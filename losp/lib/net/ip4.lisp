@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.9 2004/11/24 10:06:25 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.10 2004/11/24 13:12:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -342,6 +342,8 @@
       (setf (ip4-ref packet start 6 :unsigned-byte16) checksum))
      ((eq t checksum)
       (setf (ip4-ref packet start 6 :unsigned-byte16) 0)
+      (when (oddp udp-length)		; Ensure zero-padding for checksum.
+	(setf (ip4-ref packet start udp-length :unsigned-byte8) 0))
       (setf (ip4-ref packet start 6 :unsigned-byte16)
 	(logxor #xffff
 		(add-u16-ones-complement (checksum-octets source)
@@ -472,7 +474,7 @@
   (unless *ip4-nic*
     (let ((ethernet
 	   (some #'muerte.x86-pc.ne2k:ne2k-probe
-		 muerte.x86-pc.ne2k:+ne2k-probe-addresses+)))
+		 muerte.x86-pc.ne2k:*ne2k-probe-addresses*)))
       (assert ethernet ethernet "No ethernet device.")
       (setf *ip4-nic* ethernet)))
   (unless *ip4-ip*
