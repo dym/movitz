@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.60 2005/01/10 08:19:06 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.61 2005/01/25 13:54:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -482,11 +482,10 @@ BUFFER-SIZE is the number of words in the buffer."
     (:movl (:eax #.(movitz::class-object-offset 'symbol)) :eax)
     (:ret)))
 
-
 (define-primitive-function fast-class-of-std-instance ()
   "Return the class of a std-instance object."
   (with-inline-assembly (:returns :multiple-values)
-    (:movl (:eax #.(bt:slot-offset 'movitz::movitz-std-instance 'movitz::class))
+    (:movl (:eax (:offset movitz-std-instance class))
 	   :eax)
     (:ret)))
 
