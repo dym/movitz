@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.47 2005/01/26 13:49:24 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.48 2005/01/27 07:48:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -25,18 +25,6 @@
 (defvar *gc-consitency-check* t) 
 
     
-(defun make-space (location size)
-  "Make a space vector at a fixed location."
-  (assert (evenp location))
-  (macrolet ((x (index)
-	       `(memref location 0 :index ,index :type :unsigned-byte32)))
-    (setf (x 1) (* #.movitz:+movitz-fixnum-factor+ size)
-	  (x 0) #.(cl:dpb (bt:enum-value 'movitz:movitz-vector-element-type :u32)
-			  (cl:byte 8 8)
-			  (bt:enum-value 'movitz:other-type-byte :basic-vector))))
-  (%word-offset location #.(movitz:tag :other)))
-
-
 (defmacro space-fresh-pointer (space)
   `(memref ,space -6 :index 2))
 
@@ -59,8 +47,32 @@
     (setf (space-other space1) space2)
     space1))
 
-;;;(defun space-cons-pointer ()
-;;;  (aref (%run-time-context-slot 'nursery-space) 0))
+(defun make-space (location size)
+  "Make a space vector at a fixed location."
+  (assert (evenp location))
+  (macrolet ((x (index)
+	       `(memref location 0 :index ,index :type :unsigned-byte32)))
+    (setf (x 1) (* #.movitz:+movitz-fixnum-factor+ size)
+	  (x 0) #.(cl:dpb (bt:enum-value 'movitz:movitz-vector-element-type :u32)
+			  (cl:byte 8 8)
+			  (bt:enum-value 'movitz:other-type-byte :basic-vector))))
+  (%word-offset location #.(movitz:tag :other)))
+
+(defun make-duo-space (location size)
+  (when (oddp location)
+    (incf location))
+  (let ((space1 (make-space location size))
+	(space2 (make-space (logand -4 (+ location 3 size)) size)))
+    (initialize-space space1)
+    (initialize-space space2)
+    (setf (space-other space1) space2
+	  (space-other space2) space1)
+    space1))
+
+(defun duo-space-end-location (space1)
+  (let ((space2 (space-other space1)))
+    (max (+ (object-location space1) (length space2) 2)
+	 (+ (object-location space2) (length space2) 2))))
 
 (defun test ()
   (warn "install..")
@@ -229,12 +241,17 @@ duo-space where each space is KB-SIZE kilobytes."
       (declare (ignore exception interrupt-frame))
       (without-interrupts
 	(let ((*standard-output* *terminal-io*))
-	  (when *gc-running*
-	    (break "Recursive GC triggered."))
-	  (let ((*gc-running* t))
-	    (unless *gc-quiet*
-	      (format t "~&;; GC.. "))
-	    (stop-and-copy))
+	  (cond
+	   (*gc-running*
+	    (let* ((full-space (%run-time-context-slot 'muerte::nursery-space))
+		   (hack-space (make-duo-space (duo-space-end-location full-space) 102400)))
+	      (setf (%run-time-context-slot 'muerte::nursery-space) hack-space)
+	      (break "Recursive GC triggered. Full-space: ~Z, hack-space: ~Z"
+		     full-space hack-space)))
+	   (t (let ((*gc-running* t))
+		(unless *gc-quiet*
+		  (format t "~&;; GC.. "))
+		(stop-and-copy))))
 	  (if *gc-break*
 	      (break "GC break.")
 	    (loop			; This is  a nice opportunity to poll the keyboard..
@@ -429,9 +446,9 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
       (unless *gc-quiet*
 	(let ((old-size (truncate (- (space-fresh-pointer oldspace) 2) 2))
 	      (new-size (truncate (- (space-fresh-pointer newspace) 2) 2)))
-	  (format t "Old space [~Z]: ~/muerte:pprint-clumps/, new space [~Z]: ~
+	  (format t "Old space: ~/muerte:pprint-clumps/, new space: ~
 ~/muerte:pprint-clumps/, freed: ~/muerte:pprint-clumps/.~%"
-		  oldspace old-size newspace new-size (- old-size new-size))))
+		  old-size new-size (- old-size new-size))))
 
       (initialize-space oldspace)
       (fill oldspace #x13 :start 2)
