@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.8 2004/06/01 13:42:19 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.9 2004/06/01 15:17:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -164,18 +164,26 @@
 	   restart-atomical-block
 	    (:cmpb ,(bt:enum-value 'movitz::atomically-status :restart-primitive-function) :cl)
 	    (:jne 'not-simple-atomical-pf-restart)
-	    (:cmpb 0 :ch)		; map of registers to restore
+	    (:testl ,(bt:enum-value 'movitz::atomically-status '(:eax :ebx :ecx :edx))
+		    :ecx)		; map of registers to restore
 	    (:jnz 'not-simple-atomical-pf-restart)
 	    (:sarl 16 :ecx)		; move atomically-status data into ECX
 	    (:movl (:edi (:ecx 4) ,(- (movitz:tag :null)))
 		   :ecx)		; This is the EIP to restart
 	    (:movl :ecx (:ebp 20))
+	    (:movl (:ebp -32) :ecx)
+	    (:testl ,(bt:enum-value 'movitz::atomically-status :reset-status-p)
+		    :ecx)		; Should we reset status to zero?
+	    (:jnz 'normal-return)
+	    (:xorl :ecx :ecx)		; Do reset status to zero.
 	    (:jmp 'normal-return)
 	   not-simple-atomical-pf-restart
 	    ;; Don't know what to do.
+	    (:halt)
 	    (:int 90)
 	    (:jmp 'not-simple-atomical-pf-restart)
-	    )))))
+	    )))
+    (do-it)))
 
 (defvar *last-interrupt-frame* nil)
 

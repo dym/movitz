@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.32 2004/06/01 13:42:06 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.33 2004/06/01 15:16:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -455,11 +455,11 @@
 		   (((:enum :byte (2 3))
 		     :inactive 0
 		     :restart-primitive-function 1) ; data = slot-offset of pf.
-		    ((:bits) :reset-status-p 7
-			     :eax 8
-			     :ebx 9
-			     :ecx 10
-			     :edx 11)
+		    ((:bits) :reset-status-p 8
+			     :eax 9
+			     :ebx 10
+			     :ecx 11
+			     :edx 12)
 		    ((:numeric :data 16 16))))
     :initform '(:inactive))
    (atomically-registers
@@ -477,11 +477,13 @@
 			(cons :reset-status-p
 			      (if reset-status-p 1 0))
 			(cons :data
-			      (truncate (+ (tag :null)
-					   (bt:slot-offset 'movitz-constant-block
-							   (intern (symbol-name pf-name)
-								   :movitz)))
-					4))
+			      (if (not pf-name)
+				  0
+				(truncate (+ (tag :null)
+					     (bt:slot-offset 'movitz-constant-block
+							     (intern (symbol-name pf-name)
+								     :movitz)))
+					  4)))
 			registers)))
 
 (defmethod movitz-object-offset ((obj movitz-constant-block)) 0)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.13 2004/06/01 13:42:14 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.14 2004/06/01 15:17:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -61,7 +61,7 @@
 	 `(with-inline-assembly (:returns :eax)
 	   retry-cons
 	    ;; Set up thread-atomical execution
-	    (:locally (:movl ,(movitz::atomically-status-simple-pf 'fast-cons)
+	    (:locally (:movl ,(movitz::atomically-status-simple-pf 'fast-cons t)
 			     (:edi (:edi-offset atomically-status))))
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :ecx)

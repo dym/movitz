@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Aug 27 14:46:50 2001
 ;;;;                
-;;;; $Id: stream-image.lisp,v 1.5 2004/05/24 14:58:07 ffjeld Exp $
+;;;; $Id: stream-image.lisp,v 1.6 2004/06/01 15:16:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -79,7 +79,7 @@
 		   (read-binary 'movitz-symbol (image-stream image)))
 		  (:other
 		   (setf (image-stream-position image)
-		     (+ 4 (extract-pointer word)))
+		     (+ 0 (extract-pointer word)))
 		   (let* ((type-code (read-binary 'u8 (image-stream image)))
 			  (type-tag (enum-symbolic-value 'other-type-byte type-code)))
 		     (setf (image-stream-position image)
