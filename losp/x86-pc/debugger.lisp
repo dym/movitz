@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.24 2004/09/15 10:23:09 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.25 2004/09/22 18:00:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -441,6 +441,14 @@ be provided for those cases."
   (assert (location-in-object-p vector location))
   (- location (object-location vector) 2))
 
+(defun find-primitive-code-vector-by-eip (eip &optional (context (current-run-time-context)))
+  (loop with location = (truncate eip 4)
+      for (slot-name type) in (slot-value (class-of context) 'slot-map)
+      do (when (eq type 'code-vector-word)
+	   (let ((code-vector (%run-time-context-slot slot-name)))
+	     (when (location-in-object-p code-vector location)
+	       (return (values slot-name (code-vector-offset code-vector eip))))))))
+
 (defun backtrace (&key (stack nil)
 		       ((:frame initial-stack-frame-index)
 			(if stack
@@ -485,30 +493,68 @@ be provided for those cases."
 		      (format t "#x~X " frame))))
 	     (typecase funobj
 	       ((eql 0)
-		(let* (#+ignore (dit-frame (if (null stack) frame (+ frame 2 (object-location stack))))
-		       (funobj (dit-frame-ref stack frame :esi)))
-		  (setf next-frame (dit-frame-casf stack frame))
-		  (if (and conflate-interrupts conflate
-			   ;; When the interrupted function has a stack-frame, conflate it.
-			   (typep funobj 'function)
-			   (= 1 (ldb (byte 1 5) (funobj-debug-info funobj))))
-		      (incf conflate-count)
-		    (progn
-		      (incf count)
-		      (print-leadin stack frame count conflate-count)
-		      (setf conflate-count 0)
-		      (let ((exception (dit-frame-ref stack frame :exception-vector :unsigned-byte32))
-			    (eip (dit-frame-ref stack frame :eip :unsigned-byte32)))
-			(typecase funobj
-			  (function
-			   (let ((delta (code-vector-offset (funobj-code-vector funobj) eip)))
-			     (if delta
-				 (format t "{Exception ~D in ~W at PC offset ~D.}"
-					 exception (funobj-name funobj) delta)
-			       (format t "{Exception ~D in ~W at EIP=#x~X.}"
-				       exception (funobj-name funobj) eip))))
-			  (t (format t "{Exception ~D with ESI=~Z and EIP=#x~X.}"
-				     exception funobj eip))))))))
+		(let ((eip (dit-frame-ref stack frame :eip :unsigned-byte32))
+		      (casf (dit-frame-casf stack frame)))
+		  (multiple-value-bind (function-name code-vector-offset)
+		      (let ((casf-funobj (stack-frame-funobj stack casf)))
+			(cond
+			 ((eq 0 casf-funobj)
+			  (values 'default-interrupt-trampoline
+				  (code-vector-offset (slot-value 'default-interrupt-trampoline)
+						      eip)))
+			 ((not (typep casf-funobj 'function))
+			  ;; Hm.. very suspicius
+			  (warn "Weird frame ~S" frame)
+			  (values nil))
+			 (t (let ((x (code-vector-offset (funobj-code-vector casf-funobj) eip)))
+			      (cond
+			       ((not (eq nil x))
+				(values (funobj-name casf-funobj) x))
+			       ((not (logbitp 10 (dit-frame-ref stack frame :eflags :unsigned-byte16)))
+				(let ((funobj2 (dit-frame-ref stack frame :esi :lisp)))
+				  (or (when (typep funobj2 'function)
+					(let ((x (code-vector-offset (funobj-code-vector funobj2) eip)))
+					  (when x
+					    (values (funobj-name funobj2) x))))
+				      (find-primitive-code-vector-by-eip eip)))))))))
+		    (setf next-frame (dit-frame-casf stack frame))
+		    (if (and conflate-interrupts conflate
+			     ;; When the interrupted function has a stack-frame, conflate it.
+			     (typep funobj 'function)
+			     (= 1 (ldb (byte 1 5) (funobj-debug-info funobj))))
+			(incf conflate-count)
+		      (progn
+			(incf count)
+			(print-leadin stack frame count conflate-count)
+			(setf conflate-count 0)
+			(let ((exception (dit-frame-ref stack frame :exception-vector :unsigned-byte32)))
+			  (if function-name
+			      (format t "DIT exception ~D in ~W at PC offset ~D."
+				      exception
+				      function-name
+				      code-vector-offset)
+			    (format t "DIT exception ~D at EIP=~S with ESI=~S."
+				    exception
+				    eip
+				    (dit-frame-ref stack frame :esi :unsigned-byte32)))
+			  #+ignore
+			  (typecase funobj
+			    (function
+			     (let ((delta (code-vector-offset (funobj-code-vector funobj) eip)))
+			       (if delta
+				   (format t "DIT Exception ~D in ~W at PC offset ~D."
+					   exception (funobj-name funobj) delta)
+				 (multiple-value-bind (primitive-name primitive-vector)
+				     (find-primitive-code-vector-by-location (truncate eip 4))
+				   (if (not primitive-name)
+				       (format t "DIT Exception ~D in ~W at EIP=#x~X."
+					       exception (funobj-name funobj) eip)
+				     (format t "DIT Exception ~D in primitive-function ~A at PC offset ~D."
+					     exception
+					     primitive-name
+					     (code-vector-offset primitive-vector eip)))))))
+			    (t (format t "DIT Exception ~D with ESI=~Z and EIP=#x~X."
+				       exception funobj eip)))))))))
 	       (function
 		(let ((name (funobj-name funobj)))
 		  (cond
