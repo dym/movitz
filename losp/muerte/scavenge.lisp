@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.45 2005/01/31 17:54:03 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.46 2005/02/02 07:50:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -175,7 +175,7 @@ at the start-stack-frame location."
 	     (when (location-in-object-p code-vector location)
 	       (return code-vector))))))
 
-(defun scavenge-find-code-vector (location casf-funobj esi &optional primitive-function-p)
+(defun scavenge-find-code-vector (location casf-funobj esi &optional primitive-function-p edx)
   (flet ((match-funobj (funobj location)
 	   (cond
 	    ((not (typep funobj 'function))
@@ -203,7 +203,9 @@ at the start-stack-frame location."
 	 ((match-funobj esi location))
 	 (t (break "DIT returns outside DIT??")))))
      ((match-funobj casf-funobj location))
-     ((match-funobj esi location))
+     ((match-funobj esi location))      
+     ((match-funobj edx location)
+      (break "Trampoline/EDX situation?"))
      ((not (typep casf-funobj 'function))
       (break "Unknown funobj/frame-type: ~S" casf-funobj))
      ((location-in-object-p (%run-time-context-slot 'dynamic-jump-next) location)
@@ -302,7 +304,7 @@ and whose return instruction-pointer is at location eip-index."
 					 0 interrupted-esi
 					 nil))
 	     (new-code-vector (map-stack-instruction-pointer function eip-index old-code-vector)))
-	;;
+	;; (when atomically (we should be more clever about the stack..))
 	(multiple-value-bind (x0-location x0-tag)
 	    (stack-frame-ref nil next-frame-bottom 0 :signed-byte30+2)
 	  (cond
@@ -316,7 +318,9 @@ and whose return instruction-pointer is at location eip-index."
 		(symbol-value 'ret-trampoline)))
 	    (let* ((old-x0-code-vector
 		    (scavenge-find-code-vector (stack-frame-ref nil next-eip-index 0 :location)
-					       casf-funobj interrupted-esi t)))
+					       casf-funobj interrupted-esi t
+					       (unless secondary-register-mode-p
+						 (dit-frame-ref nil dit-frame :edx)))))
 	      (map-stack-instruction-pointer function next-eip-index old-x0-code-vector))
 	    (setf next-eip-index next-frame-bottom
 		  next-frame-bottom (1+ next-frame-bottom)))
@@ -328,7 +332,10 @@ and whose return instruction-pointer is at location eip-index."
 			   (location-in-object-p casf-code-vector x1-location))
 		  (let* ((old-x1-code-vector
 			  (scavenge-find-code-vector (stack-frame-ref nil next-eip-index 0 :location)
-						     casf-funobj interrupted-esi t)))
+						     casf-funobj
+						     (unless secondary-register-mode-p
+						       interrupted-esi)
+						     t)))
 		    (map-stack-instruction-pointer function next-eip-index old-x1-code-vector))
 		  (setf next-eip-index (+ 1 next-frame-bottom)
 			next-frame-bottom (+ 2 next-frame-bottom)))))))
