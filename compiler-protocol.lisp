@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct 10 13:02:03 2001
 ;;;;                
-;;;; $Id: compiler-protocol.lisp,v 1.2 2004/01/19 11:23:41 ffjeld Exp $
+;;;; $Id: compiler-protocol.lisp,v 1.3 2004/02/12 17:51:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -124,20 +124,20 @@ COMPILER-VALUES."
 			  ,@(unless type-p (list type))
 			  ,@(unless final-form-p (list final-form))))
 	 ,@body)
-    `(macrolet ((,all (x)
-		  (ecase x
-		    (:code ',code) (:returns ',returns) (:functional-p ',functional-p)
-		    (:producer ',producer) (:modifies ',modifies) (:type ',type)
-		    (:final-form ',final-form))))
-       (multiple-value-bind (,code ,returns ,functional-p ,producer ,modifies ,type ,final-form)
-	   ,form
-	 (declare (ignorable ,@(unless code-p (list code))
-			     ,@(unless returns-p (list returns))
-			     ,@(unless functional-p-p (list functional-p))
-			     ,@(unless producer-p (list producer))
-			     ,@(unless modifies-p (list modifies))
-			     ,@(unless type-p (list type))
-			     ,@(unless final-form-p (list final-form))))
+    `(multiple-value-bind (,code ,returns ,functional-p ,producer ,modifies ,type ,final-form)
+	 ,form
+       (declare (ignorable ,@(unless code-p (list code))
+			   ,@(unless returns-p (list returns))
+			   ,@(unless functional-p-p (list functional-p))
+			   ,@(unless producer-p (list producer))
+			   ,@(unless modifies-p (list modifies))
+			   ,@(unless type-p (list type))
+			   ,@(unless final-form-p (list final-form))))
+       (macrolet ((,all (x)
+		    (ecase x
+		      (:code ',code) (:returns ',returns) (:functional-p ',functional-p)
+		      (:producer ',producer) (:modifies ',modifies) (:type ',type)
+		      (:final-form ',final-form))))
 	 ,@body))))
 
 (defmacro compiler-values-list (&rest compiler-values-spec)
