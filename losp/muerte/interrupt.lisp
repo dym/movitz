@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.34 2005/01/04 16:54:16 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.35 2005/01/17 10:51:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -27,8 +27,10 @@
       :edi
       :dynamic-env
       :atomically-continuation
-      :raw-scratch0      
-      :ecx :eax :edx :ebx :esi
+      :raw-scratch0
+      :ecx
+      :cr2
+      :eax :edx :ebx :esi
       :scratch1 :scratch2
       :debug0
       :debug1
@@ -124,7 +126,10 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:locally (:pushl (:edi (:edi-offset dynamic-env))))
 	    (:locally (:pushl (:edi (:edi-offset atomically-continuation))))
 	    (:locally (:pushl (:edi (:edi-offset raw-scratch0))))
-	    ,@(loop for reg in (sort (copy-list '(:eax :ebx :ecx :edx :esi))
+	    (:locally (:pushl :ecx))
+	    (:movcr :cr2 :ecx)
+	    (:locally (:pushl :ecx))
+	    ,@(loop for reg in (sort (copy-list '(:eax :ebx :edx :esi))
 				     #'>
 				     :key #'dit-frame-index)
 		  collect `(:pushl ,reg))
