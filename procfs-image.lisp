@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.10 2004/07/22 00:28:06 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.11 2004/07/23 15:32:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -170,7 +170,18 @@
 		 '(nil :eflags :eip :error-code :exception :ebp nil
 		   :ecx :eax :edx :ebx :esi :edi))))
 
-(defun backtrace (&key reqs)
+(defun debug-get-object (word spartan)
+  (if spartan
+      word
+    (handler-case
+	(let ((object (movitz-word word)))
+	  (typecase object
+	    ((or movitz-funobj movitz-struct movitz-std-instance)
+	     object)
+	    (t (movitz-print object))))
+      (t () (list :unknown-word word)))))
+
+(defun backtrace (&key (reqs t) print-frames print-returns spartan)
   (format t "~&Backtracing from EIP = #x~X: "
 	  (image-register32 *image* :eip))
   ;; (search-image-funobj (image-register32 *image* :eip))
@@ -195,14 +206,17 @@
 				r eax ecx edi eip exception))))
 	     (movitz-symbol
 	      (let ((name (movitz-print movitz-name)))
-		(write-string (symbol-name name))
+		(when print-frames
+		  (format t "~S " stack-frame))
 		(when (string= name 'toplevel-function)
 		  (loop-finish))
-		(format t " (#x~X)" (stack-frame-return-address stack-frame))
 		(when reqs
-		  (format t " req1: ~S, req2: ~S"
-			  (movitz-word (get-word stack-frame -2))
-			  (movitz-word (get-word stack-frame -3))))))
+		  (format t "(~A ~S ~S)"
+			  (symbol-name name)
+			  (debug-get-object (get-word (+ stack-frame -8)) spartan)
+			  (debug-get-object (get-word (+ stack-frame -12)) spartan)))
+		(when print-returns
+		  (format t " (#x~X)" (stack-frame-return-address stack-frame)))))
 	     (t (write (movitz-print movitz-name)))))
       do (format t "~& => "))
   (values))
@@ -276,13 +290,30 @@
 	      (values)))
 
 
+(defvar *previous-image*)
+
 #+allegro
 (top-level:alias ("bochs" 0) (&optional form)
-  (with-bochs-image ()
-    (with-simple-restart (continue "Exit this bochs session [pid=~D]" (image-pid *image*))
+  (let ((*previous-image* *image*))
+    (with-bochs-image ()
+      (let ((image *image*))
+	(with-simple-restart (continue "Exit this bochs session [pid=~D]" (image-pid image))
+	  (if form
+	      (let ((x (eval form)))
+		(format t "~&~W" x)
+		x)
+	    (invoke-debugger "Established Bochs session [pid=~D]. ~S is ~S"
+			     (image-pid image)
+			     '*previous-image*
+			     *previous-image*)))))))
+
+#+allegro
+(top-level:alias ("unbochs" 3) (&optional form)
+  (let ((*image* *previous-image*)
+	(image *image*))
+    (with-simple-restart (continue "Exit this unbochs session")
       (if form
 	  (let ((x (eval form)))
 	    (format t "~&~W" x)
 	    x)
-	(invoke-debugger "Established connection to Bochs [pid=~D]."
-			 (image-pid *image*))))))
+	(invoke-debugger "Established connection to unBochs ~S" image)))))
