@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 29 13:39:43 2003
 ;;;;                
-;;;; $Id: simple-streams.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
+;;;; $Id: simple-streams.lisp,v 1.3 2004/02/02 14:55:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -70,23 +70,23 @@
 		    (type simple-vector ,slots-var)
 		    (ignorable ,slots-var))
 	   (macrolet ((sm (slot-name stream)
-			;; (declare (ignore stream))
-			`(slot-value ,stream ',slot-name)
+			(declare (ignore stream))
+			`(slot-value ,',stream-var ',slot-name)
 			#+ignore `(svref%unsafe ,',slots-var
 						,(slot-location ,(movitz-find-class class-name)
 								slot-name)))
 		      (add-stream-instance-flags (stream &rest flags)
-			;; (declare (ignore stream))
+			(declare (ignore stream))
 			`(setf (sm %flags ,',stream-var)
 			   (logior (sm %flags ,',stream-var)
 				   ,(%flags flags))))
 		      (remove-stream-instance-flags (stream &rest flags)
-			;; (declare (ignore stream))
+			(declare (ignore stream))
 			`(setf (sm %flags ,',stream-var)
 			   (logandc2 (sm %flags ,',stream-var)
 				     ,(%flags flags))))
 		      (any-stream-instance-flags (stream &rest flags)
-			;; (declare (ignore stream))
+			(declare (ignore stream))
 			`(not (zerop (logand (sm %flags ,',stream-var)
 					     ,(%flags flags))))))
 	     ,@body)))
