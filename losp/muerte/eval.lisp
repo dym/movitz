@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.3 2004/03/28 13:23:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -276,7 +276,7 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 	special-values
 	(local-env env))
     (multiple-value-bind (body declarations)
-	declarations-and-body
+	(parse-declarations-and-body declarations-and-body)
       (dolist (var-spec var-specs)
 	(multiple-value-bind (var init-form)
 	    (if (atom var-spec)
