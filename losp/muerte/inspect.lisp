@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.19 2004/07/13 14:29:22 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.20 2004/07/13 22:42:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -315,7 +315,7 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 (defun copy-bignum (old)
   (check-type old bignum)
   (let* ((length (%bignum-bigits old))
-	 (new (malloc-data-words length)))
+	 (new (malloc-data-clumps (1+ (truncate length 2)))))
     (with-inline-assembly (:returns :eax)
       (:compile-two-forms (:eax :ebx) new old)
       (:compile-form (:result-mode :edx) length)
