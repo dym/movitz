@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 21 22:14:08 2001
 ;;;;                
-;;;; $Id: io-port.lisp,v 1.10 2004/04/14 16:38:47 ffjeld Exp $
+;;;; $Id: io-port.lisp,v 1.11 2004/04/14 16:45:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -66,14 +66,14 @@
     (:character
      (io-port port :character))))
 
-(define-compiler-macro (setf io-port) (&whole form value port type)
+(define-compiler-macro (setf io-port) (&whole form value port type &environment env)
   (let ((value-var (gensym "(setf io-port)-value-"))
 	(port-var (gensym "(setf io-port)-port-")))
     (cond
-     ((and (movitz:movitz-constantp type)
-	   (movitz:movitz-constantp port))
-      (let ((the-port (movitz:movitz-eval port))
-	    (the-type (movitz:movitz-eval type)))
+     ((and (movitz:movitz-constantp type env)
+	   (movitz:movitz-constantp port env))
+      (let ((the-port (movitz:movitz-eval port env))
+	    (the-type (movitz:movitz-eval type env)))
 	(etypecase the-port
 	  ((unsigned-byte 8)		; short form of outb can be used
 	   (ecase the-type
@@ -151,8 +151,8 @@
 			 `((:movl :edi :edx)))
 		     (:compile-form (:result-mode :eax) ,value-var)
 		     (:cld))))))))))
-     ((movitz:movitz-constantp type)
-      (ecase (movitz:movitz-eval type)
+     ((movitz:movitz-constantp type env)
+      (ecase (movitz:movitz-eval type env)
 	(:unsigned-byte8
 	 `(let ((,value-var ,value)
 		(,port-var ,port))
