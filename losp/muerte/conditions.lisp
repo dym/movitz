@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.3 2004/03/12 11:47:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -250,7 +250,8 @@ Return the condition object, if there was one."
   (declare (dynamic-extent arguments))
   (let* ((class (etypecase datum
 		  (symbol
-		   (find-class datum))
+		   (or (find-class datum nil)
+		       (error "No condition class named ~S." datum)))
 		  (string
 		   (find-class default-type))
 		  (condition
