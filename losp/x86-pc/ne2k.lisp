@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:16:00 2002
 ;;;;                
-;;;; $Id: ne2k.lisp,v 1.9 2004/02/26 11:19:25 ffjeld Exp $
+;;;; $Id: ne2k.lisp,v 1.10 2004/07/22 00:58:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -96,7 +96,7 @@
 		  :io-base io-base
 		  :asic-io-base (+ io-base #x10))))
     (reset-device ne2000)
-    (let ((mac (make-array 6 :element-type 'muerte::u8)))
+    (let ((mac (make-array 6 :element-type '(unsigned-byte 8))))
       (with-dp8390 (dp8390 io-base)
 	(with-dp8390-dma (dp8390 remote-read 12 0)
 	  (dotimes (i 6)
@@ -113,7 +113,7 @@
 (defun read-from-ne2k-ring (io-base asic-io packet start length ring-start ring-pointer ring-stop)
   "Read from a NE2000 ring buffer into packet, starting at start,
    length number of bytes."
-  (check-type packet vector-u8)
+  (check-type packet (simple-array (unsigned-byte 8) 1))
   (let* ((ring-space (- ring-stop ring-pointer)))
     (if (<= length ring-space)
 	(with-dp8390 (dp8390 io-base)
@@ -133,7 +133,8 @@
   (let ((read-pointer (next-packet device)))
     (when read-pointer
       (let ((asic-io (asic-io-base device))
-	    (packet (or packet (make-array +max-ethernet-frame-size+ :element-type 'muerte::u8)))
+	    (packet (or packet (make-array +max-ethernet-frame-size+
+					   :element-type '(unsigned-byte 8))))
 	    (ring-start (ring-start device))
 	    (ring-stop (ring-stop device)))
 	(with-dp8390 (dp8390 (io-base device))
@@ -206,7 +207,7 @@
     t))
 
 (defmethod transmit ((device ne2000) packet &key (start 0) (end (length packet)))
-  (check-type packet vector-u8)
+  (check-type packet (simple-array (unsigned-byte 8) 1))
   (assert (and (evenp start)))
   (with-dp8390 (dp8390 (io-base device))
     (loop while (logbitp ($command-bit transmit)
@@ -229,7 +230,7 @@
 
 #+ignore
 (defun spinning-receive (ne2000
-			 &optional (packet (make-array 1500 :element-type 'muerte::u8))
+			 &optional (packet (make-array 1500 :element-type '(unsigned-byte 8)))
 			 &key (start 0))
   (multiple-value-bind (recovered-packet recovered-packet-length)
       (recover-when-ring-overflow ne2000 packet :start start)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Mar 20 15:01:15 2003
 ;;;;                
-;;;; $Id: arp.lisp,v 1.4 2004/02/26 11:28:08 ffjeld Exp $
+;;;; $Id: arp.lisp,v 1.5 2004/07/22 00:58:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -43,7 +43,8 @@
   (if packet
       (setf (fill-pointer packet) (max +min-ethernet-frame-size+
 				       (+ start 28)))
-    (setf packet (make-array +min-ethernet-frame-size+ :element-type 'muerte::u8)))
+    (setf packet (make-array +min-ethernet-frame-size+
+			     :element-type '(unsigned-byte 8))))
   (setf (aref packet (+ start 0)) (ldb (byte 8 8) hard-type)
 	(aref packet (+ start 1)) (ldb (byte 8 0) hard-type)
 	(aref packet (+ start 2)) (ldb (byte 8 8) prot-type)
