@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.20 2004/04/14 23:20:24 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.21 2004/04/15 13:06:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1134,6 +1134,13 @@ on the current result."
   (compiler-values ()))
 
 ;;;
+
+(define-special-operator muerte::no-macro-call (&all all &form form)
+  (destructuring-bind (operator &rest arguments)
+      (cdr form)
+    (compiler-call #'compile-apply-symbol
+      :forward all
+      :form (cons operator arguments))))
 
 (define-special-operator muerte::do-result-mode-case (&all all &result-mode result-mode &form form)
   (loop for (cases . then-forms) in (cddr form)
