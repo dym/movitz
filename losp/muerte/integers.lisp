@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.16 2004/06/02 23:48:15 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.17 2004/06/03 09:14:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -84,59 +84,6 @@
 				    (cons constant-term non-constant-operands))))))
 	 `(+ (+%2op ,(first operands) ,(second operands)) ,@(cddr operands))))))
 
-#+ignore
-(defun +%2op (term1 term2)
-  (check-type term1 fixnum)
-  (check-type term2 fixnum)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) term1)
-    (:compile-form (:result-mode :ebx) term2)
-    (:addl :ebx :eax)
-    (:into)))
-
-;;;(define-compiler-macro +%2op (&whole form term1 term2)
-;;;  (cond
-;;;   ((and (movitz:movitz-constantp term1)	; first operand zero?
-;;;	 (zerop (movitz:movitz-eval term1)))
-;;;    term2)				; (+ 0 x) => x
-;;;   ((and (movitz:movitz-constantp term2)	; second operand zero?
-;;;	 (zerop (movitz:movitz-eval term2)))
-;;;    term1)				; (+ x 0) => x
-;;;   ((and (movitz:movitz-constantp term1)
-;;;	 (movitz:movitz-constantp term2))
-;;;    (+ (movitz:movitz-eval term1)
-;;;       (movitz:movitz-eval term2)))	; compile-time constant folding.
-;;;   ((movitz:movitz-constantp term1)
-;;;    (let ((constant-term1 (movitz:movitz-eval term1)))
-;;;      (check-type constant-term1 (signed-byte 30))
-;;;      `(with-inline-assembly (:returns :register :side-effects nil) ; inline
-;;;	 (:compile-form (:result-mode :register) ,term2)
-;;;	 (:addl ,(* movitz::+movitz-fixnum-factor+ constant-term1) (:result-register))
-;;;	 (:into))))
-;;;   ((movitz:movitz-constantp term2)
-;;;    (let ((constant-term2 (movitz:movitz-eval term2)))
-;;;      (check-type constant-term2 (signed-byte 30))
-;;;      `(with-inline-assembly (:returns :register :side-effects nil) ; inline
-;;;	 (:compile-form (:result-mode :register) ,term1)
-;;;	 (:addl ,(* movitz::+movitz-fixnum-factor+ constant-term2) (:result-register))
-;;;	 (:into))))
-;;;   (t `(with-inline-assembly (:returns :eax :side-effects nil)
-;;;	 (:compile-two-forms (:ebx :eax) ,term1 ,term2)
-;;;	 (:addl :ebx :eax)
-;;;	 (:into)))))
-
-(defun 1+ (number)
-  (+ 1 number))
-
-(define-compiler-macro 1+ (number)
-  `(+ ,number 1))
-
-(defun 1- (number)
-  (- number 1))
-
-(define-compiler-macro 1- (number)
-  `(- ,number 1))
-
 (defun + (&rest terms)
   (numargs-case
    (1 (x) x)
@@ -177,8 +124,17 @@
 	  0
 	(reduce #'+ terms)))))
 
-;;;(defmacro incf (place &optional (delta-form 1))
-;;;  `(setf ,place (+ ,place ,delta-form)))
+(defun 1+ (number)
+  (+ 1 number))
+
+(define-compiler-macro 1+ (number)
+  `(+ ,number 1))
+
+(defun 1- (number)
+  (- number 1))
+
+(define-compiler-macro 1- (number)
+  `(- ,number 1))
 
 (define-modify-macro incf (&optional (delta-form 1)) +)
 
