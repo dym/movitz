@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.131 2005/01/27 09:00:25 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.132 2005/01/31 11:19:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -696,8 +696,6 @@ of all function-bindings seen."
 	      function-binding-usage))))
 
 (defun resolve-sub-functions (toplevel-funobj function-binding-usage)
-;;;  (multiple-value-bind (toplevel-funobj function-binding-usage)
-;;;      (resolve-borrowed-bindings toplevel-funobj)
   (assert (null (borrowed-bindings toplevel-funobj)) ()
     "Can't deal with toplevel closures yet. Borrowed: ~S"
     (borrowed-bindings toplevel-funobj))
@@ -709,7 +707,7 @@ of all function-bindings seen."
 	     (case (car (movitz-funobj-name sub-funobj))
 	       ((muerte.cl:lambda)
 		(setf (movitz-funobj-name sub-funobj)
-		  (list 'lambda
+		  (list 'muerte.cl:lambda
 			(movitz-funobj-name toplevel-funobj)
 			(post-incf sub-funobj-index)))))
 	     (loop for borrowed-binding in (borrowed-bindings sub-funobj)
@@ -733,12 +731,7 @@ of all function-bindings seen."
 	       (change-class function-binding 'closure-binding))
 	      (t (change-class function-binding 'closure-binding)
 		 (setf (movitz-funobj-extent sub-funobj)
-		   :indefinite-extent))) ; XXX
-	     #+ignore
-	     (warn "extent usage ~S: ~S => ~S"
-		   usage
-		   sub-funobj
-		   (movitz-funobj-extent sub-funobj)))))
+		   :indefinite-extent))))))
   (loop for function-binding in function-binding-usage by #'cddr
       do (finalize-funobj (function-binding-funobj function-binding)))
   (finalize-funobj toplevel-funobj))
@@ -1017,12 +1010,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	    (make-movitz-vector (length code-vector)
 				:fill-pointer code-length
 				:element-type 'code
-				:initial-contents code-vector)
-	    #+ignore
-	    (make-movitz-code-vector code-vector
-				     (slot-value funobj 'code-vector%1op)
-				     (slot-value funobj 'code-vector%2op)
-				     (slot-value funobj 'code-vector%3op)))))
+				:initial-contents code-vector))))
   funobj)
 
 (defun check-locate-concistency (code-vector)
