@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.43 2005/02/02 07:47:34 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.44 2005/03/09 07:19:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -83,7 +83,7 @@
 		     `(let ((,object-var ,object)
 			    (,offset-var ,offset))
 			(with-inline-assembly (:returns :untagged-fixnum-ecx
-							:type (unsigned-byte 16))
+							:type (unsigned-byte 8))
 			  (:compile-two-forms (:eax :untagged-fixnum-ecx) ,object-var ,offset-var)
 			  ;; (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
 			  (:movzxb (:eax :ecx ,(offset-by 1)) :ecx)
@@ -287,6 +287,28 @@
 			    (:addl :ebx :ecx)
 			    (:movl (:eax :ecx ,(offset-by 4)) :ecx)
 			    (:andl -4 :ecx)))))))
+		(:tag
+		 (assert (= 4 movitz::+movitz-fixnum-factor+))
+		 (cond
+		  ((and (eq 0 offset) (eq 0 index))
+		   `(with-inline-assembly (:returns :untagged-fixnum-ecx :type (unsigned-byte 3))
+		      (:compile-form (:result-mode :eax) ,object)
+		      (:movl (:eax ,(offset-by 4)) :ecx)
+		      (:andl 7 :ecx)))
+		  ((eq 0 offset)
+		   `(with-inline-assembly (:returns :untagged-fixnum-ecx :type (unsigned-byte 3))
+		      (:compile-two-forms (:eax :ecx) ,object ,index)
+		      (:movl (:eax :ecx ,(offset-by 4)) :ecx)
+		      (:andl 7 :ecx)))
+		  (t (let ((object-var (gensym "memref-object-")))
+		       `(let ((,object-var ,object))
+			  (with-inline-assembly (:returns :untagged-fixnum-ecx :type (unsigned-byte 3))
+			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
+			    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
+			    (:load-lexical (:lexical-binding ,object-var) :eax)
+			    (:addl :ebx :ecx)
+			    (:movl (:eax :ecx ,(offset-by 4)) :ecx)
+			    (:andl 7 :ecx)))))))
 		(:unsigned-byte32
 		 (let ((endian (movitz:movitz-eval endian env)))
 		   (assert (member endian '(:host :little))))
