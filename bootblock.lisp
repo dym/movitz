@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:47:19 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: bootblock.lisp,v 1.3 2004/01/15 20:02:16 ffjeld Exp $
+;;;; $Id: bootblock.lisp,v 1.4 2004/01/15 21:25:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -89,24 +89,16 @@
        
        ;;
        ;; We are running at address #x7c00.
-       ;; First we need to initialize the data segment
-       ;; registers and the stack pointer.
-       ;; Having done this, we can reference variables in the bootblock
-       ;; and use the stack to hold local variables
        ;;
 
        (:xorw :ax :ax)
-       (:movw :ax :ds)			; Let data segment and extended segment)
-       (:movw :ax :es)			; point to #x7c00 -> Data
-					; references will be to #x7c00 + offset)
+       (:movw :ax :ds)
+       (:movw :ax :es)
 
        (:movw #x9000 :ax)
-       (:movw :ax :ss)			; Let stack segment point to #xb000)
+       (:movw :ax :ss)
        (:movw #xfffc :bp)
-       (:leaw (:bp ,(- +stack-frame-size+)) :sp) ; and the stack pointer to #xfffe ->)
-					; Make room for 10 bytes on the stack
-
-					; stack is at #x9fffe)
+       (:leaw (:bp ,(- +stack-frame-size+)) :sp)
        (:movw 'welcome :si)		; Print welcome message)
        (:call 'print)
        
@@ -114,28 +106,20 @@
        ;; Enable the A20 gate
        ;;
        (:call 'empty-8042)
-       (:movb #xd1 :al)			; Write ouput port
+       (:movb #xd1 :al)
        (:outb :al #x64)
 
        (:call 'empty-8042)
-       (:movb #xdf :al)			; Enable A20 address line
+       (:movb #xdf :al)
        (:outb :al #x60)
        (:call 'empty-8042)
 
-
+       ;;
+       ;; Read sectors into memory
+       ;;
+       
        (:movw ,(+ 1 skip-sectors) (:bp ,+linear-sector+))
        (:movl ,load-address (:bp ,+destination+))
-
-;;;       
-;;;       read-loop
-;;;
-;;;       (:movw 'track-end-msg :si)	; Print ')' to screen after each track
-;;;       (:call 'print)
-;;;       (:movw 'track-start-msg :si)	; Print '(' to screen for each track
-;;;       (:call 'print)
-;;;
-;;;       read
-;;;
 
        read-loop
        
@@ -212,8 +196,6 @@
        ;;
        read-done
 
-;;;       foo (:jmp 'foo)
-       
        motor-loop			; Wait for floppy motor
        (:btw 8 (#x43e))
        (:jc 'motor-loop)
@@ -313,10 +295,6 @@
        track-start-msg (% format 8 "(")
        track-end-msg   (% format 8 ")") ;; (% format 8 ")~%")
        sector-msg      (% format 8 "-")
-
-;;;     integer-msg (% nformat "Int: ")
-;;;     integer-msg-int (% format "XXXX~%")
-
      
        (% align 16)
        gdt
