@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.67 2004/07/16 00:03:05 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.68 2004/07/16 10:42:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1133,21 +1133,23 @@ Preserve EAX and EBX."
 	     (:andl -4 :eax)
 	     (:cld)))
 	  (positive-bignum
-	   (let* ((result-length (- (integer-length integer) count))
-		  (result (%make-bignum (truncate (+ result-length 31) 32))))
-	     (multiple-value-bind (long short)
-		 (truncate count 16)
-	       (let ((src-max-bigit (* 2 (%bignum-bigits integer))))
-		 (dotimes (i (* 2 (%bignum-bigits result)))
-		   (let ((src (+ i long)))
-		     (setf (memref result -2 i :unsigned-byte16)
-		       (if (< src src-max-bigit)
-			   (memref integer -2 src :unsigned-byte16)
-			 0)))))
-	       (setf result (%bignum-canonicalize result))
-	       (dotimes (i short result)
-		 (setf result (truncate result 2)))
-	       result))))))))
+	   (let ((result-length (- (integer-length integer) count)))
+	     (if (<= result-length 0)
+		 0
+	       (let ((result (%make-bignum (truncate (+ result-length 31) 32))))
+		 (multiple-value-bind (long short)
+		     (truncate count 16)
+		   (let ((src-max-bigit (* 2 (%bignum-bigits integer))))
+		     (dotimes (i (* 2 (%bignum-bigits result)))
+		       (let ((src (+ i long)))
+			 (setf (memref result -2 i :unsigned-byte16)
+			   (if (< src src-max-bigit)
+			       (memref integer -2 src :unsigned-byte16)
+			     0)))))
+		   (setf result (%bignum-canonicalize result))
+		   (dotimes (i short result)
+		     (setf result (truncate result 2)))
+		   result))))))))))
 
 ;;;;
 
@@ -1540,12 +1542,12 @@ Preserve EAX and EBX."
 		   (%negatef r number divisor))))
 	(((integer 0 *) (integer * -1))
 	 (multiple-value-bind (q r)
-	     (truncate (- number) divisor)
+	     (truncate number (- divisor))
 	   (values (%negatef q number divisor)
 		   r)))
 	(((integer * -1) (integer * -1))
 	 (multiple-value-bind (q r)
-	     (truncate (- number) divisor)
+	     (truncate (- number) (- divisor))
 	   (values q (%negatef r number divisor))))
 	))))
 
