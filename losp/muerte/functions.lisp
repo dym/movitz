@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.14 2004/07/07 17:37:43 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.15 2004/07/13 22:41:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -83,9 +83,11 @@
 			 (compiled-function
 			  (funobj-name edx))
 			 (t '(unknown)))))
-    (error 'undefined-function-call
-	   :name function-name
-	   :arguments (copy-list args))))
+    (with-simple-restart (continue "Return NIL from ~S." function-name)
+      (error 'undefined-function-call
+	     :name function-name
+	     :arguments (copy-list args))))
+  nil)
 
 ;;; funobj object
 
