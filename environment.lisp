@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.5 2004/02/17 20:24:00 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.6 2004/06/07 22:09:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -438,7 +438,7 @@ the function sets up itself. Its parent env. must be a funobj-env."))
 ;;; Accessor: movitz-env-symbol-function
 
 (defun movitz-env-symbol-function (symbol &optional env)
-  (gethash symbol (movitz-environment-function-cells (or env *movitz-global-environment*))))
+  (values (gethash symbol (movitz-environment-function-cells (or env *movitz-global-environment*)))))
 
 (defun (setf movitz-env-symbol-function) (value symbol &optional env)
   (setf (gethash symbol (movitz-environment-function-cells (or env *movitz-global-environment*)))
