@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.33 2004/07/08 18:53:42 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.34 2004/07/08 21:51:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -214,10 +214,6 @@
 					    finally (return x)))
 		   (:compile-two-forms (:eax :ebx) array index)
 		   (:movl (:eax ,movitz:+other-type-offset+) :ecx)
-;;;		   (:cmpb ,(movitz:tag :basic-vector) :cl)
-;;;		   (:jne '(:sub-program (not-vector)
-;;;			   (:compile-form (:result-mode :ignore)
-;;;			    (error "Not an array: ~S." array))))
 		   (:testb ,movitz:+movitz-fixnum-zmask+ :bl)
 		   (:jnz '(:sub-program (illegal-index)
 			   (:compile-form (:result-mode :ignore)
