@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.15 2004/07/08 18:59:55 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.16 2004/07/08 21:52:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -790,6 +790,15 @@ s#+ignore
 	      (format t "~&~Z = ~W" x x))
 	     (t (fresh-line)
 		(write x :radix nil :base (case *print-base* (10 16) (t 10)))))
+	   x))
+    (if x-list
+	(do-print (eval x-list))
+      (dolist (x cl:/ (values-list cl:/))
+	(do-print x)))))
+
+(define-toplevel-command :z (&optional x-list)
+  (flet ((do-print (x)
+	   (format t "~&~Z => ~S" x x)
 	   x))
     (if x-list
 	(do-print (eval x-list))
