@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.36 2004/07/15 21:06:42 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.37 2004/07/20 12:38:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -490,14 +490,17 @@
   `(memref ,vector 2 ,index :unsigned-byte32))
 
 (defun u32ref%unsafe (vector index)
-  (u32ref%unsafe vector index))
+  (compiler-macro-call u32ref%unsafe vector index))
 
 (define-compiler-macro (setf u32ref%unsafe) (value vector index)
-  `(setf (memref ,vector 2 ,index :unsigned-byte32) ,value))
+  (let ((var (gensym "setf-u32ref-value-")))
+    ;; Use var so as to avoid re-boxing of the u32 value.
+    `(let ((,var ,value))
+       (setf (memref ,vector 2 ,index :unsigned-byte32) ,var)
+       ,var)))
 
 (defun (setf u32ref%unsafe) (value vector index)
-  (setf (u32ref%unsafe vector index) value)
-  value)
+  (compiler-macro-call (setf u32ref%unsafe) value vector index))
 
 ;;; fast vector access
 
