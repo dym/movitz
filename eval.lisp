@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  2 17:45:05 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: eval.lisp,v 1.3 2004/03/26 01:43:46 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.4 2004/03/31 16:31:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -66,8 +66,13 @@
       (symbol (or (movitz-env-get form 'constantp nil environment)
 		  (typep (movitz-binding form environment) 'constant-object-binding)))
       (cons (case (car form)
-	      ((muerte.cl::quote) t)
-	      (muerte.cl::not (movitz-constantp (second form))))))))
+	      ((muerte.cl:quote) t)
+	      ((muerte.cl:not)
+	       (movitz-constantp (second form)))
+	      ((muerte.cl:+ muerte.cl:- muerte.cl:*)
+	       (every (lambda (sub-form)
+			(movitz-constantp sub-form environment))
+		      (cdr form))))))))
 
 
 (defun isconst (x)
@@ -139,4 +144,9 @@
     (eval-self-evaluating (second form) env top-level-p))
    (muerte.cl::not
     (not (eval-form (second form) env nil)))
+   ((muerte.cl:+ muerte.cl:- muerte.cl:*)
+    (apply (translate-program (car form) :muerte.cl :cl)
+	   (mapcar (lambda (sub-form)
+		     (movitz-eval sub-form env nil))
+		   (cdr form))))
    (t (error "Don't know how to compile constant compound form ~A" form))))
