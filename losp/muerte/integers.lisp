@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.6 2004/04/15 13:10:37 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.7 2004/04/16 19:22:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1088,7 +1088,7 @@
     '(integer 0))
    ((typep size '(integer 1 *))
     (list 'integer 0 (1- (ash 1 size))))
-   (t (error "Illegal size for signed-byte."))))
+   (t (error "Illegal size for unsigned-byte."))))
 
 (define-simple-typep (bit bitp) (x)
   (or (eq x 0) (eq x 1)))
