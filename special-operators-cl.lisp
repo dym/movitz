@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.37 2004/11/19 20:12:37 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.38 2004/11/23 16:12:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -97,29 +97,36 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		    and do (incf (num-specials local-env))
 			;; lexical...
 		    else collect
-			 (compiler-values-bind (&code init-code	&functional-p functional-p
-						&type type &returns init-register
-						&final-form final-form)
-			     (compiler-call #'compile-form-to-register
-			       :env init-env
-			       :defaults all
-			       :form init-form
-			       :modify-accumulate let-modifies)
-			   ;; (warn "prod: ~S, type: ~S" prod type)
-			   (list var
-				 init-form
-				 init-code
-				 functional-p
-				 (let ((init-type (type-specifier-primary type)))
-				   (assert init-type ()
-				     "The init-form ~S yielded the empty primary type!" type)
-				   init-type)
-				 (case init-register
-				   (:non-local-exit :edi)
-				   (t init-register))
-				 final-form))
-		    and do (movitz-env-add-binding local-env (make-instance 'located-binding
-							       :name var)))))
+			 (let ((binding (make-instance 'located-binding :name var)))
+			   (movitz-env-add-binding local-env binding)
+			   (compiler-values-bind (&code init-code	&functional-p functional-p
+						  &type type &returns init-register
+						  &final-form final-form)
+			       (compiler-call #'compile-form-to-register
+				 :env init-env
+				 :defaults all
+				 :form init-form
+				 :modify-accumulate let-modifies)
+;;;			     ;; (warn "prod: ~S, type: ~S" prod type)
+;;;			     (warn "var ~S init: ~S.." var init-form)
+;;;			     (print-code 'init
+;;;					 (compiler-call #'compile-form
+;;;					   :env init-env
+;;;					   :defaults all
+;;;					   :form init-form
+;;;					   :result-mode binding))
+			     (list var
+				   init-form
+				   init-code
+				   functional-p
+				   (let ((init-type (type-specifier-primary type)))
+				     (assert init-type ()
+				       "The init-form ~S yielded the empty primary type!" type)
+				     init-type)
+				   (case init-register
+				     (:non-local-exit :edi)
+				     (t init-register))
+				   final-form))))))
 	  (setf (stack-used local-env)
 	    (stack-used init-env))
 	  (flet ((compile-body ()
@@ -834,7 +841,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				;; catcher
 				(:locally (:pushl (:edi (:edi-offset dynamic-env))))
 				(:pushl ',label-set-name)
-				(:locally (:pushl (:edi (:edi-offset unbound-value))))
+				(:locally (:pushl (:edi (:edi-offset unbound-function))))
 				(:pushl :ebp)
 				(:locally (:movl :esp (:edi (:edi-offset dynamic-env)))))
 			      `((:init-lexvar ,save-esp-binding
@@ -1109,7 +1116,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			  (:je '(:sub-program (,zero-specials)
 				 ;; Insert dummy binding
 				 (:pushl :edi) ; biding value
-				 (:globally (:pushl (:edi (:edi-offset unbound-value)))) ;  [[ binding tag ]]
+				 (:pushl :edi) ; scratch
 				 (:pushl :edi) ; binding name
 				 (:pushl :esp)
 				 (:addl 4 :ecx)
@@ -1117,7 +1124,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			  ,loop
 			  (:cmpl :edi :ebx) ; (endp symbols)
 			  (:je ',no-more-symbols) ;  .. (go no-more-symbols)
-			  (:globally (:movl (:edi (:edi-offset unbound-value)) :edx))
+			  (:globally (:movl (:edi (:edi-offset new-unbound-value)) :edx))
 			  (:cmpl :edi :eax) ; (endp values)
 			  (:je ',no-more-values) ; .. (go no-more-values)
 			  (:movl (:eax -1) :edx)
@@ -1272,7 +1279,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		   ,cleanup-entry
 
 		   ;; Now (?), modify unwind-protect dyn-env-entry to be normal continuation
-		   (:locally (:movl (:edi (:edi-offset unbound-value)) :edx))
+		   (:locally (:movl (:edi (:edi-offset unbound-function)) :edx))
 		   (:movl :edx (:esp 4)) ; not unwind-protect-tag
 		   (:movl ',continue-label (:esp 8)) ; new jumper index
 
