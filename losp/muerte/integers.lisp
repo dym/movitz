@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.22 2004/06/06 14:25:22 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.23 2004/06/07 10:39:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -85,6 +85,7 @@
 	 `(+ (+%2op ,(first operands) ,(second operands)) ,@(cddr operands))))))
 
 (defun + (&rest terms)
+  (declare (without-check-stack-limit))
   (numargs-case
    (1 (x) x)
    (2 (x y)
@@ -822,7 +823,84 @@
 		    fixnum-result
 		     (:movl :edi :edx)
 		     (:cld)
-		    fixnum-done))))))
+		    fixnum-done)))
+		(((eql 0) t) 0)
+		(((eql 1) t) y)
+		((t fixnum) (* y x))
+		((fixnum bignum)
+		 (let (r)
+		   (with-inline-assembly (:returns :eax)
+		    retry
+		     (:declare-label-set retry-jumper (retry))
+		     (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
+		     (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
+					'retry-jumper)
+				      (:edi (:edi-offset atomically-status))))
+			     
+		     (:compile-form (:result-mode :eax) y)
+		     (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+			      :ecx)
+		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
+			     ,(* 2 movitz:+movitz-fixnum-factor+))
+			    :eax)
+		     (:call-global-constant get-cons-pointer) ; New bignum into EAX
+
+		     (:load-lexical (:lexical-binding y) :ebx) ; bignum
+		     (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
+		     (:movl :ecx (:eax ,movitz:+other-type-offset+))
+		     (:store-lexical (:lexical-binding r) :eax :type bignum)
+
+		     (:movl :eax :ebx)	; r into ebx
+		     (:xorl :ecx :ecx)
+		     (:xorl :edx :edx)	; initial carry
+		     (:std)		; Make EAX, EDX, ESI non-GC-roots.
+		     (:compile-form (:result-mode :esi) x)
+		     (:sarl ,movitz:+movitz-fixnum-shift+ :esi)
+		     (:jns 'multiply-loop)
+		     (:negl :esi)	; can't overflow
+		    multiply-loop
+		     (:movl :edx (:ebx (:ecx 4) ; new
+				       ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		     (:compile-form (:result-mode :ebx) y)
+		     (:movl (:ebx (:ecx 4) ; old
+				  ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
+			    :eax)
+		     
+		     (:mull :esi :eax :edx)
+		     (:compile-form (:result-mode :ebx) r)
+		     (:addl :eax
+			    (:ebx (:ecx 4)
+				  ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		     (:adcl 0 :edx)
+		     (:addl 1 :ecx)
+		     (:cmpw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+		     (:ja 'multiply-loop)
+		     (:testl :edx :edx)
+		     (:jz 'no-carry-expansion)
+		     (:movl :edx
+			    (:ebx (:ecx 4)
+				  ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		     (:addl 1 :ecx)
+		     (:movw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+		    no-carry-expansion
+		     (:movl (:ebp -4) :esi)
+		     (:movl :ebx :eax)
+		     (:movl :edi :edx)
+		     (:cld)		; EAX, EDX, and ESI are GC roots again.
+		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
+			     ,movitz:+movitz-fixnum-factor+)
+			    :ecx)
+		     (:call-global-constant cons-commit)
+		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+				      (:edi (:edi-offset atomically-status))))
+		     (:compile-form (:result-mode :ebx) x)
+		     (:testl :ebx :ebx)
+		     (:jns 'positive-result)
+		     ;; Negate the resulting bignum
+		     (:xorl #xff00 (:eax ,movitz:+other-type-offset+))
+		    positive-result
+		     )))
+		)))
 	(do-it)))
    (t (&rest factors)
       (declare (dynamic-extent factors))
@@ -875,6 +953,8 @@
       (values number 0))
    (t (number divisor)
       (number-double-dispatch (number divisor)
+	((t (eql 1))
+	 number)
 	((fixnum fixnum)
 	 (with-inline-assembly (:returns :multiple-values)
 	   (:compile-form (:result-mode :eax) number)
@@ -894,16 +974,16 @@
 		`(let (r n)
 		   (with-inline-assembly (:returns :multiple-values)
 		     (:compile-form (:result-mode :ebx) number)
-		     (:cmpw 1 (:ebx #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+		     (:cmpw 1 (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
 		     (:jne 'not-size1)
 		     (:compile-form (:result-mode :ecx) divisor)
-		     (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
+		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 		     (:std)
-		     (:movl (:ebx #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)) :eax)
+		     (:movl (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)) :eax)
 		     (:xorl :edx :edx)
 		     (:divl :ecx :eax :edx)
 		     (:movl :eax :ecx)
-		     (:shll #.movitz:+movitz-fixnum-shift+ :edx)
+		     (:shll ,movitz:+movitz-fixnum-shift+ :edx)
 		     (:movl :edi :eax)
 		     (:cld)
 		     (:pushl :edx)
@@ -912,7 +992,7 @@
 		     (:jmp 'done)
 		    not-size1
 		     (:compile-form (:result-mode :ebx) number)
-		     (:movzxw (:ebx #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+		     (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
 			      :ecx)
 	     
 		     (:declare-label-set retry-jumper (not-size1))
@@ -921,10 +1001,10 @@
 					'retry-jumper)
 				      (:edi (:edi-offset atomically-status))))
 
-		     (:leal ((:ecx #.movitz:+movitz-fixnum-factor+) #.movitz:+movitz-fixnum-factor+)
+		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,movitz:+movitz-fixnum-factor+)
 			    :eax)	; Number of words
 		     (:call-global-constant get-cons-pointer) ; New bignum into EAX
-
+		     
 
 		     (:store-lexical (:lexical-binding r) :eax :type bignum)
 		     (:compile-form (:result-mode :ebx) number)
