@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.2 2004/01/19 11:23:41 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.3 2004/02/05 14:19:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -103,6 +103,26 @@
 
 (defun register32 (register-name)
   (image-register32 *image* register-name))
+
+(defmethod image-movitz-to-lisp-object ((image procfs-image) expr)
+  (etypecase expr
+    (cons (mapcar #'movitz-print expr))
+    ((not movitz-object)
+     expr)
+    ((or movitz-nil movitz-constant-block) nil)
+    (movitz-symbol
+     (intern (movitz-print (movitz-symbol-name expr))))
+    (movitz-string
+     (map 'string #'identity
+	  (movitz-vector-symbolic-data expr)))
+    (movitz-fixnum
+     (movitz-fixnum-value expr))
+    (movitz-vector
+     (map 'vector #'movitz-print (movitz-vector-symbolic-data expr)))
+    (movitz-cons
+     (cons (movitz-print (movitz-car expr))
+	   (movitz-print (movitz-cdr expr))))))
+
 
 (defmethod report-gdtr ((image bochs-image))
   (assert (file-position (image-stream image)
