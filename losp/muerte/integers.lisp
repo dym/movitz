@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.41 2004/07/10 13:29:23 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.42 2004/07/10 14:39:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -27,6 +27,9 @@
 
 (deftype positive-bignum ()
   `(integer ,(1+ movitz:+movitz-most-positive-fixnum+) *))
+
+(deftype negative-fixnum ()
+  `(integer ,movitz:+movitz-most-negative-fixnum+ -1))
 
 (defmacro number-double-dispatch ((x y) &rest clauses)
   `(let ((x ,x) (y ,y))
@@ -123,7 +126,13 @@
 		((positive-bignum positive-fixnum)
 		 (funcall '+ y x))
 		((positive-fixnum positive-bignum)
-		 (with-inline-assembly (:returns :eax)
+		 (with-inline-assembly (:returns :eax :labels (retry-not-size1
+							       not-size1
+							       copy-bignum-loop
+							       add-bignum-loop
+							       add-bignum-done
+							       no-expansion
+							       pfix-pbig-done))
 		   (:compile-two-forms (:eax :ebx) y x)
 		   (:testl :ebx :ebx)
 		   (:jz 'pfix-pbig-done)
@@ -131,7 +140,7 @@
 		   (:cmpl 1 :ecx)
 		   (:jne 'not-size1)
 		   (:compile-form (:result-mode :ecx) x)
-		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
 		   (:addl (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)) :ecx)
 		   (:jc 'retry-not-size1)
 		   (:call-global-constant box-u32-ecx)
@@ -160,7 +169,7 @@
 		   (:jnz 'copy-bignum-loop)
 
 		   (:load-lexical (:lexical-binding x) :ecx)
-		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
 		   (:xorl :ebx :ebx)
 		   (:addl :ecx (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
 		   (:jnc 'add-bignum-done)
@@ -177,6 +186,70 @@
 		   (:je 'no-expansion)
 		   (:addl #x10000 (:eax ,movitz:+other-type-offset+))
 		   (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
+		  no-expansion
+		   (:call-global-constant cons-commit)
+		   (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+				    (:edi (:edi-offset atomically-status))))
+		   
+		  pfix-pbig-done))
+		((negative-fixnum positive-bignum)
+		 (with-inline-assembly (:returns :eax :labels (retry-not-size1
+							       not-size1
+							       copy-bignum-loop
+							       add-bignum-loop
+							       add-bignum-done
+							       no-expansion
+							       pfix-pbig-done))
+		   (:compile-two-forms (:eax :ebx) y x)
+		   (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
+		   (:cmpl 1 :ecx)
+		   (:jne 'not-size1)
+		   (:compile-form (:result-mode :ecx) x)
+		   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   (:addl (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)) :ecx)
+		   (:call-global-constant box-u32-ecx)
+		   (:jmp 'pfix-pbig-done)
+		  retry-not-size1
+		   (:compile-form (:result-mode :eax) y)
+		   (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
+		  not-size1
+		   (:declare-label-set retry-jumper (retry-not-size1))
+		   (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
+		   (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
+				      'retry-jumper)
+				    (:edi (:edi-offset atomically-status))))
+		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,(* 1 movitz:+movitz-fixnum-factor+))
+			  :eax)		; Number of words
+		   (:call-global-constant get-cons-pointer)
+		   (:load-lexical (:lexical-binding y) :ebx) ; bignum
+		   (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
+		   (:leal ((:ecx #.movitz:+movitz-fixnum-factor+) ,movitz:+movitz-fixnum-factor+)
+			  :edx)
+		  copy-bignum-loop
+		   (:subl ,movitz:+movitz-fixnum-factor+ :edx)
+		   (:movl (:ebx :edx ,movitz:+other-type-offset+) :ecx)
+		   (:movl :ecx (:eax :edx ,movitz:+other-type-offset+))
+		   (:jnz 'copy-bignum-loop)
+
+		   (:load-lexical (:lexical-binding x) :ecx)
+		   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   (:xorl :ebx :ebx)	; counter
+		   (:negl :ecx)
+		   (:subl :ecx (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		   (:jnc 'add-bignum-done)
+		  add-bignum-loop
+		   (:addl 4 :ebx)
+		   (:subl 1 (:eax :ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		   (:jc 'add-bignum-loop)
+		  add-bignum-done
+		   (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+			    :ecx)
+		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,movitz:+movitz-fixnum-factor+)
+			  :ecx)		; result bignum word-size
+		   (:cmpl 0 (:eax :ecx ,(+ -8 (bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))))
+		   (:jne 'no-expansion)
+		   (:subl #x10000 (:eax ,movitz:+other-type-offset+))
+		   (:subl ,movitz:+movitz-fixnum-factor+ :ecx)
 		  no-expansion
 		   (:call-global-constant cons-commit)
 		   (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
