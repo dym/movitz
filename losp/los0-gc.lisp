@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.17 2004/06/06 03:02:08 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.18 2004/06/16 07:40:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -267,6 +267,10 @@ Preserve EAX and EBX."
 	  (+ (object-location space)
 	     (array-dimension space 0)))))
 
+(defun tenure ()
+  (install-old-consing)
+  (install-los0-consing))
+
 (defun report-nursery (x location)
   "Write a message if x is inside newspace."
   (when (object-in-space-p (%run-time-context-slot 'nursery-space) x)
@@ -286,7 +290,21 @@ Preserve EAX and EBX."
 	     find-location x location))
     x))
 
-(defun stop-and-copy ()
+(defun kill-the-newborns ()
+  (let* ((oldspace (%run-time-context-slot 'nursery-space))
+	 (newspace (space-other oldspace)))
+    (setf (%run-time-context-slot 'nursery-space) newspace)
+    (flet ((zap-oldspace (x location)
+	     (declare (ignore location))
+	     (if (object-in-space-p oldspace x)
+		 nil
+	       x)))
+      (map-heap-words #'zap-oldspace 0 (malloc-end))
+      (map-stack-words #'zap-oldspace (current-stack-frame))
+      (initialize-space oldspace)
+      (values))))
+  
+(defun stop-and-copy (&optional evacuator)
   (let* ((space0 (%run-time-context-slot 'nursery-space))
 	 (space1 (space-other space0)))
     (check-type space0 vector-u32)
@@ -299,29 +317,30 @@ Preserve EAX and EBX."
 	  (values space1 space0))
       ;; Ensure newspace is activated.
       (setf (%run-time-context-slot 'nursery-space) newspace)
-      ;; (assert (< #x200 (- (length newspace) (space-fresh-pointer newspace))))
       ;; Evacuate-oldspace is to be mapped over every potential pointer.
-      (flet ((evacuate-oldspace (x location)
-	       "If x is in oldspace, migrate it to newspace."
-	       (declare (ignore location))
-	       (if (not (object-in-space-p oldspace x))
-		   x
-		 (let ((forwarded-x (memref (object-location x) 0 1 :lisp)))
-		   (if (object-in-space-p newspace forwarded-x)
-		       forwarded-x
-		     (let ((forward-x (shallow-copy x)))
-		       (setf (memref (object-location x) 0 1 :lisp) forward-x)
-		       forward-x))))))
+      (let ((evacuator
+	     (or evacuator
+		 (lambda (x location)
+		   "If x is in oldspace, migrate it to newspace."
+		   (declare (ignore location))
+		   (if (not (object-in-space-p oldspace x))
+		       x
+		     (let ((forwarded-x (memref (object-location x) 0 1 :lisp)))
+		       (if (object-in-space-p newspace forwarded-x)
+			   forwarded-x
+			 (let ((forward-x (shallow-copy x)))
+			   (setf (memref (object-location x) 0 1 :lisp) forward-x)
+			   forward-x))))))))
 	;; Scavenge roots
-	(map-heap-words #'evacuate-oldspace 0 (+ (malloc-buffer-start)
+	(map-heap-words evacuator 0 (+ (malloc-buffer-start)
 						 (* 2 (malloc-cons-pointer))))
-	(map-stack-words #'evacuate-oldspace (current-stack-frame))
+	(map-stack-words evacuator (current-stack-frame))
 	;; Scan newspace, Cheney style.
 	(loop with newspace-location = (+ 2 (object-location newspace))
 	    with scan-pointer = 2
 	    as fresh-pointer = (space-fresh-pointer newspace)
 	    while (< scan-pointer fresh-pointer)
-	    do (map-heap-words #'evacuate-oldspace
+	    do (map-heap-words evacuator
 			       (+ newspace-location scan-pointer)
 			       (+ newspace-location (space-fresh-pointer newspace)))
 	       (setf scan-pointer fresh-pointer))
