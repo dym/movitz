@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.25 2004/06/08 08:15:26 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.26 2004/06/08 20:11:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1273,19 +1273,21 @@
       (t `(logior (logior%2op ,(first constant-folded-integers) ,(second constant-folded-integers))
 		  ,@(cddr constant-folded-integers))))))
 
-(defun logxor%2op (x y)
-  (check-type x fixnum)
-  (check-type y fixnum)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) x)
-    (:compile-form (:result-mode :ebx) y)
-    (:xorl :ebx :eax)))
-
 (defun logxor (&rest integers)
-  (declare (dynamic-extent integers))
-  (if (null integers)
-      0
-    (reduce #'logxor%2op integers)))
+  (numargs-case
+   (1 (x) x)
+   (2 (x y)
+      (number-double-dispatch (x y)
+	((fixnum fixnum)
+	 (with-inline-assembly (:returns :eax)
+	   (:compile-form (:result-mode :eax) x)
+	   (:compile-form (:result-mode :ebx) y)
+	   (:xorl :ebx :eax)))))
+   (t (&rest integers)
+      (declare (dynamic-extent integers))
+      (if (null integers)
+	  0
+	(reduce #'logxor integers)))))
 
 (defun lognot (integer)
   (check-type integer fixnum)
@@ -1294,20 +1296,363 @@
     (:xorl #.(cl:- #xffffffff movitz::+movitz-fixnum-zmask+) :eax)))
 
 (defun ldb%byte (size position integer)
-  (check-type size fixnum)
-  (check-type position fixnum)
-  (logand (ash integer (- position))
-	  (svref #(#x0 #x1 #x3 #x7
-		   #xf #x1f #x3f #x7f
-		   #xff #x1ff #x3ff #x7ff
-		   #xfff #x1fff #x3fff #x7fff
-		   #xffff #x1ffff #x3ffff #x7ffff
-		   #xfffff #x1fffff #x3fffff #x7fffff
-		   #xffffff #x1ffffff #x3ffffff #x7ffffff
-		   #xfffffff)
-		 size)))
+  "This is LDB with explicit byte-size and position parameters."
+  (check-type size positive-fixnum)
+  (check-type position positive-fixnum)
+  (etypecase integer
+    (fixnum
+     (macrolet
+	 ((do-it ()
+	    `(with-inline-assembly (:returns :eax)
+	       (:compile-two-forms (:eax :ecx) integer position)
+	       (:cmpl ,(* (1- movitz:+movitz-fixnum-bits+) movitz:+movitz-fixnum-factor+)
+		      :ecx)
+	       (:ja '(:sub-program (outside-fixnum)
+		      (:break)
+		      (:addl #x80000000 :eax) ; sign into carry
+		      (:sbbl :ecx :ecx)
+		      (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
+		      (:jmp 'mask-fixnum)))
+	       (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	       (:std)			; <================= STD
+	       (:sarl :cl :eax)		; shift..
+	       (:andl ,(logxor #xffffffff movitz:+movitz-fixnum-zmask+) :eax)
+	       (:cld)			; =================> CLD
+	      mask-fixnum
+	       (:compile-form (:result-mode :ecx) size)
+	       (:cmpl ,(* (1- movitz:+movitz-fixnum-bits+) movitz:+movitz-fixnum-factor+)
+		      :ecx)
+	       (:jna 'fixnum-result)
+	       (:testl :eax :eax)
+	       (:jns 'fixnum-done)
+	       ;; We need to generate a bignum..
+	       ;; ..filling in 1-bits since the integer is negative.
+	       (:pushl :eax)		; This will become the LSB bigit.
+	      retry-ones-expanded-bignum
+	       (:declare-label-set retry-jumper-ones-expanded-bignum (retry-ones-expanded-bignum))
+	       ;; Calculate word-size from bytespec-size.
+	       (:compile-form (:result-mode :ecx) size)
+	       (:subl ,movitz:+movitz-fixnum-factor+ :ecx) ; Subtract 1
+	       (:shrl ,(+ 5 movitz:+movitz-fixnum-shift+) :ecx) ; Divide by 32
+	       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ; Add 1 for index->size..
+		       ,(* 2 movitz:+movitz-fixnum-factor+)) ; ..and 1 for header.
+		      :eax)
+	       (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
+	       (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
+				  'retry-jumper-ones-expanded-bignum)
+				(:edi (:edi-offset atomically-status))))
+	       (:call-global-constant get-cons-pointer)
+	       (:shll 16 :ecx)
+	       (:addl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0)) :ecx) ; add 1 for index->size
+	       (:movl :ecx (:eax ,movitz:+other-type-offset+))
+	       (:shrl 16 :ecx)
+	       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
+		       ,(* 1 movitz:+movitz-fixnum-factor+)) ; add 1 for header.
+		      :ecx)
+	       (:call-global-constant cons-commit)
+	       (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+				(:edi (:edi-offset atomically-status))))
+	       ;; Have fresh bignum in EAX, now fill it with ones.
+	       (:xorl :ecx :ecx)	; counter
+	      fill-ones-loop
+	       (:movl #xffffffff
+		      (:eax (:ecx 4) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+	       (:addl 1 :ecx)
+	       (:cmpw :cx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length)))
+	       (:jne 'fill-ones-loop)
+	       
+	       (:popl :ecx)		; The LSB bigit.
+	       (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
+	       (:movl :ecx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+	       (:movl :eax :ebx)
+	       ;; Compute MSB bigit mask in EDX
+	       (:compile-form (:result-mode :ecx) size)
+	       (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	       (:std)			; <================= STD
+	       (:xorl :edx :edx)
+	       (:andl 31 :ecx)
+	       (:jz 'fixnum-mask-ok)
+	       (:addl 1 :edx)
+	       (:shll :cl :edx)
+	      fixnum-mask-ok
+	       (:subl 1 :edx)
+	       (:movzxw (:ebx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length))
+			:ecx)
+	       (:andl :edx		; And EDX with the MSB bigit.
+		      (:ebx (:ecx 4) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
+	       (:movl :edi :edx)
+	       (:movl :edi :eax)
+	       (:cld)			; =================> CLD
+	       (:movl :ebx :eax)
+	       (:jmp 'fixnum-done)
+	       
+	      fixnum-result
+	       (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	       (:movl ,movitz:+movitz-fixnum-factor+ :edx) ; generate fixnum mask in EDX
+	       (:shll :cl :edx)
+	       (:subl ,movitz:+movitz-fixnum-factor+ :edx)
+	       (:andl :edx :eax)
+	       (:jmp 'fixnum-done)
+	      fixnum-done
+	       )))
+       (do-it)))
+    (positive-bignum
+     (cond
+      ((<= size 32)
+       ;; The result is likely to be a fixnum (or at least an u32), due to byte-size.
+       (macrolet
+	   ((do-it ()
+	      `(with-inline-assembly (:returns :eax)
+		 (:compile-form (:result-mode :ebx) integer)
+		 (:compile-form (:result-mode :eax) position)
+		 (:movl :eax :ecx)	; compute bigit-number in ecx
+		 (:sarl ,(+ 5 movitz:+movitz-fixnum-shift+) :ecx)
+		 (:addl 1 :ecx)
+		 (:cmpl #x10000 :ecx)
+		 (:jae 'position-outside-integer)
+		 (:cmpw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+		 (:jc '(:sub-program (position-outside-integer)
+			(:movsxb (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::sign)) :ecx)
+			(:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
+			(:jmp 'done-u32)))
+		 (:std)
+		 (:movl (:ebx (:ecx 4) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+			:eax)
+		 (:movl 0 :edx)		; If position was in last bigit.. (don't touch EFLAGS)
+		 (:je 'no-top-bigit)	; ..we must zero-extend rather than read top bigit.
+		 (:movl (:ebx (:ecx 4) ,(+ 0 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+			:edx)		; Read top bigit into EDX
+		no-top-bigit
+		 (:testl #xff00 (:ebx ,movitz:+other-type-offset+))
+		 (:jnz '(:sub-program (negative-bignum)
+			 ;; We must negate the bigits..
+			 (:break)
+			 ))
+		edx-eax-ok
+		 ;; EDX:EAX now holds the number that must be shifted and masked.
+		 (:compile-form (:result-mode :ecx) position)
+		 (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		 (:shrdl :cl :edx :eax)	; Shifted value into EAX
+		 (:compile-form (:result-mode :ecx) size)
+		 (:xorl :edx :edx)	; Generate a mask in EDX
+		 (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		 (:testl 31 :ecx)
+		 (:jz 'mask-ok-u32)
+		 (:addl 1 :edx)
+		 (:shll :cl :edx)
+		mask-ok-u32
+		 (:subl 1 :edx)
+		 (:andl :edx :eax)
+		 (:movl :eax :ecx)	; For boxing..
+		 (:movl :edi :eax)
+		 (:movl :edi :edx)
+		 (:cld)
+		 ;; See if we can return same bignum..
+		 (:cmpl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0))
+			(:ebx ,movitz:+other-type-offset+))			     
+		 (:jne 'cant-return-same)
+		 (:cmpl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		 (:jne 'cant-return-same)
+		 (:movl :ebx :eax)
+		 (:jmp 'done-u32)
+		cant-return-same
+		 (:call-global-constant box-u32-ecx)
+		done-u32
+		 )))
+	 (do-it)))
+      (t (macrolet
+	     ((do-it ()
+		`(let ()
+		   (with-inline-assembly (:returns :eax)
+		     (:compile-form (:result-mode :ebx) integer)
+		     (:compile-form (:result-mode :ecx) position)
+		     (:shrl ,(+ 5 movitz:+movitz-fixnum-shift+) :ecx) ; compute bigit-number in ecx
+		     (:cmpl #x10000 :ecx)
+		     (:jnc 'position-outside-integer)
+		     (:cmpw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+		     (:jbe '(:sub-program (position-outside-integer)
+			     (:movsxb (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::sign)) :ecx)
+			     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
+			     (:jmp 'done-u32)))
+		     
+		     (:compile-two-forms (:edx :ecx) position size)
+		     (:movl :ecx :eax)	; keep size/fixnum in EAX.
+		     (:addl :edx :ecx)
+		     (:into)		; just to make sure
+		     (:shrl ,(+ 5 movitz:+movitz-fixnum-shift+) :ecx) ; compute msb bigit index in ecx
+		     (:addl 1 :ecx)
+		     (:cmpw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+		     (je '(:sub-program (equal-size-maybe-return-same)
+			   (:testl :edx :edx) ; Can only return same if (zerop position).
+			   (:jnz 'adjust-size)
+			   (:movl :eax :ecx) ; size/fixnum
+			   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+			   (:andl 31 :ecx)
+			   (:jz 'yes-return-same)
+			   (:std)	; <================
+			   ;; we know EDX=0, now generate mask in EDX
+			   (:addl 1 :edx)
+			   (:shll :cl :edx)
+			   (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+			    :ecx)
+			   (:cmpl :edx (:ebx (:ecx 4)
+					,(+ -4 (bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))))
+			   (:movl 0 :edx) ; Safe value, and correct if we need to go to adjust-size.
+			   (:cld)	; =================>
+			   (:jnc 'adjust-size) ; nope, we have to generate a new bignum.
+			   yes-return-same
+			   (:movl :ebx :eax) ; yep, we can return same bignum.
+			   (:jmp 'ldb-done)))
+		     (:jnc 'size-ok)
+		     ;; We now know that (+ size position) is beyond the size of the bignum.
+		     ;; So, if (zerop position), we can return the bignum as our result.
+		     (:testl :edx :edx)
+		     (:jz '(:sub-program ()
+			    (:movl :ebx :eax) ; return the source bignum.
+			    (:jmp 'ldb-done)))
+		    adjust-size
+		     ;; The bytespec is (partially) outside source-integer, so we make the
+		     ;; size smaller before proceeding. new-size = (- source-int-length position)
+		     (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+			      :ecx)	; length of source-integer
+		     (:shll ,(+ 5 movitz:+movitz-fixnum-shift+) :ecx) ; fixnum bit-position
+		     (:xorl :eax :eax)	; In case the new size is zero.
+		     (:subl :edx :ecx)	; subtract position
+		     (:js '(:sub-program (should-not-happen)
+			    ;; new size should never be negative.
+			    (:break)))
+		     (:jz 'ldb-done)	; New size was zero, so the result of ldb is zero.
+		     (:movl :ecx :eax)	; New size into EAX.
+		    size-ok
+		    retry
+		     (:declare-label-set retry-jumper (retry))
+		     (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
+		     (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
+					'retry-jumper)
+				      (:edi (:edi-offset atomically-status))))
+		     ;; (new) Size is in EAX.
+		     (:pushl :eax)	; Save for later
+		     (:subl ,movitz:+movitz-fixnum-factor+ :eax)
+		     (:andl ,(logxor #xffffffff
+				     (mask-field (byte (+ 5 movitz:+movitz-fixnum-shift+) 0) -1))
+			    :eax)
+		     (:shrl 5 :eax)	; Divide (size-1) by 32 to get number of bigits-1
+		     ;; Now add 1 for index->size, 1 for header, and 1 for tmp storage before shift.
+		     (:addl ,(* 3 movitz:+movitz-fixnum-factor+) :eax)
+		     (:pushl :eax)
+		     (:call-global-constant get-cons-pointer)
+		     ;; (:store-lexical (:lexical-binding r) :eax :type t)
+		     (:popl :ecx)
+		     (:subl ,(* 2 movitz:+movitz-fixnum-factor+) :ecx) ; for tmp storage and header.
+		     (:shll ,(- 16 movitz:+movitz-fixnum-shift+) :ecx)
+		     (:orl ,(movitz:tag :bignum 0) :ecx)
+		     (:movl :ecx (:eax ,movitz:+other-type-offset+))
+		     (:compile-form (:result-mode :ebx) integer)
+		     
+		     (:xchgl :eax :ebx)
+		     ;; now: EAX = old integer, EBX = new result bignum
+		     
+		     ;; Edge case: When size(old)=size(new), the tail-tmp must be zero.
+		     ;; We check here, setting the tail-tmp to a mask for and-ing below.
+		     (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+			      :ecx)	; length of source-integer
+		     ;; Initialize tail-tmp to #xffffffff, meaning copy from source-integer.
+		     (:movl #xffffffff
+			    (:ebx (:ecx 4) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     (:cmpw :cx (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+		     (:jc '(:sub-program (result-too-big-shouldnt-happen)
+			    (:break)))
+		     (:jne 'tail-tmp-ok)
+		     ;; Sizes was equal, so set tail-tmp to zero.
+		     (:movl 0 (:ebx (:ecx 4) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		    tail-tmp-ok
+		     ;; Now copy the relevant part of the integer
+		     (:std)
+		     (:compile-form (:result-mode :ecx) position)
+		     (:sarl ,(+ 5 movitz:+movitz-fixnum-shift+) :ecx) ; compute bigit-number in ecx
+		     ;; We can use primitive pointers because we're both inside atomically and std.
+		     (:leal (:eax (:ecx 4) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+			    :eax)	; Use EAX as primitive pointer into source
+		     (:xorl :ecx :ecx)	; counter
+		    copy-integer
+		     (:movl (:eax) :edx)
+		     (:addl 4 :eax)
+		     (:movl :edx (:ebx (:ecx 4) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     (:addl 1 :ecx)
+		     (:cmpw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+		     (:jne 'copy-integer)
+		     ;; Copy one more than the length, namely the tmp at the end.
+		     ;; Tail-tmp was initialized to a bit-mask above.
+		     (:movl (:eax) :edx)
+		     (:andl :edx (:ebx (:ecx 4) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     ;; Copy done, now shift
+		     (:compile-form (:result-mode :ecx) position)
+		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		     (:andl 31 :ecx)
+		     (:jz 'shift-done)	; if (zerop (mod position 32)), no shift needed.
+		     (:xorl :edx :edx)	; counter
+		    shift-loop
+		     (:movl (:ebx (:edx 4) ,(+ 4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+			    :eax)	; Next bigit into eax
+		     (:shrdl :cl :eax	; Now shift bigit, with msbs from eax.
+			     (:ebx (:edx 4) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     (:addl 1 :edx)
+		     (:cmpw :dx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+		     (:jne 'shift-loop)
+		    shift-done
+		     ;; Now we must mask MSB bigit.
+		     (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+			      :edx)
+		     (:popl :ecx)	; (new) bytespec size
+		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		     (:andl 31 :ecx)
+		     (:jz 'mask-done)
+		     (:movl 1 :eax)	; Generate mask in EAX
+		     (:shll :cl :eax)
+		     (:subl 1 :eax)
+		     (:andl :eax
+			    (:ebx (:edx 4) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
+		    mask-done
+		     (:movl :edi :edx)	; safe EDX
+		     (:movl :edi :eax)	; safe EAX
+		     (:cld)
+		     ;; Now we must zero-truncate the result bignum in EBX.
+		     (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+			      :ecx)
+		    zero-truncate-loop
+		     (:cmpl 0 (:ebx (:ecx 4)
+				    ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
+		     (:jne 'zero-truncate-done)
+		     (:subl 1 :ecx)
+		     (:jnz 'zero-truncate-loop)
+		     ;; Zero bigits means the entire result collapsed to zero.
+		     (:xorl :eax :eax)
+		     (:jmp 'return-fixnum) ; don't commit the bignum allocation.
+		    zero-truncate-done
+		     (:cmpl 1 :ecx)	; If result size is 1, the result might have..
+		     (:jne 'complete-bignum-allocation) ; ..collapsed to a fixnum.
+		     (:cmpl ,movitz:+movitz-most-positive-fixnum+
+			    (:ebx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     (:ja 'complete-bignum-allocation)
+		     (:movl (:ebx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+			    :ecx)
+		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
+		     (:jmp 'return-fixnum)
+		    complete-bignum-allocation
+		     (:movw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+		     (:movl :ebx :eax)
+		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,movitz:+movitz-fixnum-factor+)
+			    :ecx)
+		     (:call-global-constant cons-commit)
+		    return-fixnum
+		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+				      (:edi (:edi-offset atomically-status))))
+		    ldb-done))))
+	   (do-it)))))))
+    
 
 (define-compiler-macro ldb%byte (&whole form &environment env size position integer)
+  "This is LDB with explicit byte-size and position parameters."
   (cond
    ((and (movitz:movitz-constantp size env)
 	 (movitz:movitz-constantp position env)
@@ -1414,7 +1759,6 @@
 (defun dpb (newbyte bytespec integer)
   (logior (mask-field bytespec (ash newbyte (byte-position bytespec)))
 	  (logandc2 integer (mask-field bytespec -1))))
-
 
 (defun mask-field (bytespec integer)
   (ash (ldb bytespec integer) (byte-position bytespec)))
