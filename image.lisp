@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.33 2004/06/01 15:16:49 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.34 2004/06/02 10:39:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -452,9 +452,10 @@
     :initform (make-segment-descriptor))
    (atomically-status
     :binary-type (define-bitfield atomically-status (lu32)
-		   (((:enum :byte (2 3))
+		   (((:enum :byte (3 2))
 		     :inactive 0
-		     :restart-primitive-function 1) ; data = slot-offset of pf.
+		     :restart-primitive-function 1 ; data = slot-offset of pf.
+		     :restart-jumper 2)	; data = ESI-relative jumper number.
 		    ((:bits) :reset-status-p 8
 			     :eax 9
 			     :ebx 10
@@ -485,6 +486,16 @@
 								     :movitz)))
 					  4)))
 			registers)))
+
+(defun atomically-status-jumper-fn (reset-status-p &rest registers)
+  (lambda (jumper)
+    (assert (= 0 (mod jumper 4)))
+    (bt:enum-value 'movitz::atomically-status
+		   (list* :restart-jumper
+			  (cons :reset-status-p
+				(if reset-status-p 1 0))
+			  (cons :data (truncate jumper 4))
+			  registers))))
 
 (defmethod movitz-object-offset ((obj movitz-constant-block)) 0)
 

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.9 2004/06/01 15:17:08 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.10 2004/06/02 10:39:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -178,6 +178,23 @@
 	    (:xorl :ecx :ecx)		; Do reset status to zero.
 	    (:jmp 'normal-return)
 	   not-simple-atomical-pf-restart
+	    (:cmpb ,(bt:enum-value 'movitz::atomically-status :restart-jumper) :cl)
+	    (:jne 'not-simple-restart-jumper)
+	    (:testl ,(bt:enum-value 'movitz::atomically-status '(:eax :ebx :ecx :edx))
+		    :ecx)		; map of registers to restore
+	    (:jnz 'not-simple-restart-jumper)
+	    (:shrl 16 :ecx)		; move atomically-status data into ECX
+	    (:movl (:ebp -24) :eax)	; This is the interruptee's ESI/funobj
+	    (:movl (:eax (:ecx 4) ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0))
+		   :ecx)		; This is the EIP to restart
+	    (:movl :ecx (:ebp 20))
+	    (:movl (:ebp -32) :ecx)
+	    (:testl ,(bt:enum-value 'movitz::atomically-status :reset-status-p)
+		    :ecx)		; Should we reset status to zero?
+	    (:jnz 'normal-return)
+	    (:xorl :ecx :ecx)		; Do reset status to zero.
+	    (:jmp 'normal-return)
+	   not-simple-restart-jumper
 	    ;; Don't know what to do.
 	    (:halt)
 	    (:int 90)

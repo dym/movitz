@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.14 2004/06/01 15:17:04 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.15 2004/06/02 10:39:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -68,8 +68,8 @@
 	    (:cmpl #x3fff4 :ecx)
 	    (:jge '(:sub-program (allocation-failed)
 		    ;; Exit thread-atomical
-;;;		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-;;;			       (:edi (:edi-offset atomically-status))))
+		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+			       (:edi (:edi-offset atomically-status))))
 		    (:int 113)
 		    ;; This interrupt can be retried.
 		    (:jmp 'retry-cons)))
@@ -95,62 +95,91 @@
 	    (:ret)
 	   not-fixnum
 	   retry-cons
+	    (:locally (:movl ,(movitz::atomically-status-simple-pf 'fast-cons t)
+			     (:edi (:edi-offset atomically-status))))
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :eax)
 	    (:cmpl #x3fff4 :eax)
 	    (:jge '(:sub-program ()
+		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+			       (:edi (:edi-offset atomically-status))))
 		    (:int 113)		; This interrupt can be retried.
 		    (:jmp 'retry-cons)))
 	    (:movl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0))
 		   (:edx :eax 2))
 	    (:movl :ecx (:edx :eax 6))
 	    (:addl 8 :eax)
-	    (:movl :eax (:edx 2))
+	    (:movl :eax (:edx 2))	; Commit allocation
+	    ;; Exit thread-atomical
+	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+			     (:edi (:edi-offset atomically-status))))
 	    (:leal (:edx :eax) :eax)
-	    (:ret)
-	    (:int 107))))
+	    (:ret))))
     (do-it)))
 
 (defun los0-malloc-clumps (clumps)
-  (check-type clumps (integer 0 4000))
-  (with-inline-assembly (:returns :eax)
-   retry
-    (:compile-form (:result-mode :ebx) clumps)
-    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
-    (:movl (:edx 2) :ecx)
-    (:leal ((:ebx 2) :ecx) :eax)
-    (:cmpl #x3fff4 :eax)
-    (:jge '(:sub-program ()
-	    (:compile-form (:result-mode :ignore)
-	     (stop-and-copy))
-	    (:jmp 'retry)))
-    (:movl :eax (:edx 2))
-    (:movl #.(movitz:tag :infant-object) (:edx :ecx 6))
-    (:leal (:edx :ecx 8) :eax)		
-    (:xorl :ecx :ecx)
-   init-loop				; Now init eax number of clumps.
-    (:movl :edi (:eax (:ecx 2) -6))
-    (:movl :edi (:eax (:ecx 2) -2))
-    (:addl 4 :ecx)
-    (:cmpl :ebx :ecx)
-    (:jb 'init-loop)))
+  (check-type clumps (integer 0 16000))
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :eax)
+	   retry
+	    (:compile-form (:result-mode :ebx) clumps)
+	    (:declare-label-set retry-jumper (retry))
+	    (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t)
+			       'retry-jumper)
+			     (:edi (:edi-offset atomically-status))))
+	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
+	    (:movl (:edx 2) :ecx)
+	    (:leal ((:ebx 2) :ecx) :eax)
+	    (:cmpl #x3fff4 :eax)
+	    (:jge '(:sub-program ()
+		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+			       (:edi (:edi-offset atomically-status))))
+		    (:compile-form (:result-mode :ignore)
+		     (stop-and-copy))
+		    (:jmp 'retry)))
+	    (:movl :eax (:edx 2))
+	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+			     (:edi (:edi-offset atomically-status))))
+	    (:movl #.(movitz:tag :infant-object) (:edx :ecx 6))
+	    (:leal (:edx :ecx 8) :eax)		
+	    (:xorl :ecx :ecx)
+	   init-loop			; Now init eax number of clumps.
+	    (:movl :edi (:eax (:ecx 2) -6))
+	    (:movl :edi (:eax (:ecx 2) -2))
+	    (:addl 4 :ecx)
+	    (:cmpl :ebx :ecx)
+	    (:jb 'init-loop))))
+    (do-it)))
 
 (defun los0-malloc-data-clumps (clumps)
   (check-type clumps (integer 0 4000))
-  (with-inline-assembly (:returns :eax)
-   retry
-    (:compile-form (:result-mode :ebx) clumps)
-    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
-    (:movl (:edx 2) :ecx)
-    (:leal ((:ebx 2) :ecx) :eax)
-    (:cmpl #x3fff4 :eax)
-    (:jge '(:sub-program ()
-	    (:compile-form (:result-mode :ignore)
-	     (stop-and-copy))
-	    (:jmp 'retry)))
-    (:movl :eax (:edx 2))
-    (:movl #.(movitz:tag :infant-object) (:edx :ecx 6))
-    (:leal (:edx :ecx 8) :eax)))
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :eax)
+	   retry
+	    (:compile-form (:result-mode :ebx) clumps)
+	    (:declare-label-set retry-jumper (retry))
+	    (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t)
+			       'retry-jumper)
+			     (:edi (:edi-offset atomically-status))))
+	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
+	    (:movl (:edx 2) :ecx)
+	    (:leal ((:ebx 2) :ecx) :eax)
+	    (:cmpl #x3fff4 :eax)
+	    (:jge '(:sub-program ()
+		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+			       (:edi (:edi-offset atomically-status))))
+		    (:compile-form (:result-mode :ignore)
+		     (stop-and-copy))
+		    (:jmp 'retry)))
+	    (:movl :eax (:edx 2))
+	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+			     (:edi (:edi-offset atomically-status))))
+
+	    (:movl #.(movitz:tag :infant-object) (:edx :ecx 6))
+	    (:leal (:edx :ecx 8) :eax))))
+    (do-it)))
 
 (defun los0-handle-out-of-memory (exception interrupt-frame)
   (declare (ignore exception interrupt-frame))
