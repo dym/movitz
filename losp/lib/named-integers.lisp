@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jan  4 16:13:46 2002
 ;;;;                
-;;;; $Id: named-integers.lisp,v 1.5 2004/12/09 14:12:41 ffjeld Exp $
+;;;; $Id: named-integers.lisp,v 1.6 2004/12/10 12:47:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -85,7 +85,7 @@
 			     ',integer-list
 			     ',name-list))))
 	     (eval-when (:compile-toplevel)
-	       ,@constant-declarations
+;;;	       ,@constant-declarations
 	       (export ',constant-exports))
 	     ,@constant-declarations
 	     ',type-name))))
