@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.5 2004/04/07 00:45:54 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.6 2004/04/07 13:55:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -62,7 +62,8 @@
     (:movl (:edx 2) :ecx)
     (:cmpl #x3fff4 :ecx)
     (:jge '(:sub-program ()
-	    (:int 112)
+	    (:int 113)
+	    ;; This interrupt can be retried.
 	    (:jmp 'retry-cons)))
     (:movl :eax (:edx :ecx 2))
     (:movl :ebx (:edx :ecx 6))
@@ -112,7 +113,7 @@
       (symbol-function 'new-malloc-clumps))
     (setf (symbol-function 'new-malloc-clumps)
       old-malloc))
-  (setf (interrupt-handler 112) 'los0-handle-out-of-memory)
+  (setf (interrupt-handler 113) 'los0-handle-out-of-memory)
   (values))
 
 (defun install-old-consing ()
