@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.5 2004/04/15 15:18:43 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.6 2004/04/15 15:23:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -240,15 +240,14 @@
 	nil))))
 
 
-(defun interrupt-handler (n)
+(defun exception-handler (n)
   (let ((vector (load-global-constant interrupt-handlers)))
     (svref vector n)))
 
-(defun (setf interrupt-handler) (handler n)
+(defun (setf exception-handler) (handler n)
   (check-type handler function)
   (let ((vector (load-global-constant interrupt-handlers)))
     (setf (svref vector n) handler)))
-
 
 (defun cli ()
   (with-inline-assembly (:returns :nothing)

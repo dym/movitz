@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.8 2004/04/15 13:21:42 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.9 2004/04/15 15:23:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -113,7 +113,7 @@
       (symbol-function 'new-malloc-clumps))
     (setf (symbol-function 'new-malloc-clumps)
       old-malloc))
-  (setf (interrupt-handler 113)
+  (setf (exception-handler 113)
     (lambda (exception interrupt-frame)
       (declare (ignore exception interrupt-frame))
       (format t "~&;; Handling out-of-memory exception..")
