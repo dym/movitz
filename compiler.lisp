@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.24 2004/02/13 10:40:14 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.25 2004/02/13 22:05:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -50,6 +50,9 @@ compile, using the host compiler, the code rather than just using eval.")
 
 (defvar *compiler-compile-macro-expanders* t
   "For macros of any kind, compile the macro-expanders using the host compiler.")
+
+(defvar *compiler-do-type-inference* t
+  "Spend time and effort performing type inference and optimization.")
 
 (defvar *compiling-function-name*)
 (defvar muerte.cl:*compile-file-pathname* nil)
@@ -142,7 +145,8 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
 Gensym a name whose symbol-function is set to the macro-expander, and return that symbol."
   (let ((function-name (gensym (format nil "~A-expander-~@[~A-~]" type name))))
     (if *compiler-compile-macro-expanders*
-	(compile function-name lambda-form)
+	(with-host-environment ()
+	  (compile function-name lambda-form))
       (setf (symbol-function function-name)
 	(coerce lambda-form 'function)))
     function-name))
@@ -331,113 +335,115 @@ Otherwise coerce funobj to class."
    (multiple-value-list (type-specifier-encode nil))))
 
 (defun analyze-bindings (toplevel-funobj)
-  "Figure out usage of bindings in a toplevel funobj."
-  (let ((more-binding-references-p nil)
-	(binding-usage (make-hash-table :test 'eq)))
-    (labels ((type-is-t (type-specifier)
-	       (or (eq type-specifier t)
-		   (and (listp type-specifier)
-			(eq 'or (car type-specifier))
-			(some #'type-is-t (cdr type-specifier)))))
-	     (analyze-store (binding type)
-	       (assert (not (null type)) ()
-		 "store-lexical with empty type.")
-	       (assert (or (typep type 'binding)
-			   (eql 1 (type-specifier-num-values type))) ()
-		 "store-lexical with multiple-valued type: ~S for ~S" type binding)
-	       (let ((analysis (or (gethash binding binding-usage)
-				   (setf (gethash binding binding-usage)
-				     (make-type-analysis)))))
-		 (cond
-		  ((typep binding 'function-argument)
-		   (setf (type-analysis-encoded-type analysis)
-		     (multiple-value-list (type-specifier-encode t))))
-		  ((and (consp type) (eq 'binding-type (car type)))
-		   (let ((target-binding (binding-target (cadr type))))
-		     (cond
-		      ((eq binding target-binding))
-		      ((typep binding 'constant-object-binding)
-		       (setf (type-analysis-encoded-type analysis)
+  "Figure out usage of bindings in a toplevel funobj.
+Side-effects each binding's binding-store-type."
+  (when *compiler-do-type-inference*
+    (let ((more-binding-references-p nil)
+	  (binding-usage (make-hash-table :test 'eq)))
+      (labels ((type-is-t (type-specifier)
+		 (or (eq type-specifier t)
+		     (and (listp type-specifier)
+			  (eq 'or (car type-specifier))
+			  (some #'type-is-t (cdr type-specifier)))))
+	       (analyze-store (binding type)
+		 (assert (not (null type)) ()
+		   "store-lexical with empty type.")
+		 (assert (or (typep type 'binding)
+			     (eql 1 (type-specifier-num-values type))) ()
+		   "store-lexical with multiple-valued type: ~S for ~S" type binding)
+		 (let ((analysis (or (gethash binding binding-usage)
+				     (setf (gethash binding binding-usage)
+				       (make-type-analysis)))))
+		   (cond
+		    ((typep binding 'function-argument)
+		     (setf (type-analysis-encoded-type analysis)
+		       (multiple-value-list (type-specifier-encode t))))
+		    ((and (consp type) (eq 'binding-type (car type)))
+		     (let ((target-binding (binding-target (cadr type))))
+		       (cond
+			((eq binding target-binding))
+			((typep binding 'constant-object-binding)
+			 (setf (type-analysis-encoded-type analysis)
+			   (multiple-value-list
+			    (multiple-value-call
+				#'encoded-types-or 
+			      (values-list (type-analysis-encoded-type analysis))
+			      (member-type-encode (constant-object target-binding))))))
+			(t (pushnew target-binding (type-analysis-binding-types analysis))
+			   (setf more-binding-references-p t)))))
+		    (t (setf (type-analysis-encoded-type analysis)
 			 (multiple-value-list
 			  (multiple-value-call
 			      #'encoded-types-or 
 			    (values-list (type-analysis-encoded-type analysis))
-			    (member-type-encode (constant-object target-binding))))))
-		      (t (pushnew target-binding (type-analysis-binding-types analysis))
-			 (setf more-binding-references-p t)))))
-		  (t (setf (type-analysis-encoded-type analysis)
-		       (multiple-value-list
-			(multiple-value-call
-			    #'encoded-types-or 
-			  (values-list (type-analysis-encoded-type analysis))
-			  (type-specifier-encode type))))))))
-	     (analyze-code (code)
-	       (dolist (instruction code)
-		 (when (listp instruction)
-		   (multiple-value-bind (store-binding store-type)
-		       (find-written-binding-and-type instruction)
-		     (when store-binding
-		       (analyze-store (binding-target store-binding) store-type)))
-		   (analyze-code (instruction-sub-program instruction)))))
-	     (analyze-funobj (funobj)
-	       (loop for (nil . function-env) in (function-envs funobj)
-		   do (analyze-code (extended-code function-env)))
-	       (loop for function-binding in (sub-function-binding-usage funobj) by #'cddr
-		   do (analyze-funobj (function-binding-funobj function-binding)))
-	       funobj))
-      ;; 1. Examine each store to lexical bindings.
-      (analyze-funobj toplevel-funobj)
-      ;; 2.
-      (loop repeat 10 while more-binding-references-p
-	  doing
-	    (setf more-binding-references-p nil)
-	    (maphash (lambda (binding analysis)
-		       (dolist (target-binding (type-analysis-binding-types analysis))
-			 (let* ((target-analysis
-				 (or (gethash target-binding binding-usage)
-				     (and (typep target-binding 'function-argument)
-					  (make-type-analysis
-					   :encoded-type (multiple-value-list
-							  (type-specifier-encode t))))
-				     (error "Type-reference by ~S to unknown binding ~S"
-					    binding target-binding)))
-				(new-type (setf (type-analysis-encoded-type analysis)
-					    (multiple-value-list
-					     (multiple-value-call
-						 #'encoded-types-or 
-					       (values-list
-						(type-analysis-encoded-type analysis))
-					       (values-list
-						(type-analysis-encoded-type target-analysis)))))))
-			   (cond
-			    ((apply #'encoded-allp new-type)
-			     ;; If the type is already T, no need to look further.
-			     (setf (type-analysis-binding-types analysis) nil))
-			    ((setf (type-analysis-binding-types analysis)
-			       (remove target-binding
-				       (remove binding
-					       (union (type-analysis-binding-types analysis)
-						      (type-analysis-binding-types target-analysis)))))
-			     (setf more-binding-references-p t))))))
-		     binding-usage))
-      (when more-binding-references-p
-	(warn "Unable to remove all binding-references duding lexical type analysis."))
-      ;; 3.
-      (maphash (lambda (binding analysis)
-		 (assert (null (type-analysis-binding-types analysis)) ()
-		   "binding ~S type ~S still refers to ~S"
-		   binding
-		   (apply #'encoded-type-decode (type-analysis-encoded-type analysis))
-		   (type-analysis-binding-types analysis))
-		 (setf (binding-store-type binding)
-		   (type-analysis-encoded-type analysis))
-		 #+ignore
-		 (unless (apply #'encoded-allp (type-analysis-encoded-type analysis))
-		   (warn "Type: ~A => ~A"
-			 (binding-name binding)
-			 (apply #'encoded-type-decode (type-analysis-encoded-type analysis)))))
-	       binding-usage)
-      toplevel-funobj)))
+			    (type-specifier-encode type))))))))
+	       (analyze-code (code)
+		 (dolist (instruction code)
+		   (when (listp instruction)
+		     (multiple-value-bind (store-binding store-type)
+			 (find-written-binding-and-type instruction)
+		       (when store-binding
+			 (analyze-store (binding-target store-binding) store-type)))
+		     (analyze-code (instruction-sub-program instruction)))))
+	       (analyze-funobj (funobj)
+		 (loop for (nil . function-env) in (function-envs funobj)
+		     do (analyze-code (extended-code function-env)))
+		 (loop for function-binding in (sub-function-binding-usage funobj) by #'cddr
+		     do (analyze-funobj (function-binding-funobj function-binding)))
+		 funobj))
+	;; 1. Examine each store to lexical bindings.
+	(analyze-funobj toplevel-funobj)
+	;; 2.
+	(loop repeat 10 while more-binding-references-p
+	    doing
+	      (setf more-binding-references-p nil)
+	      (maphash (lambda (binding analysis)
+			 (dolist (target-binding (type-analysis-binding-types analysis))
+			   (let* ((target-analysis
+				   (or (gethash target-binding binding-usage)
+				       (and (typep target-binding 'function-argument)
+					    (make-type-analysis
+					     :encoded-type (multiple-value-list
+							    (type-specifier-encode t))))
+				       (error "Type-reference by ~S to unknown binding ~S"
+					      binding target-binding)))
+				  (new-type (setf (type-analysis-encoded-type analysis)
+					      (multiple-value-list
+					       (multiple-value-call
+						   #'encoded-types-or 
+						 (values-list
+						  (type-analysis-encoded-type analysis))
+						 (values-list
+						  (type-analysis-encoded-type target-analysis)))))))
+			     (cond
+			      ((apply #'encoded-allp new-type)
+			       ;; If the type is already T, no need to look further.
+			       (setf (type-analysis-binding-types analysis) nil))
+			      ((setf (type-analysis-binding-types analysis)
+				 (remove target-binding
+					 (remove binding
+						 (union (type-analysis-binding-types analysis)
+							(type-analysis-binding-types target-analysis)))))
+			       (setf more-binding-references-p t))))))
+		       binding-usage))
+	(when more-binding-references-p
+	  (warn "Unable to remove all binding-references duding lexical type analysis."))
+	;; 3.
+	(maphash (lambda (binding analysis)
+		   (assert (null (type-analysis-binding-types analysis)) ()
+		     "binding ~S type ~S still refers to ~S"
+		     binding
+		     (apply #'encoded-type-decode (type-analysis-encoded-type analysis))
+		     (type-analysis-binding-types analysis))
+		   (setf (binding-store-type binding)
+		     (type-analysis-encoded-type analysis))
+		   #+ignore
+		   (unless (apply #'encoded-allp (type-analysis-encoded-type analysis))
+		     (warn "Type: ~A => ~A"
+			   (binding-name binding)
+			   (apply #'encoded-type-decode (type-analysis-encoded-type analysis)))))
+		 binding-usage))))
+  toplevel-funobj)
 
 (defun resolve-borrowed-bindings (toplevel-funobj)
   "For <funobj>'s code, for every non-local binding used we create
@@ -1128,11 +1134,18 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 				   (delete-file-p nil))
   (handler-bind
       (#+sbcl (sb-ext:defconstant-uneql #'continue)
+       #+lispworks-personal-edition
+       (conditions:stack-overflow (lambda (&optional c)
+				    (declare (ignore c))
+				    (warn "Stack overflow. Skipping function ~S.~%"
+					  *compiling-function-name*)
+				    (invoke-restart 'skip-toplevel-form)))
        #+ignore ((or error warning) (lambda (c)
 			     (declare (ignore c))
 			     (format *error-output* "~&;; In file ~S:" path))))
     (unwind-protect
-	(let ((*features* (image-movitz-features *image*)))
+	(let ((*movitz-host-features* *features*)
+	      (*features* (image-movitz-features *image*)))
 	  (multiple-value-prog1
 	      (movitz-compile-file-internal path load-priority)
 	    (unless (equalp *features* (image-movitz-features *image*))
@@ -1152,45 +1165,51 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 						     (symbol-value '*default-load-priority*)
 						     (1+ (symbol-value '*default-load-priority*)))))
   (declare (special *default-load-priority*))
-  (with-retries-until-true (retry "Restart Movitz compilation of ~S." path)
-    (let* ((muerte.cl::*compile-file-pathname* path)
-	   (*package* (find-package :muerte))
-	   (funobj (make-instance 'movitz-funobj-pass1
-		     :name (intern (format nil "file-~A" path) :muerte)
-		     :lambda-list (movitz-read nil)))
-	   (funobj-env (make-local-movitz-environment nil funobj
-						      :type 'funobj-env
-						      :declaration-context :funobj))
-	   (function-env (make-local-movitz-environment funobj-env funobj
-							:type 'function-env
+  (with-simple-restart (continue "Skip Movitz compilation of ~S." path)
+    (with-retries-until-true (retry "Restart Movitz compilation of ~S." path)
+      (warn "Compiling ~A.." path)
+      (let* ((muerte.cl::*compile-file-pathname* path)
+	     (*package* (find-package :muerte))
+	     (funobj (make-instance 'movitz-funobj-pass1
+		       :name (intern (format nil "file-~A" path) :muerte)
+		       :lambda-list (movitz-read nil)))
+	     (funobj-env (make-local-movitz-environment nil funobj
+							:type 'funobj-env
 							:declaration-context :funobj))
-	   (file-code
-	    (with-compilation-unit ()
-	      (add-bindings-from-lambda-list () function-env)
-	      (with-open-file (stream path :direction :input)
-		(setf (funobj-env funobj) funobj-env)
-		(loop for form = (with-movitz-syntax ()
-				   (read stream nil '#0=#:eof))
-		    until (eq form '#0#)
-		    appending
-		      (with-simple-restart (skip-toplevel-form
-					    "Skip the compilation of this top-level form.")
-			(compiler-call #'compile-form
-			  :form form
-			  :funobj funobj
-			  :env function-env
-			  :top-level-p t
-			  :result-mode :ignore)))))))
-      (cond
-       ((null file-code)
-	(setf (image-load-time-funobjs *image*)
-	  (delete funobj (image-load-time-funobjs *image*) :key #'first)))
-       (t (setf (extended-code function-env) file-code
-		(need-normalized-ecx-p function-env) nil
-		(function-envs funobj) (list (cons 'muerte.cl::t function-env))
-		(funobj-env funobj) funobj-env)
-	  (make-compiled-funobj-pass2 funobj)))
-      t)))
+	     (function-env (make-local-movitz-environment funobj-env funobj
+							  :type 'function-env
+							  :declaration-context :funobj))
+	     (file-code
+	      (with-compilation-unit ()
+		(add-bindings-from-lambda-list () function-env)
+		(with-open-file (stream path :direction :input)
+		  (setf (funobj-env funobj) funobj-env)
+		  (loop for form = (with-movitz-syntax ()
+				     (read stream nil '#0=#:eof))
+		      until (eq form '#0#)
+		      appending
+			(with-simple-restart (skip-toplevel-form
+					      "Skip the compilation of top-level form~@[ ~A~]."
+					      (cond
+					       ((symbolp form) form)
+					       ((symbolp (car form)) (car form))))
+			  #+lispworks-personal-edition (hcl:mark-and-sweep 2)
+			  (compiler-call #'compile-form
+			    :form form
+			    :funobj funobj
+			    :env function-env
+			    :top-level-p t
+			    :result-mode :ignore)))))))
+	(cond
+	 ((null file-code)
+	  (setf (image-load-time-funobjs *image*)
+	    (delete funobj (image-load-time-funobjs *image*) :key #'first)))
+	 (t (setf (extended-code function-env) file-code
+		  (need-normalized-ecx-p function-env) nil
+		  (function-envs funobj) (list (cons 'muerte.cl::t function-env))
+		  (funobj-env funobj) funobj-env)
+	    (make-compiled-funobj-pass2 funobj)))
+	t))))
 
 ;;;;
 
@@ -5352,7 +5371,7 @@ and a list of any intervening unwind-protect environment-slots."
 
 (define-find-read-bindings :incf-lexvar (binding delta &key protect-registers)
   (declare (ignore delta protect-registers))
-  binding)
+  nil #+ignore binding)
 
 (define-extended-code-expander :incf-lexvar (instruction funobj frame-map)
   (destructuring-bind (binding delta &key protect-registers)
@@ -5360,11 +5379,11 @@ and a list of any intervening unwind-protect environment-slots."
     (check-type binding binding)
     (check-type delta integer)
     (let* ((binding (binding-target binding))
-	   (location (new-binding-location binding frame-map :default nil)))
-      (assert (= 5 (length (binding-store-type binding))) ()
-	"Weird encoded-type: ~S" (binding-store-type binding))
+	   (location (new-binding-location binding frame-map :default nil))
+	   (binding-type (binding-store-type binding)))
       (cond
-       ((and location
+       ((and binding-type
+	     location
 	     (not (binding-lended-p binding))
 	     (multiple-value-call #'encoded-subtypep
 	       (values-list (binding-store-type binding))
@@ -5374,9 +5393,10 @@ and a list of any intervening unwind-protect environment-slots."
 	`((:addl ,(* delta +movitz-fixnum-factor+)
 		 (:ebp ,(stack-frame-offset location)))
 	  (:into)))
-       ((multiple-value-call #'encoded-subtypep 
-	  (values-list (binding-store-type binding))
-	  (type-specifier-encode 'integer))
+       ((and binding-type
+	     (multiple-value-call #'encoded-subtypep 
+	       (values-list (binding-store-type binding))
+	       (type-specifier-encode 'integer)))
 	(let ((register (chose-free-register protect-registers)))
 	  `(,@(make-load-lexical (ensure-local-binding binding funobj) 
 				 register funobj nil frame-map
