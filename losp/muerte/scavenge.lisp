@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.10 2004/06/11 23:26:14 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.11 2004/06/16 07:42:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -59,12 +59,15 @@ start-location and end-location."
 	 ((scavenge-typep x :illegal)
 	  (error "Illegal word ~Z at ~S." x scan))
 	 ((scavenge-typep x :bignum)
-	  (assert (evenp scan))
+	  (assert (evenp scan) ()
+	    "Scanned #x~Z at odd address #x~X." x scan)
 	  ;; Just skip the bigits
 	  (let* ((bigits (word-upper16 x))
 		 (delta (1+ (logand bigits -2))))
 	    (incf scan delta)))
 	 ((scavenge-typep x :funobj)
+	  (assert (evenp scan) ()
+	    "Scanned #x~Z at odd address #x~X." x scan)
 	  ;; Process code-vector pointer specially..
 	  (let* ((funobj (%word-offset scan #.(movitz:tag :other)))
 		 (code-vector (funobj-code-vector funobj))
@@ -80,18 +83,26 @@ start-location and end-location."
 		))
 	    (incf scan (+ 7 num-jumpers)))) ; Don't scan the jumpers.
 	 ((scavenge-typep x :infant-object)
+	  (assert (evenp scan) ()
+	    "Scanned #x~Z at odd address #x~X." x scan)
 	  (error "Scanning an infant object ~Z at ~S (end ~S)." x scan end-location))
 	 ((or (scavenge-wide-typep x :vector
 				   #.(bt:enum-value 'movitz:movitz-vector-element-type :u8))
 	      (scavenge-wide-typep x :vector
 				   #.(bt:enum-value 'movitz:movitz-vector-element-type :character)))
-	  (let ((len (word-upper16 x)))
+	  (assert (evenp scan) ()
+	    "Scanned #x~Z at odd address #x~X." x scan)
+	  (let ((len (memref scan (word-upper16 x) 0 :unsigned-byte16)))
 	    (incf scan (1+ (* 2 (truncate (+ 7 len) 8))))))
 	 ((scavenge-wide-typep x :vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u16))
-	  (let ((len (word-upper16 x)))
+	  (assert (evenp scan) ()
+	    "Scanned #x~Z at odd address #x~X." x scan)
+	  (let ((len (memref scan (word-upper16 x) 0 :unsigned-byte16)))
 	    (incf scan (1+ (* 2 (truncate (+ 3 len) 4))))))
 	 ((scavenge-wide-typep x :vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u32))
-	  (let ((len (word-upper16 x)))
+	  (assert (evenp scan) ()
+	    "Scanned #x~Z at odd address #x~X." x scan)
+	  (let ((len (memref scan (word-upper16 x) 0 :unsigned-byte16)))
 	    (incf scan (1+ (logand (1+ len) -2)))))
 	 ((eq x (fixnum-word 3))
 	  (incf scan)

@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.20 2004/06/11 23:26:09 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.21 2004/06/16 07:42:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -345,7 +345,7 @@ integer (native lisp) value."
    (num-elements
     :binary-type lu16
     :initarg :num-elements
-    :reader movitz-vector-num-elements)
+    :reader movitz-vector-num-elements)      
    (flags
     :accessor movitz-vector-flags
     :initarg :flags
@@ -362,7 +362,7 @@ integer (native lisp) value."
    (fill-pointer
     :binary-type lu16
     :initarg :fill-pointer
-    :accessor movitz-vector-fill-pointer)   
+    :accessor movitz-vector-fill-pointer)
    (data
     :binary-lisp-type :label)		; data follows physically here
    (symbolic-data
@@ -375,31 +375,51 @@ integer (native lisp) value."
        (byte 8 8)
        (enum-value 'other-type-byte :vector)))
 
-;;;(define-binary-class movitz-new-vector (movitz-heap-object-other)
-;;;  ((length
-;;;    :binary-type u32
-;;;    :initarg :length
-;;;    :accessor movitz-simple-vector-length)
-;;;   (type
-;;;    :binary-type other-type-byte
-;;;    :reader movitz-vector-type)
-;;;   #+ignore
-;;;   (element-type
-;;;    :binary-type (define-enum movitz-vector-element-type (u8)
-;;;		   :any-t 0
-;;;		   :character 1
-;;;		   :u8 2
-;;;		   :u16 3
-;;;		   :u32 4
-;;;		   :bit 5)
-;;;    :initarg :element-type
-;;;    :reader movitz-vector-element-type)
-;;;   (data
-;;;    :binary-lisp-type :label)
-;;;   (symbolic-data
-;;;    :initarg :symbolic-data
-;;;    :accessor movitz-vector-symbolic-data))
-;;;  (:slot-align type #.+other-type-offset+))
+#+ignore
+(define-binary-class movitz-new-vector (movitz-heap-object-other)
+  ((type
+    :binary-type other-type-byte
+    :reader movitz-vector-type
+    :initform :new-vector)
+   (element-type
+    :binary-type (define-enum movitz-vector-element-type (u8)
+		   :any-t 0
+		   :character 1
+		   :u8 2
+		   :u16 3
+		   :u32 4
+		   :bit 5)
+    :initarg :element-type
+    :reader movitz-vector-element-type)
+   (dummy
+    :binary-type :lu16)
+   (fill-pointer
+    :binary-type lu16
+    :initarg :fill-pointer
+    :accessor movitz-vector-fill-pointer)
+   (flags
+    :accessor movitz-vector-flags
+    :initarg :flags
+    :initform nil
+    :binary-type (define-bitfield movitz-vector-flags (u8)
+		   (((:bits) :fill-pointer-p 2
+			     :code-vector-p 3
+			     :std-instance-slots-p 4))))
+   (alignment-power
+    :binary-lisp-type u8		; align to 2^(high-nibble+3) + low-nibble
+    :initform 0
+    :initarg :alignment-power
+    :reader movitz-vector-alignment-power)
+   (num-elements
+    :binary-type lu16
+    :initarg :num-elements
+    :reader movitz-vector-num-elements)      
+   (data
+    :binary-lisp-type :label)		; data follows physically here
+   (symbolic-data
+    :initarg :symbolic-data
+    :accessor movitz-vector-symbolic-data))
+  (:slot-align type #.+other-type-offset+))
 
 (defun movitz-type-word-size (type)
   (truncate (sizeof (intern (symbol-name type) :movitz)) 4))
