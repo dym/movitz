@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.6 2004/03/26 13:58:01 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.7 2004/03/28 17:31:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -312,6 +312,11 @@ as that vector."
 (defun funobj-debug-info (funobj)
   (check-type funobj compiled-function)
   (movitz-accessor-u16 funobj movitz-funobj debug-info))
+
+(defun funobj-frame-num-unboxed (funobj)
+  "The number of unboxed slots in this function's stack-frame(s)."
+  (declare (ignore funobj))
+  0)
 
 (defun make-funobj (&key (name :unnamed)
 			 (code-vector (funobj-code-vector #'constantly-prototype))
