@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.29 2004/07/21 13:28:44 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.30 2004/07/21 14:17:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -966,7 +966,7 @@
   (error "numargs-case at illegal position."))
 
 (defmacro movitz-backquote (expression)
-  `(un-backquote ',expression 0))
+  (un-backquote expression 0))
 
 (define-compiler-macro spin-wait-pause ()
   "Insert a pause instruction, which improves performance of
