@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.30 2004/11/11 10:48:22 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.31 2004/11/11 19:26:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -292,7 +292,11 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				     body-code
 				   (progn #+ignore (warn "recompile..") ; XXX
 					  (compile-body)))
-				 (when (plusp (num-specials local-env))
+				 (when (and (plusp (num-specials local-env))
+					    (not (eq :non-local-exit body-returns)))
+				   #+ignore
+				   (warn "let spec ret: ~S, want: ~S ~S"
+					 body-returns result-mode let-var-specs)
 				   `((:movl (:esp ,(+ -4 (* 16 (num-specials local-env)))) :edx)
 				     (:locally (:call (:edi ,(bt:slot-offset 'movitz-run-time-context
 									     'dynamic-variable-uninstall))))
@@ -1248,7 +1252,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		 ;; Execute protected form..
 		 (compiler-call #'compile-form
 		   :env unwind-protect-env
-		   :with-stack-used t
+		   :with-stack-used t ;; XXX Not really true, is it?
 		   :forward all
 		   :result-mode :multiple-values
 		   :form protected-form)
