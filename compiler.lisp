@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.9 2004/02/03 18:02:59 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.10 2004/02/03 19:17:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -139,22 +139,21 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
 	       lambda-form)
     (coerce lambda-form 'function)))
 
-(defun make-compiled-funobj (&rest args)
+(defun make-compiled-funobj (name lambda-list declarations form env top-level-p funobj)
   (handler-bind (((or warning error)
 		  (lambda (c)
 		    (declare (ignore c))
 		    (if (not (boundp 'muerte.cl:*compile-file-pathname*))
 			(format *error-output*
-				"~&;; While Movitz compiling ~S:"
-				(car args))
+				"~&;; While Movitz compiling ~S:" name)
 		      (format *error-output*
 			      "~&;; While Movitz compiling ~S in ~A:"
-			      (car args) muerte.cl:*compile-file-pathname*)))))
+			      name muerte.cl:*compile-file-pathname*)))))
     (register-function-code-size
-     (make-compiled-funobj-pass2 (apply #'make-compiled-funobj-pass1 args)))))
+     (make-compiled-funobj-pass2
+      (make-compiled-funobj-pass1 name lambda-list declarations form env top-level-p funobj)))))
 
-(defun make-compiled-funobj-pass1 (name lambda-list declarations form env top-level-p
-				   &key funobj)
+(defun make-compiled-funobj-pass1 (name lambda-list declarations form env top-level-p funobj)
   "Entry-point for first-pass compilation."
   (with-retries-until-true (retry-pass1 "Retry first-pass compilation of ~S." name)
     ;; First-pass is mostly functional, so it can safely be restarted.
@@ -164,10 +163,9 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
 		      (eq 'muerte::numargs-case (caar sub-form))))
 	       'make-compiled-function-pass1-numarg-case)
 	      (t 'make-compiled-function-pass1))
-	     name lambda-list declarations form env top-level-p :funobj funobj)))
+	     name lambda-list declarations form env top-level-p funobj)))
 
-(defun make-compiled-function-pass1-numarg-case (name lambda-list declarations form env top-level-p
-						 &key funobj)
+(defun make-compiled-function-pass1-numarg-case (name lambda-list declarations form env top-level-p funobj)
   (let* ((funobj (or funobj (make-instance 'movitz-funobj-pass1)))
 	 (funobj-env (make-local-movitz-environment env funobj :type 'funobj-env)))
     (setf (movitz-funobj-name funobj) name
@@ -197,8 +195,7 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
 		     (function-envs funobj)))))
     funobj))
 
-(defun make-compiled-function-pass1 (name lambda-list declarations form env top-level-p
-				     &key funobj)
+(defun make-compiled-function-pass1 (name lambda-list declarations form env top-level-p funobj)
   "Returns compiler-values, with the pass1 funobj as &final-form."
   (when (duplicatesp lambda-list)
     (error "There are duplicates in lambda-list ~S." lambda-list))
