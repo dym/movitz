@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.6 2004/04/07 00:34:57 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.7 2004/04/11 18:56:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -318,7 +318,7 @@ located in the caller's stack-frame or funobj-constants."
 						       (+ 2 (signed8-index result-position))))))))))))))
 
 (defparameter *stack-frame-setup-patterns*
-    '(((:* 1 (#x64 #x62 #x67 #xe7))	; #<asm (FS-OVERRIDE) BOUND [#x-19+%EDI] %ESP>
+    '(((:* 1 (#x64 #x62 #x67 (any-offset))) ; #<asm (FS-OVERRIDE) BOUND [#x-19+%EDI] %ESP>
        (:* 1 (#x55 #x8b #xec #x56))	; pushl ebp, movl esp
        (:* 2 (#x80 #xf9 (cmpargs)
 		   (:or (#x72 (label))
