@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.27 2004/08/16 23:15:12 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.28 2004/09/02 09:38:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -72,16 +72,16 @@
 		(:unsigned-byte8
 		 (cond
 		  ((and (eq 0 offset) (eq 0 index))
-		   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		   `(with-inline-assembly (:returns :untagged-fixnum-ecx :type (unsigned-byte 8))
 		      (:compile-form (:result-mode :eax) ,object)
 		      (:movzxb (:eax ,(offset-by 1)) :ecx)))
 		  ((eq 0 offset)
-		   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		   `(with-inline-assembly (:returns :untagged-fixnum-ecx :type (unsigned-byte 8))
 		      (:compile-two-forms (:eax :untagged-fixnum-ecx) ,object ,index)
 		      (:movzxb (:eax :ecx ,(offset-by 1)) :ecx)))
 		  (t (let ((object-var (gensym "memref-object-")))
 		       `(let ((,object-var ,object))
-			  (with-inline-assembly (:returns :untagged-fixnum-ecx)
+			  (with-inline-assembly (:returns :untagged-fixnum-ecx :type (unsigned-byte 8))
 			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
 			    (:load-lexical (:lexical-binding ,object-var) :eax)
 			    (:addl :ebx :ecx) ; index += offset
@@ -749,7 +749,7 @@
        (memref-int address offset index :unsigned-byte32 t))))))
 
 (define-compiler-macro (setf memref-int) (&whole form &environment env value address offset index type
-								   &optional physicalp)
+					  &optional physicalp)
   (if (or (not (movitz:movitz-constantp type env))
 	  (not (movitz:movitz-constantp physicalp env)))
       (progn
@@ -810,30 +810,45 @@
 	(:unsigned-byte16
 	 (cond
 	  ((eq 0 offset)
-	   `(with-inline-assembly (:returns :untagged-fixnum-eax)
-	      (:compile-form (:result-mode :push) ,address)
-	      (:compile-form (:result-mode :push) ,index)
-	      (:compile-form (:result-mode :eax) ,value)
-	      (:popl :ebx)		; index
-	      (:shrl ,movitz::+movitz-fixnum-shift+ :eax) ; scale value
-	      (:popl :ecx)		; address
-	      (:shll 1 :ebx)		; scale index
-	      (:addl :ebx :ecx)
-	      (:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale address
-	      (,prefixes :movw :ax (:ecx))))
-	  (t `(with-inline-assembly (:returns :untagged-fixnum-eax)
-		(:compile-form (:result-mode :push) ,address)
-		(:compile-form (:result-mode :push) ,index)
-		(:compile-form (:result-mode :push) ,offset)
-		(:compile-form (:result-mode :eax) ,value)
-		(:popl :edx)		; offset
-		(:popl :ebx)		; index
-		(:popl :ecx)		; address
-		(:shrl ,movitz::+movitz-fixnum-shift+ :eax) ; scale value
-		(:leal (:ecx (:ebx 2)) :ecx)
-		(:addl :edx :ecx)	;
-		(:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale offset+address
-		(,prefixes :movw :ax (:ecx))))))))))
+	   (let ((address-var (gensym "memref-int-address-"))
+		 (index-var (gensym "memref-index-var-"))
+		 (value-var (gensym "memref-value-var-")))
+	     `(let ((,value-var ,value)
+		    (,address-var ,address)
+		    (,index-var ,index))
+		(with-inline-assembly (:returns :untagged-fixnum-eax)
+		  (:load-lexical (:lexical-binding ,value-var) :eax) ; value
+		  (:load-lexical (:lexical-binding ,index-var) :ebx) ; index
+		  (:load-lexical (:lexical-binding ,address-var) :ecx) ; address
+		  (:shll 1 :ebx)	; scale index
+		  (:addl :ebx :ecx)
+		  (:shrl ,movitz:+movitz-fixnum-shift+ :ecx) ; scale address
+		  (:std)
+		  (:shrl ,movitz:+movitz-fixnum-shift+ :eax) ; scale value
+		  (,prefixes :movw :ax (:ecx))
+		  (:leal ((:eax ,movitz:+movitz-fixnum-factor+)) :eax)
+		  (:cld)))))
+	  (t (let ((address-var (gensym "memref-int-address-"))
+		   (offset-var (gensym "memref-offset-var-"))
+		   (index-var (gensym "memref-index-var-"))
+		   (value-var (gensym "memref-value-var-")))
+	       `(let ((,value-var ,value)
+		      (,address-var ,address)
+		      (,offset-var ,offset)
+		      (,index-var ,index))
+		  (with-inline-assembly (:returns :untagged-fixnum-eax)
+		    (:load-lexical (:lexical-binding ,address-var) :ecx)
+		    (:load-lexical (:lexical-binding ,index-var) :ebx)
+		    (:load-lexical (:lexical-binding ,offset-var) :edx)
+		    (:load-lexical (:lexical-binding ,value-var) :eax)
+		    (:leal (:ecx (:ebx 2)) :ecx)
+		    (:addl :edx :ecx)	;
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :eax) ; scale value
+		    (:std)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale offset+address
+		    (,prefixes :movw :ax (:ecx))
+		    (:leal ((:eax ,movitz:+movitz-fixnum-factor+)) :eax)
+		    (:cld)))))))))))
 
 (defun (setf memref-int) (value address offset index type &optional physicalp)
   (cond
