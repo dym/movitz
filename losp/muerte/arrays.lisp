@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.47 2004/11/07 21:07:59 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.48 2004/11/23 19:30:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -632,144 +632,149 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 	    `(funcall%unsafe ,writer ,store-var ,@args)
 	    `(funcall%unsafe ,reader ,@args))))
 
-(defun make-basic-vector%character (dimension fill-pointer initial-element initial-contents)
-  (check-type dimension (and fixnum (integer 0 *)))
-  (let* ((words (+ 2 (truncate (+ dimension 3) 4)))
+(defun make-basic-vector%character (length fill-pointer initial-element initial-contents)
+  (check-type length (and fixnum (integer 0 *)))
+  (let* ((words (+ 2 (truncate (+ length 3) 4)))
 	 (array (macrolet
 		    ((do-it ()
 		       `(with-non-pointer-allocation-assembly (words :fixed-size-p t
 								     :object-register :eax)
-			  (:load-lexical (:lexical-binding dimension) :ecx)
+			  (:load-lexical (:lexical-binding length) :ecx)
 			  (:movl ,(movitz:basic-vector-type-tag :character)
 				 (:eax (:offset movitz-basic-vector type)))
 			  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements))))))
 		  (do-it))))
     (cond
-     (fill-pointer
+     ((integerp fill-pointer)
       (setf (fill-pointer array) fill-pointer))
-     ((array-has-fill-pointer-p array)
-      (setf (fill-pointer array) dimension)))
+     ((or (eq t fill-pointer)
+	  (array-has-fill-pointer-p array))
+      (setf (fill-pointer array) length)))
     (cond
      (initial-element
       (check-type initial-element character)
-      (dotimes (i dimension)
+      (dotimes (i length)
 	(setf (char array i) initial-element)))
      (initial-contents
       (replace array initial-contents)))
     array))
 
-(defun make-basic-vector%u32 (dimension fill-pointer initial-element initial-contents)
-  (check-type dimension (and fixnum (integer 0 *)))
-  (let* ((words (+ 2 dimension))
+(defun make-basic-vector%u32 (length fill-pointer initial-element initial-contents)
+  (check-type length (and fixnum (integer 0 *)))
+  (let* ((words (+ 2 length))
 	 (array (macrolet
 		    ((do-it ()
 		       `(with-non-pointer-allocation-assembly (words :fixed-size-p t
 								     :object-register :eax)
-			  (:load-lexical (:lexical-binding dimension) :ecx)
+			  (:load-lexical (:lexical-binding length) :ecx)
 			  (:movl ,(movitz:basic-vector-type-tag :u32)
 				 (:eax (:offset movitz-basic-vector type)))
 			  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements))))))
 		  (do-it))))
     (cond
-     (fill-pointer
+     ((integerp fill-pointer)
       (setf (fill-pointer array) fill-pointer))
-     ((array-has-fill-pointer-p array)
-      (setf (fill-pointer array) dimension)))
+     ((or (eq t fill-pointer)
+	  (array-has-fill-pointer-p array))
+      (setf (fill-pointer array) length)))
     (cond
      (initial-element
       ;; (check-type initial-element (unsigned-byte 32))
-      (dotimes (i dimension)
+      (dotimes (i length)
 	(setf (u32ref%unsafe array i) initial-element)))
      (initial-contents
       (replace array initial-contents)))
     array))
 
-(defun make-basic-vector%u8 (dimension fill-pointer initial-element initial-contents)
-  (check-type dimension (and fixnum (integer 0 *)))
-  (let* ((words (+ 2 (truncate (+ dimension 3) 4)))
+(defun make-basic-vector%u8 (length fill-pointer initial-element initial-contents)
+  (check-type length (and fixnum (integer 0 *)))
+  (let* ((words (+ 2 (truncate (+ length 3) 4)))
 	 (array (macrolet
 		    ((do-it ()
 		       `(with-non-pointer-allocation-assembly (words :fixed-size-p t
 								     :object-register :eax)
-			  (:load-lexical (:lexical-binding dimension) :ecx)
+			  (:load-lexical (:lexical-binding length) :ecx)
 			  (:movl ,(movitz:basic-vector-type-tag :u8)
 				 (:eax (:offset movitz-basic-vector type)))
 			  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements))))))
 		  (do-it))))
     (cond
-     (fill-pointer
+     ((integerp fill-pointer)
       (setf (fill-pointer array) fill-pointer))
-     ((array-has-fill-pointer-p array)
-      (setf (fill-pointer array) dimension)))
+     ((or (eq t fill-pointer)
+	  (array-has-fill-pointer-p array))
+      (setf (fill-pointer array) length)))
     (cond
      (initial-element
       (check-type initial-element (unsigned-byte 8))
-      (dotimes (i dimension)
+      (dotimes (i length)
 	(setf (u8ref%unsafe array i) initial-element)))
      (initial-contents
       (replace array initial-contents)))
     array))
 
-(defun make-basic-vector%bit (dimension fill-pointer initial-element initial-contents)
-  (check-type dimension (and fixnum (integer 0 *)))
-  (let* ((words (+ 2 (truncate (+ dimension 31) 32)))
+(defun make-basic-vector%bit (length fill-pointer initial-element initial-contents)
+  (check-type length (and fixnum (integer 0 *)))
+  (let* ((words (+ 2 (truncate (+ length 31) 32)))
 	 (array (macrolet
 		    ((do-it ()
 		       `(with-non-pointer-allocation-assembly (words :fixed-size-p t
 								     :object-register :eax)
-			  (:load-lexical (:lexical-binding dimension) :ecx)
+			  (:load-lexical (:lexical-binding length) :ecx)
 			  (:movl ,(movitz:basic-vector-type-tag :bit)
 				 (:eax (:offset movitz-basic-vector type)))
 			  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements))))))
 		  (do-it))))
     (cond
-     (fill-pointer
+     ((integerp fill-pointer)
       (setf (fill-pointer array) fill-pointer))
-     ((array-has-fill-pointer-p array)
-      (setf (fill-pointer array) dimension)))
+     ((or (eq t fill-pointer)
+	  (array-has-fill-pointer-p array))
+      (setf (fill-pointer array) length)))
     (cond
      (initial-element
       (check-type initial-element bit)
-      (dotimes (i dimension)
+      (dotimes (i length)
 	(setf (aref array i) initial-element)))
      (initial-contents
       (replace array initial-contents)))
     array))
 
-(defun make-basic-vector%code (dimension fill-pointer initial-element initial-contents)
-  (check-type dimension (and fixnum (integer 0 *)))
-  (let* ((words (+ 2 (truncate (+ dimension 3) 4)))
+(defun make-basic-vector%code (length fill-pointer initial-element initial-contents)
+  (check-type length (and fixnum (integer 0 *)))
+  (let* ((words (+ 2 (truncate (+ length 3) 4)))
 	 (array (macrolet
 		    ((do-it ()
 		       `(with-non-pointer-allocation-assembly (words :fixed-size-p t
 								     :object-register :eax)
-			  (:load-lexical (:lexical-binding dimension) :ecx)
+			  (:load-lexical (:lexical-binding length) :ecx)
 			  (:movl ,(movitz:basic-vector-type-tag :code)
 				 (:eax (:offset movitz-basic-vector type)))
 			  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements))))))
 		  (do-it))))
     (cond
-     (fill-pointer
+     ((integerp fill-pointer)
       (setf (fill-pointer array) fill-pointer))
-     ((array-has-fill-pointer-p array)
-      (setf (fill-pointer array) dimension)))
+     ((or (eq t fill-pointer)
+	  (array-has-fill-pointer-p array))
+      (setf (fill-pointer array) length)))
     (cond
      (initial-element
       (check-type initial-element (unsigned-byte 8))
-      (dotimes (i dimension)
+      (dotimes (i length)
 	(setf (u8ref%unsafe array i) initial-element)))
      (initial-contents
       (replace array initial-contents)))
     array))
 
-(defun make-basic-vector%t (dimension fill-pointer initial-element initial-contents)
-  (check-type dimension (and fixnum (integer 0 *)))
-  (let* ((words (+ 2 dimension))
+(defun make-basic-vector%t (length fill-pointer initial-element initial-contents)
+  (check-type length (and fixnum (integer 0 *)))
+  (let* ((words (+ 2 length))
 	 (array (macrolet
 		    ((do-it ()
 		       `(with-allocation-assembly (words :fixed-size-p t
 							 :object-register :eax)
-			  (:load-lexical (:lexical-binding dimension) :ecx)
+			  (:load-lexical (:lexical-binding length) :ecx)
 			  (:movl ,(movitz:basic-vector-type-tag :any-t)
 				 (:eax (:offset movitz-basic-vector type)))
 			  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements)))
@@ -785,17 +790,14 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 			  )))
 		  (do-it))))
     (cond
-     (fill-pointer
+     ((integerp fill-pointer)
       (setf (fill-pointer array) fill-pointer))
-     ((array-has-fill-pointer-p array)
-      (setf (fill-pointer array) dimension)))
+     ((or (eq t fill-pointer)
+	  (array-has-fill-pointer-p array))
+      (setf (fill-pointer array) length)))
     (cond
      (initial-contents
-      (replace array initial-contents))
-     #+ignore
-     (initial-element
-      (dotimes (i dimension)
-	(setf (svref%unsafe array i) initial-element))))
+      (replace array initial-contents)))
     array))
 
 (defun make-array (dimensions &key element-type initial-element initial-contents adjustable
