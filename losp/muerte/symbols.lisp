@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.10 2004/04/16 19:24:20 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.11 2004/04/16 23:36:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -61,6 +61,13 @@
 
 (defun %symbol-global-value (symbol)
   (%symbol-global-value symbol))
+
+(define-compiler-macro (setf %symbol-global-value) (value symbol)
+  `(setf (memref ,symbol ,(bt:slot-offset 'movitz:movitz-symbol 'movitz::value) 0 :lisp)
+     ,value))
+
+(defun (setf %symbol-global-value) (value symbol)
+  (setf (%symbol-global-value symbol) value))
 
 (defun symbol-function (symbol)
   (let ((function-value
