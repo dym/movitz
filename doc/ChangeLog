@@ -1,3 +1,9 @@
+2004-07-19  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Bignums are now working to the extent that one can basically
+	expect things to work, although there still are arithmetic operators
+	without bignum support.
+
 2004-07-13  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
 
 	* Added the feature that after each GC cycle, the keyboard is
