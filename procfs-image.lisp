@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.6 2004/06/01 15:16:54 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.7 2004/06/06 03:02:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -174,16 +174,13 @@
   ;; (search-image-funobj (image-register32 *image* :eip))
   (format t "~&Current ESI: #x~X.~%"
 	  (image-register32 *image* :esi))
-  (loop with unknown-counter = 0
-      for stack-frame = (current-stack-frame) then (previous-stack-frame stack-frame)
+  (loop for stack-frame = (current-stack-frame) then (previous-stack-frame stack-frame)
       unless (zerop (mod stack-frame 4))
       do (format t "[frame #x~8,'0x]" stack-frame)
-      and do (loop-finish)
+	 (loop-finish)
       do (let ((movitz-name (funobj-name (stack-frame-funobj stack-frame))))
 	   (typecase movitz-name
 	     (null
-	      (when (< 10 (incf unknown-counter))
-		(return-from backtrace nil))
 	      (write-string "?")
 	      (let* ((r (stack-frame-return-address stack-frame))
 		     (eax (get-word (+ (* 4 (interrupt-frame-index :eax)) stack-frame)))
