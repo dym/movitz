@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.17 2004/03/22 16:42:53 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.18 2004/03/24 13:20:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -870,8 +870,12 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		      (format t "~&;; No multiboot header.")
 		    ;; Update multiboot header, symbolic and in the file..
 		    (let* ((mb (image-multiboot-header *image*))
-			   (mb-address (+ (movitz-intern mb) (image-ds-segment-base *image*)))
-			   (mb-file-position (- (+ mb-address 512) load-address)))
+			   (mb-address (+ (movitz-intern mb)
+					  (slot-offset 'multiboot-header 'magic)
+					  (image-ds-segment-base *image*)))
+			   (mb-file-position (- (+ mb-address 512)
+						load-address
+						(slot-offset 'multiboot-header 'magic))))
 		      (when (< load-address #x100000)
 			(warn "Multiboot load-address #x~x is below the 1MB mark."
 			      load-address))
