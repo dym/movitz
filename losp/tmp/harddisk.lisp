@@ -1,15 +1,14 @@
-;;;; $Id: harddisk.lisp,v 1.2 2004/04/24 15:13:26 ffjeld Exp $
+;;;; $Id: harddisk.lisp,v 1.3 2004/05/05 08:26:14 ffjeld Exp $
 
 (require :lib/named-integers)
+
 (provide :tmp/harddisk)
 
 (defpackage muerte.x86-pc.harddisk
   (:use muerte.cl muerte muerte.lib muerte.x86-pc)
-  (:export make-512-vector
+  (:export hdc-reset
            hd-read-sectors
-           hd-write-sectors
-           hd-commands
-	   ))
+           hd-write-sectors))
 
 (in-package muerte.x86-pc.harddisk)
 
@@ -29,35 +28,6 @@
 (defconstant +hd-default-first-control-base+ #x3F6)
 (defconstant +hd-default-second-control-base+ #x376)
 
-(define-named-integer hd-register-offset 
-    (:only-constants t)
-  (0 data)
-  (1 error)                            
-  (1 features)
-  (2 sector-count)
-  (3 lba-byte-1)                        ;bits 0-7
-  (4 lba-byte-2)                        ;bits 8-15
-  (5 lba-byte-3)                        ;bits 16-23
-  (6 lba-byte-4)                        ;bits 24-27
-  (7 status)
-  (7 command))
-
-(define-named-integer hd-commands
-    (:only-constants t)
-  (#x20 read-sectors-with-retry)
-  (#x30 write-sectors-with-retry))
-
-(define-named-integer hd-status-bits
-    (:only-constants t)
-  (0 error)
-  (1 index)
-  (2 corrected-data)
-  (3 data-request)
-  (4 drive-seek-complete)
-  (5 drive-write-fault)
-  (6 drive-ready)
-  (7 busy))
-
 ;;;
 ;;; classes
 ;;;
@@ -68,74 +38,116 @@
    (control-base :initform +hd-default-first-control-base+
                  :initarg :command-base
                  :type integer)))
+;;;
+;;; accessors
+;;;
+
+(defmacro data-register (hdc)
+  `(io-port (+ (slot-value ,hdc 'command-base) 0) :unsigned-byte16))
+
+(defmacro features-register (hdc)
+  `(io-port (+ (slot-value ,hdc 'command-base) 1) :unsigned-byte8))
+
+(defmacro error-register (hdc)
+  `(io-port (+ (slot-value ,hdc 'command-base) 1) :unsigned-byte8))
+
+(defmacro sector-count-register (hdc)
+  `(io-port (+ (slot-value ,hdc 'command-base) 2) :unsigned-byte8))
+
+(defmacro lba-low-register (hdc)
+  `(io-port (+ (slot-value ,hdc 'command-base) 3) :unsigned-byte8))
+
+(defmacro lba-mid-register (hdc)
+  `(io-port (+ (slot-value ,hdc 'command-base) 4) :unsigned-byte8))
+
+(defmacro lba-high-register (hdc)
+  `(io-port (+ (slot-value ,hdc 'command-base) 5) :unsigned-byte8))
+
+(defmacro device-register (hdc)
+  `(io-port (+ (slot-value ,hdc 'command-base) 6) :unsigned-byte8))
+
+(defmacro command-register (hdc)
+  `(io-port (+ (slot-value ,hdc 'command-base) 7) :unsigned-byte8))
+
+(defmacro status-register (hdc)
+  `(io-port (+ (slot-value ,hdc 'command-base) 7) :unsigned-byte8))
+
+(defmacro alt-status-register (hdc)
+  `(io-port (slot-value ,hdc 'control-base) :unsigned-byte8))
 
 ;;;
-;;; waiters
+;;; getters
 ;;;
-(defun hd-controller-wait-for-drive-ready (hdc) ;wait for DRDY=1
-  (with-slots (control-base) hdc
-    (loop until (/= 0 (logand (io-port control-base :unsigned-byte8)
-                              #x40)))))  
+(defun reg-bsy (hdc)
+  (get-bit 7 (status-register hdc)))
 
-(defun hd-controller-wait-for-ready (hdc) ;wait for BSY=0
-  (with-slots (control-base) hdc
-    (loop until (= 0 (logand (io-port control-base :unsigned-byte8)
-                             #x80)))))
+(defun reg-drdy (hdc)
+  (get-bit 6 (status-register hdc)))
 
-(defun hd-controller-wait-for-data-request (hdc) ;wait for DRQ=1
-  (with-slots (control-base) hdc
-    (loop until (/= 0 (logand (io-port control-base :unsigned-byte8)
-                              #x08)))))
+(defun reg-drq (hdc)
+  (get-bit 3 (status-register hdc)))
+
+(defun reg-err (hdc)
+  (get-bit 0 (status-register hdc)))
+
+(defun reg-alt-bsy (hdc)
+  (get-bit 7 (alt-status-register hdc)))
+
+(defun reg-alt-drdy (hdc)
+  (get-bit 6 (alt-status-register hdc)))
+
+(defun reg-alt-drq (hdc)
+  (get-bit 3 (alt-status-register hdc)))
+
+(defun reg-alt-err (hdc)
+  (get-bit 3 (alt-status-register hdc)))
 
 ;;;
-;;; feeders
+;;; setters
 ;;;
-(defun hd-controller-feed-lba-mode (hdc)
-  (setf (io-port (hd-controller-command-register hdc 'lba-byte-4)
-                 :unsigned-byte8)
-          (logior (io-port (hd-controller-command-register hdc 'lba-byte-4)
-                           :unsigned-byte8)
-                  #b01000000)))
+(defun set-drive-number (hdc drive)
+  (set-bit 4 (/= drive 0) (device-register hdc)))
 
-(defun hd-controller-feed-drive (hdc drive)
-  (setf (io-port (hd-controller-command-register hdc 'lba-byte-4)
-                 :unsigned-byte8)
-          (logior (* #b00010000 drive)
-                  (logand (io-port (hd-controller-command-register hdc 'lba-byte-4)
-                                   :unsigned-byte8)
-                          #b11101111))))
+(defun set-intrq-mode (hdc mode)
+  (set-bit 1 (not mode) (device-register hdc)))
 
-(defun hd-controller-feed-lba-address (hdc lba)
-  (setf (io-port (hd-controller-command-register hdc 'lba-byte-1)
-                 :unsigned-byte8)
-          (logand lba #x000000FF))
-  (setf (io-port (hd-controller-command-register hdc 'lba-byte-2)
-                 :unsigned-byte8)
-          (logand lba #x0000FF00))
-  (setf (io-port (hd-controller-command-register hdc 'lba-byte-3)
-                               :unsigned-byte8)
-          (logand lba #x00FF0000))
-  (setf (io-port (hd-controller-command-register hdc 'lba-byte-3)
-                 :unsigned-byte8)
-          (logior (io-port (hd-controller-command-register hdc 'lba-byte-4)
-                           :unsigned-byte8)
-                  (logand lba #x000F0000))))
+(defun set-lba-mode (hdc mode)
+  (set-bit 6 mode (device-register hdc)))
 
+(defun set-lba-address (hdc lba)
+  (setf (lba-low-register hdc) (ldb (byte 8 0) lba))
+  (setf (lba-mid-register hdc) (ldb (byte 8 8) lba))
+  (setf (lba-high-register hdc) (ldb (byte 8 16) lba))
+  (setf (device-register hdc) (dpb (ash (ldb (byte 4 24) lba) -24)
+                                   (byte 4 0)
+                                   (device-register hdc))))
+
+(defun set-sector-count (hdc count)
+  (setf (sector-count-register hdc) count))
+
+(defun set-command (hdc command)
+  (let ((command-code (case command
+                        ('read-sectors-with-retry #x20)
+                        ('write-sectors-with-retry #x30)
+                        ('identify-drive #xCE))))
+  (setf (command-register hdc) command-code)))
+          
 ;;;
 ;;; misc
 ;;;
+(defun get-bit (number place)
+  (/= 0 (ldb (byte 1 number) place)))
+
+(defmacro set-bit (number value place)
+  (let ((gs-number (gensym "number-")))
+    `(if ,value
+      (let ((,gs-number ,number))
+        (setf ,place (dpb (ash 1 ,gs-number) (byte 1 ,gs-number) ,place)))
+      (setf ,place (dpb 0 (byte 1 ,number) ,place)))))
+
 (defmacro while (test &body body)
   `(do () ((not ,test))
     ,@body))
-
-(defun div (a b)
-  "Floored integer division, the painful way."
-  (let ((r 0)
-        (x a))
-    (while (>= x 0)
-      (decf x b)
-      (incf r))
-    (1- r)))
 
 (defun log2 (n)
   (cond ((= n 256) 8)
@@ -147,118 +159,160 @@
         ((= n 4) 2)
         ((= n 2) 1)
         ((= n 1) 0)))
-        
+  
 (defmacro with-hd-info ((hdc drive-number) hd-number &body body)
   (let ((gs-hdnr (gensym "hd-number-")))
     `(let* ((,gs-hdnr ,hd-number)
-            (,hdc (aref *hd-controllers* (div ,hd-number 2)))
+            (,hdc (aref *hd-controllers* (truncate ,hd-number 2)))
             (,drive-number (mod ,gs-hdnr 2)))
       ,@body)))
 
-(defun hd-controller-command-register (hdc name)
-  ;; use a case statement for now, until I learn how to use
-  ;; named-integer right
-  (+ (case name
-       ('data 0)
-       ('error 1)
-       ('features 1)
-       ('sector-count 2)
-       ('lba-byte-1 3)
-       ('lba-byte-2 4)
-       ('lba-byte-3 5)
-       ('lba-byte-4 6)
-       ('status 7)
-       ('command 7)
-       (else (error "HD command register not found ~A" name)))
-     (slot-value hdc 'command-base)))
-
 (defun error-code-meaning (code)
-  (nth (log2 code)
-       '("Address Mark Not Found"
-         "Track 0 Not Found"
-         "Media Change Requested"
-         "Aborted Command"
-         "ID Not Found"
-         "Media Changed"
-         "Uncorrectable Data Error"
-         "Bad Block Detected")))
+  (if (< 0 code 257)
+      (nth (log2 code)
+           '("Address Mark Not Found"
+             "Track 0 Not Found"
+             "Media Change Requested"
+             "Aborted Command"
+             "ID Not Found"
+             "Media Changed"
+             "Uncorrectable Data Error"
+             "Bad Block Detected"))
+      "No error"))
     
-    
-(defun hd-check-error (hdc command-name hdnr)
-  "Check and when found signal an error in task."
-  (when (/= 0 (logand (io-port (slot-value hdc 'control-base)
-                               :unsigned-byte8)
-                      #x01))
-    (error "Harddrive command ~A returned error. HD number: ~A. Error message: '~A'." 
-           command-name hdnr 
-           (error-code-meaning 
-            (io-port (hd-controller-command-register hdc 'error)
-                     :unsigned-byte8)))))
+(defun hdc-error (hdc command-name hdnr)
+  (puts "In HDC error")
+  (error "Harddrive command ~A returned error. HD number: ~A. Error message: '~A'." 
+         command-name hdnr 
+         (error-code-meaning 
+          (io-port (error-register hdc) :unsigned-byte8))))
+
+(defun puts (s)
+  (fresh-line)
+  (format t s)
+  (terpri))
 
 ;;;
 ;;; hd operations
 ;;;
+(defun hdc-reset (hdcnr)
+  "Reset the harddisk controller. Must be done at startup to
+initialize the harddisk controller."
+  ;; set SRST
+  ;; wait > 2ms
+  ;; continue when BSY=0
+  (let ((hdc (aref *hd-controllers* hdcnr)))
+    (setf (device-register hdc) #x04)
+    (loop for x from 1 to 2500)
+    (loop while (reg-bsy hdc))))
+
 (defun hd-read-sectors (hdnr start-sector count)
-  (let ((data (make-array 512 :element-type :unsigned-byte8))
+  (let ((data (make-array (* count 512) :element-type :unsigned-byte8))
         (offset 0)
-        (read-data nil))
+        input)
     (with-hd-info (hdc drive) hdnr
-      ;; set drive
-      (hd-controller-feed-drive hdc drive)
-      ;; set count
-      (setf (io-port (hd-controller-command-register hdc 'sector-count)
-                     :unsigned-byte8)
-              count)
-      ;; set LBA and address
-      (hd-controller-feed-lba-mode hdc)
-      (hd-controller-feed-lba-address hdc start-sector)
-      ;; get going
-      (setf (io-port (hd-controller-command-register hdc 'command)
-                     :unsigned-byte8)
-              +hd-commands-read-sectors-with-retry+)
-      ;; data handling
-      (while (<= offset (* count 512))
-        (hd-controller-wait-for-drive-ready hdc)
-        (hd-controller-wait-for-ready hdc)
-        (hd-check-error hdc "read-sectors" hdnr)
-        (hd-controller-wait-for-data-request hdc)
-        (dotimes (i 256)
-          (setf read-data (io-port (hd-controller-command-register hdc 'status)
-                                   :unsigned-byte16)))
-          (setf (aref data offset) (logand read-data #xFF))
-          (setf (aref data (1+ offset)) (logand read-data #xFF00))              
-          (incf offset 2))
-      ;; done
-      data)))
+      (tagbody
+;        (puts "in entry")
+        ;; drive must be ready
+        ;; drive number must be set
+        ;; intrq's must not be used
+        ;; LBA mode must be on
+        ;; LBA must be set
+        ;; sector-count must be set
+        ;; command must be entered
+        ;; 400 nsec must be waited before checking BSY
+        (loop until (reg-drdy hdc))
+        (loop while (reg-alt-bsy hdc))
+        (set-drive-number hdc drive)
+        (set-intrq-mode hdc nil)
+        (set-lba-mode hdc t)
+        (set-lba-address hdc start-sector)
+        (set-sector-count hdc count)
+        (set-command hdc 'read-sectors-with-retry)
+        (dotimes (x 500))              ;aught to be enough waiting
+        (go :check-status)
+        ;;;;;;;;;;;;;;;;;;
+        :check-status
+;        (puts "in check-status")
+        ;; if BSY=0 and DRQ=0 then error
+        ;; if BSY=0 and DRQ=1 then go transfer-data
+        ;; if BSY=1 then go check-state
+        (let ((status (status-register hdc)))
+          (if (get-bit 7 status)       ;if BSY = 1
+              (go :check-status)
+              (if (get-bit 3 status)   ;if DRQ = 1
+                  (go :transfer-data)
+                  (progn
+                    (hdc-error hdc "read-sectors" hdnr)))))
+        ;;;;;;;;;;;;;;;;;;
+        :transfer-data
+;        (puts "in transfer-data")        
+        ;; read the data register
+        (setf input (data-register hdc))
+        (setf (aref data offset) (ldb (byte 8 0) input))
+        (incf offset)
+        (setf (aref data offset) (ldb (byte 8 8) input))
+        (incf offset)
+        ;; read the status register to determine if we're done
+        (if (reg-drq hdc)
+            (if (/= 0 (mod offset 512))
+                (go :transfer-data)     ;data block not completely transfered
+                (progn
+                  (alt-status-register hdc) ;read and ignore
+                  (go :check-status)))
+            (return-from hd-read-sectors data))))))
 
 (defun hd-write-sectors (hdnr start-sector data)
-  (let ((offset 0)
-        (write-data nil)
-        (count (div (length data) 512)))
+  (check-type hdnr (integer 0 *))
+  (check-type start-sector (integer 0 *))
+  (check-type data vector)
+  (let ((count (truncate (length data) 512))
+        (offset 0))
     (with-hd-info (hdc drive) hdnr
-      ;; set drive
-      (hd-controller-feed-drive hdc drive)
-      ;; set count
-      (setf (io-port (hd-controller-command-register hdc 'sector-count)
-                     :unsigned-byte8)
-              count)
-      ;; set LBA and address
-      (hd-controller-feed-lba-mode hdc)
-      (hd-controller-feed-lba-address hdc start-sector)
-      ;; get going
-      (setf (io-port (hd-controller-command-register hdc 'command)
-                     :unsigned-byte8)
-              +hd-commands-write-sectors-with-retry+)
-      ;; data handling
-      (while (<= offset (* count 512))
-        (hd-controller-wait-for-drive-ready hdc)
-        (hd-controller-wait-for-ready hdc)
-        (hd-check-error hdc "write-sectors" hdnr)
-        (hd-controller-wait-for-data-request hdc)
-        (dotimes (i 256)
-          (setf write-data (aref data offset))
-          (incf write-data (* #xFF (aref data (1+ offset))))
-          (setf (io-port (hd-controller-command-register hdc 'data)
-                         :unsigned-byte16)
-                  write-data)
-          (incf offset 2))))))
+      (tagbody
+;        (puts "in entry")
+        ;; drive must be ready
+        ;; drive number must be set
+        ;; intrq's must not be used
+        ;; LBA mode must be on
+        ;; LBA must be set
+        ;; sector-count must be set
+        ;; command must be entered
+        ;; 400 nsec must be waited before checking BSY
+        (loop until (reg-drdy hdc))
+        (loop while (reg-alt-bsy hdc))
+        (set-drive-number hdc drive)
+        (set-intrq-mode hdc nil)
+        (set-lba-mode hdc t)
+        (set-lba-address hdc start-sector)
+        (set-sector-count hdc count)
+        (set-command hdc 'write-sectors-with-retry)
+        (dotimes (x 500))              ;aught to be enough waiting
+        (go :check-status)
+        ;;;;;;;;;;;;;;;;;;
+        :check-status
+;        (puts "in check-status")
+        ;; if BSY=0 and DRQ=0 then error
+        ;; if BSY=0 and DRQ=1 then go transfer-data
+        ;; if BSY=1 then go 
+        (let ((status (status-register hdc)))
+          (if (get-bit 7 status)       ;if BSY = 1
+              (go :check-status)
+              (if (get-bit 3 status)   ;if DRQ = 1
+                  (go :transfer-data)
+                  (hdc-error hdc "write-sectors" hdnr))))
+        ;;;;;;;;;;;;;;;;;;
+        :transfer-data
+;        (puts "in transfer-data")
+        ;; read the data register
+        (setf (data-register hdc) (+ (aref data offset)
+                                     (ash (aref data (1+ offset)) 8)))
+        (incf offset 2)
+        ;; read the status register to determine if we're done
+        (if (reg-drq hdc)
+            (if (/= 0 (mod offset 512))
+                (go :transfer-data)     ;data block not completely transfered
+                (progn
+                  (alt-status-register hdc) ;read and ignore
+                  (go :check-status)))
+	  (return-from hd-write-sectors nil))))))
