@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.16 2004/08/16 08:25:28 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.17 2004/08/23 13:46:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -187,39 +187,40 @@
   ;; (search-image-funobj (image-register32 *image* :eip))
   (format t "~&Current ESI: #x~X.~%"
 	  (image-register32 *image* :esi))
-  (loop for stack-frame = (current-stack-frame) then (previous-stack-frame stack-frame)
-      unless (zerop (mod stack-frame 4))
-      do (format t "[frame #x~8,'0x]" stack-frame)
-	 (loop-finish)
-      do (let ((movitz-name (funobj-name (stack-frame-funobj stack-frame))))
-	   (typecase movitz-name
-	     (null
-	      (write-string "?")
-	      (let* ((eax (get-word (+ (* 4 (interrupt-frame-index :eax)) stack-frame)))
-		     (ecx (get-word (+ (* 4 (interrupt-frame-index :ecx)) stack-frame)))
-		     (edx (get-word (+ (* 4 (interrupt-frame-index :edx)) stack-frame)))
-		     (edi (get-word (+ (* 4 (interrupt-frame-index :edi)) stack-frame)))
-		     (eip (get-word (+ (* 4 (interrupt-frame-index :eip)) stack-frame)))
-		     (esi (get-word (+ (* 4 (interrupt-frame-index :esi)) stack-frame)))
-		     (exception (get-word (+ (* 4 (interrupt-frame-index :exception)) stack-frame))))
-		(format t "#x~X {EAX: #x~X, ECX: #x~X, EDX: #x~X, EDI: #x~X, ESI: #x~X, EIP: #x~X, exception ~D}"
-			stack-frame
-			eax ecx edx edi esi eip exception)))
-	     (movitz-symbol
-	      (let ((name (movitz-print movitz-name)))
-		(when print-frames
-		  (format t "~S " stack-frame))
-		(when (string= name 'toplevel-function)
-		  (loop-finish))
-		(when reqs
-		  (format t "(~A ~S ~S)"
-			  (symbol-name name)
-			  (debug-get-object (get-word (+ stack-frame -8)) spartan)
-			  (debug-get-object (get-word (+ stack-frame -12)) spartan)))
-		(when print-returns
-		  (format t " (#x~X)" (stack-frame-return-address stack-frame)))))
-	     (t (write (movitz-print movitz-name)))))
-      do (format t "~& => "))
+  (let ((*print-length* 20))
+    (loop for stack-frame = (current-stack-frame) then (previous-stack-frame stack-frame)
+	unless (zerop (mod stack-frame 4))
+	do (format t "[frame #x~8,'0x]" stack-frame)
+	   (loop-finish)
+	do (let ((movitz-name (funobj-name (stack-frame-funobj stack-frame))))
+	     (typecase movitz-name
+	       (null
+		(write-string "?")
+		(let* ((eax (get-word (+ (* 4 (interrupt-frame-index :eax)) stack-frame)))
+		       (ecx (get-word (+ (* 4 (interrupt-frame-index :ecx)) stack-frame)))
+		       (edx (get-word (+ (* 4 (interrupt-frame-index :edx)) stack-frame)))
+		       (edi (get-word (+ (* 4 (interrupt-frame-index :edi)) stack-frame)))
+		       (eip (get-word (+ (* 4 (interrupt-frame-index :eip)) stack-frame)))
+		       (esi (get-word (+ (* 4 (interrupt-frame-index :esi)) stack-frame)))
+		       (exception (get-word (+ (* 4 (interrupt-frame-index :exception)) stack-frame))))
+		  (format t "#x~X {EAX: #x~X, ECX: #x~X, EDX: #x~X, EDI: #x~X, ESI: #x~X, EIP: #x~X, exception ~D}"
+			  stack-frame
+			  eax ecx edx edi esi eip exception)))
+	       (movitz-symbol
+		(let ((name (movitz-print movitz-name)))
+		  (when print-frames
+		    (format t "~S " stack-frame))
+		  (when (string= name 'toplevel-function)
+		    (loop-finish))
+		  (when reqs
+		    (format t "(~A ~S ~S)"
+			    (symbol-name name)
+			    (debug-get-object (get-word (+ stack-frame -8)) spartan)
+			    (debug-get-object (get-word (+ stack-frame -12)) spartan)))
+		  (when print-returns
+		    (format t " (#x~X)" (stack-frame-return-address stack-frame)))))
+	       (t (write (movitz-print movitz-name)))))
+	do (format t "~& => ")))
   (values))
 
 (defun funobj-name (x)
