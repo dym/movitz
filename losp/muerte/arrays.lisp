@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.9 2004/03/26 01:47:39 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.10 2004/03/26 10:45:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -326,7 +326,7 @@
 		(:compile-form (:result-mode :ignore)
 		 (error "Value not (unsigned-byte 32): ~S" value))))
 	(:shrl #.movitz:+movitz-fixnum-shift+ :ebx)
-	(:movw :bx (:eax (:ecx 4) #.(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
+       	(:movl :ebx (:eax (:ecx 4) #.(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
 	(:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :ebx)
 	(:jmp 'done)
 
