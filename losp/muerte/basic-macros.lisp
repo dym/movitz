@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.54 2005/01/04 11:36:09 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.55 2005/02/25 07:59:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -409,6 +409,13 @@
     (bt:slot-offset (intern (symbol-name (movitz:movitz-eval type env)) :movitz)
 		    (intern (symbol-name (movitz:movitz-eval slot env)) :movitz))))
 
+(define-compiler-macro movitz-type-location-offset (type slot &environment env)
+  (if (not (and (movitz:movitz-constantp type env)
+		(movitz:movitz-constantp slot env)))
+      (error "Non-constant movitz-type-slot-offset call.")
+    (truncate (+ -6 (bt:slot-offset (intern (symbol-name (movitz:movitz-eval type env)) :movitz)
+				    (intern (symbol-name (movitz:movitz-eval slot env)) :movitz)))
+	      4)))
 
 (define-compiler-macro not (x)
   `(muerte::inlined-not ,x))
@@ -540,7 +547,7 @@
     nil)
    (t (if (member type '(standard-gf-instance function pointer atom
 			 integer fixnum positive-fixnum cons symbol character null list
-			 string vector simple-vector vector-u8 vector-u16 code-vector))
+			 string vector simple-vector vector-u8 vector-u16))
 	  `(with-inline-assembly (:returns :nothing :labels (fail))
 	     (:compile-form (:result-mode (:boolean-branch-on-false . check-type-failed))
 			    (typep ,place ',type))
