@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.3 2004/02/05 14:19:36 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.4 2004/04/06 14:35:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -270,12 +270,12 @@
 
 
 #+allegro
-(top-level:alias ("bochs" 0) (&rest forms)
+(top-level:alias ("bochs" 0) (&optional form)
   (with-bochs-image ()
     (with-simple-restart (continue "Exit this bochs session [pid=~D]" (image-pid *image*))
-      (if forms
-	  (let ((x (multiple-value-list (eval (cons 'progn forms)))))
-	    (format t "~{~&~W~}" x)
-	    (values-list x))
+      (if form
+	  (let ((x (eval form)))
+	    (format t "~&~W" x)
+	    x)
 	(invoke-debugger "Established connection to Bochs [pid=~D]."
 			 (image-pid *image*))))))
