@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.10 2004/04/15 19:57:10 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.11 2004/06/02 14:31:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -466,7 +466,7 @@ be provided for those cases."
 	     (typecase funobj
 	       (integer
 		(let* ((interrupt-frame stack-frame)
-		       (funobj (interrupt-frame-ref interrupt-frame :esi :lisp)))
+		       (funobj (interrupt-frame-ref :esi :lisp 0 interrupt-frame)))
 		  (if (and conflate-interrupts conflate
 			   ;; When the interrupted function has a stack-frame, conflate it.
 			   (typep funobj 'function)
@@ -476,9 +476,10 @@ be provided for those cases."
 		      (incf count)
 		      (print-leadin stack-frame count conflate-count)
 		      (setf conflate-count 0)
-		      (let ((exception (interrupt-frame-ref interrupt-frame :exception
-							    :unsigned-byte32))
-			    (eip (interrupt-frame-ref interrupt-frame :eip :unsigned-byte32)))
+		      (let ((exception (interrupt-frame-ref :exception :unsigned-byte32
+							    0 interrupt-frame))
+			    (eip (interrupt-frame-ref :eip :unsigned-byte32
+						      0  interrupt-frame)))
 			(typecase funobj
 			  (function
 			   (let ((delta (code-vector-offset (funobj-code-vector funobj) eip)))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.7 2004/05/21 09:40:19 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.8 2004/06/02 14:31:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -112,7 +112,7 @@ at the start-stack-frame location."
 			      (+ frame (interrupt-frame-index :ecx)))
 	      (let* ((interrupt-frame frame)
 		     (interrupted-eip-loc
-		      (interrupt-frame-ref interrupt-frame :eip :signed-byte30+2)))
+		      (interrupt-frame-ref :eip :signed-byte30+2 0 interrupt-frame)))
 		;; 2. Pop to interrupted frame
 		(setf nether-frame frame
 		      frame (stack-frame-uplink frame))

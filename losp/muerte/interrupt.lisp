@@ -10,13 +10,15 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.10 2004/06/02 10:39:59 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.11 2004/06/02 14:31:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (in-package #:muerte)
 
 (provide :muerte/interrupt)
+
+(defvar *last-interrupt-frame* nil)
 
 (defmacro stack-word (offset)
   `(with-inline-assembly (:returns :eax)
@@ -36,38 +38,31 @@
 		 '(nil :eflags :eip :error-code :exception :ebp nil
 		   :ecx :eax :edx :ebx :esi :edi :atomically-status))))
 
-(define-compiler-macro interrupt-frame-ref (&whole form frame reg type &optional (offset 0)
+(define-compiler-macro interrupt-frame-ref (&whole form reg type
+					    &optional (offset 0)
+						      (frame '*last-interrupt-frame*)
 					    &environment env)
   `(memref ,frame (+ (* 4 (interrupt-frame-index ,reg)) ,offset) 0 ,type))
 
-(defun interrupt-frame-ref (frame reg type &optional (offset 0))
-  (interrupt-frame-ref frame reg type offset))
+(defun interrupt-frame-ref (reg type &optional (offset 0) (frame *last-interrupt-frame*))
+  (interrupt-frame-ref reg type offset frame))
 
-(defun (setf interrupt-frame-ref) (x frame reg type)
+(defun (setf interrupt-frame-ref) (x reg type &optional (frame *last-interrupt-frame*))
   (setf (memref frame (* 4 (interrupt-frame-index reg)) 0 type) x))
 
 (define-primitive-function default-interrupt-trampoline ()
   "Default first-stage interrupt handler."
-;;;	 `(cl:list* 'with-inline-assembly '(:returns :nothing)
-;;;		    (cl:loop :for i :from 0 :to movitz::+idt-size+
-;;;		:append (cl:if (cl:member i '(8 10 11 12 13 14 17))
-;;;			    `(((5) :pushl ,i)
-;;;			      ((5) :jmp 'ok))
-;;;			  `(((2) :pushl 0) ; replace Error Code
-;;;			    ((2) :pushl ,i)
-;;;			    ((1) :nop)
-;;;			    ((5) :jmp 'ok)))))
   (macrolet
       ((do-it ()
 	 `(with-inline-assembly (:returns :multiple-values)
-	    ,@(loop :for i :from 0 :to movitz::+idt-size+
-		:append (cl:if (cl:member i '(8 10 11 12 13 14 17))
-			    `(((5) :pushl ,i)
-			      ((5) :jmp 'ok))
-			  `(((2) :pushl 0) ; replace Error Code
-			    ((2) :pushl ,i)
-			    ((1) :nop)
-			    ((5) :jmp 'ok))))
+	    ,@(loop for i from 0 to movitz::+idt-size+
+		  append (if (member i '(8 10 11 12 13 14 17))
+			     `(((5) :pushl ,i)
+			       ((5) :jmp 'ok))
+			   `(((2) :pushl 0) ; replace Error Code
+			     ((2) :pushl ,i)
+			     ((1) :nop)
+			     ((5) :jmp 'ok))))
 	   ok
 	    ;; Stack:
 	    ;; 20: Interruptee EFLAGS (later EIP)
@@ -202,8 +197,6 @@
 	    )))
     (do-it)))
 
-(defvar *last-interrupt-frame* nil)
-
 (defun interrupt-default-handler (number interrupt-frame)
   (declare (without-check-stack-limit))
   (macrolet ((@ (fixnum-address &optional (type :lisp))
@@ -223,7 +216,7 @@
 	  (6 (error "Illegal instruction at ~@Z." $eip))
 	  (13 (error "General protection error. EIP=~@Z, error-code: #x~X, EAX: ~@Z, EBX: ~@Z, ECX: ~@Z"
 		     $eip
-		     (interrupt-frame-ref interrupt-frame :error-code :unsigned-byte32)
+		     (interrupt-frame-ref :error-code :unsigned-byte32 0 interrupt-frame)
 		     $eax $ebx $ecx))
 	  ((61)
 	   ;; EAX failed type in EDX. May be restarted by returning with a new value in EAX.
@@ -283,12 +276,12 @@
 	       (error 'unbound-variable :name name))))
 	  ((100);; 101 102 103 104 105)
 	   (let ((funobj (@ (+ interrupt-frame (interrupt-frame-index :esi))))
-		 (code (interrupt-frame-ref interrupt-frame :ecx :unsigned-byte8)))
+		 (code (interrupt-frame-ref :ecx :unsigned-byte8 0 interrupt-frame)))
 	     (error 'wrong-argument-count
 		    :function funobj
 		    :argument-count (if (logbitp 7 code)
-					(ash (interrupt-frame-ref interrupt-frame
-								  :ecx :unsigned-byte32)
+					(ash (interrupt-frame-ref :ecx :unsigned-byte32
+								  0 interrupt-frame)
 					     -24)
 				      code))))
 	  (108
