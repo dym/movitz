@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 2001,2000, 2002-2004,
-;;;;    Department of Computer Science, University of Tromsø, Norway
+;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      bootblock.lisp
 ;;;; Description:   A simple, single-stage, floppy bootloader.
@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:47:19 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: bootblock.lisp,v 1.4 2004/01/15 21:25:43 ffjeld Exp $
+;;;; $Id: bootblock.lisp,v 1.5 2004/01/16 15:40:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -293,7 +293,7 @@
        entering        (% format 8 "~%Enter..")
        error           (% format 8 "Failed!)")
        track-start-msg (% format 8 "(")
-       track-end-msg   (% format 8 ")") ;; (% format 8 ")~%")
+       track-end-msg   (% format 8 ")")
        sector-msg      (% format 8 "-")
      
        (% align 16)
@@ -330,8 +330,6 @@
   (assert (<= load-address call-address (+ load-address image-size)) ()
     "Call-address #x~X is not in range #x~X to #x~X."
     call-address load-address (+ load-address image-size))
-;;;  (warn "Call-address: #x~X" call-address)
-;;;  (warn "Call-funobj:  #x~X" call-funobj)
   (ia-x86:read-proglist
    `(
      ;;
