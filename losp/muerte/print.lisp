@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.6 2004/04/13 14:22:02 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.7 2004/04/13 15:15:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -161,9 +161,8 @@
 		   ((:readably *print-readably*) *print-readably*)
 		   right-margin)
   (numargs-case
-   (t (object &key safe-recursive-call
+   (t (object &key stream
 	      ;; lines miser-width pprint-dispatch right-margin case circle
-	      ((:stream *standard-output*) *standard-output*)
 	      ((:array *print-array*) *print-array*)
 	      ((:base *print-base*) *print-base*)
 	      ((:escape *print-escape*) *print-escape*)
@@ -173,158 +172,161 @@
 	      ((:pretty *print-pretty*) *print-pretty*)
 	      ((:radix *print-radix*) *print-radix*)
 	      ((:readably *print-readably*) *print-readably*))
-      (cond
-       ((and *print-safely* (not safe-recursive-call))
-	(handler-case (write object :safe-recursive-call t)
-	  (t (condition)
-	    (write-string "#<printer error>"))))
-       (t (write object))))
+      (let ((*standard-output* (output-stream-designator stream)))
+	(write object)))
    (1 (object)
-      (let ((stream (output-stream-designator *standard-output*)))
-	(cond
-	 ((and (not *print-pretty*)
-	       (not *never-use-print-object*))
-	  (print-object object stream))
-	 (t (let ((do-escape-p (or *print-escape* *print-readably*))
-		  (*print-level* (minus-if *print-level* 1)))
-	      (typecase object
-		(character
-		 (if (not do-escape-p)
-		     (write-char object stream)
-		   (progn
-		     (write-string "#\\" stream)
-		     (let ((name (char-name object)))
-		       (if name
-			   (write-string name stream)
-			 (write-char object stream))))))
-		(null
-		 (write-string (symbol-name nil) stream))
-		((or cons tag5)
-		 (let ((level *print-level*)
-		       (length *print-length*))
-		   (cond
-		    ((and level (minusp level))
-		     (write-char #\# stream))
-		    ((and (eq 'quote (car object))
-			  (not (cddr object)))
-		     (write-char #\' stream)
-		     (write (cadr object)))
-		    (t (labels ((write-cons (c stream length)
-				  (cond
-				   ((and length (= 0 length))
-				    (write-string "...)"))
-				   (t (write (car c))
-				      (typecase (cdr c)
-					(null
-					 (write-char #\) stream))
-					(cons
-					 (write-char #\space stream)
-					 (write-cons (cdr c) stream (minus-if length 1)))
-					(t
-					 (write-string " . " stream)
-					 (write (cdr c))
-					 (write-char #\) stream)))))))
-			 (write-char #\( stream)
-			 (write-cons object stream length))))))
-		(integer
-		 (write-integer object stream *print-base* *print-radix*))
-		(string
-		 (if do-escape-p
-		     (stream-write-escaped-string stream object #\")
-		   (write-string object stream)))
-		(symbol			; 22.1.3.3 Printing Symbols
-		 (flet ((write-symbol-name (symbol stream)
-			  (let ((name (symbol-name symbol)))
-			    (if (and (plusp (length name))
-				     (every (lambda (c)
-					      (or (upper-case-p c)
-						  (member c '(#\- #\% #\$ #\* #\@ #\. #\& #\< #\> #\=))
-						  (digit-char-p c)))
-					    name)
-				     (not (every (lambda (c)
-						   (or (digit-char-p c *read-base*)
-						       (member c '(#\.))))
-						 name)))
-				(write-string name stream)
-			      (stream-write-escaped-string stream name #\|)))))
-		   (cond
-		    ((not do-escape-p)
-		     (write-symbol-name object stream))
-		    ((eq (symbol-package object) (find-package "KEYWORD"))
-		     (write-string ":" stream)
-		     (write-symbol-name object stream))
-		    ((or (eq (symbol-package object) *package*)
-			 (eq (find-symbol (string object))
-			     object))
-		     (write-symbol-name object stream))
-		    ((symbol-package object)
-		     (let ((package (symbol-package object)))
-		       (write-string (package-name package) stream)
-		       (write-string (if (gethash (symbol-name object)
-						  (package-object-external-symbols package))
-					 ":" "::")
-				     stream)
-		       (write-symbol-name object stream)))
-		    ((not (symbol-package object))
-		     (when *print-gensym*
-		       (write-string "#:" stream))
-		     (write-symbol-name object stream))
-		    (t (error "Huh?")))))
-		(vector
-		 (let ((level *print-level*)
-		       (length *print-length*))
-		   (cond
-		    ((and level (minusp level))
-		     (write-char #\# stream))
-		    ((or *print-array* *print-readably*)
-		     (write-string "#(" stream)
-		     (cond
-		      ((and length (< length (length object)))
-		       (dotimes (i length)
-			 (unless (= 0 i)
-			   (write-char #\space stream))
-			 (write (aref object i)))
-		       (write-string " ...)" stream))
-		      (t (dotimes (i (length object))
-			   (unless (= 0 i)
-			     (write-char #\space stream))
-			   (write (aref object i)))
-			 (write-char #\) stream))))
-		    (t (print-unreadable-object (object stream :identity t)
-			 (princ (type-of object) stream))))))
-		(standard-gf-instance
-		 (print-unreadable-object (object stream)
-		   (format stream "gf ~S" (funobj-name object))))
-		(compiled-function
-		 (print-unreadable-object (object stream)
-		   (format stream "function ~S" (funobj-name object))))
-		(hash-table
+      (if (not *print-safely*)
+	  (internal-write object)
+	(handler-case (internal-write object)
+	  (serious-condition (c)
+	    (format t "#<printer error for ~Z: [~A]>" object c)))))))
+
+(defun internal-write (object)
+  (let ((stream *standard-output*))
+    (cond
+     ((and (not *print-pretty*)
+	   (not *never-use-print-object*))
+      (print-object object stream))
+     (t (let ((do-escape-p (or *print-escape* *print-readably*))
+	      (*print-level* (minus-if *print-level* 1)))
+	  (typecase object
+	    (character
+	     (if (not do-escape-p)
+		 (write-char object stream)
+	       (progn
+		 (write-string "#\\" stream)
+		 (let ((name (char-name object)))
+		   (if name
+		       (write-string name stream)
+		     (write-char object stream))))))
+	    (null
+	     (write-string (symbol-name nil) stream))
+	    ((or cons tag5)
+	     (let ((level *print-level*)
+		   (length *print-length*))
+	       (cond
+		((and level (minusp level))
+		 (write-char #\# stream))
+		((and (eq 'quote (car object))
+		      (not (cddr object)))
+		 (write-char #\' stream)
+		 (write (cadr object)))
+		(t (labels ((write-cons (c stream length)
+			      (cond
+			       ((and length (= 0 length))
+				(write-string "...)"))
+			       (t (write (car c))
+				  (typecase (cdr c)
+				    (null
+				     (write-char #\) stream))
+				    (cons
+				     (write-char #\space stream)
+				     (write-cons (cdr c) stream (minus-if length 1)))
+				    (t
+				     (write-string " . " stream)
+				     (write (cdr c))
+				     (write-char #\) stream)))))))
+		     (write-char #\( stream)
+		     (write-cons object stream length))))))
+	    (integer
+	     (write-integer object stream *print-base* *print-radix*))
+	    (string
+	     (if do-escape-p
+		 (stream-write-escaped-string stream object #\")
+	       (write-string object stream)))
+	    (symbol			; 22.1.3.3 Printing Symbols
+	     (flet ((write-symbol-name (symbol stream)
+		      (let ((name (symbol-name symbol)))
+			(if (and (plusp (length name))
+				 (every (lambda (c)
+					  (or (upper-case-p c)
+					      (member c '(#\- #\% #\$ #\* #\@ #\. #\& #\< #\> #\=))
+					      (digit-char-p c)))
+					name)
+				 (not (every (lambda (c)
+					       (or (digit-char-p c *read-base*)
+						   (member c '(#\.))))
+					     name)))
+			    (write-string name stream)
+			  (stream-write-escaped-string stream name #\|)))))
+	       (cond
+		((not do-escape-p)
+		 (write-symbol-name object stream))
+		((eq (symbol-package object) (find-package "KEYWORD"))
+		 (write-string ":" stream)
+		 (write-symbol-name object stream))
+		((or (eq (symbol-package object) *package*)
+		     (eq (find-symbol (string object))
+			 object))
+		 (write-symbol-name object stream))
+		((symbol-package object)
+		 (let ((package (symbol-package object)))
+		   (write-string (package-name package) stream)
+		   (write-string (if (gethash (symbol-name object)
+					      (package-object-external-symbols package))
+				     ":" "::")
+				 stream)
+		   (write-symbol-name object stream)))
+		((not (symbol-package object))
+		 (when *print-gensym*
+		   (write-string "#:" stream))
+		 (write-symbol-name object stream))
+		(t (error "Huh?")))))
+	    (vector
+	     (let ((level *print-level*)
+		   (length *print-length*))
+	       (cond
+		((and level (minusp level))
+		 (write-char #\# stream))
+		((or *print-array* *print-readably*)
+		 (write-string "#(" stream)
+		 (cond
+		  ((and length (< length (length object)))
+		   (dotimes (i length)
+		     (unless (= 0 i)
+		       (write-char #\space stream))
+		     (write (aref object i)))
+		   (write-string " ...)" stream))
+		  (t (dotimes (i (length object))
+		       (unless (= 0 i)
+			 (write-char #\space stream))
+		       (write (aref object i)))
+		     (write-char #\) stream))))
+		(t (print-unreadable-object (object stream :identity t)
+		     (princ (type-of object) stream))))))
+	    (standard-gf-instance
+	     (print-unreadable-object (object stream)
+	       (format stream "gf ~S" (funobj-name object))))
+	    (compiled-function
+	     (print-unreadable-object (object stream)
+	       (format stream "function ~S" (funobj-name object))))
+	    (hash-table
+	     (print-unreadable-object (object stream :identity nil :type nil)
+	       (format stream "~S hash-table with ~D entries"
+		       (let ((test (hash-table-test object)))
+			 (if (typep test 'compiled-function)
+			     (funobj-name test)
+			   test))
+		       (hash-table-count object))))
+	    (package
+	     (if (package-name object)
 		 (print-unreadable-object (object stream :identity nil :type nil)
-		   (format stream "~S hash-table with ~D entries"
-			   (let ((test (hash-table-test object)))
-			     (if (typep test 'compiled-function)
-				 (funobj-name test)
-			       test))
-			   (hash-table-count object))))
-		(package
-		 (if (package-name object)
-		     (print-unreadable-object (object stream :identity nil :type nil)
-		       (format stream "Package ~A with ~D+~D symbols"
-			       (package-name object)
-			       (hash-table-count (package-object-external-symbols object))
-			       (hash-table-count (package-object-internal-symbols object))))
-		   (print-unreadable-object (object stream :identity t :type t))))
-		(t (if (not *never-use-print-object*)
-		       (print-object object stream)
-		     (print-unreadable-object (object stream :identity t)
-		       (cond
-			((typep object 'std-instance)
-			 (write-string "[std-instance]" stream)
-			 (write (standard-instance-access (std-instance-class object) 0)))
-			((typep object 'standard-gf-instance)
-			 (write-string "[std-gf-instance]" stream))
-			(t (princ (type-of object) stream)))))))))))
-      object)))
+		   (format stream "Package ~A with ~D+~D symbols"
+			   (package-name object)
+			   (hash-table-count (package-object-external-symbols object))
+			   (hash-table-count (package-object-internal-symbols object))))
+	       (print-unreadable-object (object stream :identity t :type t))))
+	    (t (if (not *never-use-print-object*)
+		   (print-object object stream)
+		 (print-unreadable-object (object stream :identity t)
+		   (cond
+		    ((typep object 'std-instance)
+		     (write-string "[std-instance]" stream)
+		     (write (standard-instance-access (std-instance-class object) 0)))
+		    ((typep object 'standard-gf-instance)
+		     (write-string "[std-gf-instance]" stream))
+		    (t (princ (type-of object) stream)))))))))))
+  object)
 
 (defun prin1 (object &optional stream)
   (let ((*standard-output* (output-stream-designator stream))
