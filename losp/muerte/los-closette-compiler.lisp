@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.5 2004/02/10 00:38:45 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.6 2004/02/10 00:39:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -745,6 +745,10 @@
 				    classes-to-order)
 			 :test #'equal)
 			#'std-tie-breaker-rule)))
+  
+  (defun compute-class-precedence-list (class)
+    (error "Don't know how to compute class-precedence-list for ~S of class ~S."
+	   class (class-of class)))
 
 ;;; topological-sort implements the standard algorithm for topologically
 ;;; sorting an arbitrary set of elements while honoring the precedence
