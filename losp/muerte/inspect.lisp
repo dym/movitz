@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001, 2003-2004, 
+;;;;    Copyright (C) 2001, 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.45 2004/12/21 14:27:09 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.46 2005/01/25 13:49:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -41,10 +41,20 @@ This variable should be initialized during bootup initialization.")
 (defun stack-frame-funobj (stack frame)
   (stack-frame-ref stack frame -1))
 
+(defun stack-location (stack index)
+  (if (eq nil stack)
+      index
+    (+ (object-location stack) 2 index)))
+
 (defun stack-frame-uplink (stack frame)
   (if (eq 0 (stack-frame-funobj stack frame))
       (dit-frame-casf stack frame)
     (stack-frame-ref stack frame 0)))
+
+(defun stack-vector-designator (stack)
+  (etypecase stack
+    (null (%run-time-context-slot 'stack-vector))
+    (vector stack)))
 
 (define-compiler-macro current-stack-frame ()
   `(with-inline-assembly (:returns :eax)
@@ -176,23 +186,21 @@ Otherwise, stack-frame is an absolute location."
   (do ((l (logand location -2) (- l 2)))
       ((< l stop-location)
        (error "Unable to find code-vector for location ~S." location))
-    (multiple-value-bind (upper30 lower2)
-	(memref l 0 :type :signed-byte30+2)
-      (when (and (= 2 lower2)
-		 (= #.(movitz:basic-vector-type-tag :code))
-		 ;; If the vector has a fill-pointer, it should be equal to the length.
-		 (multiple-value-bind (len len-tag)
-		     (memref l 4 :type :signed-byte30+2)
-		   (and (= 0 len-tag)
-			(typecase len
-			  ((integer 0 #x3fff)
-			   (= len (memref l 2 :type :unsigned-byte14)))
-			  (positive-fixnum t)
-			  (t nil)))))
-	(let ((code-vector (%location-object l 6)))
-	  (check-type code-vector code-vector)
-	  (assert (location-in-object-p code-vector location))
-	  (return code-vector))))))
+    (when (and (= (memref l 0 :type :unsigned-byte16)
+		  #.(movitz:basic-vector-type-tag :code))
+	       ;; If the vector has a fill-pointer, it should be equal to the length.
+	       (multiple-value-bind (len len-tag)
+		   (memref l 4 :type :signed-byte30+2)
+		 (and (= 0 len-tag)
+		      (typecase len
+			((integer 0 #x3fff)
+			 (= len (memref l 2 :type :unsigned-byte14)))
+			(positive-fixnum t)
+			(t nil)))))
+      (let ((code-vector (%location-object l 6)))
+	(check-type code-vector code-vector)
+	(assert (location-in-object-p code-vector location))
+	(return code-vector)))))
 
 (defun %shallow-copy-object (object word-count)
   "Copy any object with size word-count."
