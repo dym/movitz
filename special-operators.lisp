@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.13 2004/02/14 23:46:56 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.14 2004/02/17 20:24:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -568,6 +568,7 @@ The valid parameters are~{ ~S~}."
 			       (check-type binding lexical-binding)
 			       (list binding)))))
 		       (let ((code (assembly-macroexpand inline-asm amenv)))
+			 #+ignore
 			 (assert (not (and (not side-effects)
 					   (tree-search code '(:store-lexical))))
 			     ()

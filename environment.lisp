@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.4 2004/02/10 00:24:38 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.5 2004/02/17 20:24:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -285,6 +285,7 @@ the function sets up itself. Its parent env. must be a funobj-env."))
     (image-global-environment *image*))
 
 (defun movitz-env-add-binding (env binding &optional (variable (binding-name binding)))
+  "Returns the binding."
   (check-type binding binding)
   (check-type variable symbol "a variable name")
   (let ((env (or env *movitz-global-environment*)))
