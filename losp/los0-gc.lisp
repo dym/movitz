@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.34 2004/08/23 13:58:07 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.35 2004/09/02 09:33:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -288,7 +288,7 @@ duo-space where each space is KB-SIZE kilobytes."
       (let ((*standard-output* *terminal-io*))
 	(when *gc-running*
 	  (let ((muerte::*error-no-condition-for-debugger* t))
-	    (error "Recursive GC triggered.")))
+	    (warn "Recursive GC triggered.")))
 	(let ((*gc-running* t))
 	  (unless *gc-quiet*
 	    (format t "~&;; GC.. "))
@@ -399,23 +399,26 @@ duo-space where each space is KB-SIZE kilobytes."
 		 "If x is in oldspace, migrate it to newspace."
 		 (declare (ignore location))
 		 (cond
+		  ((null x)
+		   nil)
 		  ((not (object-in-space-p oldspace x))
 		   x)
-		  (t (let ((forwarded-x (memref (object-location x) 0 0 :lisp)))
-		       (if (object-in-space-p newspace forwarded-x)
-			   (progn
-			     (assert (eq (object-tag forwarded-x)
-					 (object-tag x)))
-			     forwarded-x)
-			 (let ((forward-x (shallow-copy x)))
-			   (when (and (typep x 'muerte::pointer)
-				      *gc-consitency-check*)
-			     (let ((a *x*))
-			       (vector-push (%object-lispval x) a)
-			       (vector-push (memref (object-location x) 0 0 :unsigned-byte32) a)
-			       (assert (vector-push (%object-lispval forward-x) a))))
-			   (setf (memref (object-location x) 0 0 :lisp) forward-x)
-			   forward-x)))))))))
+		  (t 
+		       (or (and (eq (object-tag x)
+				    (ldb (byte 3 0)
+					 (memref (object-location x) 0 0 :unsigned-byte8)))
+				(let ((forwarded-x (memref (object-location x) 0 0 :lisp)))
+				  (and (object-in-space-p newspace forwarded-x)
+				       forwarded-x)))
+			   (let ((forward-x (shallow-copy x)))
+			     (when (and (typep x 'muerte::pointer)
+					*gc-consitency-check*)
+			       (let ((a *x*))
+				 (vector-push (%object-lispval x) a)
+				 (vector-push (memref (object-location x) 0 0 :unsigned-byte32) a)
+				 (assert (vector-push (%object-lispval forward-x) a))))
+			     (setf (memref (object-location x) 0 0 :lisp) forward-x)
+			     forward-x))))))))
       (setf *gc-stack* (muerte::copy-control-stack))
       ;; Scavenge roots
       (dolist (range muerte::%memory-map-roots%)
