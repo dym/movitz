@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.130 2005/01/25 13:42:39 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.131 2005/01/27 09:00:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -169,7 +169,6 @@ which enables tracing of recursive functions.")
     (let ((old-size (gethash hash-name (function-code-sizes *image*))))
       (cond
        ((not old-size))
-       ((eq name :anonymous-lambda))
        ((not *warn-function-change-p*))
        ((> new-size old-size)
 	(warn "~S grew from ~D to ~D bytes." name old-size new-size))
@@ -234,10 +233,9 @@ Gensym a name whose symbol-function is set to the macro-expander, and return tha
 			      "~&;; While Movitz compiling ~S in ~A:"
 			      name muerte.cl:*compile-file-pathname*)))))
     (with-retries-until-true (retry-funobj "Retry compilation of ~S." name)
-      (register-function-code-size
-       (make-compiled-funobj-pass2
-	(make-compiled-funobj-pass1 name lambda-list declarations
-				    form env top-level-p :funobj funobj))))))
+      (make-compiled-funobj-pass2
+       (make-compiled-funobj-pass1 name lambda-list declarations
+				   form env top-level-p :funobj funobj)))))
 
 (defun make-compiled-funobj-pass1 (name lambda-list declarations form env top-level-p
 				   &key funobj)
@@ -709,9 +707,9 @@ of all function-bindings seen."
 	do (let ((sub-funobj (function-binding-funobj function-binding)))
 	     ;; (warn "USage: ~S => ~S" sub-funobj usage)
 	     (case (car (movitz-funobj-name sub-funobj))
-	       (:anonymous-lambda
+	       ((muerte.cl:lambda)
 		(setf (movitz-funobj-name sub-funobj)
-		  (list :anonymous-lambda
+		  (list 'lambda
 			(movitz-funobj-name toplevel-funobj)
 			(post-incf sub-funobj-index)))))
 	     (loop for borrowed-binding in (borrowed-bindings sub-funobj)
@@ -793,7 +791,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
     (t (complete-funobj-default funobj)))
   (loop for (sub-function-binding) on (sub-function-binding-usage funobj) by #'cddr
       do (complete-funobj (function-binding-funobj sub-function-binding)))
-  funobj)
+  (register-function-code-size funobj))
 
 (defun complete-funobj-1req1opt (funobj)
   (assert (= 2 (length (function-envs funobj))))
