@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.17 2004/07/20 12:40:48 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.18 2004/07/20 23:53:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -431,8 +431,10 @@ be provided for those cases."
     (serious-condition (conditon)
       (write-string "#<error printing frame>"))))
 
-(defun backtrace (&key ((:frame initial-stack-frame)
-			(or *debugger-invoked-stack-frame*
+(defun backtrace (&key stack
+		       ((:frame initial-stack-frame)
+			(or (and stack (svref%unsafe stack 0))
+			    *debugger-invoked-stack-frame*
 			    (current-stack-frame)))
 		       ((:spartan *backtrace-be-spartan-p*))
 		       ((:fresh-lines *backtrace-do-fresh-lines*) *backtrace-do-fresh-lines*)
@@ -445,7 +447,10 @@ be provided for those cases."
 	(*print-length* *backtrace-print-length*)
 	(*print-level* *backtrace-print-level*))
     (loop with conflate-count = 0 with count = 0
-	for stack-frame = initial-stack-frame then (stack-frame-uplink stack-frame)
+	for stack-frame = initial-stack-frame
+	then (let ((uplink (stack-frame-uplink stack-frame)))
+	       (assert (> uplink stack-frame))
+	       uplink)
 	as funobj = (stack-frame-funobj stack-frame t)
 	do (flet ((print-leadin (stack-frame count conflate-count)
 		    (when *backtrace-do-fresh-lines*
