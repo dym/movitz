@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Jan 15 18:40:58 2004
 ;;;;                
-;;;; $Id: load.lisp,v 1.10 2004/02/18 14:42:59 ffjeld Exp $
+;;;; $Id: load.lisp,v 1.11 2004/12/09 14:05:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -48,20 +48,21 @@
 	    (setf (system::gsgc-parameter :generation-spread) 12)
 	    (sys:resize-areas :new (* 64 1024 1024)))
 
-#+clisp (load "packages")
-#+clisp (defconstant movitz::&all 'movitz::&all) ; CLisp has this wonderful bug..
-#+clisp (defconstant movitz::&code 'movitz::&code)
-#+clisp (defconstant movitz::&form 'movitz::&form)
-#+clisp (defconstant movitz::&returns 'movitz::&returns)
-#+clisp (defconstant movitz::&functional-p 'movitz::&functional-p)
-#+clisp (defconstant movitz::&modifies 'movitz::&modifies)
-#+clisp (defconstant movitz::&type 'movitz::&type)
-#+clisp (defconstant movitz::&final-form 'movitz::&final-form)
-#+clisp (defconstant movitz::&funobj 'movitz::&funobj)
-#+clisp (defconstant movitz::&top-level-p 'movitz::&top-level-p)
-#+clisp (defconstant movitz::&result-mode 'movitz::&result-mode)
-#+clisp (defconstant movitz::&env 'movitz::&env)
-#+clisp (defconstant movitz::&producer 'movitz::&producer)
+#+clisp-older-than-2.33-or-so
+(progn (load "packages")
+       (defconstant movitz::&all 'movitz::&all)	; CLisp has this wonderful bug..
+       (defconstant movitz::&code 'movitz::&code)
+       (defconstant movitz::&form 'movitz::&form)
+       (defconstant movitz::&returns 'movitz::&returns)
+       (defconstant movitz::&functional-p 'movitz::&functional-p)
+       (defconstant movitz::&modifies 'movitz::&modifies)
+       (defconstant movitz::&type 'movitz::&type)
+       (defconstant movitz::&final-form 'movitz::&final-form)
+       (defconstant movitz::&funobj 'movitz::&funobj)
+       (defconstant movitz::&top-level-p 'movitz::&top-level-p)
+       (defconstant movitz::&result-mode 'movitz::&result-mode)
+       (defconstant movitz::&env 'movitz::&env)
+       (defconstant movitz::&producer 'movitz::&producer))
 
 
 #-allegro (do () (nil)
