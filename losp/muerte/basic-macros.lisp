@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.46 2004/11/17 13:33:25 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.47 2004/11/18 17:59:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -445,6 +445,12 @@
    (t `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
 	 (:compile-two-forms (:eax :ebx) ,x ,y)
 	 (:cmpl :eax :ebx)))))
+
+#+ignore
+(define-compiler-macro eql (&whole form x y &environment env)
+  `(let ((x ,x) (y ,y))
+     (with-inline-assembly (:returns :boolean-zf=1)
+       (:eql (:lexical-binding x) (:lexical-binding y)))))
 
 (define-compiler-macro eql (&whole form x y &environment env)
   (cond
@@ -1078,7 +1084,7 @@ busy-waiting loop on P4."
        (:leal (:eax ,(- (movitz:tag :symbol))) :ecx)
        (:testb 7 :cl)
        (:jne '(:sub-program () (:int 66)))
-       (:call-local-pf dynamic-variable-lookup-unbound)
+       (:call-local-pf dynamic-variable-lookup)
        (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax)))))
 
 (defmacro define-global-variable (name init-form &optional docstring)

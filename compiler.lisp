@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.107 2004/11/17 13:32:46 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.108 2004/11/18 17:58:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5602,7 +5602,11 @@ fifth:  all compiler-values for form1, as a list."
 	  :modifies nil
 	  :final-form form
 	  :code `((:load-constant ,form :eax)
-		  (:call (:edi ,(global-constant-offset 'dynamic-variable-lookup))))))
+		  (,*compiler-local-segment-prefix*
+		   :call (:edi ,(global-constant-offset 'dynamic-variable-lookup)))
+		  (,*compiler-local-segment-prefix*
+		   :cmpl :eax (:edi ,(global-constant-offset 'unbound-value)))
+		  (:je '(:sub-program () (:int 99))))))
        (t (check-type binding dynamic-binding)
 	  (compiler-values ()
 	    :returns :eax
@@ -5610,7 +5614,11 @@ fifth:  all compiler-values for form1, as a list."
 	    :modifies nil
 	    :final-form form
 	    :code `((:load-constant ,form :eax)
-		    (:call (:edi ,(global-constant-offset 'dynamic-variable-lookup))))))))))
+		    (,*compiler-local-segment-prefix*
+		     :call (:edi ,(global-constant-offset 'dynamic-variable-lookup)))
+		    (,*compiler-local-segment-prefix*
+		     :cmpl :eax (:edi ,(global-constant-offset 'unbound-value)))
+		    (:je '(:sub-program () (:int 99))))))))))
 
 (define-compiler compile-lambda-form (&form form)
   "3.1.2.2.4 Lambda Forms"
@@ -6486,3 +6494,38 @@ and a list of any intervening unwind-protect environment-slots."
 			 `((:movl :eax ,destination))))
 		      (binding
 		       (make-store-lexical destination :eax nil frame-map))))))))))
+
+;;;;;;;
+
+(define-find-read-bindings :eql (x y)
+  (list x y))
+
+(define-extended-code-expander :eql (instruction funobj frame-map)
+  (destructuring-bind (x y)
+      (cdr instruction)
+    (let* ((x-type (apply #'encoded-type-decode (binding-store-type x)))
+	   (y-type (apply #'encoded-type-decode (binding-store-type y)))
+	   (x-singleton (type-specifier-singleton x-type))
+	   (y-singleton (type-specifier-singleton y-type)))
+      (when (and y-singleton (not x-singleton))
+	(rotatef x y)
+	(rotatef x-type y-type)
+	(rotatef x-singleton y-singleton))
+      (warn "eql ~S ~S" x-singleton y-singleton)
+      (cond
+       ((and x-singleton y-singleton)
+	(break "Constant EQL: ~S ~S" (car x-singleton) (car y-singleton)))
+       ((or (movitz-subtypep x-type 'fixnum)
+	    (movitz-subtypep x-type 'character)
+	    (movitz-subtypep y-type 'fixnum)
+	    (movitz-subtypep y-type 'character))
+	(break "EQL that is EQ."))
+       (t (append (make-load-lexical x :eax funobj nil frame-map)
+		  (make-load-lexical y :ebx funobj nil frame-map)
+		  (let ((eql-done (gensym "eql-done-")))
+		    `((:cmpl :eax :ebx)
+		      (:je ',eql-done)
+		      (,*compiler-global-segment-prefix*
+		       :movl (:edi ,(global-constant-offset 'complicated-eql)) :esi)
+		      (:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%2op)))
+		      ,eql-done))))))))

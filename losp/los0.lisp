@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.29 2004/11/17 14:02:18 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.30 2004/11/18 17:58:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -46,6 +46,8 @@
 
 (in-package muerte.init)
 
+(defun xx (a b)
+  (eql b #x123456789))
 
 (defun test0 ()
   (ash 1 -1000000000000))
@@ -1494,20 +1496,23 @@ Can be used to measure the overhead of primitive function."
 ;;;;;;;;;;;;;;;;;; Shallow binding
 
 (define-primitive-function dynamic-variable-install-shallow ()
-  "Install each dynamic binding entry between that in ESP (offset by 4 due to
-the call to this primitive-function!) and current dynamic-env.
-Preserve EDX."
+  "Install each dynamic binding entry between that in ESP
+ (offset by 4 due to the call to this primitive-function!)
+and current dynamic-env. Preserve EDX."
   (with-inline-assembly (:returns :nothing)
-    (:leal (:esp 4) :ecx)
+    (:leal (:esp 4) :ecx)		; first entry
    install-loop
-    (:locally (:cmpl :ecx (:edi (:edi-offset dynamic-env))))
+    (:locally
+      (:cmpl :ecx (:edi (:edi-offset dynamic-env))))
     (:je 'install-completed)
-    (:movl (:ecx 0) :eax)		; symbol
-    (:movl (:eax (:offset movitz-symbol value)) :ebx) ; symbol's old-value into EBX
-    (:movl :ebx (:ecx 4))		; save old-value in binding's scratch
-    (:movl (:ecx 8) :ebx)		; new value
-    (:movl :ebx (:eax (:offset movitz-symbol value))) ; install new value
-    (:movl (:ecx 12) :ecx)
+    (:movl (:ecx 0) :eax)		; binding's name
+    (:movl (:eax (:offset movitz-symbol value))
+	   :ebx)			; old value into EBX
+    (:movl :ebx (:ecx 4))		; save old value in scratch
+    (:movl (:ecx 8) :ebx)		; new value..
+    (:movl :ebx				; ..into symbol's value slot
+	   (:eax (:offset movitz-symbol value)))
+    (:movl (:ecx 12) :ecx)		; iterate next binding
     (:jmp 'install-loop)
    install-completed
     (:ret)))
@@ -1587,14 +1592,6 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
   "Load the dynamic value of SYMBOL into EAX."
   (with-inline-assembly (:returns :multiple-values)
     (:movl (:eax (:offset movitz-symbol value)) :eax)
-    (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax))
-    (:je '(:sub-program (unbound) (:int 99)))
-    (:ret)))
-
-(define-primitive-function dynamic-variable-lookup-unbound-shallow (symbol)
-  "Load the dynamic value of SYMBOL into EAX."
-  (with-inline-assembly (:returns :multiple-values)
-    (:movl (:eax (:offset movitz-symbol value)) :eax)
     (:ret)))
 
 (define-primitive-function dynamic-variable-store-shallow (symbol value)
@@ -1609,27 +1606,25 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
     (warn "Installing shallow-binding strategy.."))
   (without-interrupts
     (macrolet ((install (slot function)
-		 `(prog1 (cons ',slot (%run-time-context-slot ',slot))
-		    (setf (%run-time-context-slot ',slot) (symbol-value ',function)))))
-      (prog1
-	  (list (install muerte:dynamic-variable-install dynamic-variable-install-shallow)
-		(install muerte:dynamic-variable-uninstall dynamic-variable-uninstall-shallow)
-		(install muerte::dynamic-unwind-next dynamic-unwind-next-shallow)
-		(install muerte::dynamic-variable-store dynamic-variable-store-shallow)
-		(install muerte::dynamic-variable-lookup-unbound dynamic-variable-lookup-unbound-shallow)
-		(install muerte::dynamic-variable-lookup dynamic-variable-lookup-shallow))
-	(labels ((install-shallow-env (env)
-		   "We use this local function in order to install dynamic-env slots
+		 `(setf (%run-time-context-slot ',slot) (symbol-value ',function))))
+      (install muerte:dynamic-variable-install dynamic-variable-install-shallow)
+      (install muerte:dynamic-variable-uninstall dynamic-variable-uninstall-shallow)
+      (install muerte::dynamic-unwind-next dynamic-unwind-next-shallow)
+      (install muerte::dynamic-variable-store dynamic-variable-store-shallow)
+      (install muerte::dynamic-variable-lookup dynamic-variable-lookup-shallow))
+    (labels ((install-shallow-env (env)
+	       "We use this local function in order to install dynamic-env slots
                     in reverse order, by depth-first recursion."
-		   (unless (eq 0 env)
-		     (install-shallow-env (memref env 12))
-		     (let ((name (memref env 0)))
-		       (when (symbolp name)
-			 (setf (memref env 4)
-			   (%symbol-global-value name))
-			 (setf (%symbol-global-value name)
-			   (memref env 8)))))))
-	  (install-shallow-env (load-global-constant dynamic-env :thread-local t)))))))
+	       (unless (eq 0 env)
+		 (install-shallow-env (memref env 12))
+		 (let ((name (memref env 0)))
+		   (when (symbolp name)
+		     (setf (memref env 4)
+		       (%symbol-global-value name))
+		     (setf (%symbol-global-value name)
+		       (memref env 8)))))))
+      (install-shallow-env (load-global-constant dynamic-env :thread-local t))))
+  (values))
 
 (defun deinstall-shallow-binding (&key quiet)
   (unless quiet
@@ -1641,16 +1636,15 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
       (install muerte:dynamic-variable-uninstall)
       (install muerte::dynamic-unwind-next)
       (install muerte::dynamic-variable-store)
-      (install muerte::dynamic-variable-lookup-unbound)
-      (install muerte::dynamic-variable-lookup)
-      (loop for env = (load-global-constant dynamic-env :thread-local t)
-	  then (memref env 12)
-	  while (plusp env)
-	  do (let ((name (memref env 0)))
-	       (when (symbolp name)
-		 (setf (%symbol-global-value name)
-		   (memref env 4)))))
-      (values))))
+      (install muerte::dynamic-variable-lookup))
+    (loop for env = (load-global-constant dynamic-env :thread-local t)
+	then (memref env 12)
+	while (plusp env)
+	do (let ((name (memref env 0)))
+	     (when (symbolp name)
+	       (setf (%symbol-global-value name)
+		 (memref env 4)))))
+    (values)))
 
 (genesis)
 
