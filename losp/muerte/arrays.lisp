@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.11 2004/03/26 13:56:53 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.12 2004/03/28 16:20:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -516,9 +516,14 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 		       0 :unsigned-byte16)
 	   dimensions)
 	 (setf (fill-pointer a) fill-pointer)
-	 (when initial-element
+	 (cond
+	  (initial-element
+	   (check-type initial-element character)
 	   (dotimes (i dimensions)
 	     (setf (char%unsafe a i) initial-element)))
+	  (initial-contents
+	   (dotimes (i dimensions)
+	     (setf (char a i) (elt initial-contents i)))))
 	 a))
       ((member element-type '(u8 (unsigned-byte 8)) :test #'equal)
        (let ((a (inline-malloc (+ #.(bt:sizeof 'movitz::movitz-vector) dimensions)
