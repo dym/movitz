@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.31 2004/06/09 22:52:12 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.32 2004/06/10 01:25:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -788,34 +788,6 @@ Preserve EAX and EBX."
       (when (< x min)
 	(setq min x)))))
 
-;;; Types
-
-(define-typep integer (x &optional (min '*) (max '*))
-  (and (typep x 'integer)
-       (or (eq min '*) (<= min x))
-       (or (eq max '*) (<= x max))))
-
-(deftype signed-byte (&optional (size '*))
-  (cond
-   ((eq size '*)
-    'integer)
-   ((typep size '(integer 1 *))
-    (list 'integer
-	  (- (ash 1 (1- size)))
-	  (1- (ash 1 (1- size)))))
-   (t (error "Illegal size for signed-byte."))))
-
-(deftype unsigned-byte (&optional (size '*))
-  (cond
-   ((eq size '*)
-    '(integer 0))
-   ((typep size '(integer 1 *))
-    (list 'integer 0 (1- (ash 1 size))))
-   (t (error "Illegal size for unsigned-byte."))))
-
-(define-simple-typep (bit bitp) (x)
-  (or (eq x 0) (eq x 1)))
-
 ;; shift 
 
 (define-compiler-macro ash (&whole form integer count &environment env)
@@ -884,6 +856,36 @@ Preserve EAX and EBX."
       (:sarl :cl :eax)
       (:andb #.(cl:logxor #xff movitz::+movitz-fixnum-zmask+) :al)))
    (t (if (= 0 integer) 0 (error "Illegal ash count: ~D" count)))))
+
+;;; Types
+
+(define-typep integer (x &optional (min '*) (max '*))
+  (and (typep x 'integer)
+       (or (eq min '*) (<= min x))
+       (or (eq max '*) (<= x max))))
+
+(deftype signed-byte (&optional (size '*))
+  (cond
+   ((eq size '*)
+    'integer)
+   ((typep size '(integer 1 *))
+    (list 'integer
+	  (- (ash 1 (1- size)))
+	  (1- (ash 1 (1- size)))))
+   (t (error "Illegal size for signed-byte."))))
+
+(deftype unsigned-byte (&optional (size '*))
+  (cond
+   ((eq size '*)
+    '(integer 0))
+   ((typep size '(integer 1 *))
+    (list 'integer 0 (1- (ash 1 size))))
+   (t (error "Illegal size for unsigned-byte."))))
+
+(define-simple-typep (bit bitp) (x)
+  (or (eq x 0) (eq x 1)))
+
+;;;;
 
 (defun integer-length (integer)
   "=> number-of-bits"
