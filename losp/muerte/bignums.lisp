@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 19:42:57 2004
 ;;;;                
-;;;; $Id: bignums.lisp,v 1.9 2004/09/21 14:24:03 ffjeld Exp $
+;;;; $Id: bignums.lisp,v 1.10 2004/09/22 16:22:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -64,18 +64,7 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 
 (defun copy-bignum (old)
   (check-type old bignum)
-  (%shallow-copy-object old (1+ (%bignum-bigits old)))
-  #+ignore
-  (let* ((length (%bignum-bigits old))
-	 (new (malloc-non-pointer-words (1+ length))))
-    (with-inline-assembly (:returns :eax)
-      (:compile-two-forms (:eax :ebx) new old)
-      (:compile-form (:result-mode :edx) length)
-     copy-bignum-loop
-      (:movl (:ebx :edx (:offset movitz-bignum type)) :ecx)
-      (:movl :ecx (:eax :edx (:offset movitz-bignum type)))
-      (:subl 4 :edx)
-      (:jnc 'copy-bignum-loop))))
+  (%shallow-copy-object old (1+ (%bignum-bigits old))))
 
 (defun %make-bignum (bigits)
   (assert (plusp bigits))
@@ -381,27 +370,29 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	      (:compile-form (:result-mode :ecx) short-shift)
 	      (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 	      (:jz 'done)
-	      (:xorl :edx :edx)		; counter
-	      (:movw (:ebx (:offset movitz-bignum length)) :dx)
-	      (:subl 4 :edx)
+	      (:xorl :esi :esi)		; counter
+	      (:movw (:ebx (:offset movitz-bignum length)) :si)
+	      (:subl 4 :esi)
 	      (:jz 'shift-short-lsb)
 	      (:xorl :eax :eax)
 	      (:std)
 	      ;; Overflow check
-	      (:movl (:ebx :edx (:offset movitz-bignum bigit0))
+	      (:movl (:ebx :esi (:offset movitz-bignum bigit0))
 		     :eax)
-	      (:xorl :esi :esi)
-	      (:shldl :cl :eax :esi)
+	      (:xorl :edx :edx)
+	      (:shldl :cl :eax :edx)
 	      (jnz 'overflow)
 	     shift-short-loop
-	      (:movl (:ebx :edx (:offset movitz-bignum bigit0 -4))
+	      (:int 32)
+	      (:movl (:ebx :esi (:offset movitz-bignum bigit0 -4))
 		     :eax)
-	      (:shldl :cl :eax (:ebx :edx (:offset movitz-bignum bigit0)))
-	      (:subl 4 :edx)
+	      (:shldl :cl :eax (:ebx :esi (:offset movitz-bignum bigit0)))
+	      (:subl 4 :esi)
 	      (:jnz 'shift-short-loop)
-	      (:movl (:ebp -4) :esi)
+	      (:movl :edi :edx)
 	      (:movl :edi :eax)		; Safe EAX
 	      (:cld)
+	      (:movl (:ebp -4) :esi)
 	     shift-short-lsb
 	      (:shll :cl (:ebx (:offset movitz-bignum bigit0)))
 	     done
@@ -428,7 +419,6 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	       (:xorl :edx :edx)	; Initial carry
 	       (:std)			; Make EAX, EDX non-GC-roots.
 	      multiply-loop
-	       (:movl :esi (#x1000000))
 	       (:movl (:ebx :esi (:offset movitz-bignum bigit0))
 		      :eax)
 	       (:movl :edx :ecx)	; Save carry in ECX
@@ -459,9 +449,9 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	       (:compile-two-forms (:ebx :ecx) bignum divisor)
 	       (:xorl :edx :edx)	; hi-digit
 	       (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
-	       (:std)
-	       (:xorl :esi :esi)
+	       (:xorl :esi :esi)	; ESI is counter by 4
 	       (:movw (:ebx (:offset movitz-bignum length)) :si)
+	       (:std)
 	      divide-loop
 	       (:movl (:ebx :esi (:offset movitz-bignum bigit0 -4))
 		      :eax)		; lo-digit
