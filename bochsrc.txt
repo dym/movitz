@@ -3,7 +3,7 @@
 ###############################################################
 
 # how much memory the emulated machine will have
-megs: 32
+megs: 64
 
 # filename of ROM images
 #romimage: file=/usr/local/bochs/1.2.1/BIOS-bochs-latest, address=0xf0000
