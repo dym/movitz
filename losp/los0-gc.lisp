@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.23 2004/07/12 11:11:15 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.24 2004/07/13 02:38:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -390,6 +390,7 @@ Preserve EAX and EBX."
 			       (+ newspace-location (space-fresh-pointer newspace)))
 	       (setf scan-pointer fresh-pointer))
 
+	#+ignore
 	(dotimes (i (truncate (length *x*) 2))
 	  (let ((x (muerte::%word-offset (aref *x* (* i 2)) 6))
 		(y (muerte::%word-offset (aref *x* (1+ (* i 2))) 6)))
