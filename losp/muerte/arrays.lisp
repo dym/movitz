@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.23 2004/06/16 07:38:27 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.24 2004/06/17 09:49:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -98,24 +98,66 @@
 (defun vector-fill-pointer (vector)
   (vector-fill-pointer vector))
 
+(define-compiler-macro %basic-vector-has-fill-pointer-p (vector)
+  "Does the basic-vector have a fill-pointer?"
+  `(with-inline-assembly (:returns :boolean-zf=1)
+     (:compile-form (:result-mode :eax) ,vector)
+     (:testl ,(logxor #xffffffff (1- (expt 2 14)))
+	     (:eax ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)))))
+
+(define-compiler-macro %basic-vector-fill-pointer (vector)
+  "Return the basic-vector's fill-pointer. The result is only valid if
+%basic-vector-has-fill-pointer-p is true."
+  `(with-inline-assembly (:returns :register)
+     (:compile-form (:result-mode :register) ,vector)
+     (:movzxw ((:result-register)
+	       ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+	      (:result-register))))
 
 (defun array-has-fill-pointer-p (array)
-  (etypecase array			;
+  (etypecase array
+    (basic-vector
+     (%basic-vector-has-fill-pointer-p array))
     (vector t)
     (array nil)))
   
 (defun fill-pointer (vector)
-  (check-type vector vector)
-  (memref vector #.(bt:slot-offset 'movitz:movitz-vector 'movitz::fill-pointer) 0
-	  :unsigned-byte16))
+  (etypecase vector
+    (basic-vector
+     (assert (%basic-vector-has-fill-pointer-p vector) (vector)
+       "Vector has no fill-pointer.")
+     (%basic-vector-fill-pointer vector))
+    (vector
+     (memref vector #.(bt:slot-offset 'movitz:movitz-vector 'movitz::fill-pointer) 0
+	     :unsigned-byte16))))
 
 
 (defun (setf fill-pointer) (new-fill-pointer vector)
-  (check-type vector vector)
-  (assert (<= new-fill-pointer (vector-dimension vector)))
-  (setf (memref vector #.(bt:slot-offset 'movitz::movitz-vector 'movitz::fill-pointer) 0
-		:unsigned-byte16)
-    new-fill-pointer))
+  (etypecase vector
+    (basic-vector
+     (macrolet
+	 ((do-it ()
+	    `(with-inline-assembly (:returns :eax)
+	       (:compile-two-forms (:eax :ebx) new-fill-pointer vector)
+	       (:testb ,movitz:+movitz-fixnum-zmask+ :al)
+	       (:jnz 'illegal-fill-pointer)
+	       (:movl (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+		      :ecx)
+	       (:testl ,(logxor #xffffffff (1- (expt 2 14))) :ecx)
+	       (:jnz '(:sub-program ()
+		       (:compile-form (:result-mode :ignore)
+			(error "Vector has no fill-pointer."))))
+	       (:cmpl :eax :ecx)
+	       (:jc '(:sub-program (illegal-fill-pointer)
+		       (:compile-form (:result-mode :ignore)
+			(error "Illegal fill-pointer: ~W." new-fill-pointer))))
+	       (:movw :ax (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))))))
+       (do-it)))
+    (vector
+     (assert (<= new-fill-pointer (vector-dimension vector)))
+     (setf (memref vector #.(bt:slot-offset 'movitz::movitz-vector 'movitz::fill-pointer) 0
+		   :unsigned-byte16)
+       new-fill-pointer))))
 
 (defun vector-aref%unsafe (vector index)
   "No type-checking of <vector> or <index>."
@@ -571,6 +613,24 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 	     (setf (aref array i) initial-element)))
 	  (initial-contents
 	   (replace array initial-contents)))
+	 array))
+      ((eq element-type :basic)
+       (check-type dimensions (and fixnum (integer 0 *)))
+       (let ((array (malloc-words dimensions)))
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-new-vector 'movitz::num-elements)
+		       0 :lisp)
+	   dimensions)
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
+		       0 :unsigned-byte16)
+	   #.(movitz:basic-vector-type-tag :any-t))
+	 (when fill-pointer
+	   (setf (fill-pointer array) fill-pointer))
+	 (cond
+	  (initial-contents
+	   (replace array initial-contents))
+	  (initial-element
+	   (dotimes (i dimensions)
+	     (setf (svref%unsafe array i) initial-element))))
 	 array))
       (t (let ((array (malloc-words dimensions)))
 	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.11 2004/06/09 20:23:48 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.12 2004/06/17 09:49:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -211,6 +211,7 @@ The unit clump is 8 bytes, or two words."
   (malloc-clumps clumps))
 
 (defun malloc-words (words)
+  "Allocate space for at least (+ 2 words) cells/words."
   (malloc-clumps (1+ (truncate (1+ words) 2))))
 
 (defun malloc-data-words (words)

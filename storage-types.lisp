@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.21 2004/06/16 07:42:50 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.22 2004/06/17 09:49:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -68,13 +68,14 @@
   :symbol 7
   
   :vector #x1a
-  :defstruct #x20
+  :basic-vector #x22
   :funobj #x3a
+  :bignum #x4a
+  :defstruct #x20
   :std-instance #x40
   :run-time-context #x50
   :illegal #x13
   :infant-object #x23
-  :bignum #x4a
 
   ;; :simple-vector #x20
   ;; :character-vector 
@@ -375,12 +376,16 @@ integer (native lisp) value."
        (byte 8 8)
        (enum-value 'other-type-byte :vector)))
 
-#+ignore
-(define-binary-class movitz-new-vector (movitz-heap-object-other)
+(defun basic-vector-type-tag (element-type)
+  (dpb (enum-value 'movitz-vector-element-type element-type)
+       (byte 8 8)
+       (enum-value 'other-type-byte :basic-vector)))
+
+(define-binary-class movitz-basic-vector (movitz-heap-object-other)
   ((type
     :binary-type other-type-byte
     :reader movitz-vector-type
-    :initform :new-vector)
+    :initform :basic-vector)
    (element-type
     :binary-type (define-enum movitz-vector-element-type (u8)
 		   :any-t 0
@@ -391,27 +396,12 @@ integer (native lisp) value."
 		   :bit 5)
     :initarg :element-type
     :reader movitz-vector-element-type)
-   (dummy
-    :binary-type :lu16)
    (fill-pointer
     :binary-type lu16
     :initarg :fill-pointer
     :accessor movitz-vector-fill-pointer)
-   (flags
-    :accessor movitz-vector-flags
-    :initarg :flags
-    :initform nil
-    :binary-type (define-bitfield movitz-vector-flags (u8)
-		   (((:bits) :fill-pointer-p 2
-			     :code-vector-p 3
-			     :std-instance-slots-p 4))))
-   (alignment-power
-    :binary-lisp-type u8		; align to 2^(high-nibble+3) + low-nibble
-    :initform 0
-    :initarg :alignment-power
-    :reader movitz-vector-alignment-power)
    (num-elements
-    :binary-type lu16
+    :binary-type word
     :initarg :num-elements
     :reader movitz-vector-num-elements)      
    (data

@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.17 2004/06/10 13:51:53 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.18 2004/06/17 09:49:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -233,6 +233,8 @@
 		    (:cmpb ,(movitz:tag :character) :al)))
 		((function compiled-function)
 		 (make-other-typep :funobj))
+		((basic-vector)
+		 (make-other-typep :basic-vector))
 		((vector array)
 		 (make-other-typep :vector))
 		(simple-vector
