@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.8 2004/04/23 13:00:30 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.9 2004/06/16 07:37:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -72,6 +72,10 @@
   (case (car form)
     (quote (cadr form))
     (function (eval-function (second form) env))
+    (when (when (eval-form (second form) env)
+	    (eval-progn (cddr form) env)))
+    (unless (unless (eval-form (second form) env)
+	      (eval-progn (cddr form) env)))
     (if (if (eval-form (second form) env)
 	    (eval-form (third form) env)
 	  (eval-form (fourth form) env)))
