@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.14 2004/02/11 16:22:38 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.15 2004/02/12 11:30:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -542,11 +542,14 @@
 		    (image-cons-pointer image) (+ new-ptr size))
 	      new-ptr))))))
 
-(defmethod image-memref ((image symbolic-image) address &optional (errorp nil))
+(defmethod image-memref ((image symbolic-image) address &optional (errorp t))
   (let ((obj (gethash address (image-address-hash image) :nothing)))
-    (when (and errorp (not (typep obj 'movitz-object)))
-      (error "Found non-movitz-object at image-address #x~X: ~A" address obj))
-    obj))
+    (cond
+     ((not (typep obj 'movitz-object))
+      (when errorp
+	(error "Found non-movitz-object at image-address #x~X: ~A" address obj))
+      nil)
+     (t obj))))
 
 (defmethod search-image ((image symbolic-image) address)
   (loop for a downfrom (logand address -8) by 8
@@ -902,7 +905,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
     (loop for p upfrom (- (image-start-address image) (image-ds-segment-base image)) by 8
 	until (>= p (image-cons-pointer image))
 	summing
-	  (let ((obj (image-memref image p)))
+	  (let ((obj (image-memref image p nil)))
 	    (cond
 	     ((not obj) 0)
 	     (t (let ((new-pos (+ p file-start-position
