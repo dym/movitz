@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.8 2004/04/16 14:42:22 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.9 2004/04/17 14:09:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -24,6 +24,7 @@
      (:locally (:bound (:edi (:edi-offset stack-bottom)) :esp))))
 
 (defun check-stack-limit ()
+  (declare (without-check-stack-limit))	; we do it explicitly..
   (check-stack-limit))
 
 (defun stack-top ()
