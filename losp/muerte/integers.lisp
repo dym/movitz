@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.47 2004/07/12 14:17:14 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.48 2004/07/13 02:29:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -67,6 +67,36 @@
 
 (defun oddp (x)
   (not (evenp x)))
+
+
+
+;;; Types
+
+(define-typep integer (x &optional (min '*) (max '*))
+  (and (typep x 'integer)
+       (or (eq min '*) (<= min x))
+       (or (eq max '*) (<= x max))))
+
+(deftype signed-byte (&optional (size '*))
+  (cond
+   ((eq size '*)
+    'integer)
+   ((typep size '(integer 1 *))
+    (list 'integer
+	  (- (ash 1 (1- size)))
+	  (1- (ash 1 (1- size)))))
+   (t (error "Illegal size for signed-byte."))))
+
+(deftype unsigned-byte (&optional (size '*))
+  (cond
+   ((eq size '*)
+    '(integer 0))
+   ((typep size '(integer 1 *))
+    (list 'integer 0 (1- (ash 1 size))))
+   (t (error "Illegal size for unsigned-byte."))))
+
+(define-simple-typep (bit bitp) (x)
+  (or (eq x 0) (eq x 1)))
 
 ;;; Addition
 
@@ -400,7 +430,7 @@
 			(:movl (:eax ,movitz:+other-type-offset+) :ecx)
 			(:cmpb ,(movitz:tag :bignum) :cl)
 			(:jne 'not-a-number)
-			(:cmpl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0)) :ecx)
+			(:cmpl ,(dpb 4 (byte 16 16) (movitz:tag :bignum 0)) :ecx)
 			(:jne 'not-most-negative-fixnum)
 			(:cmpl ,(- most-negative-fixnum)
 			 (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
@@ -423,15 +453,50 @@
 		)))
 	(do-it)))
    (2 (minuend subtrahend)
-      (cond
-       ((eq 0 minuend)
-	(- subtrahend))
-       (t (check-type minuend fixnum)
-	  (check-type subtrahend fixnum)
-	  (with-inline-assembly (:returns :eax :side-effects nil)
-	    (:compile-two-forms (:eax :ebx) minuend subtrahend)
-	    (:subl :ebx :eax)
-	    (:into)))))
+      (macrolet
+	  ((do-it ()
+	     `(number-double-dispatch (minuend subtrahend)
+		((t (eql 0))
+		 minuend)
+		(((eql 0) t)
+		 (- subtrahend))
+		((fixnum fixnum)
+		 (with-inline-assembly (:returns :eax :side-effects nil)
+		   (:compile-two-forms (:eax :ebx) minuend subtrahend)
+		   (:subl :ebx :eax)
+		   (:into)))
+		((bignum fixnum)
+		 (+ (- subtrahend) minuend))
+		((fixnum bignum)
+		 (- (+ (- minuend) subtrahend)))
+		((positive-bignum positive-bignum)
+		 (cond
+		  ((= minuend subtrahend)
+		   0)
+		  ((< minuend subtrahend)
+		   (- (- subtrahend minuend)))
+		  (t (%bignum-canonicalize
+		      (with-inline-assembly (:returns :eax)
+			(:compile-two-forms (:eax :ebx) (copy-bignum minuend) subtrahend)
+			(:xorl :edx :edx) ; counter
+			(:xorl :ecx :ecx) ; carry
+		       sub-loop
+			(:addl (:ebx :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
+			       :ecx)
+			(:sbbl :ecx
+			       (:eax :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+			(:sbbl :ecx :ecx)
+			(:negl :ecx)
+			(:addl 4 :edx)
+			(:cmpw :dx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+			(:jne 'sub-loop)
+			(:subl :ecx
+			       (:eax :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+			(:jc '(:sub-program (should-not-happen)
+			       (:int 107)))
+			)))))
+		)))
+	(do-it)))
    (t (minuend &rest subtrahends)
       (declare (dynamic-extent subtrahends))
       (if subtrahends
@@ -1025,34 +1090,6 @@ Preserve EAX and EBX."
 ;;;      (:andb #.(cl:logxor #xff movitz::+movitz-fixnum-zmask+) :al)))
 ;;;   (t (if (= 0 integer) 0 (error "Illegal ash count: ~D" count)))))
 
-;;; Types
-
-(define-typep integer (x &optional (min '*) (max '*))
-  (and (typep x 'integer)
-       (or (eq min '*) (<= min x))
-       (or (eq max '*) (<= x max))))
-
-(deftype signed-byte (&optional (size '*))
-  (cond
-   ((eq size '*)
-    'integer)
-   ((typep size '(integer 1 *))
-    (list 'integer
-	  (- (ash 1 (1- size)))
-	  (1- (ash 1 (1- size)))))
-   (t (error "Illegal size for signed-byte."))))
-
-(deftype unsigned-byte (&optional (size '*))
-  (cond
-   ((eq size '*)
-    '(integer 0))
-   ((typep size '(integer 1 *))
-    (list 'integer 0 (1- (ash 1 size))))
-   (t (error "Illegal size for unsigned-byte."))))
-
-(define-simple-typep (bit bitp) (x)
-  (or (eq x 0) (eq x 1)))
-
 ;;;;
 
 (defun integer-length (integer)
@@ -1267,10 +1304,11 @@ Preserve EAX and EBX."
 		    positive-result
 		     )))
 		((positive-bignum positive-bignum)
-		 (do ((f y)
+		 (do ((mx (* most-positive-fixnum x))
+		      (f y)
 		      (r 0))
 		     ((typep f 'fixnum) (+ r (* f x)))
-		   (setf r (+ r (* most-positive-fixnum x)))
+		   (setf r (+ r mx))
 		   (setf f (- f most-positive-fixnum))))
 		)))
 	(do-it)))
@@ -1402,7 +1440,9 @@ Preserve EAX and EBX."
 	 (cond
 	  ((= number divisor) (values 1 0))
 	  ((< number divisor) (values 0 number))
-	  (t (error "Don't know how to divide ~S with ~S." number divisor))))
+	  (t (do ((q 0 (1+ q))
+		  (r number (- r divisor)))
+		 ((< r divisor) (values q r))))))
 	))))
 
 (defun / (number &rest denominators)
