@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.94 2004/09/15 10:22:59 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.95 2004/09/20 08:06:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -481,72 +481,7 @@
 		((positive-bignum positive-fixnum)
 		 (+ y x))
 		((positive-fixnum positive-bignum)
-		 (bignum-add-fixnum y x)
-		 #+ignore
-		 (with-inline-assembly (:returns :eax :labels (retry-not-size1
-							       not-size1
-							       copy-bignum-loop
-							       add-bignum-loop
-							       add-bignum-done
-							       no-expansion
-							       pfix-pbig-done))
-		   (:compile-two-forms (:eax :ebx) y x)
-		   (:testl :ebx :ebx)
-		   (:jz 'pfix-pbig-done)
-		   (:movzxw (:eax (:offset movitz-bignum length)) :ecx)
-		   (:cmpl ,movitz:+movitz-fixnum-factor+ :ecx)
-		   (:jne 'not-size1)
-		   (:compile-form (:result-mode :ecx) x)
-		   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
-		   (:addl (:eax (:offset movitz-bignum bigit0)) :ecx)
-		   (:jc 'retry-not-size1)
-		   (:call-local-pf box-u32-ecx)
-		   (:jmp 'pfix-pbig-done)
-		  retry-not-size1
-		   (:compile-form (:result-mode :eax) y)
-		   (:movzxw (:eax (:offset movitz-bignum length)) :ecx)
-		  not-size1
-		   (:declare-label-set retry-jumper (retry-not-size1))
-		   (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
-		   (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
-				      'retry-jumper)
-				    (:edi (:edi-offset atomically-status))))
-		   (:leal ((:ecx 1) ,(* 2 movitz:+movitz-fixnum-factor+))
-			  :eax)		; Number of words
-		   (:call-local-pf get-cons-pointer)
-		   (:load-lexical (:lexical-binding y) :ebx) ; bignum
-		   (:movzxw (:ebx (:offset movitz-bignum length)) :ecx)
-		   (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
-			  :edx)
-		   (:movl 0 (:eax :edx ,movitz:+other-type-offset+)) ; MSB
-		  copy-bignum-loop
-		   (:subl ,movitz:+movitz-fixnum-factor+ :edx)
-		   (:movl (:ebx :edx ,movitz:+other-type-offset+) :ecx)
-		   (:movl :ecx (:eax :edx ,movitz:+other-type-offset+))
-		   (:jnz 'copy-bignum-loop)
-
-		   (:load-lexical (:lexical-binding x) :ecx)
-		   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
-		   (:xorl :ebx :ebx)
-		   (:addl :ecx (:eax (:offset movitz-bignum bigit0)))
-		   (:jnc 'add-bignum-done)
-		  add-bignum-loop
-		   (:addl 4 :ebx)
-		   (:addl 1 (:eax :ebx (:offset movitz-bignum bigit0)))
-		   (:jc 'add-bignum-loop)
-		  add-bignum-done
-		   (:movzxw (:eax (:offset movitz-bignum length)) :ecx)
-		   (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+) :ecx)
-		   (:cmpl 0 (:eax :ecx (:offset movitz-bignum bigit0 -4)))
-		   (:je 'no-expansion)
-		   (:addl #x40000 (:eax ,movitz:+other-type-offset+))
-		   (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
-		  no-expansion
-		   (:call-local-pf cons-commit)
-		   (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-				    (:edi (:edi-offset atomically-status))))
-		   
-		  pfix-pbig-done))
+		 (bignum-add-fixnum y x))
 		((positive-bignum negative-fixnum)
 		 (+ y x))
 		((negative-fixnum positive-bignum)
