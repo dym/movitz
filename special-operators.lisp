@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.23 2004/06/06 15:12:40 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.24 2004/07/09 16:12:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1092,7 +1092,7 @@ on the current result."
 	  :forward all
 	  :form (+ (eval-form term1 env)
 		   (eval-form term2 env))))
-       ((and (movitz-constantp term1 env)	; first operand zero?
+       ((and (movitz-constantp term1 env) ; first operand zero?
 	     (zerop (eval-form term1 env)))
 	(compiler-call #'compile-form-unprotected
 	  :forward all
