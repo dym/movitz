@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov  5 21:53:34 2003
 ;;;;                
-;;;; $Id: variables.lisp,v 1.2 2004/03/24 18:39:53 ffjeld Exp $
+;;;; $Id: variables.lisp,v 1.3 2004/03/24 23:42:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -38,4 +38,4 @@
 
 (defvar internal-time-units-per-second)
 
-(defvar *build-number* :unknown)
+(declaim (special *build-number*))
