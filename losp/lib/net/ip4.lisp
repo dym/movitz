@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.13 2004/11/24 16:26:29 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.14 2004/11/24 17:28:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -29,12 +29,14 @@
 	   #:format-ip4-header
 	   #:format-udp-header
 	   #:*ip4-nic*
-	   #:*ip4-ip*))
+	   #:*ip4-ip*
+	   #:*ip4-router*))
 
 (in-package muerte.ip4)
 
 (defvar *ip4-nic* nil)
 (defvar *ip4-ip* nil)
+(defvar *ip4-router* nil)
 
 (defmacro ip4-ref (packet start offset type)
   `(memref ,packet (+ (muerte:movitz-type-slot-offset 'movitz-basic-vector 'data)
@@ -165,11 +167,12 @@
 		    (t 0)))
   (when (and (not start-p) (or colon at))
     (incf start 14))
-  (format stream "~D.~D.~D.~D"
-	  (aref address (+ start 0))
-	  (aref address (+ start 1))
-	  (aref address (+ start 2))
-	  (aref address (+ start 3)))
+  (let ((address (ip4-address address)))
+    (format stream "~D.~D.~D.~D"
+	    (ip4-ref address start 0 :unsigned-byte8)
+	    (ip4-ref address start 1 :unsigned-byte8)
+	    (ip4-ref address start 2 :unsigned-byte8)
+	    (ip4-ref address start 3 :unsigned-byte8)))
   nil)
 
 (defun arp-input (stack packet start)
@@ -454,6 +457,10 @@
 (defun ip4-address (specifier &optional (start 0))
   (or (ignore-errors
        (typecase specifier
+	 ((simple-array (unsigned-byte 8) (*))
+	  (if (= start 0)
+	      specifier
+	    (subseq specifier start (+ start 4))))
 	 ((or string symbol)
 	  (read-ip4-address (string specifier) start))
 	 (vector
@@ -482,23 +489,25 @@
       (setf *ip4-nic* ethernet)))
   (unless *ip4-ip*
     (setf *ip4-ip* (ip4-address :129.242.16.173)))
+  (unless *ip4-router*
+    (setf *ip4-router* (ip4-address :129.242.16.1)))
+  ;; This is to announce our presence on the LAN..
+  (polling-arp *ip4-router* (lambda ()
+			      (eql #\esc (muerte.x86-pc.keyboard:poll-char))))
   (values *ip4-nic* *ip4-ip*))
 
-(defun ip4-test (&key (router #(129 242 16 1)))
+(defun ip4-test ()
   (ip4-init)
   (let ((ethernet *ip4-nic*)
 	(stack (make-instance 'ip4-stack
 		 :interface *ip4-nic*
 		 :address *ip4-ip*)))
-    (when router
-      (transmit (interface stack)
-		(format-ethernet-packet (format-arp-request nil +arp-op-request+
-							    (address stack)
-							    (mac-address (interface stack))
-							    (ip4-address router))
-					(mac-address (interface stack))
-					+broadcast-address+
-					+ether-type-arp+)))
+    (when *ip4-router*
+      (format *query-io* "~&Router ~/ip4:pprint-ip4/ is at ~/ethernet:pprint-mac/."
+	      *ip4-router*
+	      (polling-arp *ip4-router* 
+			   (lambda ()
+			     (eql #\esc (muerte.x86-pc.keyboard:poll-char))))))
     (loop
       (case (muerte.x86-pc.keyboard:poll-char)
 	((nil))
