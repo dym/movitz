@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.3 2004/02/05 14:46:08 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.4 2004/02/10 00:24:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -198,7 +198,7 @@ the function sets up itself. Its parent env. must be a funobj-env."))
     (call-next-method))
    (t (print-unreadable-object (object stream :type t :identity t)
 	(format stream "of ~A binding~?"
-		(funobj-name (movitz-environment-funobj object))
+		(movitz-funobj-name (movitz-environment-funobj object))
 		"~#[ nothing~; ~S~; ~S and ~S~:;~@{~#[~; and~] ~S~^,~}~]"
 		(mapcar #'binding-name (mapcar #'cdr (movitz-environment-bindings object)))))
       object)))
