@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.17 2004/03/31 16:33:25 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.18 2004/04/07 00:21:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -711,9 +711,8 @@ The valid parameters are~{ ~S~}."
 	as sub-form-result-mode = buried-result-modes
 	then (or (cdr sub-form-result-mode)
 		 sub-form-result-mode)
-	as current-result-mode = (if (endp (cdr sub-form)) all but the
-				     ;; last form have result-mode as
-				     ;; declared
+	as current-result-mode = (if (endp (cdr sub-form))
+				     ;; all but the last form have result-mode as declared
 				     result-mode
 				   (car sub-form-result-mode))
 	as last-form-p = (endp (cdr sub-form))
