@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.3 2004/02/02 13:09:26 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.4 2004/02/04 15:25:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -820,6 +820,7 @@ integer (native lisp) value."
     :accessor movitz-funobj-symtab)
    (borrowed-bindings
     :initarg :borrowed-bindings
+    :initform nil
     :accessor borrowed-bindings)
    (function-envs
     :accessor function-envs)

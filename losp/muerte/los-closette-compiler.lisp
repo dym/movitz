@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.3 2004/02/04 15:25:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1578,10 +1578,10 @@ and <method2> is more specific?"
       (multiple-value-bind (body declarations)
 	  (movitz::parse-docstring-declarations-and-body decl-doc-body 'cl:declare)
 	(movitz::make-compiled-funobj name
-				   (translate-program lambda-list :cl :muerte.cl)
-				   (translate-program declarations :cl :muerte.cl)
-				   (translate-program (cons 'muerte.cl:progn body) :cl :muerte.cl)
-				   nil nil))))
+				      (translate-program lambda-list :cl :muerte.cl)
+				      (translate-program declarations :cl :muerte.cl)
+				      (translate-program (cons 'muerte.cl:progn body) :cl :muerte.cl)
+				      nil nil nil))))
   
 ;;;
 ;;; Bootstrap

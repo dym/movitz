@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.5 2004/02/03 19:17:30 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.6 2004/02/04 15:25:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -887,7 +887,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 					      (cadr name)
 					      lambda-declarations
 					      `(muerte.cl:progn ,@lambda-forms)
-					      env nil nil)))
+					      env nil)))
 	     (let ((lambda-binding (make-instance 'lambda-binding
 				     :name (gensym "anonymous-lambda-")
 				     :parent-funobj funobj
@@ -950,7 +950,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 							    (list* 'muerte.cl:block
 								   (compute-function-block-name flet-name)
 								   flet-body)
-							    env nil nil)))
+							    env nil)))
 		  do (movitz-env-add-binding flet-env flet-binding)
 		  collect `(:local-function-init ,flet-binding))))
 	(compiler-values-bind (&all body-values &code body-code)
@@ -1057,7 +1057,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 							  (compute-function-block-name labels-name)
 							  labels-body)
 						   labels-env nil
-						   (function-binding-funobj labels-binding)))
+						   :funobj (function-binding-funobj labels-binding)))
 		  collect `(:local-function-init ,labels-binding))))
 	(compiler-values-bind (&all body-values &code body-code)
 	    (compiler-call #'compile-implicit-progn

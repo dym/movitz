@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.11 2004/02/04 10:33:14 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.12 2004/02/04 15:25:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -154,10 +154,15 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
     (register-function-code-size
      (make-compiled-funobj-pass2
       (make-compiled-funobj-pass1 name lambda-list declarations
-				  form env top-level-p funobj)))))
+				  form env top-level-p :funobj funobj)))))
 
-(defun make-compiled-funobj-pass1 (name lambda-list declarations form env top-level-p funobj)
-  "Entry-point for first-pass compilation."
+(defun make-compiled-funobj-pass1 (name lambda-list declarations form env top-level-p
+				   &key funobj)
+  "Per funobj (i.e. not necessarily top-level) entry-point for first-pass compilation.
+If funobj is provided, its identity will be kept, but its type (and values) might change."
+  ;; The ability to provide funobj's identity is important when a
+  ;; function must be referenced before it can be compiled, e.g. for
+  ;; mutually recursive (lexically bound) functions.
   (with-retries-until-true (retry-pass1 "Retry first-pass compilation of ~S." name)
     ;; First-pass is mostly functional, so it can safely be restarted.
     (multiple-value-bind (required-vars optional-vars rest-var key-vars)
@@ -189,15 +194,16 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
 	     (error "There are duplicates in lambda-list ~S." lambda-list))
 	   (multiple-value-bind (clause-body clause-declarations)
 	       (parse-declarations-and-body clause-body)
-	     (let ((function-env (add-bindings-from-lambda-list
-				  lambda-list
-				  (make-local-movitz-environment funobj-env funobj
-							      :type 'function-env
-							      :declaration-context :funobj
-							      :declarations 
-							      (append clause-declarations
-								      declarations)))))
-	       (make-compiled-body-pass1 funobj
+	     (let ((function-env
+		    (add-bindings-from-lambda-list lambda-list
+						   (make-local-movitz-environment
+						    funobj-env funobj
+						    :type 'function-env
+						    :declaration-context :funobj
+						    :declarations 
+						    (append clause-declarations
+							    declarations)))))
+	       (make-compiled-function-body-pass1 funobj
 					 function-env
 					 (list* 'muerte.cl::block
 						(compute-function-block-name name)
@@ -208,7 +214,7 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
     funobj))
 
 (defun make-compiled-function-pass1 (name lambda-list declarations form env top-level-p funobj)
-  "Returns compiler-values, with the pass1 funobj as &final-form."
+  "Returns funobj."
   (when (duplicatesp lambda-list)
     (error "There are duplicates in lambda-list ~S." lambda-list))
   (let* ((funobj (or funobj (make-instance 'movitz-funobj-pass1)))
@@ -223,37 +229,33 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
 	  (movitz-funobj-lambda-list funobj) (movitz-read (lambda-list-simplify lambda-list))
 	  (funobj-env funobj) funobj-env
 	  (function-envs funobj) (list (cons 'muerte.cl::t function-env)))
-    (cond
-     #+ignore
-     ((and (= 1 (length (required-vars function-env)))
-	   (= 1 (length (optional-vars function-env)))
-	   (null (key-vars function-env))
-	   (null (rest-var function-env)))
-      (make-compiled-body-pass1-1req1opt funobj function-env form top-level-p))
-     (t (make-compiled-body-pass1 funobj function-env form top-level-p)))))
+    (make-compiled-function-body-pass1 funobj function-env form top-level-p)))
 
-(defun make-compiled-body-pass1 (funobj function-env form top-level-p)
-  "Returns compiler-values, with the pass1 funobj as &final-form."
-  (multiple-value-bind (arg-init-code need-normalized-ecx-p)
-      (make-function-arguments-init funobj function-env)
-    (compiler-values-bind (&code body-code)
-	(compiler-call #'compile-form
-	  :form (make-special-funarg-shadowing function-env form)
-	  :funobj funobj
-	  :env function-env
-	  :top-level-p top-level-p
-	  :result-mode :function)
-      (let ((extended-code (append arg-init-code body-code)))
-	(setf (extended-code function-env) extended-code
-	      (need-normalized-ecx-p function-env) need-normalized-ecx-p)
-	funobj))))
+(defun make-compiled-function-body-pass1 (funobj function-env form top-level-p)
+  "Returns the funobj with its extended-code."
+  (compiler-values-bind (&code body-code)
+      (compiler-call #'compile-form
+	:form (make-special-funarg-shadowing function-env form)
+	:funobj funobj
+	:env function-env
+	:top-level-p top-level-p
+	:result-mode :function)
+    (multiple-value-bind (arg-init-code need-normalized-ecx-p)
+	(make-function-arguments-init funobj function-env)
+      (setf (extended-code function-env) (append arg-init-code body-code)
+	    (need-normalized-ecx-p function-env) need-normalized-ecx-p)
+      funobj)))
 
-(defun make-compiled-funobj-pass2 (funobj)
-  (check-type funobj movitz-funobj-pass1)
-  (complete-funobj
-   (layout-stack-frames
-    (analyze-bindings
-     (resolve-sub-functions funobj)))))
+(defun make-compiled-funobj-pass2 (toplevel-funobj-pass1)
+  "This is where second pass compilation for each top-level funobj begins."
+  (check-type toplevel-funobj-pass1 movitz-funobj-pass1)
+  (let ((toplevel-funobj (change-class toplevel-funobj-pass1 'movitz-funobj)))
+    (multiple-value-bind (toplevel-funobj function-binding-usage)
+	(resolve-borrowed-bindings toplevel-funobj)
+      (complete-funobj
+       (layout-stack-frames
+	(analyze-bindings
+	 (resolve-sub-functions toplevel-funobj function-binding-usage)))))))
 
 (defun analyze-bindings (toplevel-funobj)
   "Figure out usage of bindings in a toplevel funobj."
@@ -299,9 +301,8 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
 a borrowing-binding in the funobj-env. This process must be done
 recursively, depth-first wrt. sub-functions. Also, return a plist
 of all function-bindings seen."
-  (let ((toplevel-funobj (change-class toplevel-funobj 'movitz-funobj
-				       :borrowed-bindings nil))
-	(function-binding-usage ()))
+  (check-type toplevel-funobj movitz-funobj)
+  (let ((function-binding-usage ()))
     (labels ((process-binding (funobj binding usages)
 	       (typecase binding
 		 (forwarding-binding
@@ -383,41 +384,41 @@ of all function-bindings seen."
       (values (resolve-funobj-borrowing toplevel-funobj)
 	      function-binding-usage))))
 
-(defun resolve-sub-functions (toplevel-funobj)
-  (multiple-value-bind (toplevel-funobj function-binding-usage)
-      (resolve-borrowed-bindings toplevel-funobj)
-    (assert (null (borrowed-bindings toplevel-funobj)) ()
-      "Can't deal with toplevel closures yet.")
-    (setf (movitz-funobj-extent toplevel-funobj) :indefinite-extent)
-    (let ((sub-funobj-index 0))
-      (loop for (function-binding usage) on function-binding-usage by #'cddr
-	  do (let ((sub-funobj (function-binding-funobj function-binding)))
-	       ;; (warn "USage: ~S => ~S" sub-funobj usage)
-	       (case (car (movitz-funobj-name sub-funobj))
-		 (:anonymous-lambda
-		  (setf (movitz-funobj-name sub-funobj)
-		    (list :anonymous-lambda
-			  (movitz-funobj-name toplevel-funobj)
-			  (post-incf sub-funobj-index)))))
-	       (cond
-		((or (null usage)
-		     (null (borrowed-bindings sub-funobj)))
-		 (change-class function-binding 'funobj-binding)
+(defun resolve-sub-functions (toplevel-funobj function-binding-usage)
+;;;  (multiple-value-bind (toplevel-funobj function-binding-usage)
+;;;      (resolve-borrowed-bindings toplevel-funobj)
+  (assert (null (borrowed-bindings toplevel-funobj)) ()
+    "Can't deal with toplevel closures yet.")
+  (setf (movitz-funobj-extent toplevel-funobj) :indefinite-extent)
+  (let ((sub-funobj-index 0))
+    (loop for (function-binding usage) on function-binding-usage by #'cddr
+	do (let ((sub-funobj (function-binding-funobj function-binding)))
+	     ;; (warn "USage: ~S => ~S" sub-funobj usage)
+	     (case (car (movitz-funobj-name sub-funobj))
+	       (:anonymous-lambda
+		(setf (movitz-funobj-name sub-funobj)
+		  (list :anonymous-lambda
+			(movitz-funobj-name toplevel-funobj)
+			(post-incf sub-funobj-index)))))
+	     (cond
+	      ((or (null usage)
+		   (null (borrowed-bindings sub-funobj)))
+	       (change-class function-binding 'funobj-binding)
+	       (setf (movitz-funobj-extent sub-funobj)
+		 :indefinite-extent))
+	      ((equal usage '(:call))
+	       (change-class function-binding 'closure-binding)
+	       (setf (movitz-funobj-extent sub-funobj)
+		 :lexical-extent))
+	      (t (change-class function-binding 'closure-binding)
 		 (setf (movitz-funobj-extent sub-funobj)
-		   :indefinite-extent))
-		((equal usage '(:call))
-		 (change-class function-binding 'closure-binding)
-		 (setf (movitz-funobj-extent sub-funobj)
-		   :lexical-extent))
-		(t (change-class function-binding 'closure-binding)
-		   (setf (movitz-funobj-extent sub-funobj)
-		     :indefinite-extent))) ; XXX
-	       #+ignore (warn "extent: ~S => ~S"
-			      sub-funobj
-			      (movitz-funobj-extent sub-funobj)))))
-    (loop for function-binding in function-binding-usage by #'cddr
-	do (finalize-funobj (function-binding-funobj function-binding)))
-    (finalize-funobj toplevel-funobj)))
+		   :indefinite-extent))) ; XXX
+	     #+ignore (warn "extent: ~S => ~S"
+			    sub-funobj
+			    (movitz-funobj-extent sub-funobj)))))
+  (loop for function-binding in function-binding-usage by #'cddr
+      do (finalize-funobj (function-binding-funobj function-binding)))
+  (finalize-funobj toplevel-funobj))
 
 (defun finalize-funobj (funobj)
   "Calculate funobj's constants, jumpers."
