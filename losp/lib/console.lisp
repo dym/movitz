@@ -10,11 +10,11 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 14 18:14:16 2003
 ;;;;                
-;;;; $Id: console.lisp,v 1.2 2004/01/15 17:34:49 ffjeld Exp $
+;;;; $Id: console.lisp,v 1.3 2004/01/16 14:51:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
-(requore :lib/package)
+(require :lib/package)
 (provide :lib/console)
 
 (in-package muerte.lib)
