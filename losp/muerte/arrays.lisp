@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.38 2004/07/21 11:47:49 lgorrie Exp $
+;;;; $Id: arrays.lisp,v 1.39 2004/07/21 22:33:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -65,14 +65,60 @@
        '(unsigned-byte 16))
     (#.(bt:enum-value 'movitz::movitz-vector-element-type :u32)
        '(unsigned-byte 32))
+    (#.(bt:enum-value 'movitz::movitz-vector-element-type :bit)
+       'bit)
     (#.(bt:enum-value 'movitz::movitz-vector-element-type :code)
        'code)))
 
+(defun upgraded-array-element-type (type-specifier &optional environment)
+  "=> upgraded-type-specifier"
+  ;; We're in dire need of subtypep..
+  (cond
+   ((symbolp type-specifier)
+    (case type-specifier
+      ((character base-char standard-char)
+       'character)
+      ((code)
+       'code)
+      (t (let ((deriver (gethash type-specifier *derived-typespecs*)))
+	   (if (not deriver)
+	       t
+	     (upgraded-array-element-type (funcall deriver)))))))
+   ((null type-specifier)
+    t)
+   ((consp type-specifier)
+    (case (car type-specifier)
+      ((integer)
+       (let* ((q (cdr type-specifier))
+	      (min (if q (pop q) '*))
+	      (max (if q (pop q) '*)))
+	 (cond
+	  ((or (eq min '*) (eq max '*))
+	   t)
+	  ((<= 0 min max 1)
+	   'bit)
+	  ((<= 0 min max #xff)
+	   '(unsigned-byte 8))
+	  ((<= 0 min max #xffff)
+	   '(unsigned-byte 16))
+	  ((<= 0 min max #xffffffff)
+	   '(unsigned-byte 32)))))
+      (t (let ((deriver (gethash (car type-specifier) *derived-typespecs*)))
+	   (if (not deriver)
+	       t
+	     (upgraded-array-element-type (apply deriver (cdr type-specifier)) environment))))))
+   (t t)))
+    
+
 (defun array-dimension (array axis-number)
   (etypecase array
-    (simple-array
+    ((simple-array * 1)
      (assert (zerop axis-number))
      (movitz-accessor array movitz-basic-vector num-elements))))
+
+(defun array-dimensions (array)
+  (check-type array array)
+  1)
 
 (defun shrink-vector (vector new-size)
   (setf-movitz-accessor (vector movitz-basic-vector num-elements) new-size)
@@ -772,3 +818,19 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 (defun bvref-u16 (vector offset index)
   "View <vector> as an sequence of octets, access the big-endian 16-bit word at position <index> + <offset>."
   (bvref-u16 vector offset index))
+
+(define-typep array (x &optional (element-type '*) (dimension-spec '*))
+  (and (typep x 'array)
+       (or (eq element-type '*)
+	   (eq element-type t)
+	   (equalp (array-element-type x)
+		   (upgraded-array-element-type element-type)))
+       (or (eq dimension-spec '*)
+	   (and (integerp dimension-spec)
+		(= dimension-spec (array-dimensions x)))
+	   (and (listp dimension-spec)
+		(do ((d 0 (1+ d))
+		     (q dimension-spec))
+		    ((null q) t)
+		  (unless (= (pop q) (array-dimension x d))
+		    (return nil)))))))
