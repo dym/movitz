@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.13 2004/06/07 22:09:24 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.14 2004/06/09 17:18:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -224,8 +224,10 @@ with the single member of <type-specifier>."
      (typep x 'movitz-symbol))
     ((vector array)
      (typep x 'movitz-vector))
-    (integer
-     (typep x 'movitz-fixnum))))
+    (fixnum
+     (typep x 'movitz-fixnum))
+    (bignum
+     (typep x 'movitz-bignum))))
 
 (defun type-code (first-type &rest types)
   "Find the code (a bitmap) for (or ,@types)."
@@ -317,16 +319,21 @@ with the single member of <type-specifier>."
     (= x (logand x code))))
 
 (defun encoded-typep (errorp undecided-value x code integer-range members include complement)
+  "Is the movitz-object x included in the encoded-type?"
   (let ((x (or (= -1 code)
 	       (and (member x members :test #'movitz-eql) t)
 	       (cond
 		((typep x 'movitz-nil)
 		 (type-code-p 'symbol code))
-		((basic-typep x 'integer)
+		((basic-typep x 'fixnum)
 		 (or (type-code-p 'integer code)
 		     (and integer-range
 			  (numscope-memberp integer-range (movitz-fixnum-value x)))))
-		(t (dolist (bt '(symbol character function cons hash-table)
+		((basic-typep x 'bignum)
+		 (or (type-code-p 'integer code)
+		     (and integer-range
+			  (numscope-memberp integer-range (movitz-bignum-value x)))))
+		(t (dolist (bt '(symbol character function cons hash-table vector)
 			     (error "Cant decide typep for ~S." x))
 		     (when (basic-typep x bt)
 		       (return (type-code-p bt code))))))
@@ -436,7 +443,10 @@ with the single member of <type-specifier>."
      ((atom type-specifier)
       (case type-specifier
 	(fixnum
-	 (type-values 'integer))
+	 (type-specifier-encode `(signed-byte ,+movitz-fixnum-bits+)))
+	(bignum
+	 (type-specifier-encode `(or (integer * ,(1- +movitz-most-negative-fixnum+))
+				     (integer ,(1+ +movitz-most-positive-fixnum+) *))))
 	((t nil cons symbol keyword function array vector integer hash-table character)
 	 (type-values type-specifier))
 	(null
