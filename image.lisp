@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.42 2004/07/08 18:53:24 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.43 2004/07/09 11:16:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -330,38 +330,6 @@
 			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
 						'word))
     :map-binary-read-delayed 'movitz-word)
-;;;   (the-class-fixnum
-;;;    :binary-type word
-;;;    :initform 'fixnum
-;;;    :map-binary-write (lambda (x type)
-;;;			(declare (ignore type))
-;;;			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
-;;;					     'word))
-;;;    :map-binary-read-delayed 'movitz-word)
-;;;   (the-class-cons
-;;;    :binary-type word
-;;;    :initform 'cons
-;;;    :map-binary-write (lambda (x type)
-;;;			(declare (ignore type))
-;;;			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
-;;;					     'word))
-;;;    :map-binary-read-delayed 'movitz-word)
-;;;   (the-class-null
-;;;    :binary-type word
-;;;    :initform 'null
-;;;    :map-binary-write (lambda (x type)
-;;;			(declare (ignore type))
-;;;			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
-;;;					     'word))
-;;;    :map-binary-read-delayed 'movitz-word)
-;;;   (the-class-symbol
-;;;    :binary-type word
-;;;    :initform 'symbol
-;;;    :map-binary-write (lambda (x type)
-;;;			(declare (ignore type))
-;;;			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
-;;;					     'word))
-;;;    :map-binary-read-delayed 'movitz-word)
    (interrupt-handlers
     :binary-type word
     :map-binary-write 'movitz-intern
