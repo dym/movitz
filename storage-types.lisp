@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.9 2004/02/13 15:25:34 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.10 2004/03/18 09:16:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -362,6 +362,11 @@ integer (native lisp) value."
     :initarg :symbolic-data
     :accessor movitz-vector-symbolic-data))
   (:slot-align type -2))
+
+(defun vector-type-tag (element-type)
+  (dpb (enum-value 'movitz-vector-element-type element-type)
+       (byte 8 8)
+       (enum-value 'other-type-byte :vector)))
 
 (define-binary-class movitz-new-vector (movitz-heap-object-other)
   ((length
