@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:16:00 2002
 ;;;;                
-;;;; $Id: ne2k.lisp,v 1.13 2004/11/24 16:20:30 ffjeld Exp $
+;;;; $Id: ne2k.lisp,v 1.14 2004/11/30 14:16:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -217,6 +217,7 @@
 	(%io-port-write-succession (asic-io-base device) packet 2 start end :16-bit))
       (setf (io-register8x2 dp8390 ($page0-write tbcr1) ($page0-write tbcr0)) packet-length
 	    (dp8390 ($page0-write cr)) ($command transmit start abort-complete))
+      #+ignore
       (loop while (= (dp8390 ($page0-read cr))
 		     ($command start transmit abort-complete)))))
   nil)
