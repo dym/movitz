@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.14 2004/06/09 17:18:36 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.15 2004/06/29 23:17:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -223,7 +223,7 @@ with the single member of <type-specifier>."
     (symbol
      (typep x 'movitz-symbol))
     ((vector array)
-     (typep x 'movitz-vector))
+     (typep x '(or movitz-basic-vector movitz-vector)))
     (fixnum
      (typep x 'movitz-fixnum))
     (bignum
