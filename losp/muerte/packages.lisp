@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 30 15:19:43 2001
 ;;;;                
-;;;; $Id: packages.lisp,v 1.5 2004/10/21 20:50:19 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.6 2004/11/13 14:50:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -172,10 +172,10 @@
 	      ((keywordp symbol)
 	       (format t "~&~W == keyword~%" symbol))
 	      ((fboundp symbol)
-	       (format t "~&~W == function arglist: ~A~%"
+	       (format t "~&~W == function ~:A~%"
 		       symbol (funobj-lambda-list (symbol-function symbol))))
 	      ((boundp symbol)
-	       (format t "~&~W == variable value: ~S~%"
+	       (format t "~&~W == variable ~S~%"
 		       symbol (symbol-value symbol)))
 	      (t (format t "~&~W~%" symbol))))))
     (let ((string (string string)))
