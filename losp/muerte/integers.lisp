@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.53 2004/07/13 22:43:40 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.54 2004/07/14 10:03:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -938,90 +938,59 @@ Preserve EAX and EBX."
   `(< ,number 0))
 
 (define-compiler-macro abs (x)
-  `(with-inline-assembly (:returns :eax)
-     (:compile-form (:result-mode :eax) ,x)
-     (:testb #.movitz::+movitz-fixnum-zmask+ :al)
-     (:jnz '(:sub-program () (:int 107)))
-     (:movl :eax :ecx)
-     (:addl :ecx :ecx)
-     (:sbbl :ecx :ecx)
-     (:xorl :ecx :eax)
-     (:subl :ecx :eax)))
+  `(let ((x ,x))
+     (if (>= 0 x) x (- x))))
 
 (defun abs (x)
   (abs x))
 
 (defun signum (x)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) x)
-    (:testb #.movitz::+movitz-fixnum-zmask+ :al)
-    (:jnz '(:sub-program (not-fixnum) (:int 107)))
-    (:cdq :eax :edx)
-    (:negl :eax)
-    (:adcl :edx :edx)
-    (:leal ((:edx #.movitz::+movitz-fixnum-factor+)) :eax)))
+  (cond
+   ((> x 0) 1)
+   ((< x 0) -1)
+   (t 0)))
 
 ;;;
-
-(define-compiler-macro max%2op (number1 number2)
-  #+ignore
-  `(let ((number1 ,number1) (number2 ,number2))
-     (if (< number1 number2)
-	 number2 number1))
-  (let ((label (gensym)))
-    `(with-inline-assembly (:returns :eax :type fixnum)
-       (:compile-two-forms (:eax :ebx) ,number1 ,number2)
-       (:movl :ebx :ecx)
-       (:orl :eax :ecx)
-       (:testb ,movitz::+movitz-fixnum-zmask+ :cl)
-       (:jnz '(:sub-program () (:int 107)))
-       (:cmpl :eax :ebx)
-       (:jl ',label)
-       (:movl :ebx :eax)
-       ,label)))
-    
-
-(defun max%2op (number1 number2)
-  (max%2op number1 number2))
 
 (define-compiler-macro max (&whole form first-number &rest more-numbers)
   (case (length more-numbers)
     (0 first-number)
-    (1 `(max%2op ,first-number ,(car more-numbers)))
+    (1 `(let ((x ,first-number)
+	      (y ,(car more-numbers)))
+	  (if (>= x y) x y)))
     ((2 3 4)
-     `(max%2op ,first-number (max ,@more-numbers)))
+     `(max ,first-number (max ,@more-numbers)))
     (t form)))
 
 (defun max (number1 &rest numbers)
-  (declare (dynamic-extent numbers))
-  (let ((max number1))
-    (dolist (x numbers max)
-      (when (>= x max)
-	(setq max x)))))
-
-(define-compiler-macro min%2op (number1 number2)
-  `(let ((number1 ,number1) (number2 ,number2))
-     (if (< number1 number2)
-	 number1 number2)))
-
-(defun min%2op (number1 number2)
-  (min%2op number1 number2))
+  (numargs-case
+   (2 (x y) (max x y))
+   (t (number1 &rest numbers)
+      (declare (dynamic-extent numbers))
+      (let ((max number1))
+	(dolist (x numbers max)
+	  (when (> x max)
+	    (setq max x)))))))
 
 (define-compiler-macro min (&whole form first-number &rest more-numbers)
   (case (length more-numbers)
     (0 first-number)
-    (1 `(min%2op ,first-number ,(car more-numbers)))
+    (1 `(let ((x ,first-number)
+	      (y ,(car more-numbers)))
+	  (if (<= x y) x y)))
     ((2 3 4)
-     `(min%2op ,first-number (min ,@more-numbers)))
+     `(min ,first-number (min ,@more-numbers)))
     (t form)))
 
 (defun min (number1 &rest numbers)
-  (declare (dynamic-extent numbers))
-  #+ignore (reduce #'min%2op numbers :initial-value number1)
-  (let ((min number1))
-    (dolist (x numbers min)
-      (when (< x min)
-	(setq min x)))))
+  (numargs-case
+   (2 (x y) (min x y))
+   (t (number1 &rest numbers)
+      (declare (dynamic-extent numbers))
+      (let ((min number1))
+	(dolist (x numbers min)
+	  (when (< x min)
+	    (setq min x)))))))
 
 ;; shift 
 
@@ -1138,10 +1107,11 @@ Preserve EAX and EBX."
 	   `(* ,(movitz:movitz-eval factor2 env) ,factor1))
 	  ((movitz:movitz-constantp factor1 env)
 	   (let ((f1 (movitz:movitz-eval factor1 env)))
-	     (check-type f1 fixnum)
+	     (check-type f1 integer)
 	     (case f1
 	       (0 `(progn ,factor2 0))
 	       (1 factor2)
+;;;	       (2 `(let ((x ,factor2)) (+ x x)))
 	       (t `(no-macro-call * ,factor1 ,factor2)))))
 	  (t `(no-macro-call * ,factor1 ,factor2)))))
     (t `(* (* ,(first operands) ,(second operands)) ,@(cddr operands)))))
@@ -1564,34 +1534,6 @@ Preserve EAX and EBX."
 	       (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
 	       (:btl :ecx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))))))))
     (do-it)))
-
-;;;(define-compiler-macro logbitp (&whole form index integer &environment env)
-;;;  (if (not (movitz:movitz-constantp index env))
-;;;      form
-;;;    (let ((index (movitz::movitz-eval index env)))
-;;;      (check-type index (integer 0 30))
-;;;      `(with-inline-assembly (:returns :boolean-cf=1)
-;;;	 (:compile-form (:result-mode :eax) ,integer)
-;;;	 (:testb #.movitz::+movitz-fixnum-zmask+ :al)
-;;;	 (:jnz '(:sub-program () (:int 107)))
-;;;	 (:btl ,(+ index movitz::+movitz-fixnum-shift+) :eax)))))
-
-      
-;;;(defun logand%2op (x y)
-;;;  (with-inline-assembly (:returns :eax)
-;;;    (:compile-form (:result-mode :eax) x)
-;;;    (:compile-form (:result-mode :ebx) y)
-;;;    (:testb #.movitz::+movitz-fixnum-zmask+ :al)
-;;;    (:jnz '(:sub-program () (:int 107)))
-;;;    (:testb #.movitz::+movitz-fixnum-zmask+ :bl)
-;;;    (:jnz '(:sub-program () (:movl :ebx :eax) (:int 107)))
-;;;    (:andl :ebx :eax)))
-;;;
-;;;(define-compiler-macro logand%2op (&whole form x y)
-;;;  (cond
-;;;   ((and (movitz:movitz-constantp x) (movitz:movitz-constantp y))
-;;;    (logand  (movitz::movitz-eval x) (movitz::movitz-eval y)))
-;;;   (t form)))
 
 (define-compiler-macro logand (&whole form &rest integers &environment env)
   (let ((constant-folded-integers (loop for x in integers
