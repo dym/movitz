@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.9 2004/05/24 14:58:44 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.10 2004/06/02 23:50:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -113,25 +113,15 @@
       (t (write-char #\# stream)
 	 (write-simple-integer base 10 stream)
 	 (write-char #\r stream))))
-  (block minus-hack			; don't barf on most-negative-fixnum
-    (multiple-value-bind (sign-char print-value)
-	(cond
-	 ((minusp x)
-	  (if (not (eq x most-negative-fixnum))
-	      (values #\- (- x))
-	    (return-from minus-hack
-	      (write-string (case base
-			      (2 #.(cl:format cl:nil "~B" movitz::+movitz-most-negative-fixnum+))
-			      (8 #.(cl:format cl:nil "~O" movitz::+movitz-most-negative-fixnum+))
-			      (10 #.(cl:format cl:nil "~D" movitz::+movitz-most-negative-fixnum+))
-			      (16 #.(cl:format cl:nil "~X" movitz::+movitz-most-negative-fixnum+))
-			      (t (break "minus-hack!?")))
-			    stream))))
-	 (sign-always
-	  (values #\+ x))
-	 (t (values nil x)))
-      (write-lowlevel-integer print-value stream base comma-char comma-interval
-			      mincol padchar sign-char 0)))
+  (multiple-value-bind (sign-char print-value)
+      (cond
+       ((minusp x)
+	(values #\- (- x)))
+       (sign-always
+	(values #\+ x))
+       (t (values nil x)))
+    (write-lowlevel-integer print-value stream base comma-char comma-interval
+			    mincol padchar sign-char 0))
   (when (and radix (= 10 base))
     (write-char #\. stream))
   nil)
