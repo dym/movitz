@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.116 2004/11/23 16:10:17 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.117 2004/11/24 10:02:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2772,7 +2772,7 @@ the sub-program options (&optional label) as secondary value."
    This function is factored out from assign-bindings."
   (let* ((count-init-pc (gethash binding var-counts))
 	 (count (car count-init-pc))
-	 (init-pc (cdr count-init-pc)))
+	 (init-pc (second count-init-pc)))
     ;; (warn "b ~S: count: ~D, init-pc: ~{~&~A~}" binding count init-pc)
     (cond
      ((binding-lended-p binding)
@@ -2845,13 +2845,20 @@ the sub-program options (&optional label) as secondary value."
   (check-type function-env function-env)
   ;; (print-code 'discover code)
   (let ((var-counter (make-hash-table :test #'eq :size 40)))
-    (labels ((take-note-of-binding (binding &optional storep init-pc)
+    (labels ((record-binding-used (binding)
 	       (let ((count-init-pc (or (gethash binding var-counter)
 					(setf (gethash binding var-counter)
-					  (cons 0 nil)))))
+					  (list 0 nil t)))))
+		 (setf (third count-init-pc) t)
+		 (when (typep binding 'forwarding-binding)
+		   (record-binding-used (forwarding-binding-target binding)))))
+	     (take-note-of-binding (binding &optional storep init-pc)
+	       (let ((count-init-pc (or (gethash binding var-counter)
+					(setf (gethash binding var-counter)
+					  (list 0 nil t)))))
 		 (when init-pc
-		   (assert (not (cdr count-init-pc)))
-		   (setf (cdr count-init-pc) init-pc))
+		   (assert (not (second count-init-pc)))
+		   (setf (second count-init-pc) init-pc))
 		 (unless storep
 		   (unless (eq binding (binding-target binding))
 		     ;; (break "ewfew: ~S" (gethash (binding-target binding) var-counter))
@@ -2902,6 +2909,8 @@ the sub-program options (&optional label) as secondary value."
 				 (take-note-of-binding init-with-register)))))
 			  (t (mapcar #'take-note-of-binding 
 				     (find-read-bindings instruction))
+			     (mapcar #'record-binding-used ; This is just concerning "unused variable"
+				     (find-used-bindings instruction)) ; warnings!
 			     (let ((store-binding (find-written-binding-and-type instruction)))
 			       (when store-binding
 				 (take-note-of-binding store-binding t)))
@@ -2953,13 +2962,13 @@ the sub-program options (&optional label) as secondary value."
 				    (prog1 nil ; may need lending-cons
 				      (setf (new-binding-location binding frame-map)
 					`(:argument-stack ,(function-argument-argnum binding)))))
-				   ((not (plusp (or (car (gethash binding var-counts)) 0)))
-				    (prog1 t
-				      (unless (or (movitz-env-get variable 'ignore nil env nil)
-						  (movitz-env-get variable 'ignorable nil env nil)
-						  (typep binding 'hidden-rest-function-argument))
-					(warn "Unused variable: ~S"
-					      (binding-name binding))))))
+				   ((unless (or (movitz-env-get variable 'ignore nil env nil)
+						(movitz-env-get variable 'ignorable nil env nil)
+						(typep binding 'hidden-rest-function-argument)
+						(third (gethash binding var-counts)))
+				      (warn "Unused variable: ~S"
+					    (binding-name binding))))
+				   ((not (plusp (or (car (gethash binding var-counts)) 0)))))
 			   collect binding))
 		      (bindings-fun-arg-sorted
 		       (when (eq env function-env)
@@ -2987,7 +2996,7 @@ the sub-program options (&optional label) as secondary value."
 				      (located-binding
 				       (let* ((count-init (gethash b var-counts))
 					      (count (car count-init))
-					      (init-pc (cdr count-init)))
+					      (init-pc (second count-init)))
 					 (if (not (and count init-pc))
 					     50
 					   (truncate
@@ -5924,6 +5933,9 @@ and a list of any intervening unwind-protect environment-slots."
 (defvar *extended-code-find-read-binding*
     (make-hash-table :test #'eq))
 
+(defvar *extended-code-find-used-bindings*
+    (make-hash-table :test #'eq))
+
 (defmacro define-find-read-bindings (name lambda-list &body body)
   (let ((defun-name (intern
 		     (with-standard-io-syntax
@@ -5934,6 +5946,28 @@ and a list of any intervening unwind-protect environment-slots."
 	 (destructuring-bind ,lambda-list
 	     (cdr instruction)
 	   ,@body)))))
+
+(defmacro define-find-used-bindings (name lambda-list &body body)
+  (let ((defun-name (intern
+		     (with-standard-io-syntax
+		       (format nil "~A-~A" 'find-used-bindings name)))))
+    `(progn
+       (setf (gethash ',name *extended-code-find-used-bindings*) ',defun-name)
+       (defun ,defun-name (instruction)
+	 (destructuring-bind ,lambda-list
+	     (cdr instruction)
+	   ,@body)))))
+
+(defun find-used-bindings (extended-instruction)
+  "Return zero, one or two bindings that this instruction reads."
+  (when (listp extended-instruction)
+    (let* ((operator (car extended-instruction))
+	   (finder (or (gethash operator *extended-code-find-used-bindings*)
+		       (gethash operator *extended-code-find-read-binding*))))
+      (when finder
+	(let ((result (funcall finder extended-instruction)))
+	  (check-type result list "a list of read bindings")
+	  result)))))
 
 (defun find-read-bindings (extended-instruction)
   "Return zero, one or two bindings that this instruction reads."
@@ -6417,6 +6451,11 @@ and a list of any intervening unwind-protect environment-slots."
 		  x))
 	      (list term0 term1)
 	      ))))
+
+(define-find-used-bindings :add (term0 term1 destination)
+  (if (bindingp destination)
+      (list term0 term1 destination)
+    (list term0 term1)))
 
 (define-find-read-bindings :add (term0 term1 destination)
   (declare (ignore destination))
