@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.27 2004/09/25 15:51:20 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.28 2004/10/07 12:42:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -261,7 +261,6 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 
 (defun interrupt-default-handler (vector dit-frame)
   (declare (without-check-stack-limit))
-  (cli)
   (macrolet ((dereference (fixnum-address &optional (type :lisp))
 	       "Dereference the fixnum-address."
 	       `(memref ,fixnum-address 0 0 ,type)))
@@ -332,7 +331,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 			   new-bottom)
 		   (break "Stack overload exception ~D at EIP=~@Z, ESP=~@Z, bottom=#x~X, ENV=#x~X."
 			  vector $eip
-			  (dit-frame-esp dit-frame)
+			  (dit-frame-esp nil dit-frame)
 			  old-bottom
 			  old-dynamic-env))
 	       (format *debug-io* "~&Stack-warning: Resetting stack-bottom to #x~X.~%"
