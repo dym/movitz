@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.43 2004/10/11 13:52:44 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.44 2004/11/23 16:03:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -103,6 +103,7 @@ Otherwise, stack-frame is an absolute location."
   "Only use this if you know what you're doing. See run-time.lisp."
   (let ((context (gensym "dynamic-context-"))
 	(tag (gensym "dynamic-tag-"))
+	(name (gensym "dynamic-name-"))
 	(bind-clause (find :binding clauses :key #'caar))
 	(catch-clause (find :catch clauses :key #'caar))
 	(up-clause (find :unwind-protect clauses :key #'caar))
@@ -110,10 +111,12 @@ Otherwise, stack-frame is an absolute location."
     `(do ((,context ,(if start-context start-context '(current-dynamic-context))
 		    (dynamic-context-uplink ,context)))
 	 ((not (plusp ,context)) ,result)
-       (let ((,tag (dynamic-context-tag ,context)))
+       (let ((,tag (dynamic-context-tag ,context))
+	     (,name (stack-frame-ref nil ,context 0 :lisp)))
+	 (declare (ignorable ,name))
 	 (cond
 	  ,@(when bind-clause
-	      `(((eq ,tag (load-global-constant unbound-value))
+	      `(((symbolp ,name)
 		 (multiple-value-bind ,(cdar bind-clause)
 		     (values ,context
 			     (stack-frame-ref nil ,context 0 :lisp)
