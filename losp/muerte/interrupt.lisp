@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.16 2004/07/20 08:54:19 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.17 2004/07/21 14:16:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -254,7 +254,7 @@
 
 (defun interrupt-default-handler (number interrupt-frame)
   (declare (without-check-stack-limit))
-  (macrolet ((@ (fixnum-address &optional (type :lisp))
+  (macrolet ((dereference (fixnum-address &optional (type :lisp))
 	       "Dereference the fixnum-address."
 	       `(memref ,fixnum-address 0 0 ,type)))
     (let (($eip (+ interrupt-frame (interrupt-frame-index :eip)))
@@ -277,15 +277,15 @@
 	  ((61)
 	   ;; EAX failed type in EDX. May be restarted by returning with a new value in EAX.
 	   (with-simple-restart (continue "Retry with a different value.")
-	     (error 'type-error :datum (@ $eax) :expected-type (@ $edx)))
+	     (error 'type-error :datum (dereference $eax) :expected-type (dereference $edx)))
 	   (format *query-io* "Enter a new value: ")
-	   (setf (@ $eax) (read *query-io*)))
+	   (setf (dereference $eax) (read *query-io*)))
 	  (62 (error "Trying to save too many values: ~@Z." $ecx))
 	  (63 (error "Primitive assertion error. EIP=~@Z, ESI=~@Z." $eip $esi))
-	  (64 (error 'type-error :datum (@ $eax) :expected-type 'integer))
-	  (65 (error 'index-out-of-range :index (@ $ebx) (@ $ecx)))
+	  (64 (error 'type-error :datum (dereference $eax) :expected-type 'integer))
+	  (65 (error 'index-out-of-range :index (dereference $ebx) (dereference $ecx)))
 	  (66 (error "Unspecified type error at ~@Z in ~S with EAX=~@Z, ECX=~@Z."
-		     $eip (@ (+ interrupt-frame (interrupt-frame-index :esi)))
+		     $eip (dereference (+ interrupt-frame (interrupt-frame-index :esi)))
 		     $eax $ecx))
 	  (67 (backtrace :fresh-lines nil :length 6)
 	      (dotimes (i 100000)
@@ -323,19 +323,19 @@
 		       old-bottom)
 	       (setf (stack-bottom) old-bottom))))
 	  (69
-	   (error "Not a function: ~S" (@ $edx)))
+	   (error "Not a function: ~S" (dereference $edx)))
 	  (70
-	   (error "[EIP=~@Z] Index ~@Z out of bounds ~@Z for ~S." $eip $ecx $ebx (@ $eax)))
+	   (error "[EIP=~@Z] Index ~@Z out of bounds ~@Z for ~S." $eip $ecx $ebx (dereference $eax)))
 	  (98
-	   (let ((name (@ $edx)))
+	   (let ((name (dereference $edx)))
 	     (when (symbolp name)
 	       (error 'undefined-function :name name))))
 	  (99
-	   (let ((name (@ $edx)))
+	   (let ((name (dereference $edx)))
 	     (when (symbolp name)
 	       (error 'unbound-variable :name name))))
 	  ((100);; 101 102 103 104 105)
-	   (let ((funobj (@ (+ interrupt-frame (interrupt-frame-index :esi))))
+	   (let ((funobj (dereference (+ interrupt-frame (interrupt-frame-index :esi))))
 		 (code (interrupt-frame-ref :ecx :unsigned-byte8 0 interrupt-frame)))
 	     (error 'wrong-argument-count
 		    :function funobj
@@ -345,7 +345,7 @@
 					     -24)
 				      code))))
 	  (108
-	   (error 'throw-error :tag (@ $eax)))
+	   (error 'throw-error :tag (dereference $eax)))
 	  (110
 	   ;; (print-dynamic-context); what's this?
 	   (throw :debugger nil))
