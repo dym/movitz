@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.20 2004/09/21 13:06:36 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.21 2004/09/22 16:40:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -44,8 +44,14 @@
 	(t `(make-prototyped-function (constantly ,value)
 				      constantly-prototype
 				      (value ,value))))))
-   (t (error "Non-constant constantly forms not yet supported: ~S" form)
-      form)))
+   (t (let ((value-var (gensym "constantly-value-")))
+	`(let ((,value-var ,value-form))
+	   (lambda (&rest ignore)
+	     (declare (ignore ignore))
+	     ,value-var))))))
+
+(defun constantly (x)
+  (compiler-macro-call constantly x))
 
 (defun complement-prototype (&rest args)
   (declare (dynamic-extent args))
