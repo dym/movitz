@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.41 2005/01/26 13:46:14 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.42 2005/01/27 07:46:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -193,7 +193,7 @@ at the start-stack-frame location."
 	(cond
 	 ((location-in-object-p dit-code-vector location)
 	  dit-code-vector)
-	 ((match-funobj esi))
+	 ((match-funobj esi location))
 	 (t (break "DIT returns outside DIT??")))))
      ((match-funobj casf-funobj location))
      ((match-funobj esi location))
