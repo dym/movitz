@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.95 2004/08/16 08:24:56 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.96 2004/08/18 22:30:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -653,6 +653,8 @@ of all function-bindings seen."
 	     (cond
 	      ((or (null usage)
 		   (null (borrowed-bindings sub-funobj)))
+	       (when (null usage)
+		 (warn "null usage for ~S" sub-funobj))
 	       (change-class function-binding 'funobj-binding)
 	       (setf (movitz-funobj-extent sub-funobj)
 		 :indefinite-extent))
@@ -2555,9 +2557,10 @@ the sub-program options (&optional label) as secondary value."
 			((:local-function-init :load-lambda)
 			 (let* ((binding (second instruction))
 				(funobj (function-binding-funobj binding)))
-			   (incf (getf constants funobj 0))
-			   (dolist (binding (borrowed-bindings funobj))
-			     (process-binding binding))))
+			   (unless (eq :unused (movitz-funobj-extent funobj))
+			     (incf (getf constants funobj 0))
+			     (dolist (binding (borrowed-bindings funobj))
+			       (process-binding binding)))))
 			((:load-lexical :lend-lexical :call-lexical)
 			 (process-binding (second instruction)))
 			(:load-constant
@@ -3621,26 +3624,34 @@ loading borrowed bindings."
 		(:local-function-init
 		 (destructuring-bind (function-binding)
 		     (operands instruction)
-		   #+ignore (warn "local-function-init: init ~S at ~S"
-				  function-binding
-				  (new-binding-location function-binding frame-map))
+		   #+ignore
+		   (warn "local-function-init: init ~S at ~S"
+			 function-binding
+			 (new-binding-location function-binding frame-map))
 		   (finalize-code 
-		    (let* ((sub-funobj (function-binding-funobj function-binding))
-			   (lend-code (loop for bb in (borrowed-bindings sub-funobj)
-					  append (make-lend-lexical bb :edx nil))))
+		    (let* ((sub-funobj (function-binding-funobj function-binding)))
 		      (cond
+		       ((eq (movitz-funobj-extent sub-funobj) :unused)
+			(unless (or (movitz-env-get (binding-name function-binding)
+						    'ignore nil
+						    (binding-env function-binding) nil)
+				    (movitz-env-get (binding-name function-binding)
+						    'ignorable nil
+						    (binding-env function-binding) nil))
+			  (warn "Unused local function: ~S"
+				(binding-name function-binding)))
+			nil)
 		       ((typep function-binding 'funobj-binding)
 			nil)
-		       ((null lend-code)
-			(warn "null lending")
-			(append (make-load-constant sub-funobj :eax funobj frame-map)
-				(make-store-lexical function-binding :eax nil frame-map)))
-		       (t (append (make-load-constant sub-funobj :eax funobj frame-map)
+		       (t (when (null (borrowed-bindings sub-funobj))
+			    (warn "null lending for ~S" sub-funobj))
+			  (append (make-load-constant sub-funobj :eax funobj frame-map)
 				  `((:movl (:edi ,(global-constant-offset 'copy-funobj)) :esi)
 				    (:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%1op)))
 				    (:movl :eax :edx))
 				  (make-store-lexical function-binding :eax nil frame-map)
-				  lend-code))))
+				  (loop for bb in (borrowed-bindings sub-funobj)
+				      append (make-lend-lexical bb :edx nil))))))
 		    funobj frame-map)))
 		(:load-lambda
 		 (destructuring-bind (function-binding register)
@@ -4284,9 +4295,14 @@ Return arg-init-code, need-normalized-ecx-p."
 							     (function-argument-argnum binding)))
 		 and optional-ok-label = (make-symbol (format nil "optional-~D-ok" 
 							      (function-argument-argnum binding)))
-		 unless (movitz-env-get optional-var 'ignore nil env nil)
+		 unless (movitz-env-get optional-var 'ignore nil env nil) ; XXX
 		 append
-		   `((:init-lexvar ,binding))
+		   (cond
+		    ((= 0 (function-argument-argnum binding))
+		     `((:init-lexvar ,binding :init-with-register :eax :init-with-type t)))
+		    ((= 1 (function-argument-argnum binding))
+		     `((:init-lexvar ,binding :init-with-register :ebx :init-with-type t)))
+		    (t `((:init-lexvar ,binding))))
 		 when supplied-p-binding
 		 append `((:init-lexvar ,supplied-p-binding))
 		 append
@@ -4297,33 +4313,24 @@ Return arg-init-code, need-normalized-ecx-p."
 			 :env env
 			 :result-mode :edx)
 		     (cond
-		      #+ignore
 		      ((and (eq 'compile-self-evaluating producer)
-			    (= 0 (function-argument-argnum binding))
-			    (not supplied-p-var))
-		       (append `((:store-lexical ,binding :eax)
-				 (:arg-cmp 1)
-				 (:jge ',optional-ok-label))
-			       (compiler-call #'compile-form
-				 :form (optional-function-argument-init-form binding)
-				 :funobj funobj
-				 :env env
-				 :result-mode binding)
-			       (list optional-ok-label)))
-		      #+ignore
-		      ((and (eq 'compile-self-evaluating producer)
-			    (= 1 (function-argument-argnum binding))
-			    (not eax-optional-destructive-p)
-			    (not supplied-p-var))
-		       (append `((:store-lexical ,binding :ebx)
-				 (:arg-cmp 2)
-				 (:jge ',optional-ok-label))
-			       (compiler-call #'compile-form
-				 :form (optional-function-argument-init-form binding)
-				 :funobj funobj
-				 :env env
-				 :result-mode binding)
-			       (list optional-ok-label)))
+			    (member (function-argument-argnum binding) '(0 1)))
+		       ;; The binding is already preset with EAX or EBX.
+		       (check-type binding lexical-binding)
+		       (append
+			(when supplied-p-var
+			  `((:load-constant ,(movitz-read t) :edx)
+			    (:store-lexical ,supplied-p-binding :edx :type (member t))))
+			`((:arg-cmp ,(function-argument-argnum binding))
+			  (:ja ',optional-ok-label))
+			(compiler-call #'compile-form
+			  :form (optional-function-argument-init-form binding)
+			  :funobj funobj
+			  :env env
+			  :result-mode binding)
+			(when supplied-p-var
+			  `((:store-lexical ,supplied-p-binding :edi :type null)))
+			`(,optional-ok-label)))
 		      ((eq 'compile-self-evaluating producer)
 		       `(,@(when supplied-p-var
 			     `((:store-lexical ,supplied-p-binding :edi :type null)))
@@ -4342,7 +4349,8 @@ Return arg-init-code, need-normalized-ecx-p."
 					     :eax)
 				      (:store-lexical ,binding :eax :type t)))
 				   (t (setq need-normalized-ecx-p t)
-				      `((:movl (:ebp (:ecx 4) ,(* -4 (1- (function-argument-argnum binding))))
+				      `((:movl (:ebp (:ecx 4)
+						     ,(* -4 (1- (function-argument-argnum binding))))
 					       :eax)
 					(:store-lexical ,binding :eax :type t))))))
 			   ,@(when supplied-p-var
@@ -4350,49 +4358,48 @@ Return arg-init-code, need-normalized-ecx-p."
 				 (:store-lexical ,supplied-p-binding :eax
 						 :type (eql ,(image-t-symbol *image*)))))
 			   ,not-present-label))
-		      (t  #+ignore (when (= 0 (function-argument-argnum binding))
-				     (setf eax-optional-destructive-p t))
-			  `((:arg-cmp ,(function-argument-argnum binding))
-			    (:jbe ',not-present-label)
-			    ,@(when supplied-p-var
-				`((:movl (:edi ,(global-constant-offset 't-symbol)) :eax)
-				  (:store-lexical ,supplied-p-binding :eax
-						  :type (eql ,(image-t-symbol *image*)))))
-			    ,@(case (function-argument-argnum binding)
-				(0 `((:store-lexical ,binding :eax :type t)))
-				(1 `((:store-lexical ,binding :ebx :type t)))
-				(t (cond
-				    (last-optional-p
-				     `((:movl (:ebp  ,(* 4 (- (1+ (function-argument-argnum binding))
-							      -1 (function-argument-argnum binding))))
-					      :eax)
-				       (:store-lexical ,binding :eax :type t)))
-				    (t (setq need-normalized-ecx-p t)
-				       `((:movl (:ebp (:ecx 4) ,(* -4 (1- (function-argument-argnum binding))))
-						:eax)
-					 (:store-lexical ,binding :eax :type t))))))
-			    (:jmp ',optional-ok-label)
-			    ,not-present-label
-			    ,@(when supplied-p-var
-				`((:store-lexical ,supplied-p-binding :edi :type null)))
-			    ,@(when (and (= 0 (function-argument-argnum binding))
-					 (not last-optional-p))
-				`((:pushl :ebx))) ; protect ebx
-			    ,@(if (optional-function-argument-init-form binding)
-				  (append '((:pushl :ecx))
-					  (when (= 0 (function-argument-argnum binding))
-					    `((:pushl :ebx)))
-					  init-code-edx
-					  `((:store-lexical ,binding :edx :type t))
-					  (when (= 0 (function-argument-argnum binding))
-					    `((:popl :ebx)))
-					  `((:popl :ecx)))
-				(progn (error "Unsupported situation.")
-				       #+ignore `((:store-lexical ,binding :edi :type null))))
-			    ,@(when (and (= 0 (function-argument-argnum binding))
-					 (not last-optional-p))
-				`((:popl :ebx))) ; protect ebx
-			    ,optional-ok-label)))))
+		      (t `((:arg-cmp ,(function-argument-argnum binding))
+			   (:jbe ',not-present-label)
+			   ,@(when supplied-p-var
+			       `((:movl (:edi ,(global-constant-offset 't-symbol)) :eax)
+				 (:store-lexical ,supplied-p-binding :eax
+						 :type (eql ,(image-t-symbol *image*)))))
+			   ,@(case (function-argument-argnum binding)
+			       (0 `((:store-lexical ,binding :eax :type t)))
+			       (1 `((:store-lexical ,binding :ebx :type t)))
+			       (t (cond
+				   (last-optional-p
+				    `((:movl (:ebp  ,(* 4 (- (1+ (function-argument-argnum binding))
+							     -1 (function-argument-argnum binding))))
+					     :eax)
+				      (:store-lexical ,binding :eax :type t)))
+				   (t (setq need-normalized-ecx-p t)
+				      `((:movl (:ebp (:ecx 4)
+						     ,(* -4 (1- (function-argument-argnum binding))))
+					       :eax)
+					(:store-lexical ,binding :eax :type t))))))
+			   (:jmp ',optional-ok-label)
+			   ,not-present-label
+			   ,@(when supplied-p-var
+			       `((:store-lexical ,supplied-p-binding :edi :type null)))
+			   ,@(when (and (= 0 (function-argument-argnum binding))
+					(not last-optional-p))
+			       `((:pushl :ebx))) ; protect ebx
+			   ,@(if (optional-function-argument-init-form binding)
+				 (append '((:pushl :ecx))
+					 (when (= 0 (function-argument-argnum binding))
+					   `((:pushl :ebx)))
+					 init-code-edx
+					 `((:store-lexical ,binding :edx :type t))
+					 (when (= 0 (function-argument-argnum binding))
+					   `((:popl :ebx)))
+					 `((:popl :ecx)))
+			       (progn (error "Unsupported situation.")
+				      #+ignore `((:store-lexical ,binding :edi :type null))))
+			   ,@(when (and (= 0 (function-argument-argnum binding))
+					(not last-optional-p))
+			       `((:popl :ebx))) ; protect ebx
+			   ,optional-ok-label)))))
 	     (when rest-var
 	       (let* ((rest-binding (movitz-binding rest-var env))
 		      #+ignore (rest-position (function-argument-argnum rest-binding)))
@@ -6265,6 +6272,13 @@ and a list of any intervening unwind-protect environment-slots."
 	   (result-type (multiple-value-call #'encoded-integer-types-add
 			  (values-list (binding-store-type term0))
 			  (values-list (binding-store-type term1)))))
+      (when (binding-lended-p term0)
+	(warn "Add for lend0: ~S" term0))
+      (when (binding-lended-p term1)
+	(warn "Add for lend0: ~S" term1))
+      (when (and (bindingp destination)
+		 (binding-lended-p destination))
+	(warn "Add for lend0: ~S" destination))
       (let ((loc0 (new-binding-location term0 frame-map :default nil))
 	    (loc1 (new-binding-location term1 frame-map :default nil)))
 ;;;	(warn "add: ~A" instruction)
