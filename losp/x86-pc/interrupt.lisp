@@ -10,11 +10,12 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri May  4 18:08:50 2001
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.5 2004/03/26 01:51:21 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.6 2004/03/28 13:35:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (require :x86-pc/pic8259)
+(require :x86-pc/debugger)
 (provide :x86-pc/interrupt)
 
 (in-package muerte.x86-pc)
