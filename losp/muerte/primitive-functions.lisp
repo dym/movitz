@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.55 2004/11/23 16:08:58 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.56 2004/11/25 16:45:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -314,6 +314,18 @@ Preserve ECX."
   (with-inline-assembly (:returns :multiple-values)
     (:locally (:jmp (:edi (:edi-offset cons-commit))))))
 
+(define-primitive-function get-cons-pointer-non-header ()
+  "Return in EAX the next object location with space for EAX non-pointer words, with tag 6.
+Preserve ECX."
+  (with-inline-assembly (:returns :multiple-values)
+    (:locally (:jmp (:edi (:edi-offset get-cons-pointer))))))
+
+(define-primitive-function cons-commit-non-header ()
+  "Return in EAX the next object location with space for EAX non-pointer words, with tag 6.
+Preserve ECX."
+  (with-inline-assembly (:returns :multiple-values)
+    (:locally (:jmp (:edi (:edi-offset cons-commit))))))
+
 (defun malloc-initialize (buffer-start buffer-size)
   "BUFFER-START is the location from which to allocate.
 BUFFER-SIZE is the number of words in the buffer."
@@ -377,7 +389,7 @@ BUFFER-SIZE is the number of words in the buffer."
     ;; Be defensive: Check that EAX is LISTP.
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 50)))
+    (:jnz '(:sub-program () (:int 63)))
     (:cmpl :ebp :eax)			; is cons above stack-frame?
     (:jge 'return-ok)
     (:cmpl :esp :eax)			; is cons below stack-frame?

@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.50 2004/11/23 16:02:34 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.51 2004/11/25 16:45:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1109,7 +1109,34 @@ busy-waiting loop on P4."
 	 ,@code
 	 ,@(when fixed-size-p
 	     `((:load-lexical (:lexical-binding ,size-var) :ecx)))
-	 (:call-local-pf cons-commit)
+	 (:call-local-pf cons-commit-non-pointer)
+	 (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+	 (:leal (:esp 16) :esp)))))
+
+(defmacro with-non-header-allocation-assembly
+    ((size-form &key object-register size-register fixed-size-p labels) &body code)
+  (assert (eq object-register :eax))
+  (assert (or fixed-size-p (eq size-register :ecx)))
+  (let ((size-var (gensym "malloc-size-")))
+    `(let ((,size-var ,size-form))
+       (with-inline-assembly (:returns :eax :labels (retry-alloc retry-jumper ,@labels))
+	 (:declare-label-set retry-jumper (retry-alloc))
+	 ;; Set up atomically continuation.
+	 (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+	 (:pushl 'retry-jumper)
+	 ;; ..this allows us to detect recursive atomicallies.
+	 (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+	 (:pushl :ebp)
+	retry-alloc
+	 (:movl (:esp) :ebp)
+	 (:load-lexical (:lexical-binding ,size-var) :eax)
+	 (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+	 ;; Now inside atomically section.
+	 (:call-local-pf get-cons-pointer-non-header)
+	 ,@code
+	 ,@(when fixed-size-p
+	     `((:load-lexical (:lexical-binding ,size-var) :ecx)))
+	 (:call-local-pf cons-commit-non-header)
 	 (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 	 (:leal (:esp 16) :esp)))))
 

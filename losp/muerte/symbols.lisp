@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.26 2004/11/23 16:09:34 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.27 2004/11/25 16:46:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -148,8 +148,8 @@
   (let ((sxhash (sxhash name)))
     (macrolet
 	((do-it ()
-	   `(with-non-pointer-allocation-assembly (6 :fixed-size-p t
-						     :object-register :eax)
+	   `(with-non-header-allocation-assembly
+		(6 :fixed-size-p t :object-register :eax)
 	      (:addl ,(- (movitz:tag :symbol) (movitz:tag :other)) :eax)
 	      (:load-lexical (:lexical-binding package) :ebx)
 	      (:movl :ebx (:eax (:offset movitz-symbol package)))
@@ -182,8 +182,8 @@
   (if (or (eq nil symbol)
 	  (not copy-properties))
       (%create-symbol (symbol-name symbol))
-    (with-allocation-assembly (6 :object-register :eax
-				 :fixed-size-p t)
+    (with-non-header-allocation-assembly
+	(6 :object-register :eax :fixed-size-p t)
       (:addl 1 :eax)
       (:load-lexical (:lexical-binding symbol) :ebx)
       ;; 0
@@ -204,7 +204,6 @@
       ;; 5
       (:movl (:ebx #.(cl:- (movitz:tag :symbol)) 20) :ecx)
       (:movl :ecx (:eax #.(cl:- (movitz:tag :symbol)) 20)))))
-
 
 (defun symbol-flags (symbol)
   (etypecase symbol
