@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.4 2004/03/25 00:52:54 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.5 2004/03/26 01:35:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -94,9 +94,10 @@
 				    (declare (dynamic-extent results))
 				    (let ((*trace-escape* t))
 				      (fresh-line *trace-output*)
-				      (dotimes (i *trace-level*)
+				      (dotimes (i (min *trace-level* 10))
 					(write-string "  " *trace-output*))
-				      (format *trace-output* "~&~D: =>~{ ~W~^,~}.~%" *trace-level* results)
+				      (format *trace-output* "~D: =>~{ ~W~^,~}.~%"
+					      *trace-level* results)
 				      (values-list results)))
 				(let ((*trace-level* (1+ *trace-level*))
 				      (*trace-escape* nil))
