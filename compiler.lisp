@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.97 2004/08/19 00:22:02 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.98 2004/09/02 09:16:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -98,6 +98,28 @@ compile, using the host compiler, the code rather than just using eval.")
     (or (member (car list) (cdr list))
 	(duplicatesp (cdr list)))))
 
+(defun compute-call-extra-prefix (instr env size)
+  (let* ((return-pointer-tag (ldb (byte 3 0)
+				  (+ (ia-x86::assemble-env-current-pc env)
+				     size))))
+    (cond
+     ((not (and (ia-x86::instruction-operands instr)
+		(typep (car (ia-x86::instruction-operands instr))
+		       'ia-x86::operand-indirect-register)
+		(eq 'ia-x86::esi
+		    (ia-x86::operand-register (car (ia-x86::instruction-operands instr))))))
+      nil)
+     ((or (= (tag :even-fixnum) return-pointer-tag)
+	  (= (tag :odd-fixnum) return-pointer-tag))
+      ;; Insert a NOP
+      '(#x90))
+     ((= 3 return-pointer-tag)
+      ;; Insert two NOPs, 3 -> 5
+      '(#x90 #x90))
+     ((= (tag :character) return-pointer-tag)
+      ;; Insert three NOPs, 2 -> 5
+      '(#x90 #x90 #x90)))))
+
 (defun make-compiled-primitive (form environment top-level-p docstring)
   "Primitive functions have no funobj, no stack-frame, and no implied
    parameter/return value passing conventions."
@@ -113,14 +135,16 @@ compile, using the host compiler, the code rather than just using eval.")
 	 (resolved-code (finalize-code body-code nil nil))
 	 (function-code (ia-x86:read-proglist resolved-code)))
     (multiple-value-bind (code-vector symtab)
-	(ia-x86:proglist-encode :octet-vector
-				:32-bit
-				#x00000000
-				function-code
-				:symtab-lookup
-				#'(lambda (label)
-				    (case label
-				      (:nil-value (image-nil-word *image*)))))
+	(let ((ia-x86:*instruction-compute-extra-prefix-map*
+	       '((:call . compute-call-extra-prefix))))
+	  (ia-x86:proglist-encode :octet-vector
+				  :32-bit
+				  #x00000000
+				  function-code
+				  :symtab-lookup
+				  #'(lambda (label)
+				      (case label
+					(:nil-value (image-nil-word *image*))))))
       (values (make-movitz-vector (length code-vector)
 				  :element-type 'code
 				  :initial-contents code-vector)
@@ -888,27 +912,29 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 
 (defun assemble-funobj (funobj combined-code)
   (multiple-value-bind (code-vector code-symtab)
-      (ia-x86:proglist-encode :octet-vector :32-bit #x00000000
-			      (ia-x86:read-proglist (append combined-code
-							    `((% bytes 8 0 0 0))))
-			      :symtab-lookup
-			      (lambda (label)
-				(case label
-				  (:nil-value (image-nil-word *image*))
-				  (t (let ((set (cdr (assoc label
-							    (movitz-funobj-jumpers-map funobj)))))
-				       (when set
-					 (let ((pos (search set (movitz-funobj-const-list funobj)
-							    :end2 (movitz-funobj-num-jumpers funobj))))
-					   (assert pos ()
-					     "Couldn't find for ~s set ~S in ~S."
-					     label set (subseq (movitz-funobj-const-list funobj)
-							       0 (movitz-funobj-num-jumpers funobj)))
-					   (* 4 pos))))))))
+      (let ((ia-x86:*instruction-compute-extra-prefix-map*
+	     '((:call . compute-call-extra-prefix))))
+	(ia-x86:proglist-encode :octet-vector :32-bit #x00000000
+				(ia-x86:read-proglist (append combined-code
+							      #+ignore `((% bytes 8 0 0 0))))
+				:symtab-lookup
+				(lambda (label)
+				  (case label
+				    (:nil-value (image-nil-word *image*))
+				    (t (let ((set (cdr (assoc label
+							      (movitz-funobj-jumpers-map funobj)))))
+					 (when set
+					   (let ((pos (search set (movitz-funobj-const-list funobj)
+							      :end2 (movitz-funobj-num-jumpers funobj))))
+					     (assert pos ()
+					       "Couldn't find for ~s set ~S in ~S."
+					       label set (subseq (movitz-funobj-const-list funobj)
+								 0 (movitz-funobj-num-jumpers funobj)))
+					     (* 4 pos)))))))))
     (setf (movitz-funobj-symtab funobj) code-symtab)
-    (let ((code-length (- (length code-vector) 3)))
-      (assert (not (mismatch #(0 0 0) code-vector :start2 code-length)) ()
-	"No space in code-vector was allocated for entry-points.")
+    (let ((code-length (- (length code-vector) 3 -3)))
+;;;      (assert (not (mismatch #(0 0 0) code-vector :start2 code-length)) ()
+;;;	"No space in code-vector was allocated for entry-points.")
       (setf (fill-pointer code-vector) code-length)
       ;; debug info
       (setf (ldb (byte 1 5) (slot-value funobj 'debug-info))
@@ -921,16 +947,17 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	  (setf (ldb (byte 5 0) (slot-value funobj 'debug-info)) x))
 	 (t (warn "Can't encode start-stack-frame-setup label ~D into debug-info for ~S."
 		  x (movitz-funobj-name funobj)))))
-      (loop for ((entry-label slot-name) . rest) on '((entry%1op code-vector%1op)
-						      (entry%2op code-vector%2op)
-						      (entry%3op code-vector%3op))
+      (loop for ((entry-label slot-name)) on '((entry%1op code-vector%1op)
+					       (entry%2op code-vector%2op)
+					       (entry%3op code-vector%3op))
 	  do (cond
 	      ((assoc entry-label code-symtab)
 	       (let ((offset (cdr (assoc entry-label code-symtab))))
 		 (setf (slot-value funobj slot-name)
 		   (cons offset funobj))
-		 (when (< offset #x100)
-		   (vector-push offset code-vector))))
+		 #+ignore (when (< offset #x100)
+			    (vector-push offset code-vector))))
+	      #+ignore
 	      ((some (lambda (label) (assoc label code-symtab))
 		     (mapcar #'car rest))
 	       (vector-push 0 code-vector))))
@@ -4394,14 +4421,16 @@ Return arg-init-code, need-normalized-ecx-p."
 					(not last-optional-p))
 			       `((:pushl :ebx))) ; protect ebx
 			   ,@(if (optional-function-argument-init-form binding)
-				 (append '((:pushl :ecx))
+				 (append `((:shll ,+movitz-fixnum-shift+ :ecx)
+					   (:pushl :ecx))
 					 (when (= 0 (function-argument-argnum binding))
 					   `((:pushl :ebx)))
 					 init-code-edx
 					 `((:store-lexical ,binding :edx :type t))
 					 (when (= 0 (function-argument-argnum binding))
 					   `((:popl :ebx)))
-					 `((:popl :ecx)))
+					 `((:popl :ecx)
+					   (:shrl ,+movitz-fixnum-shift+ :ecx)))
 			       (progn (error "Unsupported situation.")
 				      #+ignore `((:store-lexical ,binding :edi :type null))))
 			   ,@(when (and (= 0 (function-argument-argnum binding))
@@ -5511,13 +5540,7 @@ fifth:  all compiler-values for form1, as a list."
 			  ((:function :multiple-values :eax)
 			   :eax)
 			  (:lexical-binding
-			   ;; We can use ECX as temporary storage,
-			   ;; because this value will be reachable
-			   ;; from at least one variable.
-			   ;; XXXX But, probably we shouldn't decide
-			   ;;      on this here, rather use binding
-			   ;;      as result-mode in :load-lexical.
-			   result-mode #+ignore :ecx)
+			   result-mode)
 			  ((:ebx :ecx :edx :esi :push
 			    :untagged-fixnum-eax
 			    :untagged-fixnum-ecx
@@ -5619,13 +5642,18 @@ fifth:  all compiler-values for form1, as a list."
 	  :type  `(eql ,movitz-obj)
 	  :final-form binding
 	  :functional-p t)	
-      (if (eq :ignore (operator result-mode))
-	  (compiler-values (self-eval)
-	    :returns :nothing
-	    :type nil)
-	(compiler-values (self-eval)
-	  :code `((:load-lexical ,binding ,result-mode))
-	  :returns result-mode)))))
+      (case  (operator result-mode)
+	(:ignore
+	 (compiler-values (self-eval)
+	   :returns :nothing
+	   :type nil))
+	((:eax :single-value :multiple-values :function)
+	 (compiler-values (self-eval)
+	   :code `((:load-lexical ,binding :eax))
+	   :returns :eax))
+	(t (compiler-values (self-eval)
+	     :code `((:load-lexical ,binding ,result-mode))
+	     :returns result-mode))))))
 
 (define-compiler compile-implicit-progn (&all all &form forms &top-level-p top-level-p
 					      &result-mode result-mode)
@@ -5731,6 +5759,39 @@ cleanup-forms etc.) to <to-env> with <return-code>'s result intact."
 						   return-mode)
 		      `((:jmp ',to-label)))))
      (t (error "unknown!")))))
+
+(defun make-compiled-push-current-values ()
+  "Return code that pushes the current values onto the stack, and returns
+in ECX the number of values (as fixnum)."
+  (let ((not-single-value (gensym "not-single-value-"))
+	(push-values-done (gensym "push-values-done-"))
+	(push-values-loop (gensym "push-values-loop-")))
+    `((:jc ',not-single-value)
+      (:movl 4 :ecx)
+      (:pushl :eax)
+      (:jmp ',push-values-done)
+      ,not-single-value
+      (:shll ,+movitz-fixnum-shift+ :ecx)
+      (:jz ',push-values-done)
+      (:xorl :edx :edx)
+      (:pushl :eax)
+      (:addl 4 :edx)
+      (:cmpl :edx :ecx)
+      (:je ',push-values-done)
+      (:pushl :ebx)
+      (:addl 4 :edx)
+      (:cmpl :edx :ecx)
+      (:je ',push-values-done)
+      ,push-values-loop
+      (:locally (:pushl (:edi (:edi-offset values) :edx -8)))
+      (:addl 4 :edx)
+      (:cmpl :edx :ecx)
+      (:jne ',push-values-loop)
+      ,push-values-done)))
+
+;;;(:load-lexical ,numargs-binding :eax)
+;;;      (:addl :ecx :eax)
+;;;      (:store-lexical ,numargs-binding :eax :type fixnum))))
 
 (defun stack-delta (inner-env outer-env)
   "Calculate the amount of stack-space used (in 32-bit stack slots) at the time
