@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 20 00:39:59 2004
 ;;;;                
-;;;; $Id: ratios.lisp,v 1.5 2004/07/31 23:35:09 ffjeld Exp $
+;;;; $Id: ratios.lisp,v 1.6 2004/08/04 13:01:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -39,15 +39,9 @@
 (defun ratio-p (x)
   (typep x 'ratio))
 
-(define-compiler-macro %ratio-numerator (x)
-  `(memref ,x ,(bt:slot-offset 'movitz::movitz-ratio 'movitz::numerator) 0 :lisp))
-
 (defun ratio-numerator (x)
   (check-type x ratio)
   (%ratio-numerator x))
-
-(define-compiler-macro %ratio-denominator (x)
-  `(memref ,x ,(bt:slot-offset 'movitz::movitz-ratio 'movitz::denominator) 0 :lisp))
 
 (defun ratio-denominator (x)
   (check-type x ratio)
