@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.75 2004/07/17 22:34:38 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.76 2004/07/19 00:54:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -438,8 +438,10 @@ Preserve EAX and EBX."
 			  (:jmp 'fix-fix-ok)))
 		  fix-fix-ok))
 		((positive-bignum positive-fixnum)
-		 (funcall '+ y x))
+		 (+ y x))
 		((positive-fixnum positive-bignum)
+		 (bignum-add-fixnum y x)
+		 #+ignore
 		 (with-inline-assembly (:returns :eax :labels (retry-not-size1
 							       not-size1
 							       copy-bignum-loop
@@ -729,14 +731,36 @@ Preserve EAX and EBX."
 		(((eql 0) t)
 		 (- subtrahend))
 		((fixnum fixnum)
-		 (with-inline-assembly (:returns :eax :side-effects nil)
+		 (with-inline-assembly (:returns :eax :labels (done negative-result))
 		   (:compile-two-forms (:eax :ebx) minuend subtrahend)
 		   (:subl :ebx :eax)
-		   (:into)))
+		   (:jno 'done)
+		   (:jnc 'negative-result)
+		   (:movl :eax :ecx)
+		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   (:orl ,(- movitz:+movitz-most-negative-fixnum+) :ecx)
+		   (:call-local-pf box-u32-ecx)
+		   (:jmp 'done)
+		  negative-result
+		   (:movl :eax :ecx)
+		   (:negl :ecx)
+		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   (:call-local-pf box-u32-ecx)
+		   (:xorl #xff00 (:eax (:offset movitz-bignum type)))
+		  done))
 		((positive-bignum fixnum)
 		 (+ (- subtrahend) minuend))
 		((fixnum positive-bignum)
-		 (- (+ (- minuend) subtrahend)))
+		 (%negatef (+ subtrahend (- minuend))
+			   subtrahend minuend))
+;;;		((positive-fixnum positive-bignum)
+;;;		 (%bignum-canonicalize
+;;;		  (%bignum-negate
+;;;		   (bignum-subf (copy-bignum subtrahend) minuend))))
+;;;		((negative-fixnum positive-bignum)
+;;;		 (%bignum-canonicalize
+;;;		  (%negatef (bignum-add-fixnum subtrahend minuend)
+;;;			    subtrahend minuend)))
 		((positive-bignum positive-bignum)
 		 (cond
 		  ((= minuend subtrahend)
@@ -847,7 +871,7 @@ Preserve EAX and EBX."
 	  (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
 	  (:shll :cl :eax)))
        (t (check-type integer (integer 0 *))
-	  (let ((result (%make-bignum (truncate (+ result-length 31) 32))))
+	  (let ((result (%make-bignum (ceiling result-length 32))))
 	    (dotimes (i (* 2 (%bignum-bigits result)))
 	      (setf (memref result -2 i :unsigned-byte16)
 		(let ((pos (- (* i 16) count)))
@@ -877,7 +901,7 @@ Preserve EAX and EBX."
 	       result-length)		; 1 or 0.
 	      (t (multiple-value-bind (long short)
 		     (truncate count 16)
-		   (let ((result (%make-bignum (1+ (truncate (+ result-length 31) 32)))))
+		   (let ((result (%make-bignum (1+ (ceiling result-length 32)))))
 		     (let ((src-max-bigit (* 2 (%bignum-bigits integer))))
 		       (dotimes (i (* 2 (%bignum-bigits result)))
 			 (let ((src (+ i long)))
@@ -937,16 +961,26 @@ Preserve EAX and EBX."
 	    `(with-inline-assembly (:returns :eax)
 	       (:compile-form (:result-mode :ebx) integer)
 	       (:movzxw (:ebx (:offset movitz-bignum length))
-			:ecx)
-	       (:leal ((:ecx 1) ,(* -1 movitz:+movitz-fixnum-factor+))
-		      :eax)		; bigits-1
-	       (:bsrl (:ebx (:ecx 1) (:offset movitz-bignum bigit0 -4))
+			:edx)
+	       (:xorl :eax :eax)
+	      bigit-scan-loop
+	       (:subl 4 :edx)
+	       (:jc 'done)
+	       (:cmpl 0 (:ebx :edx (:offset movitz-bignum bigit0)))
+	       (:jz 'bigit-scan-loop)
+	       ;; Now, EAX must be loaded with (+ (* EDX 32) bit-index 1).
+	       (:leal ((:edx 8)) :eax)	; Factor 8
+	       (:bsrl (:ebx :edx (:offset movitz-bignum bigit0))
 		      :ecx)
-	       (:shll 5 :eax)		; bits = bigits*32 + (bit-index+1)
-	       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) :eax
-							     ,movitz:+movitz-fixnum-factor+)
-		      :eax))))
-       (do-it)))))
+	       (:leal ((:eax 4)) :eax)	; Factor 4
+	       (:leal ((:ecx 4) :eax 4) :eax)
+	      done)))
+       (do-it)))
+    (negative-bignum
+     (let ((abs-length (bignum-integer-length integer)))
+       (if (= 1 (bignum-logcount integer))
+	   (1- abs-length)
+	 abs-length)))))
 
 ;;; Multiplication
 
@@ -1033,16 +1067,15 @@ Preserve EAX and EBX."
 		   (with-inline-assembly (:returns :eax)
 		    retry
 		     (:declare-label-set retry-jumper (retry))
+		     (:compile-two-forms (:eax :ebx) (integer-length x) (integer-length y))
 		     (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
 		     (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
 					'retry-jumper)
 				      (:edi (:edi-offset atomically-status))))
-			     
-		     (:compile-form (:result-mode :eax) y)
-		     (:movzxw (:eax (:offset movitz-bignum length))
-			      :ecx)
-		     (:leal ((:ecx 1) ,(* 2 movitz:+movitz-fixnum-factor+))
-			    :eax)
+		     ;; Compute (1+ (ceiling (+ (len x) (len y)) 32)) ..
+		     (:leal (:eax :ebx ,(* 4 (+ 31 32))) :eax)
+		     (:andl ,(logxor #xffffffff (* 31 4)) :eax)
+		     (:shrl 5 :eax)
 		     (:call-local-pf get-cons-pointer) ; New bignum into EAX
 
 		     (:load-lexical (:lexical-binding y) :ebx) ; bignum
@@ -1099,13 +1132,19 @@ Preserve EAX and EBX."
 		     (* y x)
 		   ;; X is the biggest factor.
 		   #-movitz-reference-code
-		   (do ((r (%bignum-set-zerof (%make-bignum (ceiling (+ (integer-length x)
-								    (integer-length y))
-								 32))))
+		   (do ((tmp (%make-bignum (ceiling (+ (integer-length x)
+						       (integer-length y))
+						    32)))
+			(r (bignum-set-zerof (%make-bignum (ceiling (+ (integer-length x)
+								       (integer-length y))
+								    32))))
 			(length (integer-length y))
 			(i 0 (+ i 29)))
 		       ((>= i length) (%bignum-canonicalize r))
-		     (setf r (%bignum-addf r (ash (* x (ldb (byte 29 i) y)) i))))
+		     (bignum-set-zerof tmp)
+		     (bignum-addf r (bignum-shift-leftf (bignum-mulf-fixnum (bignum-addf tmp x)
+									    (ldb (byte 29 i) y))
+							i)))
 		   #+movitz-reference-code
 		   (do ((r 0)
 			(length (integer-length y))
@@ -1134,7 +1173,7 @@ Preserve EAX and EBX."
    (t (number divisor)
       (number-double-dispatch (number divisor)
 	((t (eql 1))
-	 number)
+	 (values number 0))
 	((fixnum fixnum)
 	 (with-inline-assembly (:returns :multiple-values)
 	   (:compile-form (:result-mode :eax) number)
@@ -1174,31 +1213,28 @@ Preserve EAX and EBX."
 		     (:popl :ebx)
 		     (:jmp 'done)
 		    not-size1
+		     (:xorl :eax :eax)
 		     (:compile-form (:result-mode :ebx) number)
-		     (:movzxw (:ebx (:offset movitz-bignum length))
-			      :ecx)
-	     
+		     (:movw (:ebx (:offset movitz-bignum length)) :ax)
 		     (:declare-label-set retry-jumper (not-size1))
 		     (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
 		     (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
 					'retry-jumper)
 				      (:edi (:edi-offset atomically-status))))
-
-		     (:leal ((:ecx 1) 4) :eax) ; Number of words
+		     (:addl 4 :eax)
 		     (:call-local-pf get-cons-pointer) ; New bignum into EAX
-		     
 
-		     (:store-lexical (:lexical-binding r) :eax :type bignum)
+		     (:store-lexical (:lexical-binding r) :eax :type bignum) ; XXX breaks GC invariant!
 		     (:compile-form (:result-mode :ebx) number)
-		     (:movl (:ebx #.movitz:+other-type-offset+) :ecx)
-		     (:movl :ecx (:eax #.movitz:+other-type-offset+))
+		     (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
+		     (:movl :ecx (:eax ,movitz:+other-type-offset+))
 		     (:shrl 16 :ecx)
 	     
 		     (:xorl :edx :edx)	; edx=hi-digit=0
 					; eax=lo-digit=msd(number)
 		     (:std)
 		     (:compile-form (:result-mode :esi) divisor)
-		     (:shrl #.movitz:+movitz-fixnum-shift+ :esi)
+		     (:shrl ,movitz:+movitz-fixnum-shift+ :esi)
 
 		    divide-loop
 		     (:load-lexical (:lexical-binding number) :ebx)
@@ -1249,45 +1285,55 @@ Preserve EAX and EBX."
 	  ((< number divisor) (values 0 number))
 	  (t 
 	   #-movitz-reference-code
-	   (let* ((guess-pos (- (integer-length divisor) 29))
+	   (let* ((divisor-length (integer-length divisor))
+		  (guess-pos (- divisor-length 29))
 		  (msb (ldb (byte 29 guess-pos) divisor))) 
 	     (when (eq msb most-positive-fixnum)
-	       (decf guess-pos)
+	       (incf guess-pos)
 	       (setf msb (ash msb -1)))
 	     (incf msb)
-	     (do ((shift (- guess-pos))
-		  (q (%bignum-set-zerof (%make-bignum (ceiling (- (integer-length number)
-								  (integer-length divisor))
-							       32))))
-		  (r number))
-		 ((< r divisor)
-		  (values (%bignum-canonicalize q)
-			  r))
-	       (let* ((guess (ash (truncate r msb) shift)))
-		 (let ((delta (* guess divisor)))
-		   (if (= 0 delta)
-		       (setf q (%bignum-addf-fixnum q 1)
-			     r (- r divisor))
-		     (setf q (%bignum-addf q guess)
-			   r (- r delta)))))))
+	     (do ((tmp (copy-bignum number))
+		  (tmp2 (copy-bignum number))
+		  (q (bignum-set-zerof (%make-bignum (ceiling (1+ (- (integer-length number)
+								     divisor-length))
+							      32))))
+		  (r (copy-bignum number)))
+		 ((%bignum< r divisor)
+		  (values (bignum-canonicalize q)
+			  (bignum-canonicalize r)))
+	       (let ((guess (bignum-shift-rightf
+			     (bignum-truncatef (bignum-addf (bignum-set-zerof tmp)
+							    r)
+					       msb)
+			     guess-pos)))
+		 (if (%bignum-zerop guess)
+		     (setf q (bignum-addf-fixnum q 1)
+			   r (bignum-subf r divisor))
+		   (setf q (bignum-addf q guess)
+			 r (do ((i 0 (+ i 29)))
+			       ((>= i divisor-length) r)
+			     (bignum-subf r (bignum-shift-leftf
+					     (bignum-mulf (bignum-addf (bignum-set-zerof tmp2) guess)
+							  (ldb (byte 29 i) divisor))
+					     i))))))))
 	   #+movitz-reference-code
 	   (let* ((guess-pos (- (integer-length divisor) 29))
 		  (msb (ldb (byte 29 guess-pos) divisor))) 
 	     (when (eq msb most-positive-fixnum)
-	       (decf guess-pos)
+	       (incf guess-pos)
 	       (setf msb (ash msb -1)))
 	     (incf msb)
-	     (do ((q 0)
+	     (do ((shift (- guess-pos))
+		  (q 0)
 		  (r number))
 		 ((< r divisor)
 		  (values q r))
-	       (let* ((guess (ash (truncate r msb) (- guess-pos))))
-		 (let ((delta (* guess divisor)))
-		   (if (= 0 guess)
-		       (setf q (1+ q)
-			     r (- r divisor))
-		     (setf q (+ q guess)
-			   r (- r delta))))))))))
+	       (let ((guess (ash (truncate r msb) shift)))
+		 (if (= 0 guess)
+		     (setf q (1+ q)
+			   r (- r divisor))
+		   (setf q (+ q guess)
+			 r (- r (* guess divisor))))))))))
 	(((integer * -1) (integer 0 *))
 	 (multiple-value-bind (q r)
 	     (truncate (- number) divisor)

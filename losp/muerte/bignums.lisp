@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 19:42:57 2004
 ;;;;                
-;;;; $Id: bignums.lisp,v 1.2 2004/07/18 08:45:39 ffjeld Exp $
+;;;; $Id: bignums.lisp,v 1.3 2004/07/19 00:54:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -24,7 +24,7 @@
 (defun %bignum-bigits (x)
   (%bignum-bigits x))
 
-(defun %bignum-canonicalize (x)
+(defun bignum-canonicalize (x)
   "Assuming x is a bignum, return the canonical integer value. That is,
 either return a fixnum, or destructively modify the bignum's length so
 that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
@@ -64,7 +64,7 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 
 (defun copy-bignum (old)
   (check-type old bignum)
-  (let* ((length (ceiling (integer-length old) 32))
+  (let* ((length (ceiling (bignum-integer-length old) 32))
 	 (new (malloc-non-pointer-words (1+ length))))
     (with-inline-assembly (:returns :eax)
       (:compile-two-forms (:eax :ebx) new old)
@@ -94,7 +94,79 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
   (terpri)
   (values))
 
-(defun %bignum-addf-fixnum (bignum delta)
+(defun bignum-add-fixnum (bignum delta)
+  "Non-destructively add an unsigned fixnum delta to an (unsigned) bignum."
+  (check-type bignum bignum)
+  (check-type delta fixnum)
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :eax :labels (retry-not-size1
+							not-size1
+							copy-bignum-loop
+							add-bignum-loop
+							add-bignum-done
+							no-expansion
+							pfix-pbig-done))
+	    (:compile-two-forms (:eax :ebx) bignum delta)
+	    (:testl :ebx :ebx)
+	    (:jz 'pfix-pbig-done)
+	    (:movzxw (:eax (:offset movitz-bignum length)) :ecx)
+	    (:cmpl ,movitz:+movitz-fixnum-factor+ :ecx)
+	    (:jne 'not-size1)
+	    (:compile-form (:result-mode :ecx) delta)
+	    (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	    (:addl (:eax (:offset movitz-bignum bigit0)) :ecx)
+	    (:jc 'retry-not-size1)
+	    (:call-local-pf box-u32-ecx)
+	    (:jmp 'pfix-pbig-done)
+	   retry-not-size1
+	    (:compile-form (:result-mode :eax) bignum)
+	    (:movzxw (:eax (:offset movitz-bignum length)) :ecx)
+	   not-size1
+	    (:declare-label-set retry-jumper (retry-not-size1))
+	    (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
+	    (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
+			       'retry-jumper)
+			     (:edi (:edi-offset atomically-status))))
+	    (:leal ((:ecx 1) ,(* 2 movitz:+movitz-fixnum-factor+))
+		   :eax)		; Number of words
+	    (:call-local-pf get-cons-pointer)
+	    (:load-lexical (:lexical-binding bignum) :ebx) ; bignum
+	    (:movzxw (:ebx (:offset movitz-bignum length)) :ecx)
+	    (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
+		   :edx)
+	    (:movl 0 (:eax :edx ,movitz:+other-type-offset+)) ; MSB
+	   copy-bignum-loop
+	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
+	    (:movl (:ebx :edx ,movitz:+other-type-offset+) :ecx)
+	    (:movl :ecx (:eax :edx ,movitz:+other-type-offset+))
+	    (:jnz 'copy-bignum-loop)
+
+	    (:load-lexical (:lexical-binding delta) :ecx)
+	    (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	    (:xorl :ebx :ebx)
+	    (:addl :ecx (:eax (:offset movitz-bignum bigit0)))
+	    (:jnc 'add-bignum-done)
+	   add-bignum-loop
+	    (:addl 4 :ebx)
+	    (:addl 1 (:eax :ebx (:offset movitz-bignum bigit0)))
+	    (:jc 'add-bignum-loop)
+	   add-bignum-done
+	    (:movzxw (:eax (:offset movitz-bignum length)) :ecx)
+	    (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+) :ecx)
+	    (:cmpl 0 (:eax :ecx (:offset movitz-bignum bigit0 -4)))
+	    (:je 'no-expansion)
+	    (:addl #x40000 (:eax ,movitz:+other-type-offset+))
+	    (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
+	   no-expansion
+	    (:call-local-pf cons-commit)
+	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+			     (:edi (:edi-offset atomically-status))))
+		   
+	   pfix-pbig-done)))
+    (do-it)))
+
+(defun bignum-addf-fixnum (bignum delta)
   "Destructively add a fixnum delta (negative or positive) to an (unsigned) bignum."
   (check-type delta fixnum)
   (check-type bignum bignum)
@@ -131,14 +203,14 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	   add-bignum-done)))
     (do-it)))
 
-(defun %bignum-addf (bignum delta)
+(defun bignum-addf (bignum delta)
   "Destructively add (abs delta) to bignum."
   (check-type bignum bignum)
   (etypecase delta
     (positive-fixnum
-     (%bignum-addf-fixnum bignum delta))
+     (bignum-addf-fixnum bignum delta))
     (negative-fixnum
-     (%bignum-addf-fixnum bignum (- delta)))
+     (bignum-addf-fixnum bignum (- delta)))
     (bignum
      (macrolet
 	 ((do-it ()
@@ -149,11 +221,11 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	       (:xorl :edx :edx)	; Counter
 	       (:xorl :ecx :ecx)	; Carry
 	      add-bignum-loop
-	       (:cmpw :dx (:eax (:offset movitz-bignum length)))
-	       (:jbe '(:sub-program (overflow) (:int 4)))
 	       (:addl (:ebx :edx (:offset movitz-bignum :bigit0))
 		      :ecx)
 	       (:jz 'carry+digit-overflowed) ; If CF=1, then ECX=0.
+	       (:cmpw :dx (:eax (:offset movitz-bignum length)))
+	       (:jbe '(:sub-program (overflow) (:int 4)))
 	       (:addl :ecx (:eax :edx (:offset movitz-bignum bigit0)))
 	      carry+digit-overflowed
 	       (:sbbl :ecx :ecx)
@@ -172,14 +244,14 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	      add-bignum-done)))
        (do-it)))))
 
-(defun %bignum-subf (bignum delta)
+(defun bignum-subf (bignum delta)
   "Destructively subtract (abs delta) from bignum."
   (check-type bignum bignum)
   (etypecase delta
     (positive-fixnum
-     (%bignum-addf-fixnum bignum (- delta)))
+     (bignum-addf-fixnum bignum (- delta)))
     (negative-fixnum
-     (%bignum-addf-fixnum bignum delta))
+     (bignum-addf-fixnum bignum delta))
     (bignum
      (macrolet
 	 ((do-it ()
@@ -213,14 +285,253 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
       sub-bignum-done)))
        (do-it)))))
 
-(defun %bignum-set-zerof (bignum)
+(defun bignum-shift-rightf (bignum count)
+  "Destructively right-shift bignum by count bits."
+  (check-type bignum bignum)
+  (check-type count positive-fixnum)
+  (multiple-value-bind (long-shift short-shift)
+      (truncate count 32)
+    (macrolet
+	((do-it ()
+	   `(with-inline-assembly (:returns :ebx)
+	      (:compile-two-forms (:edx :ebx) long-shift bignum)
+	      (:xorl :eax :eax)
+	     shift-long-loop
+	      (:cmpw :dx (:ebx (:offset movitz-bignum length)))
+	      (:jbe 'zero-msb-loop)
+	      (:movl (:ebx :edx (:offset movitz-bignum bigit0)) :ecx)
+	      (:movl :ecx (:ebx :eax (:offset movitz-bignum bigit0)))
+	      (:addl 4 :eax)
+	      (:addl 4 :edx)
+	      (:jmp 'shift-long-loop)
+	     zero-msb-loop
+	      (:cmpw :ax (:ebx (:offset movitz-bignum length)))
+	      (:jbe 'long-shift-done)
+	      (:movl 0 (:ebx :eax (:offset movitz-bignum bigit0)))
+	      (:addl 4 :eax)
+	      (:jmp 'zero-msb-loop)
+	     long-shift-done
+	      (:compile-form (:result-mode :ecx) short-shift)
+	      (:xorl :edx :edx)		; counter
+	      (:xorl :eax :eax)		; We need to use EAX for u32 storage.
+	      (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	      (:std)
+	     shift-short-loop
+	      (:addl 4 :edx)
+	      (:cmpw :dx (:ebx (:offset movitz-bignum length)))
+	      (:jbe 'end-shift-short-loop)
+	      (:movl (:ebx :edx (:offset movitz-bignum bigit0))
+		     :eax)
+	      (:shrdl :cl :eax
+		      (:ebx :edx (:offset movitz-bignum bigit0 -4)))
+	      (:jmp 'shift-short-loop)
+	     end-shift-short-loop
+	      (:movl :edx :eax)		; Safe EAX
+	      (:shrl :cl (:ebx :edx (:offset movitz-bignum bigit0 -4)))
+	      (:cld))))
+      (do-it))))
+
+(defun bignum-shift-leftf (bignum count)
+  "Destructively left-shift bignum by count bits."
+  (check-type bignum bignum)
+  (check-type count positive-fixnum)
+  (multiple-value-bind (long-shift short-shift)
+      (truncate count 32)
+    (macrolet
+	((do-it ()
+	   `(with-inline-assembly (:returns :ebx)
+	      (:compile-two-forms (:ecx :ebx) long-shift bignum)
+	      (:jecxz 'long-shift-done)
+	      (:xorl :eax :eax)
+	      (:movw (:ebx (:offset movitz-bignum length)) :ax)
+	      (:subl 4 :eax)		; destination pointer
+	      (:movl :eax :edx)
+	      ;; Overflow check
+	     overflow-check-loop
+	      (:cmpl 0 (:ebx :edx (:offset movitz-bignum bigit0)))
+	      (:jne '(:sub-program (overflow) (:int 4)))
+	      (:subl 4 :edx)
+	      (:subl 4 :ecx)
+	      (:jnz 'overflow-check-loop)
+	      ;; (:subl :ecx :edx)		; source = EDX = (- dest long-shift)
+	      (:jc '(:sub-program (overflow) (:int 4)))
+	     shift-long-loop
+	      (:movl (:ebx :edx (:offset movitz-bignum bigit0)) :ecx)
+	      (:movl :ecx (:ebx :eax (:offset movitz-bignum bigit0)))
+	      (:subl 4 :eax)
+	      (:subl 4 :edx)
+	      (:jnc 'shift-long-loop)
+	     zero-lsb-loop
+	      (:movl 0 (:ebx :eax (:offset movitz-bignum bigit0))) ; EDX=0
+	      (:subl 4 :eax)
+	      (:jnc 'zero-lsb-loop)
+	      
+	     long-shift-done
+	      (:compile-form (:result-mode :ecx) short-shift)
+	      (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	      (:jz 'done)
+	      (:xorl :edx :edx)		; counter
+	      (:movw (:ebx (:offset movitz-bignum length)) :dx)
+	      (:subl 4 :edx)
+	      (:jz 'shift-short-lsb)
+	      (:xorl :eax :eax)
+	      (:std)
+	      ;; Overflow check
+	      (:movl (:ebx :edx (:offset movitz-bignum bigit0))
+		     :eax)
+	      (:xorl :esi :esi)
+	      (:shldl :cl :eax :esi)
+	      (jnz 'overflow)
+	     shift-short-loop
+	      (:movl (:ebx :edx (:offset movitz-bignum bigit0 -4))
+		     :eax)
+	      (:shldl :cl :eax (:ebx :edx (:offset movitz-bignum bigit0)))
+	      (:subl 4 :edx)
+	      (:jnz 'shift-short-loop)
+	      (:movl (:ebp -4) :esi)
+	      (:movl :edi :eax)		; Safe EAX
+	      (:cld)
+	     shift-short-lsb
+	      (:shll :cl (:ebx (:offset movitz-bignum bigit0)))
+	     done
+	      )))
+      (do-it))))
+
+(defun bignum-mulf (bignum factor)
+  "Destructively multiply bignum by (abs factor)."
+  (check-type bignum bignum)
+  (etypecase factor
+    (bignum
+     (error "not yet"))
+    (negative-fixnum
+     (bignum-mulf bignum (- factor)))
+    (positive-fixnum
+     (macrolet
+	 ((do-it ()
+	    `(with-inline-assembly (:returns :ebx)
+	       (:load-lexical (:lexical-binding bignum) :ebx) ; bignum
+	       (:compile-form (:result-mode :ecx) factor)
+	       (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
+	       (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	       (:xorl :ecx :ecx)	; Counter
+	       (:xorl :edx :edx)	; Initial carry
+	       (:std)			; Make EAX, EDX, ESI non-GC-roots.
+	      multiply-loop
+	       (:movl (:ebx :ecx (:offset movitz-bignum bigit0))
+		      :eax)
+	       (:movl :edx :esi)	; Save carry in ESI
+	       (:locally (:mull (:edi (:edi-offset scratch0)) :eax :edx)) ; EDX:EAX = scratch0*EAX
+	       (:addl :esi :eax)	; Add carry
+	       (:adcl 0 :edx)		; Compute next carry
+	       (:jc '(:sub-program (should-not-happen) (:int 63)))
+	       (:movl :eax (:ebx :ecx (:offset movitz-bignum bigit0)))
+	       (:addl 4 :ecx)
+	       (:cmpw :cx (:ebx (:offset movitz-bignum length)))
+	       (:ja 'multiply-loop)
+	       (:movl (:ebp -4) :esi)
+	       (:movl :edx :ecx)	; Carry into ECX
+	       (:movl :edi :eax)
+	       (:movl :edi :edx)
+	       (:cld)
+	       (:testl :ecx :ecx)	; Carry overflow?
+	       (:jnz '(:sub-program (overflow) (:int 4)))
+	       )))
+       (do-it)))))
+
+(defun bignum-truncatef (bignum divisor)
+  (etypecase divisor
+    (positive-fixnum
+     (macrolet
+	 ((do-it ()
+	    `(with-inline-assembly (:returns :ebx)
+	       (:compile-two-forms (:ebx :ecx) bignum divisor)
+	       (:xorl :edx :edx)	; hi-digit
+	       (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
+	       (:std)
+	       (:xorl :esi :esi)
+	       (:movw (:ebx (:offset movitz-bignum length)) :si)
+	      divide-loop
+	       (:movl (:ebx :esi (:offset movitz-bignum bigit0 -4))
+		      :eax)		; lo-digit
+	       (:divl :ecx :eax :edx)	; EDX:EAX = EDX:EAX/ECX
+	       (:movl :eax (:ebx :esi (:offset movitz-bignum bigit0 -4)))
+	       (:subl 4 :esi)
+	       (:jnz 'divide-loop)
+
+	       (:movl (:ebp -4) :esi)
+	       (:movl :edi :edx)
+	       (:movl :ebx :eax)
+	       (:cld))))
+       (do-it)))))
+
+(defun bignum-set-zerof (bignum)
   (check-type bignum bignum)
   (dotimes (i (logior 1 (%bignum-bigits bignum)))
     (setf (memref bignum -2 i :lisp) 0))
   bignum)
 
 (defun %bignum= (x y)
+  (check-type x bignum)
+  (check-type y bignum)
   (compiler-macro-call %bignum= x y))
 
 (defun %bignum< (x y)
+  (check-type x bignum)
+  (check-type y bignum)
   (compiler-macro-call %bignum< x y))
+
+(defun %bignum-zerop (x)
+  (compiler-macro-call %bignum-zerop x))
+
+(defun bignum-integer-length (x)
+  "Compute (integer-length (abs x))."
+  (check-type x bignum)
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :eax)
+	    (:compile-form (:result-mode :ebx) x)
+	    (:movzxw (:ebx (:offset movitz-bignum length))
+		     :edx)
+	    (:xorl :eax :eax)
+	   bigit-scan-loop
+	    (:subl 4 :edx)
+	    (:jc 'done)
+	    (:cmpl 0 (:ebx :edx (:offset movitz-bignum bigit0)))
+	    (:jz 'bigit-scan-loop)
+	    ;; Now, EAX must be loaded with (+ (* EDX 32) bit-index 1).
+	    (:leal ((:edx 8)) :eax)	; Factor 8
+	    (:bsrl (:ebx :edx (:offset movitz-bignum bigit0))
+		   :ecx)
+	    (:leal ((:eax 4)) :eax)	; Factor 4
+	    (:leal ((:ecx 4) :eax 4) :eax)
+	   done)))
+    (do-it)))
+
+(defun bignum-logcount (x)
+  "Compute (logcount (abs x))."
+  (check-type x bignum)
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :eax)
+	    (:compile-form (:result-mode :ebx) x)
+	    (:xorl :eax :eax)
+	    (:xorl :edx :edx)
+	    (:movw (:ebx (:offset movitz-bignum length)) :dx)
+	   word-loop
+	    (:movl (:ebx :edx (:offset movitz-bignum bigit0 -4)) :ecx)
+	   bit-loop
+	    (:jecxz 'end-bit-loop)
+	    (:shrl 1 :ecx)
+	    (:jnc 'bit-loop)
+	    (:addl ,movitz:+movitz-fixnum-factor+ :eax)
+	    (:jmp 'bit-loop)
+	   end-bit-loop
+	    (:subl 4 :edx)
+	    (:jnz 'word-loop))))
+    (do-it)))
+
+(defun %bignum-negate (x)
+  (compiler-macro-call %bignum-negate x))
+
+(defun %bignum-plus-fixnum-size (x fixnum-delta)
+  (compiler-macro-call %bignum-plus-fixnum-size x fixnum-delta))
