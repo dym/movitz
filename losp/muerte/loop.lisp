@@ -151,7 +151,7 @@
   #+ignore
   (if *loop-gentemp*
       (gentemp (string pref))
-      (gensym)))
+      (gensym (string pref))))
 
 
 
@@ -1184,7 +1184,7 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
     (setq *loop-names* (list name nil))))
 
 (defun loop-do-return ()
-  (loop-pseudo-body (loop-construct-return (loop-get-form))))
+  (loop-emit-body (loop-construct-return (loop-get-form))))
 
 
 )
@@ -1752,7 +1752,7 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
 		((eq prep :upfrom) (setq dir ':up)))
 	  (multiple-value-setq (form start-constantp start-value)
 	    (loop-constant-fold-if-possible form indexv-type))
-	  (loop-make-iteration-variable indexv form indexv-type))
+	  (setq indexv (loop-make-iteration-variable indexv form indexv-type)))
 	 ((:upto :to :downto :above :below)
 	  (cond ((loop-tequal prep :upto) (setq inclusive-iteration (setq dir ':up)))
 		((loop-tequal prep :to) (setq inclusive-iteration t))
