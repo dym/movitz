@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.4 2004/04/01 02:12:22 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.5 2004/04/15 13:08:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -701,27 +701,11 @@
 
 ;;; Division
 
-(define-compiler-macro truncate (number &optional (divisor 1))
+(define-compiler-macro truncate (&whole form number &optional (divisor 1))
   `(do-result-mode-case ()
      (:plural
-      (truncate%2ops ,number ,divisor))
+      (no-macro-call ,@form))
      (t (truncate%2ops%1ret ,number ,divisor))))
-  
-(defun truncate%2ops (number divisor)
-  (with-inline-assembly (:returns :multiple-values)
-    (:compile-form (:result-mode :eax) number)
-    (:compile-form (:result-mode :ebx) divisor)
-    (:movl :eax :ecx)
-    (:orl :ebx :ecx)
-    (:testb #.movitz::+movitz-fixnum-zmask+ :cl)
-    (:jnz '(:sub-program (not-integer) (:int 107)))
-    (:cdq :eax :edx)
-    (:idivl :ebx :eax :edx)
-    (:shll #.movitz::+movitz-fixnum-shift+ :eax)
-    (:movl :edx :ebx)
-    (:xorl :ecx :ecx)
-    (:movb 2 :cl)			; return values: qutient, remainder.
-    (:stc)))
 
 (defun truncate%2ops%1ret (number divisor)
   (with-inline-assembly (:returns :multiple-values)
@@ -755,7 +739,24 @@
    (t form)))
 
 (defun truncate (number &optional (divisor 1))
-  (truncate number divisor))
+  (numargs-case
+   (1 (number)
+      number)
+   (t (number divisor)
+      (with-inline-assembly (:returns :multiple-values)
+	(:compile-form (:result-mode :eax) number)
+	(:compile-form (:result-mode :ebx) divisor)
+	(:movl :eax :ecx)
+	(:orl :ebx :ecx)
+	(:testb #.movitz::+movitz-fixnum-zmask+ :cl)
+	(:jnz '(:sub-program (not-integer) (:int 107)))
+	(:cdq :eax :edx)
+	(:idivl :ebx :eax :edx)
+	(:shll #.movitz::+movitz-fixnum-shift+ :eax)
+	(:movl :edx :ebx)
+	(:xorl :ecx :ecx)
+	(:movb 2 :cl)			; return values: qutient, remainder.
+	(:stc)))))
 
 
 (defun round (number &optional (divisor 1))
