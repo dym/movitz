@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.5 2004/02/05 14:46:19 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.6 2004/02/12 11:28:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1023,7 +1023,7 @@ integer (native lisp) value."
 
 (define-binary-class movitz-struct (movitz-heap-object-other)
   ((name
-    :binary-lisp-type word
+    :binary-type word
     :map-binary-write 'movitz-intern
     :map-binary-read-delayed 'movitz-word
     :reader movitz-struct-name
