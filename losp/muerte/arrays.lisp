@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.3 2004/03/08 13:17:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -252,8 +252,6 @@
     (:testb 7 :cl)
     (:jnz '(:sub-program () (:int 60) (:jmp (:pc+ -4)))) ; not other-type
     (:movzxw (:eax -2) :edx)
-    (:cmpb #.(movitz::tag :vector) :dl)
-    (:jne '(:sub-program () (:int 60) (:jmp (:pc+ -4)))) ; not vector-type
     
     (:compile-form (:result-mode :ecx) index)
     (:testb #.movitz::+movitz-fixnum-zmask+ :cl)
@@ -262,27 +260,64 @@
     (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
 
     (:cmpw (:eax -4) :cx)
-    (:jae '(:sub-program () (:int 61) (:jmp (:pc+ -4))))	; index out of bounds
-    (:testb :dh :dh)			; element-type 0?
+    (:jae '(:sub-program () (:int 61) (:jmp (:pc+ -4)))) ; index out of bounds
+
+    (:cmpl #.(movitz:vector-type-tag :any-t) :edx)
     (:jnz 'not-any-t)
 
     (:movl :ebx (:eax (:ecx 4) 2))
     (:jmp 'done)
 
-    not-any-t
-    (:decb :dh)				; element-type 1?
+   not-any-t
+    (:cmpl #.(movitz:vector-type-tag :character) :edx)
     (:jnz 'not-character)
+    (:cmpb #.(movitz:tag :character) :bl)
+    (:jnz '(:sub-program (not-character-value)
+	    (:compile-form (:result-mode :ignore)
+	     (error "Value not character: ~S" value))))
     (:movb :bh (:eax :ecx 2))
     (:jmp 'done)
     
-    not-character
-    (:decb :dh)
-    (:jnz '(:sub-program (not-u8) (:int 62) (:jmp (:pc+ -4))))
-    (:shll #.(cl:- 8 movitz::+movitz-fixnum-shift+) :ebx)
-    (:movb :bh (:eax :ecx 2))
-    (:shrl #.(cl:- 8 movitz::+movitz-fixnum-shift+) :ebx)
+   not-character
+    (:cmpl #.(movitz:vector-type-tag :u8) :edx)
+    (:jnz 'not-u8)
+    (:testl #.(cl:ldb (cl:byte 32 0) (cl:- -1 (cl:* #xff movitz:+movitz-fixnum-factor+))) :ebx)
+    (:jnz '(:sub-program (not-u8-value)
+	    (:compile-form (:result-mode :ignore)
+	     (error "Value not (unsigned-byte 8): ~S" value))))
+    (:shrl #.movitz:+movitz-fixnum-shift+ :ebx)
+    (:movb :bl (:eax (:ecx 1) #.(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
+    (:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :ebx)
+    (:jmp 'done)
+    
+    
+   not-u8
+    (:cmpl #.(movitz:vector-type-tag :u16) :edx)
+    (:jnz 'not-u16)
+    (:testl #.(cl:ldb (cl:byte 32 0) (cl:- -1 (cl:* #xffff movitz:+movitz-fixnum-factor+))) :ebx)
+    (:jnz '(:sub-program (not-u16-value)
+	    (:compile-form (:result-mode :ignore)
+	     (error "Value not (unsigned-byte 16): ~S" value))))
+    (:shrl #.movitz:+movitz-fixnum-shift+ :ebx)
+    (:movw :bx (:eax (:ecx 2) #.(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
+    (:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :ebx)
+    (:jmp 'done)
 
-    done))
+   not-u16
+    (:cmpl #.(movitz:vector-type-tag :u32) :edx)
+    (:jnz 'not-u32)
+    (:testl #.(cl:ldb (cl:byte 32 0) (cl:- -1 (cl:* #xffffffff movitz:+movitz-fixnum-factor+))) :ebx)
+    (:jnz '(:sub-program (not-u32-value)
+	    (:compile-form (:result-mode :ignore)
+	     (error "Value not (unsigned-byte 32): ~S" value))))
+    (:shrl #.movitz:+movitz-fixnum-shift+ :ebx)
+    (:movw :bx (:eax (:ecx 4) #.(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
+    (:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :ebx)
+    (:jmp 'done)
+
+   not-u32
+    (:compile-form (:result-mode :ignore) (error "Not a vector: ~S" vector))
+   done))
 
 
 ;;; simple-vector accessors
