@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.3 2004/02/26 13:43:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -151,7 +151,7 @@
 		  (:cmpw ,type-code
 			 (:eax ,(bt:slot-offset 'movitz::movitz-funobj 'movitz::type)))
 		  (:branch-when :boolean-zf=1)
-		  function-typep-failed)
+		 function-typep-failed)
 		(do-case (t :boolean-zf=1 :labels (function-typep-failed))
 		  (:compile-form (:result-mode :eax) ,object)
 		  (:leal (:eax ,(- (movitz::tag :other))) :ecx)
@@ -159,11 +159,11 @@
 		  (:jne 'function-typep-failed)
 		  (:cmpw ,type-code
 			 (:eax ,(bt:slot-offset 'movitz::movitz-funobj 'movitz::type)))
-		  function-typep-failed)))))
+		 function-typep-failed)))))
     (if (not (movitz:movitz-constantp type-specifier env))
 	form
       (let ((type (movitz::translate-program (movitz::eval-form type-specifier env)
-					   :muerte.cl :cl)))
+					     :muerte.cl :cl)))
 	(or (cond
 	     ((symbolp type)
 	      (case type
@@ -201,7 +201,7 @@
 		 `(with-inline-assembly (:returns :boolean-zf=0)
 		    (:compile-form (:result-mode :eax) ,object)
 		    (:leal (:eax -1) :ecx)
-		    (:testb 7 :cl))) ; tag 1 is not atom.
+		    (:testb 7 :cl)))	; tag 1 is not atom.
 		(character
 		 `(with-inline-assembly (:returns :boolean-zf=1)
 		    (:compile-form (:result-mode :eax) ,object)
@@ -218,6 +218,8 @@
 		 (make-vector-typep :u8))
 		(vector-u16
 		 (make-vector-typep :u16))
+		(vector-u32
+		 (make-vector-typep :u32))
 		(run-time-context
 		 (make-other-typep :run-time-context))
 		(structure-object
