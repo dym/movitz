@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2000-2004,
+;;;;    Copyright (C) 2000-2005,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      los0.lisp
@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.35 2004/12/15 13:58:26 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.36 2005/01/04 20:24:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -107,6 +107,38 @@
 ;;;(defun test-constantly (&rest args)
 ;;;  (declare (dynamic-extent args))
 ;;;  (apply (constantly 'test-value) args))
+
+(defun test-closure (x z)
+  (flet ((closure (y) (= x (1+ y))))
+    (declare (dynamic-extent (function closure)))
+    (closure z)
+    #+ignore (funcall (lambda (y) (= x (1+ y)))
+		      z)))
+
+(defun test-stack-cons (x y)
+  (muerte::with-dynamic-extent-scope (zap)
+    (let ((foo (muerte::with-dynamic-extent-allocation (zap)
+		 (cons x (lambda () y)))))
+      (format t "~Z: ~S, ~S" foo foo (funcall (cdr foo))))))
+
+(defun test-handler (x)
+  (let ((foo x))
+    (handler-bind
+	((error (lambda (c)
+		  (format t "error: ~S ~S" c x))))
+      (error "This is an error. ~S" foo))))
+
+(defun fooo (v w)
+  (tagbody
+    (print (block blurgh
+	     (progv (list v) (list w)
+	       (format t "Uh: ~S" (symbol-value v))
+	       (if (symbol-value v)
+		   (return-from blurgh 1)
+		 (go zap)))))
+   zap)
+  t)
+
 
 (defun test-break ()
   (with-inline-assembly (:returns :multiple-values)
@@ -543,14 +575,6 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
 
 (defun test-fixed (x y z)
   (warn "x: ~W, y: ~W, z: ~W" x y z))
-
-(defun test-closure (x)
-  (warn "lending x: ~W" x)
-  (values (lambda ()
-	    (warn "borrowed x: ~W" x)
-	    (* x 2))
-	  (lambda (y)
-	    (setq x y))))
 
 (defun test-let-closure ()
   (tagbody
@@ -1089,6 +1113,28 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
 	(with-simple-restart (abort "Abort to command level ~D." (1+ *repl-level*))
 	  (read-eval-print))))))
 
+(defun xwrite (object)
+  (with-inline-assembly (:returns :nothing)
+    (:locally (:movl (:edi (:edi-offset muerte::dynamic-env)) :eax))
+    (:movl :eax (#x1000000))
+    (:movl :ebp (#x1000004))
+    (:movl :esi (#x1000008)))
+  (block handler-case-block-1431896
+    (let (handler-case-var-1431897)
+      (tagbody
+	(handler-bind
+	    ((serious-condition
+	      (lambda (handler-case-temp-var-1431898)
+		(setq handler-case-var-1431897 handler-case-temp-var-1431898)
+		(go handler-case-clause-tag-1431899))))
+	  (return-from handler-case-block-1431896
+	    (muerte::internal-write object)))
+       handler-case-clause-tag-1431899
+	(return-from handler-case-block-1431896
+	  (let ((c handler-case-var-1431897))
+	    (print-unreadable-object (c *standard-output* :type t :identity t)
+	      (format t " while printing ~z" object))))))))
+
 (defun ub (x)
   `(hello world ,x or . what))
 
@@ -1185,7 +1231,7 @@ Can be used to measure the overhead of primitive function."
 ;;;		 (vector-push funobj ts)
 ;;;		 (vector-push offset ts)
 ;;;		 (vector-push code-vector ts))))
-      ;; (muerte::cli)
+      (muerte::cli)
       (pic8259-end-of-interrupt 0)
       (when (eql #\esc (muerte.x86-pc.keyboard:poll-char))
 	(break "Test-timer keyboard break."))
@@ -1219,8 +1265,7 @@ Can be used to measure the overhead of primitive function."
 	    *timer-stack* (muerte::copy-current-control-stack))
       (setf (pit8253-timer-mode 0) +pit8253-mode-single-timeout+
 	    (pit8253-timer-count 0) (or timeout (+ base (random variation))))
-      
-      #+ignore (muerte::sti)))
+      (muerte::sti)))
   (with-inline-assembly (:returns :nothing)
     (:compile-form (:result-mode :ecx) muerte.x86-pc::*screen*)
     (:shrl 2 :ecx)
@@ -1259,7 +1304,7 @@ Can be used to measure the overhead of primitive function."
 			 (progn
 ;;;			   (unless (logbitp 9 (eflags))
 ;;;			     (break "Someone switched off interrupts!"))
-			   (incf (memref-int muerte.x86-pc::*screen* :type :unsigned-byte16))
+;;;			   (incf (memref-int muerte.x86-pc::*screen* :type :unsigned-byte16))
 			   (throw 'foo 'inner-peace))
 		       (incf (memref-int muerte.x86-pc::*screen* :index 80 :type :unsigned-byte16)))))
 	(incf (memref-int muerte.x86-pc::*screen* :index 160 :type :unsigned-byte16))))))
@@ -1305,8 +1350,8 @@ Can be used to measure the overhead of primitive function."
     (format t "Extended memory: ~D KB~%" extended-memsize)
 
     (idt-init)
-    #+ignore
     (install-los0-consing :kb-size 500)
+    #+ignore
     (install-los0-consing :kb-size (max 100 (truncate (- extended-memsize 2048) 2))))
 
   (setf *debugger-function* #'los0-debugger)
