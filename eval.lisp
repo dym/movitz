@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  2 17:45:05 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: eval.lisp,v 1.8 2004/10/11 13:46:56 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.9 2004/12/09 13:27:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -111,6 +111,8 @@
   "3.1.2.1.1 Symbols as Forms"
   (declare (ignore top-level-p))
   (cond
+   ((keywordp form)
+    (eval-self-evaluating form env top-level-p))
    ((typep (movitz-binding form env) 'constant-object-binding)
     (translate-program (movitz-print (constant-object (movitz-binding form env)))
 		       :cl :muerte.cl))
