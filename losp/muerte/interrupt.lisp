@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.14 2004/06/07 22:13:12 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.15 2004/07/18 23:48:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -268,6 +268,7 @@
 	(case number
 	  (0 (error 'division-by-zero))
 	  (3 (break "Break instruction at ~@Z." $eip))
+	  (4 (error "Primitive overflow assertion failed."))
 	  (6 (error "Illegal instruction at ~@Z." $eip))
 	  (13 (error "General protection error. EIP=~@Z, error-code: #x~X, EAX: ~@Z, EBX: ~@Z, ECX: ~@Z"
 		     $eip
@@ -279,17 +280,18 @@
 	     (error 'type-error :datum (@ $eax) :expected-type (@ $edx)))
 	   (format *query-io* "Enter a new value: ")
 	   (setf (@ $eax) (read *query-io*)))
+	  (62 (error "Trying to save too many values: ~@Z." $ecx))
+	  (63 (error "Primitive assertion error. EIP=~@Z, ESI=~@Z." $eip $esi))
+	  (66 (error "Unspecified type error at ~@Z in ~S with EAX=~@Z, ECX=~@Z."
+		     $eip (@ (+ interrupt-frame (interrupt-frame-index :esi)))
+		     $eax $ecx))
+	  (67 (backtrace :fresh-lines nil :length 6)
+	      (dotimes (i 100000)
+		(with-inline-assembly (:returns :nothing) (:nop))))
 	  (68 (warn "EIP: ~@Z EAX: ~@Z EBX: ~@Z  ECX: ~@Z EDX: ~@Z"
 		    $eip $eax $ebx $ecx $edx)
 	      (dotimes (i 100000)
 		(with-inline-assembly (:returns :nothing) (:nop))))
-	  (67 (backtrace :fresh-lines nil :length 6)
-	      (dotimes (i 100000)
-		(with-inline-assembly (:returns :nothing) (:nop))))
-	  (66 (error "Unspecified type error at ~@Z in ~S with EAX=~@Z, ECX=~@Z."
-		     $eip (@ (+ interrupt-frame (interrupt-frame-index :esi)))
-		     $eax $ecx))
-	  (62 (error "Trying to save too many values: ~@Z." $ecx))
 	  ((5 55)
 	   (let* ((old-bottom (prog1 (stack-bottom)
 				(setf (stack-bottom) 0)))
@@ -311,8 +313,8 @@
 		   (format *debug-io* "~&Stack-warning: Bumped stack-bottom by ~D to #x~X.~%"
 			   (- old-bottom new-bottom)
 			   new-bottom)
-		   (break "Stack overload exception ~D at ESP=~@Z with bottom #x~X."
-			  number
+		   (break "Stack overload exception ~D at EIP=~@Z, ESI=~@Z, ESP=~@Z, bottom=#x~X."
+			  number $eip $esi
 			  (+ interrupt-frame (interrupt-frame-index :ebp))
 			  old-bottom))
 	       (format *debug-io* "~&Stack-warning: Resetting stack-bottom to #x~X.~%"
