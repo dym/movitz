@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon May 12 17:13:31 2003
 ;;;;                
-;;;; $Id: misc.lisp,v 1.4 2004/02/26 11:40:00 ffjeld Exp $
+;;;; $Id: misc.lisp,v 1.5 2004/08/14 17:52:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -24,29 +24,31 @@
   (typecase packet
     (muerte:vector-u8
      (assert (<= 0 start end (length packet)))
-     (with-inline-assembly (:returns :ebx)
-       (:compile-form (:result-mode :eax) packet)
-       (:compile-form (:result-mode :ebx) start)
-       (:compile-form (:result-mode :edx) end)
-       (:movl :ebx :ecx)		; ecx = start
-       (:subl :ebx :edx)		; edx = (- end start)
-       (:movl 0 :ebx)
+     (with-inline-assembly (:returns :eax)
+       (:compile-form (:result-mode :ebx) packet)
+       (:compile-form (:result-mode :eax) start)
+       (:compile-form (:result-mode :esi) end)
+       (:movl :eax :ecx)		; ecx = start
+       (:subl :eax :esi)		; esi = (- end start)
+       (:movl 0 :eax)
        (:jz 'end-checksum-loop)
        (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
-       (:xorl :esi :esi)
+       (:xorl :edx :edx)
+       (:std)
       checksum-loop
-       (:movw (:eax 2 :ecx) :bx)
-       (:xchgb :bl :bh)
-       (:addl :ebx :esi)
+       (:movw (:ebx 2 :ecx) :ax)
+       (:xchgb :al :ah)
        (:addl 2 :ecx)
-       (:subl #.(cl:* 2 movitz:+movitz-fixnum-factor+) :edx)
+       (:addl :eax :edx)
+       (:subl #.(cl:* 2 movitz:+movitz-fixnum-factor+) :esi)
        (:jnbe 'checksum-loop)
-       (:movw :si :bx)
-       (:shrl 16 :esi)
-       (:addw :si :bx)
-       (:movl (:ebp -4) :esi)       
+       (:movw :dx :ax)
+       (:shrl 16 :edx)
+       (:addw :dx :ax)
+       (:movl (:ebp -4) :esi)
       end-checksum-loop
-       (:shll #.movitz:+movitz-fixnum-shift+ :ebx)))
+       (:shll #.movitz:+movitz-fixnum-shift+ :eax)
+       (:cld)))
     (t (muerte:with-subvector-accessor (packet-ref packet start end)
 	 (cond
 	  ((or (and (evenp start) (evenp end))
