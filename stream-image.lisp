@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Aug 27 14:46:50 2001
 ;;;;                
-;;;; $Id: stream-image.lisp,v 1.3 2004/02/10 00:23:39 ffjeld Exp $
+;;;; $Id: stream-image.lisp,v 1.4 2004/03/31 16:34:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -31,7 +31,11 @@
     :reader image-start-address)
    (nil-word
     :initarg :nil-word
-    :initform #x65
+    :initform (if (boundp '*image*)
+		  (image-nil-word *image*)
+		(progn
+		  (format *query-io* "~&Please enter the stream-images NIL value: ")
+		  (read *query-io*)))
     :reader image-nil-word)))
 
 (defmethod image-register32 ((image stream-image) register-name)
