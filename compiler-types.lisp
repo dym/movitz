@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.2 2004/01/19 11:23:41 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.3 2004/02/11 18:01:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -442,11 +442,13 @@ with the single member of <type-specifier>."
 			   (or (encoded-typep nil t x code0 integer-range0 nil include0 nil)
 			       (encoded-typep nil t x code1 integer-range1 nil include1 nil)))
 			 (union members0 members1 :test #'movitz-eql))
-	      (union include0 include1 :test #'equal))))
+	      (union include0 include1 :test #'equal)
+	      nil)))
    (t (error "Not implemented"))))
 
 
 (defun type-specifier-encode (type-specifier)
+  "Encode a type-specifier to internal representation."
   (let ((type-specifier (translate-program type-specifier :muerte.cl :cl)))
     (cond
      ((atom type-specifier)
