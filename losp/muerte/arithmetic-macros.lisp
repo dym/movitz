@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.2 2004/07/18 08:45:17 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.3 2004/07/19 00:14:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -25,7 +25,7 @@
      (cond ,@(loop for ((x-type y-type) . then-body) in clauses
 		 collect `((and (typep x ',x-type) (typep y ',y-type))
 			   ,@then-body))
-	   (t (error "Not numbers: ~S or ~S." x y)))))
+	   (t (error "Not numbers or not implemented: ~S or ~S." x y)))))
 
 
 (define-compiler-macro evenp (x)
@@ -400,7 +400,6 @@
     (expt (movitz:movitz-eval base-number env)
 	  (movitz:movitz-eval power-number env))))
     
-
 (define-compiler-macro %bignum-compare (x y)
   "Set ZF and CF according to (:cmpl y x), disregarding sign."
   `(with-inline-assembly (:returns :nothing :labels (eax-shortest-loop
@@ -445,3 +444,41 @@
 (define-compiler-macro %bignum= (x y)
   `(with-inline-assembly (:returns :boolean-zf=1)
      (:compile-form (:result-mode :ignore) (%bignum-compare ,x ,y))))
+
+(define-compiler-macro %bignum-zerop (x)
+  `(with-inline-assembly (:returns :boolean-zf=1 :labels (zerop-loop zerop-loop-end))
+     (:compile-form (:result-mode :eax) ,x)
+     (:xorl :edx :edx)
+     (:movw (:eax (:offset movitz-bignum length)) :dx)
+     (:xorl :ecx :ecx)
+    zerop-loop
+     (:cmpl :ecx (:eax :edx (:offset movitz-bignum bigit0 -4)))
+     (:jne 'zerop-loop-end)
+     (:subl 4 :edx)
+     (:jnz 'zerop-loop)
+    zerop-loop-end))
+
+(define-compiler-macro %bignum-negate (x)
+  `(with-inline-assembly (:returns :register)
+     (:compile-form (:result-mode :register) ,x)
+     (:xorl #xff00 ((:result-register) (:offset movitz-bignum type)))))
+
+(define-compiler-macro %bignum-plus-fixnum-size (x fixnum-delta)
+  "Return 1 if fixnum delta can overflow x, otherwise 0."
+  `(with-inline-assembly (:returns :eax :type (unsigned-byte 0 1)
+				   :labels (check-hi-loop check-lsb done))
+     (:compile-two-forms (:ebx :edx) ,x ,fixnum-delta)
+     (:xorl :ecx :ecx)
+     (:movw (:ebx (:offset movitz-bignum length)) :cx)
+     (:movl :ecx :eax)
+    check-hi-loop
+     (:subl 4 :ecx)
+     (:jz 'check-lsb)
+     (:cmpl -1 (:ebx :ecx (:offset movitz-bignum bigit0)))
+     (:jne 'done)
+    check-lsb
+     (:shrl ,movitz:+movitz-fixnum-shift+ :edx)
+     (:addl (:ebx (:offset movitz-bignum bigit0)) :edx)
+     (:jnc 'done)
+     (:addl ,movitz:+movitz-fixnum-factor+ :eax)
+    done))
