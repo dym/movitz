@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.18 2004/07/28 10:01:11 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.19 2004/09/23 07:21:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -119,14 +119,17 @@
 
 
 (defun allocate-std-instance (class slots)
-  (let ((instance (malloc-pointer-words 4)))
-    (setf (memref instance #.(bt:slot-offset 'movitz:movitz-struct 'movitz:type)
-		  0 :unsigned-byte8)
-      #.(movitz:tag :std-instance))
-    (setf-movitz-accessor (instance movitz-std-instance dummy) nil)
-    (setf (std-instance-class instance) class
-	  (std-instance-slots instance) slots)
-    instance))
+  (macrolet
+      ((do-it ()
+	 `(with-allocation-assembly (4 :fixed-size-p t
+				       :object-register :eax)
+	    (:load-lexical (:lexical-binding class) :ebx)
+	    (:load-lexical (:lexical-binding slots) :edx)
+	    (:movl ,(movitz:tag :std-instance) (:eax (:offset movitz-std-instance type)))
+	    (:movl :edi (:eax (:offset movitz-std-instance dummy)))
+	    (:movl :ebx (:eax (:offset movitz-std-instance class)))
+	    (:movl :edx (:eax (:offset movitz-std-instance slots))))))
+    (do-it)))
 
 (defun std-allocate-instance (class)
   (allocate-std-instance class
@@ -1111,18 +1114,29 @@ next-emf as its target for call-next-method."
     (check-type class structure-class)
     (let* ((slots (class-slots class))
 	   (num-slots (length slots))
-	   (struct (malloc-pointer-words (+ 2 num-slots))))
-      (setf (memref struct #.(bt:slot-offset 'movitz::movitz-struct 'movitz::class)
-		    0 :lisp)
-	class)
-      (setf (memref struct #.(bt:slot-offset 'movitz::movitz-struct 'movitz::type)
-		    0 :unsigned-byte8)
-	#.(movitz::tag :defstruct))
-      (setf (memref struct #.(bt:slot-offset 'movitz::movitz-struct 'movitz::length)
-		    0 :unsigned-byte16)
-	num-slots)
-      (dotimes (i num-slots)
-	(setf (structure-ref struct i) nil))
+	   (words (+ 2 num-slots))
+	   (struct (macrolet
+		       ((do-it ()
+			  `(with-allocation-assembly (words :fixed-size-p t
+							    :object-register :eax)
+			     (:load-lexical (:lexical-binding num-slots) :ecx)
+			     (:movl :ecx :edx)
+			     (:shll 16 :ecx)
+			     (:orl ,(movitz:tag :defstruct 0) :ecx)
+			     (:movl :ecx (:eax (:offset movitz-struct type)))
+			     (:load-lexical (:lexical-binding class) :ebx)
+			     (:movl :ebx (:eax (:offset movitz-struct class)))
+			     (:addl 4 :edx)
+			     (:andl -8 :edx)
+			     (:xorl :ecx :ecx)
+			     init-loop
+			     (:cmpl :ecx :edx)
+			     (:jbe 'init-done)
+			     (:movl :edi (:eax (:offset movitz-struct slot0) :ecx))
+			     (:addl 4 :ecx)
+			     (:jmp 'init-loop)
+			     init-done)))
+		     (do-it))))
       (do ((p init-args (cddr p)))
 	  ((endp p))
 	(let ((slot-position (position (car p) slots :key #'fifth)))
