@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.36 2004/10/21 20:47:26 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.37 2004/11/10 15:30:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -793,9 +793,9 @@
 		(:shll 2 :ecx)
 		(:addl :ebx :eax)
 		(:into)
-		(:testb ,(mask-field (byte (+ 2 movitz::+movitz-fixnum-shift+) 0) -1)
-			:al)
-		(:jnz '(:sub-program () (:int 63)))
+;;;		(:testb ,(mask-field (byte (+ 2 movitz::+movitz-fixnum-shift+) 0) -1)
+;;;			:al)
+;;;		(:jnz '(:sub-program () (:int 63)))
 		(:addl :eax :ecx)
 		(:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale down address
 		(,prefixes :movl (:ecx) :ecx)))))
