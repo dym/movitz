@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.22 2004/08/23 13:58:41 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.23 2004/09/02 09:41:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -499,7 +499,7 @@ be provided for those cases."
 			  (function
 			   (let ((delta (code-vector-offset (funobj-code-vector funobj) eip)))
 			     (if delta
-				 (format t "{Exception ~D in ~W at PC offset ~D."
+				 (format t "{Exception ~D in ~W at PC offset ~D.}"
 					 exception (funobj-name funobj) delta)
 			       (format t "{Exception ~D in ~W at EIP=#x~X.}"
 				       exception (funobj-name funobj) eip))))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct 28 09:27:13 2003
 ;;;;                
-;;;; $Id: restarts.lisp,v 1.3 2004/07/13 22:44:10 ffjeld Exp $
+;;;; $Id: restarts.lisp,v 1.4 2004/09/02 09:41:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -33,10 +33,12 @@
 	   (restart-bind ,rest-specs ,@body))))))
 
 (defun dynamic-context->basic-restart (context)
-  (assert (< (stack-bottom) (truncate context 4) (stack-top)))
+  (assert (< (%run-time-context-slot 'stack-bottom)
+	     context
+	     (%run-time-context-slot 'stack-top)))
   (assert (eq (load-global-constant restart-tag)
-	      (stack-ref context 0 1 :lisp)))
-  (let ((x (- (* 4 (stack-top)) context)))
+	      (stack-frame-ref nil context 1 :lisp)))
+  (let ((x (- (%run-time-context-slot 'stack-top) context)))
     (assert (below x #x1000000))
     (with-inline-assembly (:returns :eax)
       (:compile-form (:result-mode :eax) x)
@@ -51,17 +53,17 @@
     (:locally (:movl (:edi (:edi-offset stack-top)) :ecx))
     (:shrl 6 :eax)
     (:negl :eax)
-    (:leal (:eax (:ecx #.movitz::+movitz-fixnum-factor+)) :eax)))
+    (:leal (:eax :ecx) :eax)))
 
 (define-simple-typep (basic-restart basic-restart-p) (x)
   (with-inline-assembly (:returns :boolean-zf=1)
     (:compile-form (:result-mode :eax) x)
     (:cmpb #.(movitz::tag :basic-restart) :al)
     (:jne 'fail)
-    (:shrl 8 :eax)
+    (:shrl 6 :eax)
     (:locally (:movl (:edi (:edi-offset stack-top)) :ecx))
     (:locally (:movl (:edi (:edi-offset dynamic-env)) :ebx))
-    (:shll 2 :ebx)
+;;    (:shll 2 :ebx)
     (:subl :ebx :ecx)
     (:cmpl :eax :ecx)
     (:jna 'fail)
@@ -74,38 +76,38 @@
 (defun restart-name (restart)
   (etypecase restart
     (basic-restart
-     (stack-ref (basic-restart->dynamic-context restart)
-		0 -1 :lisp))))
+     (stack-frame-ref nil (basic-restart->dynamic-context restart)
+		      -1 :lisp))))
 
 (defun restart-function (restart)
   (etypecase restart
     (basic-restart
-     (stack-ref (basic-restart->dynamic-context restart)
-		0 -2 :lisp))))
+     (stack-frame-ref nil (basic-restart->dynamic-context restart)
+		      -2 :lisp))))
 
 (defun restart-interactive-function (restart)
   (etypecase restart
     (basic-restart
-     (stack-ref (basic-restart->dynamic-context restart)
-		0 -3 :lisp))))
+     (stack-frame-ref nil (basic-restart->dynamic-context restart)
+		      -3 :lisp))))
 
 (defun restart-test (restart)
   (etypecase restart
     (basic-restart
-     (stack-ref (basic-restart->dynamic-context restart)
-		0 -4 :lisp))))
+     (stack-frame-ref nil (basic-restart->dynamic-context restart)
+		      -4 :lisp))))
 
 (defun restart-format-control (restart)
   (etypecase restart
     (basic-restart
-     (stack-ref (basic-restart->dynamic-context restart)
-		0 -5 :lisp))))
+     (stack-frame-ref nil (basic-restart->dynamic-context restart)
+		      -5 :lisp))))
 
 (defun restart-args (restart)
   (etypecase restart
     (basic-restart
-     (stack-ref (basic-restart->dynamic-context restart)
-		0 -6 :lisp))))
+     (stack-frame-ref nil (basic-restart->dynamic-context restart)
+		      -6 :lisp))))
 
 (defun invoke-restart (restart-designator &rest arguments)
   (declare (dynamic-extent arguments))
@@ -118,7 +120,7 @@
 	    (apply function arguments))
 	   (symbol
 	    (exact-throw (load-global-constant restart-tag)
-			 (truncate (basic-restart->dynamic-context restart) 4)
+			 (basic-restart->dynamic-context restart)
 			 (ecase function
 			   ((with-simple-restart)
 			    (values nil t))))))))

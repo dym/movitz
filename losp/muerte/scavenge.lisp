@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.27 2004/08/23 13:58:34 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.28 2004/09/02 09:41:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -111,7 +111,8 @@ start-location and end-location."
 	  (assert (evenp scan) ()
 	    "Scanned ~Z at odd location #x~X." x scan)
 	  (let ((len (memref scan 0 1 :lisp)))
-	    (check-type len positive-fixnum)
+	    (assert (typep len 'positive-fixnum) ()
+	      "Scanned basic-vector at ~S with illegal length ~S." scan len)
 	    (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
 	    (incf scan (1+ (logand (1+ len) -2)))))
 	 ((and (scavenge-typep x :basic-vector)
@@ -141,10 +142,18 @@ at the start-stack-frame location."
   (loop for nether-frame = start-frame then frame
       and frame = (stack-frame-uplink stack start-frame) then (stack-frame-uplink stack frame)
       while (plusp frame)
-      do (let ((funobj (funcall function (stack-frame-funobj stack frame) nil)))
+      do (let ((funobj (funcall function (stack-frame-funobj stack frame) frame)))
 	   (typecase funobj
-	     (function
+	     ((or function null)
 	      (assert (= 0 (funobj-frame-num-unboxed funobj)))
+	      #+ignore
+	      (assert (typep (stack-frame-ref stack frame 1 :lisp) '(or (eql 0)
+								     (not (or fixnum character))))
+		  () "Malaligned CALL in function ~S at #x~X, frame ~S."
+		(and (plusp (stack-frame-uplink stack frame))
+		     (stack-frame-funobj stack (stack-frame-uplink stack frame)))
+		(stack-frame-ref stack frame 1 :unsigned-byte32)
+		frame)
 	      (map-heap-words function (+ nether-frame 2) frame))
 	     ((eql 0)			; An dit interrupt-frame?
 	      (let* ((dit-frame frame)
@@ -167,95 +176,59 @@ at the start-stack-frame location."
 		;; 2. Pop to (dit-)frame's CASF
 		(setf nether-frame frame
 		      frame (dit-frame-casf frame))
-		(let ((casf-funobj (funcall function (stack-frame-funobj stack frame) nil))
+		(let ((casf-funobj (funcall function (stack-frame-funobj stack frame) frame))
 		      (interrupted-esp (dit-frame-esp dit-frame)))
 		  (cond
+		   ((eq nil casf-funobj)
+		    (warn "Scanning interrupt in PF: ~S"
+			  (dit-frame-ref :eip :unsigned-byte32 0 dit-frame)))
 		   ((eq 0 casf-funobj)
-		    (warn "Interrupt (presumably)   in interrupt trampoline."))
-		   (t (assert (typep casf-funobj 'function) ()
-			"Interrupted CASF frame was not a normal function: ~S"
-			casf-funobj)
-		      (let ((casf-code-vector (funobj-code-vector casf-funobj)))
-			;; 3. Scavenge the interrupted frame, according to one of i. ii. or iii.
+		    (warn "Interrupt (presumably) in interrupt trampoline."))
+		   ((typep casf-funobj 'function)
+		    (let ((casf-code-vector (funobj-code-vector casf-funobj)))
+		      ;; 3. Scavenge the interrupted frame, according to one of i. ii. or iii.
+		      (cond
+		       ((location-in-object-p casf-code-vector
+					      (dit-frame-ref :eip :location 0 dit-frame))
 			(cond
-			 ((location-in-object-p casf-code-vector
-						(dit-frame-ref :eip :location 0 dit-frame))
-			  ;; Situation i. Nothing special on stack, scavenge frame normally.
-			  (map-heap-words function interrupted-esp frame))
-			 ((eq casf-frame (memref interrupted-esp 0 0 :location))
-			  ;; Situation ii. esp(0)=CASF, esp(1)=code-vector
-			  (assert (location-in-object-p casf-code-vector
-							(memref interrupted-esp 0 1 :location))
-			      () "Stack discipline situation ii. invariant broken. CASF=#x~X"
-			      casf-frame)
+			 ((let ((x0-tag (ldb (byte 3 0)
+					     (memref interrupted-esp 0 0 :unsigned-byte8))))
+			    (and (member x0-tag '(1 5 6 7))
+				 (location-in-object-p casf-code-vector
+						       (memref interrupted-esp 0 0 :location))))
+			  ;; When code-vector migration is implemented...
+			  (warn "Scanning at ~S X0 call ~S in ~S."
+				(dit-frame-ref :eip :unsigned-byte32 0 dit-frame)
+				(memref interrupted-esp 0 0 :unsigned-byte32)
+				(funobj-name casf-funobj))
+			  (map-heap-words function (+ interrupted-esp 1) frame))
+			 ((let ((x1-tag (ldb (byte 3 0)
+					     (memref interrupted-esp 4 0 :unsigned-byte8))))
+			    (and (member x1-tag '(1 5 6 7))
+				 (location-in-object-p casf-code-vector
+						       (memref interrupted-esp 0 1 :location))))
+			  ;; When code-vector migration is implemented...
+			  (warn "Scanning at ~S X1 call ~S in ~S."
+				(dit-frame-ref :eip :unsigned-byte32 0 dit-frame)
+				(memref interrupted-esp 0 1 :unsigned-byte32)
+				(funobj-name casf-funobj))
 			  (map-heap-words function (+ interrupted-esp 2) frame))
-			 (t ;; Situation iii. esp(0)=code-vector.
-			  (assert (location-in-object-p casf-code-vector
-							(memref interrupted-esp 0 0 :location))
-			      () "Stack discipline situation iii. invariant broken. CASF=#x~X"
-			      casf-frame)
-			  (map-heap-words function (+ interrupted-esp 1) frame)))))))))
+			 (t ;; Situation i. Nothing special on stack, scavenge frame normally.
+			  (map-heap-words function interrupted-esp frame))))
+		       ((eq casf-frame (memref interrupted-esp 0 0 :location))
+			;; Situation ii. esp(0)=CASF, esp(1)=code-vector
+			(assert (location-in-object-p casf-code-vector
+						      (memref interrupted-esp 0 1 :location))
+			    () "Stack discipline situation ii. invariant broken. CASF=#x~X"
+			    casf-frame)
+			(map-heap-words function (+ interrupted-esp 2) frame))
+		       (t ;; Situation iii. esp(0)=code-vector.
+			(assert (location-in-object-p casf-code-vector
+						      (memref interrupted-esp 0 0 :location))
+			    () "Stack discipline situation iii. invariant broken. CASF=#x~X"
+			    casf-frame)
+			(map-heap-words function (+ interrupted-esp 1) frame)))))
+		   (t (error "DIT-frame interrupted unknown CASF funobj: ~S" casf-funobj))))))
 	     (t (error "Don't know how to scavenge across frame ~S of kind ~S." frame funobj)))))
   (values))
 
-;;;(defparameter *primitive-funcall-patterns*
-;;;    '((:or
-;;;       (#xff #x57 (:function-offset :signed8)) ; 
-;;;       (#xff #x97 (:function-offset :signed32))))) ;
-;;;
-;;;(defun stack-frame-primitive-funcall (funobj stack-location eip-location)
-;;;  "Is stack-frame in a primitive-function?
-;;;If so, return the primitive-function's code-vector."
-;;;  (declare (ignore eip-location))
-;;;  ;; XXXX Really we should make comparisons against :call-local-pf
-;;;  ;;      such that we find the active set of local-pf's from the stack-location!
-;;;  (let ((return-address (memref stack-location 0 0 :unsigned-byte32))
-;;;	(code-vector (funobj-code-vector funobj)))
-;;;    (multiple-value-bind (return-location return-delta)
-;;;	(truncate return-address #.movitz:+movitz-fixnum-factor+)
-;;;      (if (not (location-in-object-p code-vector return-location))
-;;;	  nil				; A PF must have return-address on top of stack.
-;;;	(dotimes (offset 5 (warn "mismatch in ~S at ~D from #x~X in ~Z."
-;;;				 funobj
-;;;				 (+ (* (- return-location
-;;;					  (object-location code-vector))
-;;;				       #.movitz:+movitz-fixnum-factor+)
-;;;				    return-delta
-;;;				    -3 -8)
-;;;				 return-address code-vector))
-;;;	  (multiple-value-bind (success-p type code ip)
-;;;	      (match-code-pattern *primitive-funcall-patterns*
-;;;				  code-vector (+ (* (- return-location
-;;;						       (object-location code-vector))
-;;;						    #.movitz:+movitz-fixnum-factor+)
-;;;						 return-delta
-;;;						 -3 -8 (- offset))
-;;;				  :function-offset)
-;;;	    (when success-p
-;;;	      (return
-;;;		(let* ((offset (case type
-;;;				 (:signed8
-;;;				  (if (not (logbitp 7 code)) code (- code 256)))
-;;;				 (:signed32
-;;;				  ;; We must read the unsigned-byte32 that starts at ip
-;;;				  (let ((x (logior (aref code-vector (- ip 1))
-;;;						   (* (aref code-vector (+ 0 ip)) #x100)
-;;;						   (* (aref code-vector (+ 1 ip)) #x10000)
-;;;						   (* (aref code-vector (+ 2 ip)) #x1000000))))
-;;;				    (if (not (logbitp 7 (aref code-vector (+ ip 2))))
-;;;					x
-;;;				      (break "Negative 32-bit offset."))))
-;;;				 (t (break "Match fail: vec: ~Z, ip: ~D"
-;;;					   code-vector (+ (* (- return-location
-;;;								(object-location code-vector))
-;;;							     #.movitz:+movitz-fixnum-factor+)
-;;;							  return-delta
-;;;							  -3 -8)))))
-;;;		       (primitive-function (%word-offset (%run-time-context-ref offset) -2)))
-;;;		  (if (not (typep primitive-function 'code-vector))
-;;;		      nil
-;;;		    primitive-function))))))))))
-;;;		  (check-type primitive-function code-vector)
-;;;		  (if (not (location-in-object-p primitive-function eip-location))
-;;;		      nil
-;;;		    primitive-function))))))))))
