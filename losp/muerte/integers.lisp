@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.78 2004/07/19 13:59:31 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.79 2004/07/20 08:54:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -48,7 +48,7 @@
 	    (:leal (:eax ,(- (movitz:tag :other))) :ecx)
 	    (:testb 7 :cl)
 	    (:jnz '(:sub-program (n1-not-bignum)
-		    (:int 107)))
+		    (:int 64)))
 	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
 	    (:cmpb ,(movitz:tag :bignum) :cl)
 	    (:jne 'n1-not-bignum)
@@ -60,7 +60,8 @@
 	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
 	    (:testb 7 :cl)
 	    (:jnz '(:sub-program (n2-not-bignum)
-		    (:int 107)))
+		    (:movl :ebx :eax)
+		    (:int 64)))
 	    (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
 	    (:cmpb ,(movitz:tag :bignum) :cl)
 	    (:jne 'n2-not-bignum)
@@ -184,8 +185,8 @@ Preserve EAX and EBX."
 	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
 	    (:testb 7 :cl)
 	    (:jnz '(:sub-program (not-integer)
-		    (:int 107)
-		    (:jmp 'not-integer)))
+		    (:movl :ebx :eax)
+		    (:int 64)))
 	    (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
 	    (:cmpw ,(movitz:tag :bignum 0) :cx)
 	    (:jne 'not-plusbignum)
@@ -211,8 +212,7 @@ Preserve EAX and EBX."
     (:leal (:eax #.(cl:- (movitz:tag :other))) :ecx)
     (:testb 7 :cl)
     (:jnz '(:sub-program (not-integer)
-	    (:int 107)
-	    (:jmp 'not-integer)))
+	    (:int 64)))
     (:movl (:eax #.movitz:+other-type-offset+) :ecx)
     (:cmpw #.(movitz:tag :bignum 0) :cx)
     (:jne 'not-plusbignum)
@@ -1351,17 +1351,27 @@ Preserve EAX and EBX."
 	))))
 
 (defun / (number &rest denominators)
-  (declare (dynamic-extent denominators))
-  (cond
-   ((null denominators)
-    (make-ratio 1 number))
-   ((null (cdr denominators))
-    (multiple-value-bind (q r)
-	(truncate number (first denominators))
-      (if (= 0 r)
-	  q
-	(error "Don't know how to divide ~S by ~S." number (first denominators)))))
-   (t (/ number (reduce '* denominators)))))
+  (numargs-case
+   (1 (x)
+      (make-rational 1 x))
+   (2 (x y)
+      (multiple-value-bind (q r)
+	  (truncate x y)
+	(if (= 0 r)
+	    q
+	  (make-rational x y))))
+   (t (number &rest denominators)
+      (declare (dynamic-extent denominators))
+      (cond
+       ((null denominators)
+	(make-rational 1 number))
+       ((null (cdr denominators))
+	(multiple-value-bind (q r)
+	    (truncate number (first denominators))
+	  (if (= 0 r)
+	      q
+	    (make-rational number (first denominators)))))
+       (t (/ number (reduce '* denominators)))))))
 	       
 (defun round (number &optional (divisor 1))
   "Mathematical rounding."

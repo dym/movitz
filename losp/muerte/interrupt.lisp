@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.15 2004/07/18 23:48:22 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.16 2004/07/20 08:54:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -282,6 +282,8 @@
 	   (setf (@ $eax) (read *query-io*)))
 	  (62 (error "Trying to save too many values: ~@Z." $ecx))
 	  (63 (error "Primitive assertion error. EIP=~@Z, ESI=~@Z." $eip $esi))
+	  (64 (error 'type-error :datum (@ $eax) :expected-type 'integer))
+	  (65 (error 'index-out-of-range :index (@ $ebx) (@ $ecx)))
 	  (66 (error "Unspecified type error at ~@Z in ~S with EAX=~@Z, ECX=~@Z."
 		     $eip (@ (+ interrupt-frame (interrupt-frame-index :esi)))
 		     $eax $ecx))

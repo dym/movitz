@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.12 2004/07/19 09:57:44 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.13 2004/07/20 08:54:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -312,6 +312,10 @@
 			   (hash-table-count (package-object-external-symbols object))
 			   (hash-table-count (package-object-internal-symbols object))))
 	       (print-unreadable-object (object stream :identity t :type t))))
+	    (ratio
+	     (write-integer (ratio-numerator object) stream *print-base* *print-radix*)
+	     (write-char #\/ stream)
+	     (write-integer (ratio-denominator object) stream *print-base* nil))
 	    (t (if (not *never-use-print-object*)
 		   (print-object object stream)
 		 (print-unreadable-object (object stream :identity t)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 19:42:57 2004
 ;;;;                
-;;;; $Id: bignums.lisp,v 1.4 2004/07/19 14:44:21 ffjeld Exp $
+;;;; $Id: bignums.lisp,v 1.5 2004/07/20 08:53:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -36,7 +36,7 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
 	    (:shrl 16 :ecx)
 	    (:jz '(:sub-program (should-never-happen)
-		   (:int 107)))
+		   (:int 63)))
 	   shrink-loop
 	    (:cmpl 4 :ecx)
 	    (:je 'shrink-no-more)
@@ -54,9 +54,9 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 		   (:jmp 'done)))
 	   shrink-done
 	    (:testb 3 :cl)
-	    (:jnz '(:sub-program () (:int 107)))
+	    (:jnz '(:sub-program () (:int 63)))
 	    (:testw :cx :cx)
-	    (:jz '(:sub-program () (:int 107)))
+	    (:jz '(:sub-program () (:int 63)))
 	    (:movw :cx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length)))
 	   done
 	    )))
@@ -64,14 +64,14 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 
 (defun copy-bignum (old)
   (check-type old bignum)
-  (let* ((length (ceiling (bignum-integer-length old) 32))
+  (let* ((length (%bignum-bigits old))
 	 (new (malloc-non-pointer-words (1+ length))))
     (with-inline-assembly (:returns :eax)
       (:compile-two-forms (:eax :ebx) new old)
       (:compile-form (:result-mode :edx) length)
      copy-bignum-loop
-      (:movl (:ebx :edx #.movitz:+other-type-offset+) :ecx)
-      (:movl :ecx (:eax :edx #.movitz:+other-type-offset+))
+      (:movl (:ebx :edx (:offset movitz-bignum type)) :ecx)
+      (:movl :ecx (:eax :edx (:offset movitz-bignum type)))
       (:subl 4 :edx)
       (:jnc 'copy-bignum-loop))))
 

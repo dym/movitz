@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.3 2004/07/19 00:14:53 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.4 2004/07/20 08:53:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -93,7 +93,6 @@
 	  (max (movitz:movitz-eval max env)))
       (check-type min fixnum)
       (check-type max fixnum)
-      ;; (warn "~D -- ~D" min max)
       (cond
        ((movitz:movitz-constantp x env)
 	(<= min (movitz:movitz-eval x env) max))
@@ -108,14 +107,14 @@
 	`(with-inline-assembly (:returns :boolean-cf=1)
 	   (:compile-form (:result-mode :eax) ,x)
 	   (:testb ,movitz::+movitz-fixnum-zmask+ :al)
-	   (:jnz '(:sub-program () (:int 107)))
+	   (:jnz '(:sub-program () (:int 64)))
 	   (:cmpl ,(* (1+ max) movitz::+movitz-fixnum-factor+) :eax)))
        (t `(do-result-mode-case ()
 	     (:booleans
 	      (with-inline-assembly (:returns :boolean-zf=0)
 		(:compile-form (:result-mode :eax) ,x)
 		(:testb ,movitz::+movitz-fixnum-zmask+ :al)
-		(:jnz '(:sub-program () (:int 107)))
+		(:jnz '(:sub-program () (:int 64)))
 		(:cmpl ,(* min movitz::+movitz-fixnum-factor+) :eax)
 		(:sbbl :ecx :ecx)
 		(:cmpl ,(* (1+ max) movitz::+movitz-fixnum-factor+) :eax)
@@ -123,7 +122,7 @@
 	     (t (with-inline-assembly (:returns (:boolean-ecx 1 0))
 		  (:compile-form (:result-mode :eax) ,x)
 		  (:testb ,movitz::+movitz-fixnum-zmask+ :al)
-		  (:jnz '(:sub-program () (:int 107)))
+		  (:jnz '(:sub-program () (:int 64)))
 		  (:cmpl ,(* min movitz::+movitz-fixnum-factor+) :eax)
 		  (:sbbl :ecx :ecx)
 		  (:cmpl ,(* (1+ max) movitz::+movitz-fixnum-factor+) :eax)
@@ -132,22 +131,21 @@
 	 (and (<= ,min x) (<= x ,max))))))
        
 (define-compiler-macro below (&whole form x max &environment env)
-  (let ((below-not-integer (gensym "below-not-integer-")))
-    (if (movitz:movitz-constantp max env)
-	`(with-inline-assembly (:returns :boolean-cf=1)
-	   (:compile-form (:result-mode :eax) ,x)
-	   (:testb ,movitz::+movitz-fixnum-zmask+ :al)
-	   (:jnz '(:sub-program (,below-not-integer) (:int 107)))
-	   (:cmpl ,(* (movitz:movitz-eval max env)
-		      movitz::+movitz-fixnum-factor+)
-		  :eax))
+  (if (movitz:movitz-constantp max env)
       `(with-inline-assembly (:returns :boolean-cf=1)
-	 (:compile-two-forms (:eax :ebx) ,x ,max)
-	 (:movl :eax :ecx)
-	 (:orl :ebx :ecx)
-	 (:testb ,movitz::+movitz-fixnum-zmask+ :cl)
-	 (:jnz '(:sub-program (,below-not-integer) (:int 107)))
-	 (:cmpl :ebx :eax)))))
+	 (:compile-form (:result-mode :eax) ,x)
+	 (:testb ,movitz::+movitz-fixnum-zmask+ :al)
+	 (:jnz '(:sub-program () (:int 64)))
+	 (:cmpl ,(* (movitz:movitz-eval max env)
+		    movitz::+movitz-fixnum-factor+)
+		:eax))
+    `(with-inline-assembly (:returns :boolean-cf=1)
+       (:compile-two-forms (:eax :ebx) ,x ,max)
+       (:testb ,movitz::+movitz-fixnum-zmask+ :al)
+       (:jnz '(:sub-program () (:int 64)))
+       (:testb ,movitz::+movitz-fixnum-zmask+ :bl)
+       (:jnz '(:sub-program () (:movl :ebx :eax) (:int 64)))
+       (:cmpl :ebx :eax))))
 
 (define-compiler-macro zerop (number)
   `(= 0 ,number))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.8 2004/07/12 07:54:30 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.9 2004/07/20 08:54:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -130,6 +130,18 @@
 		     (funobj-name (condition-function c))
 		     (funobj-lambda-list (condition-function c))
 		     (condition-argument-count c)))))
+
+(define-condition index-out-of-range (error)
+  ((index
+    :initarg :index
+    :reader condition-index)
+   (range
+    :initarg :range
+    :reader condition-range))
+  (:report (lambda (c s)
+	     (format s "Index ~D is beyond range 0-~D."
+		     (condition-index c)
+		     (condition-range c)))))
 
 (define-condition stream-error (error)
   ((stream

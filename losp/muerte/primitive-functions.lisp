@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.30 2004/07/17 01:54:12 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.31 2004/07/20 08:54:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -530,7 +530,7 @@ BUFFER-SIZE is the number of words in the buffer."
     (:locally (:movl (:edi (:edi-offset nursery-space)) :eax))
     (:testb 7 :al)
     (:jnz '(:sub-program ()
-	    (:int 107)))))
+	    (:int 63)))))
   
 (defun malloc-cons-pointer ()
   "Return current cons-pointer in 8-byte units since buffer-start."
@@ -633,10 +633,8 @@ BUFFER-SIZE is the number of words in the buffer."
 		   :ecx)
 	    (:ret)
 	   fail
-	    (:int 107))))
+	    (:int 64))))
     (do-it)))
-
-	    
 
 ;;;;
 

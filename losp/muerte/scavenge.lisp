@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.20 2004/07/19 14:44:25 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.21 2004/07/20 08:54:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -50,7 +50,7 @@ start-location and end-location."
 		  (:compile-form (:result-mode :eax) ,x)
 		  (:shrl 16 :eax)
 		  (:testb ,movitz:+movitz-fixnum-zmask+ :al)
-		  (:jnz '(:sub-program () (:int 107))))))
+		  (:jnz '(:sub-program () (:int 63))))))
     (do ((*scan-last* nil)		; Last scanned object, for debugging.
 	 (scan start-location (1+ scan)))
 	((>= scan end-location))
@@ -64,7 +64,7 @@ start-location and end-location."
 	  (error "Illegal word ~Z at ~S." x scan))
 	 ((scavenge-typep x :bignum)
 	  (assert (evenp scan) ()
-	    "Scanned ~Z at odd address #x~X." x scan)
+	    "Scanned ~Z at odd location #x~X." x scan)
 	  ;; Just skip the bigits
 	  (let* ((bigits (word-bigits x))
 		 (delta (logior bigits 1)))
@@ -72,7 +72,7 @@ start-location and end-location."
 	    (incf scan delta)))
 	 ((scavenge-typep x :funobj)
 	  (assert (evenp scan) ()
-	    "Scanned ~Z at odd address #x~X." x scan)
+	    "Scanned ~Z at odd location #x~X." x scan)
 	  (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
 	  ;; Process code-vector pointers specially..
 	  (let* ((funobj (%word-offset scan #.(movitz:tag :other)))
@@ -90,7 +90,7 @@ start-location and end-location."
 	    (incf scan (+ 7 num-jumpers)))) ; Don't scan the jumpers.
 	 ((scavenge-typep x :infant-object)
 	  (assert (evenp scan) ()
-	    "Scanned #x~Z at odd address #x~X." x scan)
+	    "Scanned #x~Z at odd location #x~X." x scan)
 	  (error "Scanning an infant object ~Z at ~S (end ~S)." x scan end-location))
 	 ((or (scavenge-wide-typep x :basic-vector
 				   #.(bt:enum-value 'movitz:movitz-vector-element-type :u8))
@@ -99,21 +99,21 @@ start-location and end-location."
 	      (scavenge-wide-typep x :basic-vector
 				   #.(bt:enum-value 'movitz:movitz-vector-element-type :code)))
 	  (assert (evenp scan) ()
-	    "Scanned ~Z at odd address #x~X." x scan)
+	    "Scanned ~Z at odd location #x~X." x scan)
 	  (let ((len (memref scan 0 1 :lisp)))
 	    (check-type len positive-fixnum)
 	    (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
 	    (incf scan (1+ (* 2 (truncate (+ 7 len) 8))))))
 	 ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u16))
 	  (assert (evenp scan) ()
-	    "Scanned ~Z at odd address #x~X." x scan)
+	    "Scanned ~Z at odd location #x~X." x scan)
 	  (let ((len (memref scan 0 1 :lisp)))
 	    (check-type len positive-fixnum)
 	    (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
 	    (incf scan (1+ (* 2 (truncate (+ 3 len) 4))))))
 	 ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u32))
 	  (assert (evenp scan) ()
-	    "Scanned ~Z at odd address #x~X." x scan)
+	    "Scanned ~Z at odd location #x~X." x scan)
 	  (let ((len (memref scan 0 1 :lisp)))
 	    (check-type len positive-fixnum)
 	    (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))

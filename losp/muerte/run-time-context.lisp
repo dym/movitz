@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.9 2004/07/15 21:07:27 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.10 2004/07/20 08:54:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -30,24 +30,6 @@
   (or (assoc slot-name (slot-value (class-of context) 'slot-map))
       (when errorp
 	(error "No run-time-context slot named ~S in ~S." slot-name context))))
-
-(define-compiler-macro %run-time-context-slot (&whole form &environment env slot-name
-					       &optional (context '(current-run-time-context)))
-  (if (not (and (movitz:movitz-constantp slot-name env)
-		(equal context '(current-run-time-context))))
-      form
-    (let ((slot-name (movitz::eval-form slot-name env)))
-      (ecase (bt:binary-slot-type 'movitz::movitz-constant-block (intern (symbol-name slot-name) :movitz))
-	(movitz::word
-	 `(with-inline-assembly (:returns :eax)
-	    (:locally (:movl (:edi (:edi-offset ,slot-name)) :eax))))
-	(movitz::code-vector-word
-	 `(with-inline-assembly (:returns :eax)
-	    (:locally (:movl (:edi (:edi-offset ,slot-name)) :eax))
-	    (:subl ,movitz::+code-vector-word-offset+ :eax)))
-	(movitz::lu32
-	 `(with-inline-assembly (:returns :untagged-fixnum-ecx)
-	    (:locally (:movl (:edi (:edi-offset ,slot-name)) :ecx))))))))
 
 (defun %run-time-context-slot (slot-name &optional (context (current-run-time-context)))
   (check-type context run-time-context)
