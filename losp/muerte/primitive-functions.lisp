@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.59 2005/01/04 16:54:20 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.60 2005/01/10 08:19:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -692,3 +692,34 @@ Final target is in raw-scratch0. Doesn't modify current-values."
     (:movl (:edx -4) :esi)		; get target funobj into ESI
     (:movl (:esp 8) :edx)		; target jumper number
     (:jmp (:esi :edx (:offset movitz-funobj constant0)))))
+
+(define-primitive-function copy-funobj-code-vector-slots ()
+  "Copy the (unsafe) code-vector and jumper slots of the funobj in EAX to that in EBX."
+  ;; Set up thread-atomical execution
+  (with-inline-assembly (:returns :eax)
+    (:locally (:movl #.(movitz::atomically-continuation-simple-pf 'copy-funobj-code-vector-slots)
+		     (:edi (:edi-offset atomically-continuation))))
+    (:movl (:eax (:offset movitz-funobj code-vector)) :ecx)
+    (:movl :ecx (:ebx (:offset movitz-funobj code-vector)))
+
+    (:movl (:eax (:offset movitz-funobj code-vector%1op)) :ecx)
+    (:movl :ecx (:ebx (:offset movitz-funobj code-vector%1op)))    
+
+    (:movl (:eax (:offset movitz-funobj code-vector%2op)) :ecx)
+    (:movl :ecx (:ebx (:offset movitz-funobj code-vector%2op)))    
+
+    (:movl (:eax (:offset movitz-funobj code-vector%3op)) :ecx)
+    (:movl :ecx (:ebx (:offset movitz-funobj code-vector%3op)))
+    
+    (:movl (:eax (:offset movitz-funobj num-jumpers)) :edx)
+    (:andl #xffff :edx)
+    (:jnz 'copy-jumpers)
+    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+    (:ret)
+   copy-jumpers
+    (:movl (:eax :edx (:offset movitz-funobj constant0 -4)) :ecx)
+    (:movl :ecx (:ebx :edx (:offset movitz-funobj constant0 -4)))
+    (:subl 4 :edx)
+    (:jnz 'copy-jumpers)
+    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+    (:ret)))

@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.127 2005/01/04 20:21:11 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.128 2005/01/10 08:18:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -83,6 +83,10 @@ compile, using the host compiler, the code rather than just using eval.")
 
 (defvar *compiler-produce-defensive-code* t
   "Try to make code be extra cautious.")
+
+(defvar *compiler-relink-recursive-funcall* t
+  "If true, also recursive function calls look up the function through the function name,
+which enables tracing of recursive functions.")
 
 (defvar *compiler-trust-user-type-declarations-p* t)
 
@@ -5409,8 +5413,9 @@ preceding code). As secondary value, returns the new :returns value."
 	  :functional-p nil
 	  :modifies arguments-modifies
 	  :code (append arguments-code
-			(if (eq (movitz-read operator)
-				(movitz-read (movitz-funobj-name funobj))) ; recursive?
+			(if (and (not *compiler-relink-recursive-funcall*)
+				 (eq (movitz-read operator)
+				     (movitz-read (movitz-funobj-name funobj)))) ; recursive?
 			    (make-compiled-funcall-by-esi (length arg-forms))
 			  (make-compiled-funcall-by-symbol operator (length arg-forms) funobj))
 			stack-restore-code))))))
@@ -6908,22 +6913,21 @@ and a list of any intervening unwind-protect environment-slots."
 				   collect `(:pushl (:eax ,(slot-offset 'movitz-funobj 'constant0)
 							  ,(* 4 i))))
 			       (loop repeat (movitz-funobj-num-jumpers object)
-				   do (error "Can't handle jumpers.")
 				   collect `(:pushl 0))
 			       `((:pushl (:eax ,(slot-offset 'movitz-funobj 'num-jumpers)))
 				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'name)))
 				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'lambda-list)))
 				 
-;;;				 (:pushl 0) ; %3op
-;;;				 (:pushl 0) ; %2op
-;;;				 (:pushl 0) ; %1op
-;;;				 (:pushl 0) ; (default)
-				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'code-vector%3op)))
-				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'code-vector%2op)))
-				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'code-vector%1op)))
-				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'code-vector)))
+				 (:pushl 0) ; %3op
+				 (:pushl 0) ; %2op
+				 (:pushl 0) ; %1op
+				 (:pushl 0) ; (default)
 				 
-				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'type))))))))))))
+				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'type)))
+				 (:leal (:esp ,(tag :other)) :ebx)
+				 (,*compiler-local-segment-prefix*
+				  :call (:edi ,(global-constant-offset 'copy-funobj-code-vector-slots)))
+				 )))))))))
 
 ;;;(define-extended-code-expander :exit-dynamic-scope (instruction funobj frame-map)
 ;;;  nil)
