@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.43 2004/11/25 18:05:23 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.44 2004/11/26 14:59:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -304,8 +304,8 @@ duo-space where each space is KB-SIZE kilobytes."
 	     (if (object-in-space-p oldspace x)
 		 nil
 	       x)))
-      (map-heap-words #'zap-oldspace 0 (malloc-end))
-      (map-stack-words #'zap-oldspace nil (current-stack-frame))
+      (map-header-vals #'zap-oldspace 0 (malloc-end))
+      (map-stack-vector #'zap-oldspace nil (current-stack-frame))
       (initialize-space oldspace)
       (values))))
 
@@ -354,16 +354,16 @@ duo-space where each space is KB-SIZE kilobytes."
 			   forward-x))))))))
       ;; Scavenge roots
       (dolist (range muerte::%memory-map-roots%)
-	(map-heap-words evacuator (car range) (cdr range)))
-      (map-stack-words evacuator nil (current-stack-frame))
+	(map-header-vals evacuator (car range) (cdr range)))
+      (map-stack-vector evacuator nil (current-stack-frame))
       ;; Scan newspace, Cheney style.
       (loop with newspace-location = (+ 2 (object-location newspace))
 	  with scan-pointer = 2
 	  as fresh-pointer = (space-fresh-pointer newspace)
 	  while (< scan-pointer fresh-pointer)
-	  do (map-heap-words evacuator
-			     (+ newspace-location scan-pointer)
-			     (+ newspace-location (space-fresh-pointer newspace)))
+	  do (map-header-vals evacuator
+			      (+ newspace-location scan-pointer)
+			      (+ newspace-location (space-fresh-pointer newspace)))
 	     (setf scan-pointer fresh-pointer))
 
       ;; Consistency check..
@@ -394,13 +394,13 @@ old object: ~Z: ~S
 new object: ~Z: ~S
 oldspace: ~Z, newspace: ~Z, i: ~D"
 			     old old new new oldspace newspace i))))))
-	    (map-heap-words (lambda (x y)
-			      (declare (ignore y))
-			      (when (location-in-object-p (space-other (%run-time-context-slot 'nursery-space))
-							  (object-location x))
-				(break "Seeing old object in values-vector: ~Z" x))
-			      x)
-			    #x38 #xb8)
+	    (map-header-vals (lambda (x y)
+			       (declare (ignore y))
+			       (when (location-in-object-p (space-other (%run-time-context-slot 'nursery-space))
+							   (object-location x))
+				 (break "Seeing old object in values-vector: ~Z" x))
+			       x)
+			     #x38 #xb8)
 	    (let* ((stack (%run-time-context-slot 'muerte::nursery-space))
 		   (stack-start (- (length stack) (muerte::current-control-stack-depth))))
 	      (do ((i 0 (+ i 3)))
@@ -442,14 +442,14 @@ This is a debugging tool."
       (handler-bind
 	  ((serious-condition (lambda (c)
 				(when (and continuep
-					   (find-restart 'muerte::continue-map-heap-words))
+					   (find-restart 'muerte::continue-map-header-vals))
 				  (warn "Automatic continue from scanning error: ~A" c)
-				  (invoke-restart 'muerte::continue-map-heap-words)))))
+				  (invoke-restart 'muerte::continue-map-header-vals)))))
 	(dolist (range muerte::%memory-map-roots%)
-	  (map-heap-words #'searcher (car range) (cdr range)))
+	  (map-header-vals #'searcher (car range) (cdr range)))
 	(let ((nursery (%run-time-context-slot 'muerte::nursery-space)))
-	  (map-heap-words #'searcher
-			  (+ 4 (object-location nursery))
-			  (+ 4 (object-location nursery) (space-fresh-pointer nursery))))
-	(map-stack-words #'searcher nil (current-stack-frame))))
+	  (map-header-vals #'searcher
+			   (+ 4 (object-location nursery))
+			   (+ 4 (object-location nursery) (space-fresh-pointer nursery))))
+	(map-stack-vector #'searcher nil (current-stack-frame))))
     results))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.42 2004/11/24 16:22:43 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.43 2004/11/26 14:59:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1140,8 +1140,9 @@
 	   #:package-object-internal-symbols
 	   #:package-object-external-symbols
 
-	   #:map-heap-words
-	   #:map-stack-words
+	   #:map-lisp-vals
+	   #:map-header-vals
+	   #:map-stack-vector
 
 	   #:%memory-map%
 	   #:%memory-map-roots%
