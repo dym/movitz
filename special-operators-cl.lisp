@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.9 2004/02/12 21:57:12 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.10 2004/02/13 22:08:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -839,7 +839,6 @@ where zot is not in foo's scope, but _is_ in foo's extent."
   (destructuring-bind (situations &body body)
       (cdr form)
     (when (member :compile-toplevel situations)
-;;;      (warn "EVAL-WHEN from ~S" body)
 ;;;      (warn "EVAL-WHEN: ~S" `(progn ,@(movitz::translate-program body :muerte.cl :cl
 ;;;								 :when :eval
 ;;;								 :remove-double-quotes-p t)))
@@ -847,9 +846,10 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	(dolist (toplevel-form (translate-program body :muerte.cl :cl
 						  :when :eval
 						  :remove-double-quotes-p t))
-	  (if *compiler-compile-eval-whens*
-	      (funcall (compile () `(lambda () ,toplevel-form)))
-	    (eval toplevel-form)))))
+	  (with-host-environment ()
+	    (if *compiler-compile-eval-whens*
+		(funcall (compile () `(lambda () ,toplevel-form)))
+	      (eval toplevel-form))))))
     (if (or (member :execute situations)
 	    (and (member :load-toplevel situations)
 		 top-level-p))
