@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.66 2004/07/15 21:07:08 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.67 2004/07/16 00:03:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -516,8 +516,11 @@
 			(:jne 'sub-loop)
 			(:subl :ecx
 			       (:eax :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
-			(:jc '(:sub-program (should-not-happen)
-			       (:int 107)))
+			(:jnc 'bignum-sub-done)
+		       propagate-carry
+			(:addl 4 :edx)
+			(:subl 1 (:eax :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+			(:jc 'propagate-carry)
 		       bignum-sub-done
 			)))))
 		(((integer 0 *) (integer * -1))
@@ -1088,14 +1091,63 @@ Preserve EAX and EBX."
   
 (defun ash (integer count)
   (cond
-   ((not (minusp count))
-    (do () ((< count 16))
-      (setf integer (no-macro-call * #x10000 integer))
-      (decf count 16))
-    (dotimes (i count integer)
-      (setf integer (no-macro-call * 2 integer))))
-   (t (dotimes (i (- count) integer)
-	(setf integer (truncate integer 2))))))
+   ((= 0 count)
+    integer)
+   ((plusp count)
+    (let ((result-length (+ (integer-length integer) count)))
+      (cond
+       ((<= result-length 29)
+	(with-inline-assembly (:returns :eax)
+	  (:compile-two-forms (:eax :ecx) integer count)
+	  (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
+	  (:shll :cl :eax)))
+       (t (check-type integer (integer 0 *))
+	  (multiple-value-bind (long short)
+	      (truncate count 16)
+	    (let ((result (%make-bignum (truncate (+ result-length 31) 32))))
+	      (dotimes (i long)
+		(setf (memref result -2 i :unsigned-byte16) 0))
+	      (etypecase integer
+		(fixnum
+		 (when (>= integer #x10000)
+		   (setf (memref result -2 (1+ long) :unsigned-byte16)
+		     (ldb (byte 16 16) integer)))
+		 (setf (memref result -2 long :unsigned-byte16)
+		   (ldb (byte 16 0) integer)))
+		(bignum
+		 (dotimes (i (* 2 (%bignum-bigits integer)))
+		   (setf (memref result -2 (+ i long) :unsigned-byte16)
+		     (memref integer -2 i :unsigned-byte16)))))
+	      (setf result (%bignum-canonicalize result))
+	      (dotimes (i short)
+		(setf result (* 2 result)))
+	      result))))))
+   (t (let ((count (- count)))
+	(etypecase integer
+	  (fixnum
+	   (with-inline-assembly (:returns :eax :type fixnum)
+	     (:compile-two-forms (:eax :ecx) integer count)
+	     (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
+	     (:std)
+	     (:sarl :cl :eax)
+	     (:andl -4 :eax)
+	     (:cld)))
+	  (positive-bignum
+	   (let* ((result-length (- (integer-length integer) count))
+		  (result (%make-bignum (truncate (+ result-length 31) 32))))
+	     (multiple-value-bind (long short)
+		 (truncate count 16)
+	       (let ((src-max-bigit (* 2 (%bignum-bigits integer))))
+		 (dotimes (i (* 2 (%bignum-bigits result)))
+		   (let ((src (+ i long)))
+		     (setf (memref result -2 i :unsigned-byte16)
+		       (if (< src src-max-bigit)
+			   (memref integer -2 src :unsigned-byte16)
+			 0)))))
+	       (setf result (%bignum-canonicalize result))
+	       (dotimes (i short result)
+		 (setf result (truncate result 2)))
+	       result))))))))
 
 ;;;;
 
@@ -1317,10 +1369,16 @@ Preserve EAX and EBX."
 		   ;; X is the biggest factor.
 		   (let ((r 0) (f 0))
 		     (dotimes (half-bigit (* 2 (%bignum-bigits y)))
-		       (setf r (+ r (ash (* (memref y -2 half-bigit :unsigned-byte16) x)
-					  f)))
+		       (incf r (ash (* (memref y -2 half-bigit :unsigned-byte16) x)
+				    f))
 		       (incf f 16))
-		     r))))))
+		     r)))
+		((t (integer * -1))
+		 (%negatef (* x (- y)) x y))
+		(((integer * -1) t)
+		 (%negatef (* (- x) y) x y))
+		(((integer * -1) (integer * -1))
+		 (* (- x) (- y))))))
 	(do-it)))
    (t (&rest factors)
       (declare (dynamic-extent factors))
@@ -1461,18 +1519,15 @@ Preserve EAX and EBX."
 	       (setf msb (+ (* #x10000 msb)
 			    (* #x100 (memref divisor -2 (1+ msb-pos) :unsigned-byte8))
 			    (memref divisor -2 msb-pos :unsigned-byte8)))
-	       (multiple-value-bind (long-shift short-shift)
-		   ;; This shifting stuff should be replaced by ash,
-		   ;; when ash is properly implemented.
-		   (truncate msb-pos 3)
+	       (let ((guess-shift (- (* msb-pos 8))))
 		 (do ((msb+1 (1+ msb))
 		      (q 0) (r number))
 		     ((< r divisor) (values q r))
-		   (let ((guess (truncate r msb+1)))
-		     (dotimes (i long-shift)
-		       (setf guess (truncate guess #x1000000)))
-		     (dotimes (i short-shift)
-		       (setf guess (truncate guess #x100)))
+		   (let ((guess (ash (truncate r msb+1) guess-shift)))
+;;;		     (dotimes (i long-shift)
+;;;		       (setf guess (truncate guess #x1000000)))
+;;;		     (dotimes (i short-shift)
+;;;		       (setf guess (truncate guess #x100)))
 		     (if (= 0 guess)
 			 (setf q (1+ q)
 			       r (- r divisor))
