@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.36 2004/06/10 13:31:14 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.37 2004/06/10 19:25:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1277,6 +1277,19 @@ Preserve EAX and EBX."
 	   (do-it)))
 	))))
 
+(defun / (number &rest denominators)
+  (declare (dynamic-extent denominators))
+  (cond
+   ((null denominators)
+    (make-ratio 1 number))
+   ((null (cdr denominators))
+    (multiple-value-bind (q r)
+	(truncate number (first denominators))
+      (if (= 0 r)
+	  q
+	(error "Don't know how to divide ~S by ~S." number (first denominators)))))
+   (t (reduce '/ denominators :initial-value number))))
+	       
 (defun round (number &optional (divisor 1))
   "Mathematical rounding."
   (multiple-value-bind (quotient remainder)
@@ -1536,11 +1549,14 @@ Preserve EAX and EBX."
    (1 (x) x)
    (2 (x y)
       (number-double-dispatch (x y)
+	(((eql 0) t) y)
+	((t (eql 0)) x)
 	((fixnum fixnum)
 	 (with-inline-assembly (:returns :eax)
 	   (:compile-form (:result-mode :eax) x)
-	   (:compile-form (:result-mode :ebx) y)
-	   (:xorl :ebx :eax)))))
+	   (:compile-form (:result-mode :ecx) y)
+	   ;; (:orl #.movitz:+movitz-fixnum-zmask+ :ecx)
+	   (:xorl :ecx :eax)))))
    (t (&rest integers)
       (declare (dynamic-extent integers))
       (if (null integers)
