@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.117 2004/11/24 10:02:42 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.118 2004/12/09 13:36:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -16,6 +16,8 @@
 
 (defvar *warn-function-change-p* t
   "Emit a warning whenever a named function's code-vector changes size.")
+
+(defvar *compiler-verbose-p* nil)
 
 (defvar *compiler-do-optimize* t
   "Apply the peephole optimizer to function code.")
@@ -1334,7 +1336,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 							  :declaration-context :funobj))
 	     (file-code
 	      (with-compilation-unit ()
-		(add-bindings-from-lambda-list () function-env)
+     		(add-bindings-from-lambda-list () function-env)
 		(with-open-file (stream path :direction :input)
 		  (setf (funobj-env funobj) funobj-env)
 		  (loop for form = (with-movitz-syntax ()
@@ -1346,7 +1348,12 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 					      (cond
 					       ((symbolp form) form)
 					       ((symbolp (car form)) (car form))))
-			  #+lispworks-personal-edition (hcl:mark-and-sweep 2)
+			  (when *compiler-verbose-p*
+			    (format *query-io* "~&Movitz Compiling ~S..~%"
+				    (cond
+				      ((symbolp form) form)
+				      ((symbolp (car form))
+				       (xsubseq form 0 2)))))
 			  (compiler-call #'compile-form
 			    :form form
 			    :funobj funobj
