@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.29 2004/07/08 18:53:29 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.30 2004/07/11 22:59:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1101,6 +1101,7 @@
 	   print-word
 	   fixnump below
 	   print-unreadable-movitz-object
+	   #:newline
 	   
 	   #:*print-safely*
 	   
@@ -1159,6 +1160,7 @@
 	   svref%unsafe
 	   bvref-u16
 	   object-location
+	   object-tag
 	   location-in-object-p
 	   inline-malloc
 	   define-compile-time-variable
