@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.3 2004/02/26 13:46:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -188,10 +188,7 @@
    ((movitz:movitz-constantp subtrahend)
     (let ((constant-subtrahend (movitz::eval-form subtrahend)))
       (check-type constant-subtrahend (signed-byte 30))
-      `(with-inline-assembly (:returns :register :side-effects nil) ; inline
-	 (:compile-form (:result-mode :register) ,minuend)
-	 (:subl ,(* movitz::+movitz-fixnum-factor+ constant-subtrahend) (:result-register))
-	 (:into))))
+      `(+%2op ,minuend ,(- constant-subtrahend))))
    (t `(with-inline-assembly (:returns :eax :side-effects nil)
 	 (:compile-two-forms (:eax :ebx) ,minuend ,subtrahend)
 	 (:subl :ebx :eax)
@@ -517,7 +514,7 @@
      (if (< number1 number2)
 	 number2 number1))
   (let ((label (gensym)))
-    `(with-inline-assembly (:returns :eax)
+    `(with-inline-assembly (:returns :eax :type integer)
        (:compile-two-forms (:eax :ebx) ,number1 ,number2)
        (:movl :ebx :ecx)
        (:orl :eax :ecx)
@@ -542,30 +539,15 @@
 
 (defun max (number1 &rest numbers)
   (declare (dynamic-extent numbers))
-  #+ignore (reduce #'max%2op numbers :initial-value number1)
   (let ((max number1))
     (dolist (x numbers max)
       (when (>= x max)
 	(setq max x)))))
 
 (define-compiler-macro min%2op (number1 number2)
-   `(let ((number1 ,number1) (number2 ,number2))
-      (if (< number1 number2)
-	  number1 number2))
-  #+ignore
-  (let ((label (gensym)))
-    `(with-inline-assembly (:returns :eax)
-       (:compile-two-forms (:eax :ebx) ,number1 ,number2)
-       (:movl :ebx :ecx)
-       (:orl :eax :ecx)
-       (:testb 7 :cl)
-       (:jnz '(:sub-program () (:int 107)))
-       (:subl :ebx :eax) (:sbbl :ecx :ecx) (:andl :ecx :eax) (:addl :ebx :eax)
-     
-       (:cmpl :eax :ebx)
-       (:jg ',label)
-       (:movl :ebx :eax)
-       ,label)))
+  `(let ((number1 ,number1) (number2 ,number2))
+     (if (< number1 number2)
+	 number1 number2)))
 
 (defun min%2op (number1 number2)
   (min%2op number1 number2))
@@ -608,7 +590,7 @@
 		       append `((:addl (:result-register) (:result-register))
 				(:into)))))
 	     ((< 0 count #.(cl:1- movitz::+movitz-fixnum-bits+))
-	      `(with-inline-assembly (:returns :register :side-effects nil)
+	      `(with-inline-assembly (:returns :register :side-effects nil :type integer)
 		 ,@load-integer
 		 (:cmpl ,(ash 1 (- (- 31 0) count))
 			(:result-register))
@@ -618,12 +600,12 @@
 		 (:jl '(:sub-program () (:int 4)))
 		 (:shll ,count (:result-register))))
 	     ((= -1 count)
-	      `(with-inline-assembly (:returns :register :side-effects nil)
+	      `(with-inline-assembly (:returns :register :side-effects nil :type integer)
 		 ,@load-integer
 		 (:andb #.(cl:logxor #xfe (cl:* 2 movitz::+movitz-fixnum-zmask+)) (:result-register-low8))
 		 (:sarl 1 (:result-register))))
 	     ((> 0 count #.(cl:- (cl:1- movitz::+movitz-fixnum-bits+)))
-	      `(with-inline-assembly (:returns :register :side-effects nil)
+	      `(with-inline-assembly (:returns :register :side-effects nil :type integer)
 		 ,@load-integer
 		 (:sarl ,(- count) (:result-register))
 		 (:andb #.(cl:logxor #xff movitz::+movitz-fixnum-zmask+) (:result-register-low8))))
@@ -670,7 +652,7 @@
 	(0 `(progn ,factor2 0))
 	(1 factor2)
 	(2 `(ash ,factor2 1))
-	(t `(with-inline-assembly (:returns :eax)
+	(t `(with-inline-assembly (:returns :eax :type integer)
 	      (:compile-form (:result-mode :eax) ,factor2)
 	      (:testb #.movitz::+movitz-fixnum-zmask+ :al)
 	      (:jnz '(:sub-program () (:int 107)))
@@ -762,7 +744,7 @@
       (case d
 	(0 (error "Truncate by zero."))
 	(1 number)
-	(t `(with-inline-assembly (:returns :eax)
+	(t `(with-inline-assembly (:returns :eax :type integer)
 	      (:compile-form (:result-mode :eax) ,number)
 	      (:compile-form (:result-mode :ebx) ,divisor)
 	      (:testb #.movitz::+movitz-fixnum-zmask+ :al)
@@ -1028,7 +1010,7 @@
       (let ((size (movitz::eval-form (second bytespec) env))
 	    (position (movitz::eval-form (third bytespec) env)))
 	(assert (<= (+ size position) 30))
-	`(with-inline-assembly (:returns :register)
+	`(with-inline-assembly (:returns :register :type integer)
 	   (:compile-form (:result-mode :register) ,integer)
 	   (:andl ,(mask-field (byte size (+ position movitz::+movitz-fixnum-shift+)) -1)
 		  (:result-register))
