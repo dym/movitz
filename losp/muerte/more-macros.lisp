@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.9 2004/06/09 17:22:51 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.10 2004/06/09 23:04:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -311,6 +311,15 @@ respect to multiple threads."
        (let ((,object-var ,instance-form))
 	 ,@declarations-and-forms))))
 
+
+(define-compiler-macro %bignum-bigits (x)
+  `(with-inline-assembly (:returns :eax)
+     (:compile-form (:result-mode :eax) ,x)
+     (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum
+				      'movitz::length))
+	      :ecx)
+     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+))
+	    :eax)))
 
 ;;; Some macros that aren't implemented, and we want to give compiler errors.
 
