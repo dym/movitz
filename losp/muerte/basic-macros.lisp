@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.15 2004/04/18 21:27:37 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.16 2004/04/18 23:15:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -534,7 +534,7 @@
    ((movitz:movitz-constantp place env)
     (assert (typep (movitz::eval-form place env) type))
     nil)
-   (t (if (member type '(standard-gf-instance  function pointer
+   (t (if (member type '(standard-gf-instance function pointer atom
 			 integer fixnum cons symbol character null list
 			 string vector simple-vector vector-u8 vector-u16))
 	  `(unless (typep ,place ',type)
