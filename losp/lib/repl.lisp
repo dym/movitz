@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 19 14:58:12 2003
 ;;;;                
-;;;; $Id: repl.lisp,v 1.10 2004/04/06 14:37:04 ffjeld Exp $
+;;;; $Id: repl.lisp,v 1.11 2004/04/23 14:59:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -29,7 +29,7 @@
 
 (defun default-repl-prompter ()
   (fresh-line)
-  (when (plusp *repl-level*)
+  (when (or (plusp *repl-level*) *repl-prompt-context*)
     (format t "[~D~@[~A~]] " *repl-level* *repl-prompt-context*))
   (format t "~A> " (package-name *package*)))
 
