@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.12 2004/09/22 17:55:34 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.13 2004/09/27 08:53:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -113,9 +113,11 @@
 (defun clone-run-time-context (&key (parent (current-run-time-context))
 				    (name :anonymous))
   (check-type parent run-time-context)
-  (let ((context (malloc-pointer-words #.(cl:truncate (bt:sizeof 'movitz::movitz-run-time-context) 4))))
-    (memcopy context parent -6 0 0 #.(bt:sizeof 'movitz::movitz-run-time-context)
-	     :unsigned-byte8)
+  (let ((context (%shallow-copy-object parent #.(movitz::movitz-type-word-size 'movitz-run-time-context))))
+;;;	 #+ignore
+;;;	 (malloc-pointer-words #.(cl:truncate (bt:sizeof 'movitz::movitz-run-time-context) 4))))
+;;;    (memcopy context parent -6 0 0 #.(bt:sizeof 'movitz::movitz-run-time-context)
+;;;	     :unsigned-byte8)
     (setf (%run-time-context-slot 'name context) name
 	  (%run-time-context-slot 'self context) context)
     (setf (%run-time-context-segment-base 'segment-descriptor-thread-context context) 
