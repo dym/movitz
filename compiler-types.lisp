@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.9 2004/04/01 17:26:04 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.10 2004/04/06 13:35:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -423,6 +423,8 @@ with the single member of <type-specifier>."
     (cond
      ((atom type-specifier)
       (case type-specifier
+	(fixnum
+	 (type-values 'integer))
 	((t nil cons symbol keyword function array vector integer hash-table character)
 	 (type-values type-specifier))
 	(null
