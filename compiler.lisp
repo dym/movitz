@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.129 2005/01/21 22:06:07 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.130 2005/01/25 13:42:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2841,6 +2841,9 @@ the sub-program options (&optional label) as secondary value."
 	 (init-pc (second count-init-pc)))
     ;; (warn "b ~S: count: ~D, init-pc: ~{~&~A~}" binding count init-pc)
     (cond
+     ((and (not *compiler-allow-transients*)
+	   (typep binding 'function-argument))
+      (values nil :never))
      ((binding-lended-p binding)
       ;; We can't lend a register.
       (values nil :never))
