@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.72 2004/07/10 13:29:11 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.73 2004/07/11 22:58:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2399,7 +2399,10 @@ of argument <argnum>."
 	      (list new-value)
 	      `(let ((,(car stores) (progn
 				      (assert (not (new-binding-located-p ,binding-var ,getter)))
-				      (check-type ,new-value (or keyword binding (integer 0 *)))
+				      (check-type ,new-value (or keyword
+								 binding
+								 (integer 0 *)
+								 (cons (eql :argument-stack) *)))
 				      (acons ,binding-var ,new-value ,getter))))
 		 ,setter
 		 ,new-value)
@@ -2813,7 +2816,7 @@ the sub-program options (&optional label) as secondary value."
 					 (plusp (or (car (gethash binding var-counts)) 0)))
 				    (prog1 nil ; may need lending-cons
 				      (setf (new-binding-location binding frame-map)
-					:argument-stack)))
+					`(:argument-stack ,(function-argument-argnum binding)))))
 				   ((not (plusp (or (car (gethash binding var-counts)) 0)))
 				    (prog1 t
 				      (unless (or (movitz-env-get variable 'ignore nil env nil)
@@ -2949,7 +2952,7 @@ the sub-program options (&optional label) as secondary value."
 		       (borrowed-binding) ; location is predetermined
 		       (fixed-required-function-argument
 			(setf (new-binding-location binding frame-map)
-			  :argument-stack))
+			  `(:argument-stack ,(function-argument-argnum binding))))
 		       (located-binding
 			(setf (new-binding-location binding frame-map)
 			  (post-incf stack-frame-position))))))
@@ -3228,7 +3231,7 @@ loading borrowed bindings."
 		       (when indirect-p
 			 `((:movl (-1 ,(single-value-register result-mode))
 				  ,(single-value-register result-mode))))))
-	      (t (ecase lexb-location
+	      (t (ecase (operator lexb-location)
 		   (:push
 		    (assert (member result-mode '(:eax :ebx :ecx :edx)))
 		    (assert (not indirect-p))
@@ -3324,7 +3327,7 @@ loading borrowed bindings."
 		(if (integerp binding-location)
 		    `((:movl (:ebp ,(stack-frame-offset binding-location)) :eax)
 		      (:pushl (:eax -1)))
-		  (ecase binding-location
+		  (ecase (operator binding-location)
 		    (:argument-stack
 		     (assert (<= 2 (function-argument-argnum binding)) ()
 		       ":load-lexical argnum can't be ~A." (function-argument-argnum binding))
@@ -3340,7 +3343,7 @@ loading borrowed bindings."
 		 (:push
 		  (if (integerp binding-location)
 		      `((:pushl (:ebp ,(stack-frame-offset binding-location))))
-		    (ecase binding-location
+		    (ecase (operator binding-location)
 		      ((:eax :ebx :ecx :edx)
 		       `((:pushl ,binding-location)))
 		      (:argument-stack
@@ -3351,7 +3354,7 @@ loading borrowed bindings."
 		  (if (integerp binding-location)
 		      `((:cmpl :edi (:ebp ,(stack-frame-offset binding-location)))
 			(:jne ',(operands result-mode)))
-		    (ecase binding-location
+		    (ecase (operator binding-location)
 		      ((:eax :ebx)
 		       `((:cmpl :edi ,binding-location)
 			 (:jne ',(operands result-mode))))
@@ -3362,7 +3365,7 @@ loading borrowed bindings."
 		  (if (integerp binding-location)
 		      `((:cmpl :edi (:ebp ,(stack-frame-offset binding-location)))
 			(:je ',(operands result-mode)))
-		    (ecase binding-location
+		    (ecase (operator binding-location)
 		      ((:eax :ebx)
 		       `((:cmpl :edi ,binding-location)
 			 (:je ',(operands result-mode))))
@@ -3378,7 +3381,7 @@ loading borrowed bindings."
 		     ((not dest-location) ; unknown, e.g. a borrowed-binding.
 		      (append (install-for-single-value binding binding-location :ecx nil)
 			      (make-store-lexical result-mode :ecx nil frame-map)))
-		     ((eql binding-location dest-location)
+		     ((equal binding-location dest-location)
 		      nil)
 		     ((member binding-location '(:eax :ebx :ecx :edx))
 		      (make-store-lexical destination binding-location nil frame-map))
@@ -3435,7 +3438,7 @@ loading borrowed bindings."
 	(if (integerp location)
 	    `((:movl (:ebp ,(stack-frame-offset location)) ,tmp-reg)
 	      (:movl ,source (,tmp-reg -1)))
-	  (ecase location
+	  (ecase (operator location)
 	    (:argument-stack
 	     (assert (<= 2 (function-argument-argnum binding)) ()
 	       "store-lexical argnum can't be ~A." (function-argument-argnum binding))
@@ -3444,7 +3447,7 @@ loading borrowed bindings."
      (t (let ((location (new-binding-location binding frame-map)))
 	  (if (integerp location)
 	      `((:movl ,source (:ebp ,(stack-frame-offset location))))
-	    (ecase location
+	    (ecase (operator location)
 	      ((:push)
 	       `((:pushl ,source)))
 	      ((:eax :ebx :ecx :edx)
@@ -4091,7 +4094,7 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 		  (typecase binding
 		    (required-function-argument
 		     ;; (warn "lend: ~W => ~W" binding lended-cons-position)
-		     (etypecase location
+		     (etypecase (operator location)
 		       ((eql :eax)
 			(warn "lending EAX..")
 			`((:movl :edi
@@ -4123,7 +4126,7 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 				 (:ebp ,(stack-frame-offset location)))))))
 		    (closure-binding
 		     ;; (warn "lend closure-binding: ~W => ~W" binding lended-cons-position)
-		     (etypecase location
+		     (etypecase (operator location)
 		       ((eql :argument-stack)
 			`((:movl (:edi ,(global-constant-offset 'unbound-function)) :edx)
 			  (:movl :edi (:ebp ,(stack-frame-offset lended-cons-position))) ; cdr
