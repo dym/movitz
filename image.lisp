@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.27 2004/04/21 15:06:50 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.28 2004/05/19 14:59:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1065,6 +1065,12 @@ this image will not be Multiboot compatible."
 				  name symbol)
 		   name)))
 	     (ensure-package (package-name lisp-package)
+	       (assert (not (member (package-name lisp-package)
+				    #+allegro '(excl common-lisp sys aclmop)
+				    #-allegro '(common-lisp)
+				    :test #'string=)) ()
+		 "I don't think you really want to dump the package ~A with Movitz."
+		 lisp-package)
 	       (setf (gethash lisp-package lisp-to-movitz-package)
 		 (or (gethash package-name packages-hash nil)
 		     (let ((p (funcall 'muerte::make-package-object
