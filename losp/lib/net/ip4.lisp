@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.12 2004/11/24 16:21:57 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.13 2004/11/24 16:26:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -42,9 +42,6 @@
 	   :endian :big
 	   :type ,type))
 
-(require :lib/net/arp)
-(require :lib/net/tftp)
-
 (defclass ip4-stack ()
   ((interface
     :initarg :interface
@@ -74,6 +71,9 @@
   (12 source)
   (16 destination)
   (20 options))
+
+(require :lib/net/arp)
+(require :lib/net/tftp)
 
 (defun ip-protocol (packet &optional (start 14))
   (ip4-ref packet start +ip-header-protocol+ :unsigned-byte8))
