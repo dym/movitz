@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.36 2004/09/15 10:22:57 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.37 2004/09/16 08:55:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -205,8 +205,6 @@ Preserve EAX and EBX."
 	    (:jae '(:sub-program ()
 		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 			       (:edi (:edi-offset atomically-status))))
-		    (:movl :edx (#x1000000))
-		    (:addl :eax (#x1000000))
 		    (:int 113)		; This interrupt can be retried.
 		    (:jmp 'retry-cons)))
 	    (:movl ,(dpb movitz:+movitz-fixnum-factor+
@@ -320,9 +318,7 @@ duo-space where each space is KB-SIZE kilobytes."
       (install-primitive los0-fast-cons muerte::fast-cons)
       (install-primitive los0-box-u32-ecx muerte::box-u32-ecx)
       (install-primitive los0-get-cons-pointer muerte::get-cons-pointer)
-      (install-primitive los0-cons-commit muerte::cons-commit)
-      #+ignore (install-primitive los0-malloc-pointer-words muerte::malloc-pointer-words)
-      #+ignore (install-primitive los0-malloc-non-pointer-words muerte::malloc-non-pointer-words))
+      (install-primitive los0-cons-commit muerte::cons-commit))
     (if (eq context (current-run-time-context))
 	(setf (%run-time-context-slot 'muerte::nursery-space)
 	  actual-duo-space)
@@ -380,6 +376,8 @@ duo-space where each space is KB-SIZE kilobytes."
 
 
 (defparameter *x* #4000())		; Have this in static space.
+(defparameter *xx* #4000())		; Have this in static space.
+
 
 (defun stop-and-copy (&optional evacuator)
   (setf (fill-pointer *x*) 0)
@@ -428,7 +426,6 @@ duo-space where each space is KB-SIZE kilobytes."
 			       (assert (vector-push (%object-lispval forward-x) a))))
 			   (setf (memref (object-location x) 0 0 :lisp) forward-x)
 			   forward-x))))))))
-      (setf *gc-stack* (muerte::copy-current-control-stack))
       ;; Scavenge roots
       (dolist (range muerte::%memory-map-roots%)
 	(map-heap-words evacuator (car range) (cdr range)))
@@ -479,7 +476,10 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
 ~/muerte:pprint-clumps/, freed: ~/muerte:pprint-clumps/.~%"
 		  old-size new-size (- old-size new-size))))
       (initialize-space oldspace)
-      (fill oldspace #x13 :start 2)))
+      (fill oldspace #x13 :start 2)
+      (setf *gc-stack* (muerte::copy-current-control-stack))
+      (setf (fill-pointer *xx*) (fill-pointer *x*))
+      (replace *xx* *x*)))
   (values))
 
 
