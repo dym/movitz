@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.44 2004/04/13 13:03:10 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.45 2004/04/14 14:38:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1424,7 +1424,7 @@ There is (propably) a bug in the peephole optimizer." recursive-count))
 	 (non-destructuve-p (c)
 	   (let ((c (ignore-instruction-prefixes c)))
 	     (and (consp c)
-		  (member (car c) '(:testl :testb :pushl :cmpl :cmpb :frame-map)))))
+		  (member (car c) '(:testl :testb :pushl :cmpl :cmpb :frame-map :std)))))
 	 (simple-instruction-p (c)
 	   (let ((c (ignore-instruction-prefixes c)))
 	     (and (listp c)
@@ -1469,14 +1469,14 @@ There is (propably) a bug in the peephole optimizer." recursive-count))
 	 (preserves-register-p (i register)
 	   (let ((i (ignore-instruction-prefixes i)))
 	     (and (not (atom i))
-		  (or (and (member register '(:edx))
-			   (member (global-funcall-p i)
-				   '(fast-car fast-cdr fast-car-ebx fast-cdr-ebx)))
+		  (or (and (simple-instruction-p i)
+			   (not (eq register (idst i))))
 		      (instruction-is i :frame-map)
 		      (branch-instruction-label i)
 		      (non-destructuve-p i)
-		      (and (simple-instruction-p i)
-			   (not (eq register (idst i))))))))
+		      (and (member register '(:edx))
+			   (member (global-funcall-p i)
+				   '(fast-car fast-cdr fast-car-ebx fast-cdr-ebx)))))))
 	 (register-operand (op)
 	   (and (member op '(:eax :ebx :ecx :edx :edi))
 		op))
@@ -1915,6 +1915,11 @@ falling below the label."
 			   (setq p (list `(,(car i) ',to)))
 			   (explain nil "branch redirect from ~S to ~S" from to)
 			   t)))
+		      ;; remove back-to-back std/cld
+		      ((and (instruction-is i :cld)
+			    (instruction-is i2 :std))
+		       (explain nil "removing back-to-back cld, std.")
+		       (setq p nil next-pc (cddr pc)))
 		      ;; remove branch no-ops.
 		      ((and (branch-instruction-label i t)
 			    (label-here-p (branch-instruction-label i t)
@@ -2455,7 +2460,7 @@ the sub-program options (&optional label) as secondary value."
 	 (t (case (instruction-is i)
 	      ((nil :call)
 	       (return nil))
-	      ((:into))
+	      ((:into :clc :stc :cld :std))
 	      ((:jnz :je :jne :jz))
 	      ((:outb)
 	       (setf free-so-far
@@ -2541,7 +2546,6 @@ the sub-program options (&optional label) as secondary value."
 		     (multiple-value-call #'encoded-subtypep
 		       (values-list (binding-store-type binding))
 		       (type-specifier-encode '(or integer character))))
-		(warn "for ecX: ~S" binding)
 		:ecx)
 	       ((not (null free-registers-no-ecx))
 		(first free-registers-no-ecx))
