@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.31 2004/07/23 15:34:32 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.32 2004/07/24 01:30:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -975,15 +975,23 @@ integer (native lisp) value."
     :initform :defstruct)
    (pad :binary-lisp-type 1)
    (length
-    :binary-lisp-type lu16
+    :binary-type lu16
     :initarg :length
-    :accessor movitz-struct-length)
-   (name
+    :accessor movitz-bignum-length
+    :map-binary-write (lambda (x &optional type)
+			(declare (ignore type))
+			(check-type x (unsigned-byte 14))
+			(* x 4))
+    :map-binary-read (lambda (x &optional type)
+		       (declare (ignore type))
+		       (assert (zerop (mod x 4)))
+		       (truncate x 4)))
+   (class
     :binary-type word
     :map-binary-write 'movitz-intern
     :map-binary-read-delayed 'movitz-word
-    :reader movitz-struct-name
-    :initarg :name)
+    :reader movitz-struct-class
+    :initarg :class)
    (slot0 :binary-lisp-type :label)	; the slot values follows here.
    (slot-values
     :initform '()
@@ -1017,7 +1025,7 @@ integer (native lisp) value."
 
 (defmethod print-object ((object movitz-struct) stream)
   (print-unreadable-object (object stream :type t)
-    (format stream "~S" (slot-value object 'name))))
+    (format stream "~S" (slot-value object 'class))))
 
 ;;;
 
@@ -1072,7 +1080,7 @@ integer (native lisp) value."
 			       (svref bucket-data (1+ pos)) movitz-value)))
       (let* ((bucket (make-movitz-vector hash-size :initial-contents bucket-data))
 	     (lh (make-instance 'movitz-struct
-		   :name (movitz-read 'muerte::hash-table)
+		   :class (muerte::movitz-find-class 'muerte::hash-table)
 		   :length 3
 		   :slot-values (list hash-test ; test-function
 				      bucket

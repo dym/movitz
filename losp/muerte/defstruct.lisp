@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.10 2004/07/20 08:54:09 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.11 2004/07/24 01:30:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -21,10 +21,10 @@
 
 (defun structure-object-length (object)
   (check-type object structure-object)
-  (movitz-accessor-u16 object movitz-struct length))
+  (memref object -4 0 :unsigned-byte14))
 
 (defun copy-structure (object)
-  (check-type object structure-object)
+  ;; (check-type object structure-object)
   (let* ((length (structure-object-length object))
 	 (copy (malloc-pointer-words (+ 2 length))))
     (setf (memref copy -6 0 :lisp)
@@ -46,8 +46,8 @@ Parameters: struct-name."
     (:jnz 'fail)
     (:cmpb #.(movitz:tag :defstruct) (:eax #.movitz:+other-type-offset+))
     (:jne 'fail)
-    (:load-constant struct-name :ebx)
-    (:cmpl :ebx (:eax #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)))
+    (:load-constant struct-class :ebx)
+    (:cmpl :ebx (:eax (:offset movitz-struct class)))
     fail))
 
 (defun structure-ref (object slot-number)
@@ -83,8 +83,7 @@ Parameters: struct-name."
 	    (:jne '(:sub-program (type-error) (:int 66)))
 	    (:cmpb ,(movitz:tag :defstruct) (:eax ,movitz:+other-type-offset+))
 	    (:jne '(:sub-program (type-error) (:int 66)))
-	    (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-struct 'movitz::length)) :ecx)
-	    (:leal ((:ecx ,movitz::+movitz-fixnum-factor+)) :ecx)
+	    (:movzxw (:eax (:offset movitz-struct length)) :ecx)
 	    (:testb ,movitz::+movitz-fixnum-zmask+ :bl)
 	    (:jnz '(:sub-program (not-fixnum) (:movl :ebx :eax) (:int 64)))
 	    (:cmpl :ecx :ebx)
@@ -105,8 +104,8 @@ Parameters: struct-name."
     (:cmpb #.(movitz:tag :defstruct) (:eax #.movitz:+other-type-offset+))
     (:jne '(:sub-program (type-error) (:int 66)))
     (:load-constant struct-name :ebx)
-    (:cmpl :ebx (:eax #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)))
-    (:jne '(:sub-program (type-error) (:int 66)))
+;;;    (:cmpl :ebx (:eax #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)))
+;;;    (:jne '(:sub-program (type-error) (:int 66)))
     ;; type test passed, read slot
     (:load-constant slot-number :ecx)
     (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
@@ -124,8 +123,8 @@ Parameters: struct-name."
     (:cmpb #.(movitz:tag :defstruct) (:ebx #.movitz:+other-type-offset+))
     (:jne '(:sub-program (type-error) (:int 66)))
     (:load-constant struct-name :ecx)
-    (:cmpl :ecx (:ebx #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)))
-    (:jne '(:sub-program (type-error) (:int 66)))
+;;;    (:cmpl :ecx (:ebx #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)))
+;;;    (:jne '(:sub-program (type-error) (:int 66)))
     ;; type test passed, write slot
     (:load-constant slot-number :ecx)
     (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
@@ -227,20 +226,27 @@ Parameters: struct-name."
 		    '(:translate-when :eval ,slot-descriptions :cl :muerte.cl))
 		  (defstruct (:translate-when :eval ,name-and-options :cl :muerte.cl)
 		    . (:translate-when :eval ,slot-names :cl :muerte.cl)))
+		(defclass ,struct-name (structure-object) ()
+			  (:metaclass structure-class)
+			  (:slots ,(loop for (name) in canonical-slot-descriptions
+				       as location upfrom 0
+				       collect (movitz-make-instance 'structure-slot-definition
+								     :name name
+								     :location location))))
 		,@(loop for constructor in (getf options :constructor)
 		      if (and constructor (symbolp constructor))
 		      collect
 			`(defun ,constructor (&key ,@key-lambda)
 			   (let ((s (malloc-pointer-words ,(+ 2 (length slot-names)))))
-			     (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)
+			     (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::class)
 					   0 :lisp)
-			       ',struct-name)
+			       (compile-time-find-class ,struct-name))
 			     (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::type)
 					   0 :unsigned-byte8)
 			       #.(movitz::tag :defstruct))
 			     (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::length)
 					   0 :unsigned-byte16)
-			       ,(length slot-names))
+			       ,(* movitz:+movitz-fixnum-factor+ (length slot-names)))
 			     ,@(loop for slot-name in slot-names as i upfrom 0 collecting
 				     `(setf (memref s #.(bt:slot-offset 'movitz::movitz-struct
 									'movitz::slot0)
@@ -254,15 +260,15 @@ Parameters: struct-name."
 			       (boa-variables (movitz::list-normal-lambda-list-variables boa-lambda-list)))
 			  `(defun ,boa-constructor ,boa-lambda-list
 			     (let ((s (malloc-pointer-words ,(+ 2 (length slot-names)))))
-			       (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)
+			       (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::class)
 						      0 :lisp)
-				 ',struct-name)
+				 (compile-time-find-class ,struct-name))
 			       (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::type)
 						      0 :unsigned-byte8)
 				 #.(movitz::tag :defstruct))
 			       (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::length)
 						      0 :unsigned-byte16)
-				 ,(length slot-names))
+				 ,(* movitz:+movitz-fixnum-factor+ (length slot-names)))
 			       ,@(loop for slot-name in slot-names as i upfrom 0
 				     if (member slot-name boa-variables)
 				     collect
@@ -280,7 +286,7 @@ Parameters: struct-name."
 		      do (error "Don't know how to make class-struct constructor: ~S" constructor))
 		,(when predicate-name
 		   `(defun-by-proto ,predicate-name struct-predicate-prototype
-		      (struct-name ,struct-name)))
+		      (struct-class (:movitz-find-class ,struct-name))))
 		,@(loop for (slot-name nil nil read-only-p) in canonical-slot-descriptions
 		      as accessor-name = (intern (concatenate 'string conc-name (string slot-name))
 						 (movitz::symbol-package-fix-cl struct-name))
@@ -294,13 +300,6 @@ Parameters: struct-name."
 			`(defun-by-proto ,accessor-name struct-accessor-prototype
 			   (struct-name ,struct-name)
 			   (slot-number ,slot-number)))
-		(defclass ,struct-name (structure-object) ()
-			  (:metaclass structure-class)
-			  (:slots ,(loop for (name) in canonical-slot-descriptions
-				       as location upfrom 0
-				       collect (movitz-make-instance 'structure-slot-definition
-								     :name name
-								     :location location))))
 		',struct-name))
 	    (list
 	     `(progn
@@ -335,6 +334,6 @@ Parameters: struct-name."
 		',struct-name))
 	    ))))))
 
-(defun structure-object-name (x)
-  (movitz-accessor x movitz-struct name))
+;;;(defun structure-object-name (x)
+;;;  (movitz-accessor x movitz-struct name))
 

@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.50 2004/07/23 15:32:35 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.51 2004/07/24 01:30:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1462,7 +1462,7 @@ this image will not be Multiboot compatible."
 	    (unless slot-descriptions
 	      (error "Don't know how to movitz-read struct: ~S" expr))
 	    (let ((movitz-object (make-instance 'movitz-struct
-				   :name (movitz-read (type-of expr))
+				   :class (muerte::movitz-find-class (type-of expr))
 				   :length (length slot-descriptions))))
 	      (setf (image-lisp-to-movitz-object *image* expr) movitz-object)
 	      (setf (slot-value movitz-object 'slot-values)
@@ -1497,7 +1497,8 @@ this image will not be Multiboot compatible."
 		     (movitz-make-upload-form (movitz-symbol-value object)))
 	   (format nil "~:[~;'~]#:~A" quotep (movitz-print object))))
 	(t (check-type package movitz-struct)
-	   (assert (eq (movitz-struct-name package) (movitz-read 'muerte::package-object)))
+	   (assert (eq (movitz-struct-class package)
+		       (muerte::movitz-find-class 'muerte::package-object)))
 	   (let ((package-name (intern (movitz-print (first (movitz-struct-slot-values package))))))
 	     (case package-name
 	       (keyword (format nil ":~A" (movitz-print object)))
@@ -1541,10 +1542,12 @@ this image will not be Multiboot compatible."
   (etypecase expr
     (integer expr)
     (symbol expr)
+    (array expr)
     (cons (mapcar #'movitz-print expr))
     ((or movitz-nil movitz-constant-block) nil)
     (movitz-fixnum
      (movitz-fixnum-value expr))
+    (movitz-std-instance expr)
     (movitz-heap-object
      (or (image-movitz-to-lisp-object *image* expr)
 	 (error "Unknown Movitz object: ~S" expr)))))

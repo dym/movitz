@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.31 2004/07/20 12:40:07 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.32 2004/07/24 01:30:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -249,7 +249,12 @@ and the correspondig returns mode (secondary value)."
 						       :form nil))
 						   (list exit-label)))))))))))))
 					     
-		  
+(define-special-operator compile-time-find-class (&all all &form form)
+  (destructuring-bind (class-name)
+      (cdr form)
+    (compiler-call #'compile-form-unprotected
+      :form (muerte::movitz-find-class class-name)
+      :forward all)))
 	     
 (define-special-operator make-named-function (&form form &env env)
   (destructuring-bind (name formals declarations docstring body)
@@ -296,7 +301,11 @@ and the correspondig returns mode (secondary value)."
 The valid parameters are~{ ~S~}."
 					    parameter proto-name
 					    (mapcar #'movitz-print (movitz-funobj-const-list funobj-proto)))
-				       do (setf (car (member parameter c)) (movitz-read value)))
+					  (setf (car (member parameter c))
+					    (if (and (consp value)
+						     (eq :movitz-find-class (car value)))
+						(muerte::movitz-find-class (cadr value))
+					      (movitz-read value))))
 				   c))))
       (setf (movitz-funobj-symbolic-name funobj) function-name)
       (setf (movitz-env-named-function function-name) funobj)

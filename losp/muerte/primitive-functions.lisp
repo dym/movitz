@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.33 2004/07/20 23:51:19 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.34 2004/07/24 01:30:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -731,7 +731,7 @@ BUFFER-SIZE is the number of words in the buffer."
     (function
      (find-class 'function))
     (structure-object
-     (find-class (structure-object-name object)))
+     (structure-object-name object))
     (character
      (find-class 'character))
     (run-time-context

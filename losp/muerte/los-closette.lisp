@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.16 2004/07/20 23:51:10 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.17 2004/07/24 01:30:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1112,9 +1112,9 @@ next-emf as its target for call-next-method."
     (let* ((slots (class-slots class))
 	   (num-slots (length slots))
 	   (struct (malloc-pointer-words (+ 2 num-slots))))
-      (setf (memref struct #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)
+      (setf (memref struct #.(bt:slot-offset 'movitz::movitz-struct 'movitz::class)
 		    0 :lisp)
-	(class-name class))
+	class)
       (setf (memref struct #.(bt:slot-offset 'movitz::movitz-struct 'movitz::type)
 		    0 :unsigned-byte8)
 	#.(movitz::tag :defstruct))
@@ -1728,7 +1728,7 @@ in an instance whose metaclass is standard-class."))
       (let ((*never-use-print-object* t)
 	    (*print-length* 4)
 	    (*print-level* 2))
-	(error "Recursive circle:~%:::~S~v{~&::~S~}" args nil *sml-context*))))
+	(error "Recursive circle:~%:::~S~{~&::~S~}" args *bsml-context*))))
   (let ((*bsml-context* (cons args *bsml-context*)))
     (apply 'do-bootstrap-slow-method-lookup args)))
 
