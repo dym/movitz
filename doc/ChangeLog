@@ -1,3 +1,9 @@
+2004-03-29  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Added basic GC functionality. The Movitz platform is now I
+	believe viable for at least some real-world applications!  Also,
+	there have been many bug-fixes that I've forgotten to record here.
+
 2004-01-19  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
 
 	* Fixed the bootloader slightly so it should now work with VMWare.
