@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.30 2004/07/11 22:59:26 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.31 2004/07/15 11:16:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1189,6 +1189,7 @@
 	   map-active-restarts
 	   with-basic-restart
 
+	   #:code-vector
 	   #:vector-u8
 	   #:vector-u16
 	   #:vector-u32
