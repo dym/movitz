@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.52 2004/07/13 21:01:42 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.53 2004/07/13 22:43:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1335,6 +1335,8 @@ Preserve EAX and EBX."
 	   (:xorl :ecx :ecx)
 	   (:movb 2 :cl)		; return values: qutient, remainder.
 	   (:stc)))
+	((positive-fixnum positive-bignum)
+	 (values 0 number))
 	((positive-bignum positive-fixnum)
 	 (macrolet
 	     ((do-it ()
