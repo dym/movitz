@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:25:31 2002
 ;;;;                
-;;;; $Id: ethernet.lisp,v 1.3 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: ethernet.lisp,v 1.4 2004/02/26 11:30:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -52,7 +52,7 @@
 (in-package muerte.ethernet)
 
 (defconstant +max-ethernet-frame-size+ 1514) ;  sans preamble and postable.
-(defconstant +min-ethernet-frame-size+ 64)
+(defconstant +min-ethernet-frame-size+ 60) ; except crc.
 (defconstant +broadcast-address+ #(#xff #xff #xff #xff #xff #xff))
 
 (defconstant +source-mac+ 6)
