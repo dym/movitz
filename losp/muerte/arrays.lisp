@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.26 2004/06/22 22:38:48 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.27 2004/06/23 10:15:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -689,8 +689,8 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 		       0 :unsigned-byte16)
 	   #.(movitz:vector-type-tag :character))
 	 (check-type array string)
-	 (when fill-pointer
-	   (setf (fill-pointer array) fill-pointer))
+	 (setf (fill-pointer array)
+	   (or fill-pointer dimensions))
 	 (cond
 	  (initial-element
 	   (check-type initial-element character)
@@ -731,8 +731,8 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
 		       0 :unsigned-byte16)
 	   #.(movitz:vector-type-tag :u32))	 
-	 (when fill-pointer
-	   (setf (fill-pointer array) fill-pointer))
+	 (setf (fill-pointer array)
+	   (or fill-pointer dimensions))
 	 (cond
 	  (initial-element
 	   (dotimes (i dimensions)
