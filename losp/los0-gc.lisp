@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.29 2004/07/17 01:56:52 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.30 2004/07/20 23:47:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -237,6 +237,7 @@ Preserve EAX and EBX."
 	    (:ret))))
     (do-it)))
 
+(defvar *gc-stack*)
 
 (defun install-los0-consing (&key (context (current-run-time-context))
 				  (kb-size 1024)
@@ -247,19 +248,20 @@ duo-space where each space is KB-SIZE kilobytes."
   (setf (exception-handler 113)
     (lambda (exception interrupt-frame)
       (declare (ignore exception interrupt-frame))
-      (when *gc-running*
-	(let ((muerte::*error-no-condition-for-debugger* t))
-	  (error "Recursive GC triggered.")))
-      (let ((*gc-running t))
-	(unless *gc-quiet*
-	  (format t "~&;; GC.. "))
-	(stop-and-copy)
-	(loop				; This is  a nice opportunity to poll the keyboard..
-	  (case (muerte.x86-pc.keyboard:poll-char)
-	    ((#\esc)
-	     (break "Los0 GC keyboard poll."))
-	    ((nil)
-	     (return)))))))
+      (let ((*standard-output* *terminal-io*))
+	(when *gc-running*
+	  (let ((muerte::*error-no-condition-for-debugger* t))
+	    (error "Recursive GC triggered.")))
+	(let ((*gc-running t))
+	  (unless *gc-quiet*
+	    (format t "~&;; GC.. "))
+	  (stop-and-copy)
+	  (loop				; This is  a nice opportunity to poll the keyboard..
+	    (case (muerte.x86-pc.keyboard:poll-char)
+	      ((#\esc)
+	       (break "Los0 GC keyboard poll."))
+	      ((nil)
+	       (return))))))))
   (let* ((actual-duo-space (or duo-space
 			       (allocate-duo-space (* kb-size #x100))))
 	 (last-location (object-location (cons 1 2))))
@@ -331,7 +333,8 @@ duo-space where each space is KB-SIZE kilobytes."
       (initialize-space oldspace)
       (values))))
 
-(defparameter *x* #500())
+
+(defparameter *x* #4000())		; Have this in static space.
 
 (defun stop-and-copy (&optional evacuator)
   (setf (fill-pointer *x*) 0)
@@ -356,7 +359,7 @@ duo-space where each space is KB-SIZE kilobytes."
 		   (cond
 		    ((not (object-in-space-p oldspace x))
 		     x)
-		    #+ignore ((typep x 'muerte::bignum)
+		    #+ignore ((typep x 'bignum)
 			      (let ((fwi (position (object-location x) *x* :test #'eq)))
 				(if fwi
 				    (muerte::%word-offset (aref *x* (1+ fwi)) 6)
@@ -371,10 +374,14 @@ duo-space where each space is KB-SIZE kilobytes."
 					   (object-tag x)))
 			       forwarded-x)
 			   (let ((forward-x (shallow-copy x)))
-			     (when (typep x 'muerte::bignum)
-			       (assert (= x forward-x)))
+			     (let ((a *x*))
+			       (when (typep x 'muerte::pointer)
+				 (vector-push (%object-lispval x) a)
+				 (vector-push (memref (object-location x) 0 0 :unsigned-byte32) a)
+				 (assert (vector-push (%object-lispval forward-x) a))))
 			     (setf (memref (object-location x) 0 0 :lisp) forward-x)
 			     forward-x)))))))))
+	(setf *gc-stack* (muerte::copy-control-stack))
 	;; Scavenge roots
 	(dolist (range muerte::%memory-map-roots%)
 	  (map-heap-words evacuator (car range) (cdr range)))
@@ -389,15 +396,31 @@ duo-space where each space is KB-SIZE kilobytes."
 			       (+ newspace-location (space-fresh-pointer newspace)))
 	       (setf scan-pointer fresh-pointer))
 
-	#+ignore (dotimes (i (truncate (length *x*) 2))
-		   (let ((x (muerte::%word-offset (aref *x* (* i 2)) 6))
-			 (y (muerte::%word-offset (aref *x* (1+ (* i 2))) 6)))
-		     (assert (and (object-in-space-p newspace y)
-				  (object-in-space-p oldspace x)
-				  (or (typep x 'muerte::std-instance)
-				      (equalp x y)))
-			 ()
-		       "Fail: i=~D, x: ~S/~Z, y: ~S/~Z, o: ~Z, n: ~Z" i x x y y oldspace newspace)))
+	;; Consistency check..
+	(let ((a *x*))
+	  ;; First, restore the state of old-space
+	  (do ((i 0 (+ i 3)))
+	      ((>= i (length a)))
+	    (let ((old (%lispval-object (aref a i)))
+		  (old-class (aref a (+ i 1))))
+	      (setf (memref (object-location old) 0 0 :unsigned-byte32) old-class)))
+	  ;; Then, check that each migrated object is equalp to its new self.
+	  (do ((i 0 (+ i 3)))
+	      ((>= i (length a)))
+	    (let ((old (%lispval-object (aref a i)))
+		  (new (%lispval-object (aref a (+ i 2)))))
+	      (unless (and (object-in-space-p newspace new)
+			   (object-in-space-p oldspace old)
+			   (objects-equalp old new))
+		(let ((*old* old)
+		      (*new* new)
+		      (*old-class* (aref a (+ i 1))))
+		  (declare (special *old* *new* *old-class*))
+		  (error "GC consistency check failed:
+old object: ~Z: ~S
+new object: ~Z: ~S
+oldspace: ~Z, newspace: ~Z, i: ~D"
+			 old old new new oldspace newspace i))))))
 
 	;; GC completed, oldspace is evacuated.
 	(unless *gc-quiet*
