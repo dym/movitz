@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.4 2004/03/31 16:47:40 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.5 2004/04/07 00:18:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -116,6 +116,18 @@
 	       (memref context (+ -6 4) index8 :unsigned-byte8) (ldb (byte 8 16) value)
 	       (memref context (+ -6 7) index8 :unsigned-byte8) (ldb (byte 6 24) value)))))
     value))
+
+(defun %run-time-context-ref (edi-offset)
+  "Get a run-time-context slot by its EDI-relative offset."
+  (with-inline-assembly (:returns :eax)
+    (:compile-form (:result-mode :eax) edi-offset)
+    (:leal (:eax #.(cl:* 1 movitz:+movitz-fixnum-factor+)) :ecx)
+    (:sarl #.movitz:+movitz-fixnum-shift+ :ecx)
+    (:testb 3 :cl)
+    (:jnz '(:sub-program ()
+	    (:compile-form (:result-mode :ignore)
+	     (error "Illegal edi-offset ~S" edi-offset))))
+    (:locally (:movl (:edi :ecx -1) :eax))))
 
 (defun clone-run-time-context (&key (parent (current-run-time-context))
 				    (name :anonymous))
