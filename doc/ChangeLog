@@ -1,3 +1,10 @@
+2004-07-13  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Added the feature that after each GC cycle, the keyboard is
+	polled. If the escape key is entered, a break to the debugger is
+	performed. This way one can interrupt long-running executions, so
+	long as the GC is triggered once in a while.
+
 2004-07-12  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
 
 	* Added top-level-command :more, that will evaluate a form while
