@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.70 2004/09/21 13:01:00 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.71 2004/09/25 15:40:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -181,6 +181,11 @@
     :binary-tag :primitive-function
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-type code-vector-word)
+   (dynamic-unwind-next
+    :map-binary-write 'movitz-intern-code-vector
+    :binary-tag :primitive-function
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-type code-vector-word)
    (dynamic-unwind
     :map-binary-write 'movitz-intern-code-vector
     :binary-tag :primitive-function
@@ -341,13 +346,13 @@
     :map-binary-read-delayed 'movitz-word
     :initarg :exception-handlers
     :accessor movitz-run-time-context-exception-handlers)
-   (exception-handler-tails
-    :binary-type word
-    :initform nil
-    :map-binary-write 'movitz-read-and-intern
-    :map-binary-read-delayed 'movitz-word
-    :initarg :exception-handler-tails
-    :accessor movitz-run-time-context-exception-handler-tails)
+;;;   (exception-handler-tails
+;;;    :binary-type word
+;;;    :initform nil
+;;;    :map-binary-write 'movitz-read-and-intern
+;;;    :map-binary-read-delayed 'movitz-word
+;;;    :initarg :exception-handler-tails
+;;;    :accessor movitz-run-time-context-exception-handler-tails)
    (interrupt-descriptor-table
     :binary-type word
     :accessor movitz-run-time-context-interrupt-descriptor-table
@@ -460,11 +465,11 @@
    (scratch1
     :binary-type word
     :initform 0)
-   (dynamic-unwind-next
+   (ret-trampoline
+    :binary-type code-vector-word
     :map-binary-write 'movitz-intern-code-vector
-    :binary-tag :primitive-function
     :map-binary-read-delayed 'movitz-word-code-vector
-    :binary-type code-vector-word))
+    :binary-tag :primitive-function))
   (:slot-align null-symbol -5))
 
 (defun atomically-continuation-simple-pf (pf-name)
