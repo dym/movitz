@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  9 15:38:56 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: textmode.lisp,v 1.13 2004/11/14 22:58:23 ffjeld Exp $
+;;;; $Id: textmode.lisp,v 1.14 2004/11/24 16:24:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -224,6 +224,8 @@
      (loop when (muerte.x86-pc.keyboard:poll-char) return it))
     (muerte::stream-read-char-no-hang
      (muerte.x86-pc.keyboard:poll-char))
+    (muerte::stream-read-key
+     (loop when (muerte.x86-pc.keyboard:poll-key) return it))
     (cursor-x (cursor-column))
     (cursor-y (cursor-row))
     (console-width *screen-width*)
