@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.8 2004/02/10 00:42:37 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.9 2004/02/10 00:43:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -732,6 +732,10 @@
 		 #'compute-slots)
 	       class))
     (values))
+  
+  (defun finalize-inheritance (class)
+    (error "Don't know how to finalize-inheritance for class ~S of class ~S."
+	   class (class-of class)))
 
 ;;; Class precedence lists
 
