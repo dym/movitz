@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.6 2004/02/10 00:39:51 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.7 2004/02/10 00:41:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -865,6 +865,10 @@
 							    direct-slots))
 				      :allocation (slot-definition-allocation (car direct-slots)))))
   
+  (defun compute-effective-slot-definition (class name direct-slots)
+    (declare (ignore name direct-slots))
+    (error "Don't know how to compute-effective-slot-definition for class ~S of class ~S."
+	   class (class-of class)))
   
 
 ;;;;
