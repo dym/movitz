@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.40 2004/09/15 10:22:52 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.41 2004/09/17 11:06:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -94,7 +94,8 @@
 	  (ash wide-tag 8)))
 
 (defun tag-name (number)
-  (bt:enum-symbolic-value 'other-type-byte number))
+  (find number '(:even-fixnum :odd-fixnum :cons :character :null :other :symbol)
+	:key 'tag))
 
 (defun extract-tag (word)
   (tag-name (ldb (byte 3 0) word)))
