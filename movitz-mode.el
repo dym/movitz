@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep 27 18:12:17 2001
 ;;;;                
-;;;; $Id: movitz-mode.el,v 1.2 2004/01/15 17:37:11 ffjeld Exp $
+;;;; $Id: movitz-mode.el,v 1.3 2004/02/02 13:31:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -108,7 +108,7 @@
 	     (fi:eval-in-lisp "movitz::*bootblock-build*")
 	     display-shortcut)
     (call-process "/bin/sh" nil 0 nil "-c"
-		  (format "DISPLAY=\"%s\" ~/tmp/bochs-cvs/bochs -nocp > bochs-parameters"
+		  (format "DISPLAY=\"%s\" cd ~/clnet/movitz && ~/tmp/bochs-cvs/bochs -nocp > bochs-parameters"
 			  display-shortcut))))
 
 (defun movitz-compile-file ()
@@ -220,7 +220,7 @@
                                                        (cl:char= #\\& (cl:char (cl:string x) 0))))
                                                 lambda-list)))
                   (specializers (cl:mapcar #'muerte::find-specializer
-                                  (cl:mapcar (cl:lambda (x) (cl:if (cl:consp x) (cl:second x) 'los0.cl:t))
+                                  (cl:mapcar (cl:lambda (x) (cl:if (cl:consp x) (cl:second x) 'muerte.cl:t))
                                              specializing-lambda-list)))
                   (method (muerte::movitz-find-method gf qualifiers specializers))
                   (funobj (muerte::movitz-slot-value method 'muerte::function))
@@ -258,7 +258,7 @@
         (cl:let ((cl:*package* (cl:find-package :%s)))
          (cl:with-open-file (stream \"%s\" :direction :input)
           (cl:read stream))))
-       :common-lisp :los0.common-lisp))))"
+       :common-lisp :muerte.common-lisp))))"
 					   fi:package
 					   fi:package
 					   tmp-file))
