@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.12 2004/06/04 13:33:50 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.13 2004/06/06 02:10:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -106,6 +106,7 @@
 	    ;; *DEST* iret branches to here.
 	    ;; we're now in the context of the interruptee.
 
+	    (:cld)
 	    ;; Save/push thread-local values
 	    (:locally (:movl (:edi (:edi-offset num-values)) :ecx))
 	    (:jecxz 'push-values-done)
@@ -166,8 +167,7 @@
 	   restart-atomical-block
 	    (:cmpb ,(bt:enum-value 'movitz::atomically-status :restart-primitive-function) :cl)
 	    (:jne 'not-simple-atomical-pf-restart)
-	    (:testl ,(bt:enum-value 'movitz::atomically-status '(:eax :ebx :ecx :edx))
-		    :ecx)		; map of registers to restore
+	    (:testl #xff00 :ecx)	; map of registers to restore
 	    (:jnz 'not-simple-atomical-pf-restart)
 	    (:sarl 16 :ecx)		; move atomically-status data into ECX
 	    (:movl (:edi (:ecx 4) ,(- (movitz:tag :null)))
@@ -199,6 +199,10 @@
 	    (:locally (:movl :ecx (:edi (:edi-offset atomically-status))))
 	    (:movl (:ebp -36) :ecx)	; Load interruptee's atomically-esp..
 	    (:locally (:movl :ecx (:edi (:edi-offset atomically-esp)))) ; ..and restore it.
+
+	    (:testl #x40 (:ebp 16))	; Test EFLAGS bit DF
+	    (:jnz 'atomically-jumper-return-dirty-registers)
+
 	    (:movl (:ebp -28) :edi)
 	    (:movl (:ebp -24) :esi)
 	    (:movl (:ebp -16) :edx)
@@ -215,6 +219,28 @@
 	    (:movl :edi (:ebp 16))
 	    (:movl :edi (:ebp 20))
 	    (:movl (:ebp 0) :ebp)	; pop stack-frame
+	    (:locally (:movl (:edi (:edi-offset atomically-esp)) :esp)) ; restore ESP
+	    (:jmp (:esi :ebx ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
+
+	   atomically-jumper-return-dirty-registers
+	    ;; If the interruptee had DF set, then initialize all GP registers with
+	    ;; safe values, keep EBP, set ESI=(EBP -4), and EDI is known-good EDI.
+	    ;; DF will be cleared.
+	    (:movl :edi :edx)
+	    (:movl :edi :eax)
+	    (:movl :edi  :ecx)
+
+	    (:movl (:ebp -32) :ebx)	; atomically-status..
+	    (:shrl ,(- 16 movitz:+movitz-fixnum-shift+) :ebx)
+
+	    ;; Make stack safe before we exit interrupt-frame..
+	    (:movl :edi (:ebp 4))
+	    (:movl :edi (:ebp 8))
+	    (:movl :edi (:ebp 12))
+	    (:movl :edi (:ebp 16))
+	    (:movl :edi (:ebp 20))
+	    (:movl (:ebp 0) :ebp)	; pop interrupt-frame
+	    (:movl (:ebp -4) :esi)
 	    (:locally (:movl (:edi (:edi-offset atomically-esp)) :esp)) ; restore ESP
 	    (:jmp (:esi :ebx ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
 
