@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.28 2005/01/04 16:54:34 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.29 2005/01/21 21:02:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -310,8 +310,10 @@ located in the caller's stack-frame or funobj-constants."
        (:* 1 (#x55 #x8b #xec #x56))	; pushl ebp, movl esp
        (:* 2 (#x80 #xf9 (cmpargs)
 		   (:or (#x72 (label))
+			(#x75 (label))
 			(#x77 (label))
 			(#x0f #x82 (label) (label) (label) (label))
+			(#x0f #x85 (label) (label) (label) (label))
 			(#x0f #x87 (label) (label) (label) (label)))))
        (:* 1 (#x84 #xc9			; #<asm TESTB %CL %CL>
 		   (:or (#x78 (label))	; #<asm JS %PC+#xed>
