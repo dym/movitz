@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.25 2004/10/07 12:52:47 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.26 2004/10/08 10:26:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -725,20 +725,18 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	  (compiler-values ()
 	    :returns :non-local-exit
 	    :code `((:lexical-control-transfer nil :nothing ,env ,tagbody-env ,label)))
-	;; Perform a lexical "throw" to the tag. Much like a regular throw, except
-	;; no values are transferred, and we step _into_ that dynamic env, not outside it.
+	;; Perform a lexical "throw" to the tag. Just like a regular (dynamic) throw.
 	(let ((save-esp-binding (movitz-binding (save-esp-variable tagbody-env) env))
 	      (label-id (movitz-env-get tag 'go-tag-label-id nil tagbody-env nil)))
 	  (assert label-id)
-	  #+ignore
-	  (compiler-call #'compile-form-unprotected
-	    :forward all
-	    :form `(muerte::exact-throw ,(movitz-env-lexical-catch-tag-variable tagbody-env)
-					0 nil))
 	  (compiler-values ()
 	    :returns :non-local-exit
 	    :code `((:load-lexical ,save-esp-binding :edx)
 		    (:movl :edx :eax)
+		    ,@(when (plusp label-id)
+			;; The target jumper points to the tagbody's label-set.
+			;; Now, install correct jumper within tagbody as target.
+			`((:addl ,(* 4 label-id) (:edx 8))))
 		    (:globally (:call (:edi (:edi-offset dynamic-unwind-next))))
 		    (:jnc '(:sub-program () (:int 63)))
 		    ;; have next-continuation in EAX, final-continuation in EDX
@@ -749,26 +747,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		    (:movl (:esp) :eax)	; target stack-frame EBP
 		    (:movl (:eax -4) :esi) ; get target funobj into ESI
 		    (:movl (:esp 8) :eax) ; target jumper number
-		    (:jmp (:esi :eax
-				,(* 4 label-id) ,(slot-offset 'movitz-funobj 'constant0)))))
-	  #+ignore
-	  (compiler-values ()
-	    :returns :non-local-exit
-	    :code (append (compiler-call #'compile-form
-			    :result-mode :eax
-			    :forward all
-			    :form (movitz-env-lexical-catch-tag-variable tagbody-env))
-			  `((:xorl :ebx :ebx)
-			    (:globally (:call (:edi (:edi-offset dynamic-locate-catch-tag))))
-			    (:jnc '(:sub-program () (:int 108)))
-			    (:locally (:bound (:edi (:edi-offset stack-bottom)) :eax))
-			    (:movl :eax :esp)
-			    (:movl (:esp) :ebp)
-			    (:movl (:ebp -4) :esi)
-			    (:locally (:movl :eax (:edi (:edi-offset dynamic-env)))) ; enter dynamic env
-			    (:movl (:esp 8) :ecx) ; label-set base
-			    (:jmp (:esi :ecx ,(+ (slot-offset 'movitz-funobj 'constant0)
-						 (* 4 label-id)))))))))))) ; transfer control, finally.
+		    (:clc)
+		    (:jmp (:esi :eax ,(slot-offset 'movitz-funobj 'constant0))))))))))
 
 (define-special-operator block (&all forward &funobj funobj &form form &env env
 				     &result-mode result-mode)
