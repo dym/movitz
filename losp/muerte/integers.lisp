@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.69 2004/07/17 01:48:08 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.70 2004/07/17 11:27:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -487,11 +487,7 @@
 		   0)
 		  ((< minuend subtrahend)
 		   (let ((x (- subtrahend minuend)))
-		     (when (typep x 'bignum)
-		       (setf (memref x ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::sign)
-				     0 :unsigned-byte8)
-			 #xff))
-		     x))
+		     (%negatef x subtrahend minuend)))
 		  (t (%bignum-canonicalize
 		      (with-inline-assembly (:returns :eax)
 			(:compile-two-forms (:eax :ebx) (copy-bignum minuend) subtrahend)
@@ -1093,6 +1089,7 @@ Preserve EAX and EBX."
   (cond
    ((= 0 count)
     integer)
+   ((= 0 integer) 0)
    ((plusp count)
     (let ((result-length (+ (integer-length integer) count)))
       (cond
@@ -1382,13 +1379,11 @@ Preserve EAX and EBX."
 		 (if (< x y)
 		     (* y x)
 		   ;; X is the biggest factor.
-		   (let ((r 0) (f 0))
-		     (dotimes (half-bigit (* 2 (%bignum-bigits y)))
-		       (let* ((digit (* x (memref y -2 half-bigit :unsigned-byte16)))
-			      (delta1 (ash digit f)))
-			 (incf r delta1))
-		       (incf f 16))
-		     r)))
+		   (do ((r 0)
+			(length (integer-length y))
+			(i 0 (+ i 29)))
+		       ((>= i length) r)
+		     (incf r (ash (* x (ldb (byte 29 i) y)) i)))))
 		((t (integer * -1))
 		 (%negatef (* x (- y)) x y))
 		(((integer * -1) t)
