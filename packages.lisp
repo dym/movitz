@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.8 2004/03/23 11:18:30 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.9 2004/03/24 11:24:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1155,6 +1155,7 @@
 	   vector-u8
 	   vector-u16
 	   vector-u32
+	   pointer
 	   
 	   make-funobj
 	   funobj-type

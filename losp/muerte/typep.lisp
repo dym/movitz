@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.3 2004/02/26 13:43:00 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.4 2004/03/24 11:24:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -187,6 +187,15 @@
 		(tag4 (make-tag-typep :tag4))
 		(tag5 (make-tag-typep :null))
 		(tag6 (make-tag-typep :other))
+		(pointer
+		 `(with-inline-assembly-case ()
+		    (do-case (t :boolean-zf=0 :labels (done))
+		      (:compile-form (:result-mode :eax) ,object)
+		      (:testb ,movitz::+movitz-fixnum-zmask+ :al)
+		      (:jz 'done)
+		      (:leal (:eax 6) :ecx) ; => cons:7, other:4, symbol:5, fixnum:6
+		      (:testb #b100 :cl)
+		     done)))
 		(std-instance 
 		 (make-other-typep :std-instance)
 		 #+ignore (make-tag-typep :std-instance))
@@ -205,7 +214,7 @@
 		(character
 		 `(with-inline-assembly (:returns :boolean-zf=1)
 		    (:compile-form (:result-mode :eax) ,object)
-		    (:cmpb ,(movitz::tag :character) :al)))
+		    (:cmpb ,(movitz:tag :character) :al)))
 		((function compiled-function)
 		 (make-other-typep :funobj))
 		((vector array)
@@ -327,10 +336,14 @@
 (define-simple-typep (cons consp) (obj)
   (typep obj 'cons))
 
+(define-simple-typep (pointer pointerp) (obj)
+  (typep obj 'pointer))
+
 (define-typep cons (x &optional (car '*) (cdr '*))
   (and (typep x 'cons)
        (or (eq '* car) (typep (car x) car))
        (or (eq '* cdr) (typep (cdr x) cdr))))
+
 
 (define-simple-typep (atom atom) (x)
   (typep x 'atom))
