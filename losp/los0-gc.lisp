@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.38 2004/09/21 13:05:49 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.39 2004/09/22 17:58:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -92,9 +92,10 @@
 	    (:movl :ebx (:edx :ecx 6))
 	    (:addl 8 :ecx)
 	    (:movl :ecx (:edx 2))	; Commit allocation
+	    (:leal (:edx :ecx -5) :edx)
 	    ;; Exit thread-atomical
 	    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
-	    (:leal (:edx :ecx -5) :eax)
+	    (:movl :edx :eax)
 	    (:ret))))
     (do-it)))
 
@@ -149,9 +150,9 @@ Preserve ECX."
 		   :eax)
 	    (:ja '(:sub-program (probe-failed)
 		   (:int 113)
-		   (:jmp 'retry)))
-	    (:movl :edi (:edx :ebx 8 ,movitz:+other-type-offset+))
+		   (:int 63)))
 	    (:leal (:edx :ebx 8) :eax)
+	    (:movl :edi (:edx :ebx 8 ,movitz:+other-type-offset+))
 	    (:ret))))
     (do-it)))
 
@@ -164,7 +165,7 @@ Preserve EAX and EBX."
 	   retry
 	    (:locally (:cmpl 0 (:edi (:edi-offset atomically-continuation)))) ; Atomically?
 	    (:je '(:sub-program ()
-		   (:int 50)))		; This must be called inside atomically.
+		   (:int 63)))		; This must be called inside atomically.
 	    (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:andl -8 :ecx)
@@ -180,7 +181,7 @@ Preserve EAX and EBX."
     (do-it)))
     
 (define-primitive-function los0-box-u32-ecx ()
-  "Make u32 in ECX into a fixnum or bignum."
+  "Make u32 in ECX into a fixnum or bignum in EAX."
   (macrolet
       ((do-it ()
 	 `(with-inline-assembly (:returns :multiple-values)
@@ -204,9 +205,9 @@ Preserve EAX and EBX."
 	    (:movl :ecx (:edx :eax 6))
 	    (:addl 8 :eax)
 	    (:movl :eax (:edx 2))	; Commit allocation
+	    (:leal (:edx :eax) :eax)
 	    ;; Exit thread-atomical
 	    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
-	    (:leal (:edx :eax) :eax)
 	    (:ret))))
     (do-it)))
 
