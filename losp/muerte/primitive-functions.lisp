@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.57 2004/11/25 18:06:02 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.58 2004/12/14 16:22:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,6 +18,18 @@
 (provide :muerte/primitive-functions)
 
 (in-package muerte)
+
+(defconstant +funobj-trampoline-table+
+    #(trampoline-funcall%1op
+      trampoline-funcall%2op
+      trampoline-funcall%3op
+      trampoline-cl-dispatch-1or2
+      assert-1arg
+      assert-2args
+      assert-3args
+      decode-args-1or2))
+
+(defconstant +funobj-trampoline-table-size+ 16)
 
 (define-primitive-function trampoline-funcall%1op ()
   "Call a function with 1 argument"

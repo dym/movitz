@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.24 2004/10/21 20:34:04 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.25 2004/12/14 16:20:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,7 +18,7 @@
 (require :muerte/setf)
 (provide :muerte/functions)
 
-(In-package muerte)
+(in-package muerte)
 
 (defun identity (x) x)
 
