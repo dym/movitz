@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.45 2004/04/14 14:38:14 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.46 2004/04/14 19:04:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2477,18 +2477,23 @@ the sub-program options (&optional label) as secondary value."
 			      (tree-search i r))
 			    free-so-far)))
 	      ((:load-constant :load-lexical :store-lexical :init-lexvar
-		:cons-get :endp :incf-lexvar
-		:local-function-init)
+		:cons-get :endp :incf-lexvar)
+	       (assert (gethash (instruction-is i) *extended-code-expanders*))
 	       (unless (can-expand-extended-p i frame-map)
 		 (return (values nil t)))
 	       (let ((exp (expand-extended-code i funobj frame-map)))
-		 (when (tree-search exp '(:call))
+		 (when (tree-search exp '(:call :local-function-init))
 		   (return nil))
 		 (setf free-so-far
 		   (remove-if (lambda (r)
 				(or (tree-search exp r)
 				    (tree-search exp (register32-to-low8 r))))
 			      free-so-far))))
+	      ((:local-function-init)
+	       (destructuring-bind (binding)
+		   (cdr i)
+		 (unless (typep binding 'funobj-binding)
+		   (return nil))))
 	      (t (warn "Dist ~D stopped by ~A"
 		       distance i)
 		 (return nil)))))
@@ -2651,6 +2656,7 @@ the sub-program options (&optional label) as secondary value."
 				   ((typep binding 'constant-object-binding))
 				   ((typep binding 'forwarding-binding))
 				   ((typep binding 'borrowed-binding))
+				   ((typep binding 'funobj-binding))
 				   ((and (typep binding 'fixed-required-function-argument)
 					 (plusp (or (car (gethash binding var-counts)) 0)))
 				    (prog1 nil ; may need lending-cons
@@ -3109,6 +3115,9 @@ loading borrowed bindings."
 	 (make-load-constant (constant-object binding)
 			     result-mode
 			     funobj frame-map))
+	(funobj-binding
+	 (make-load-constant (function-binding-funobj binding)
+			     result-mode funobj frame-map))
 	(borrowed-binding
 	 (let ((slot (borrowed-binding-reference-slot binding)))
 	   (cond
@@ -3375,8 +3384,10 @@ loading borrowed bindings."
 			     (lend-code (loop for bb in (borrowed-bindings sub-funobj)
 					    append (make-lend-lexical bb :edx nil))))
 			(cond
+			 ((typep function-binding 'funobj-binding)
+			  nil)
 			 ((null lend-code)
-			  ;; (warn "null lending")
+			  (warn "null lending")
 			  (append (make-load-constant sub-funobj :eax funobj frame-map)
 				  (make-store-lexical function-binding :eax nil frame-map)))
 			 (t (append (make-load-constant sub-funobj :eax funobj frame-map)
