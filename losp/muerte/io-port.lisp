@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 21 22:14:08 2001
 ;;;;                
-;;;; $Id: io-port.lisp,v 1.9 2004/04/14 14:39:18 ffjeld Exp $
+;;;; $Id: io-port.lisp,v 1.10 2004/04/14 16:38:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -68,14 +68,7 @@
 
 (define-compiler-macro (setf io-port) (&whole form value port type)
   (let ((value-var (gensym "(setf io-port)-value-"))
-	(port-var (gensym "(setf io-port)-port-"))
-	#+ignore
-	(value-eax-code (if (not (movitz:movitz-constantp value))
-			    `((:compile-form (:result-mode :untagged-fixnum-eax) ,value))
-			  (let ((port-value (movitz:movitz-eval value)))
-			    (check-type port-value (unsigned-byte 16))
-			    (movitz::make-immediate-move port-value :eax)))))
-    ;; value-code will put VALUE in eax.
+	(port-var (gensym "(setf io-port)-port-")))
     (cond
      ((and (movitz:movitz-constantp type)
 	   (movitz:movitz-constantp port))
@@ -288,7 +281,9 @@ that reads from <io-base-form> plus some offset."
 						 &environment env)
   (if (not (movitz:movitz-constantp byte-size env))
       form
-    (let ((byte-size (movitz:movitz-eval byte-size env)))
+    (let ((port-var (gensym "port-var-"))
+	  (object-var (gensym "object-var-"))
+	  (byte-size (movitz:movitz-eval byte-size env)))
       (cond
        ((and (movitz:movitz-constantp offset env)
 	     (movitz:movitz-constantp start env)
@@ -302,136 +297,158 @@ that reads from <io-base-form> plus some offset."
 	    (:32-bit
 	     (assert (= 4 movitz:+movitz-fixnum-factor+))
 	     (if (<= 1 count 20)
-		 `(with-inline-assembly-case ()
-		    (do-case (t :eax)
-		      (:compile-two-forms (:edx :ebx) ,port ,object)
-		      (:andl ,(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		 `(let ((,port-var ,port)
+			(,object-var ,object))
+		    (with-inline-assembly-case ()
+		      (do-case (t :eax)
+			(:std)
+			(:compile-two-forms (:edx :ebx) ,port-var ,object-var)
+			(:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+			,@(loop for i from start below end
+			      appending
+				`((:inl :dx :eax)
+				  (:movl :eax (:ebx ,(+ offset (* 4 i))))))
+			(:movl :edi :edx)
+			(:movl :ebx :eax)
+			(:cld))))
+	       `(let ((,port-var ,port)
+		      (,object-var ,object))
+		  (with-inline-assembly-case ()
+		    (do-case (t :eax :labels (io-read-loop end-io-read-loop not-fixnum))
+		      (:std)
+		      (:compile-two-forms (:edx :ebx) ,port-var ,object-var)
 		      (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
-		      ,@(loop for i from start below end
-			    appending
-			      `((:inl :dx :eax)
-				(:movl :eax (:ebx ,(+ offset (* 4 i))))))
-		      (:movl :ebx :eax)))
-	       `(with-inline-assembly-case ()
-		  (do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
-		    (:compile-two-forms (:edx :ebx) ,port ,object)
-		    (:andl ,(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
-		    (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
-		    (:pushl ,(cl:* movitz::+movitz-fixnum-factor+ end)) ; keep end in (:esp)
-		    (:movl ,(cl:* movitz::+movitz-fixnum-factor+ start) :ecx)
-		   io-read-loop
-		    (:cmpl :ecx (:esp))
-		    (:jbe 'end-io-read-loop)
-		    (:addl 4 :ecx)
-		    (:inl :dx :eax)
-		    (:movl :eax (:ebx ,(+ offset -4) :ecx))
-		    (:jmp 'io-read-loop)
-		    (:popl :eax)	; increment :esp, and put a lispval in :eax.
-		   end-io-read-loop))))
+		      (:pushl ,(cl:* movitz::+movitz-fixnum-factor+ end)) ; keep end in (:esp)
+		      (:movl ,(cl:* movitz::+movitz-fixnum-factor+ start) :ecx)
+		     io-read-loop
+		      (:cmpl :ecx (:esp))
+		      (:jbe 'end-io-read-loop)
+		      (:addl 4 :ecx)
+		      (:inl :dx :eax)
+		      (:movl :eax (:ebx ,(+ offset -4) :ecx))
+		      (:jmp 'io-read-loop)
+		     end-io-read-loop
+		      (:popl :edx)	; increment :esp, and put a lispval in :edx.
+		      (:movl :ebx :eax)
+		      (:cld))))))
 	    (:16-bit
 	     (assert (= 4 movitz:+movitz-fixnum-factor+))
 	     (if (and t (<= 1 count 20))
-		 `(with-inline-assembly-case ()
-		    (do-case (t :ebx)
-		      (:compile-two-forms (:edx :ebx) ,port ,object)
-		      (:andl ,(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		 `(let ((,port-var ,port)
+			(,object-var ,object))
+		    (with-inline-assembly-case ()
+		      (do-case (t :eax)
+			(:std)
+			(:compile-two-forms (:edx :ebx) ,port-var ,object-var)
+			(:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+			,@(loop for i from start below end
+			      appending
+				`((:inw :dx :ax)
+				  (:movw :ax (:ebx ,(+ offset (* 2 i))))))
+			(:movl :edi :edx)
+			(:movl :ebx :eax)
+			(:cld))))
+	       `(let ((,port-var ,port)
+		      (,object-var ,object))
+		  (with-inline-assembly-case ()
+		    (do-case (t :eax :labels (io-read-loop end-io-read-loop not-fixnum))
+		      (:std)
+		      (:compile-two-forms (:edx :ebx) ,port-var ,object-var)
 		      (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
-		      (:xorl :eax :eax)
-		      ,@(loop for i from start below end
-			    appending
-			      `((:inw :dx :ax)
-				(:movw :ax (:ebx ,(+ offset (* 2 i))))))))
-	       `(with-inline-assembly-case ()
-		  (do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
-		    (:compile-two-forms (:edx :ebx) ,port ,object)
-		    (:andl ,(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
-		    (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
-		    ;; (:pushl ,(cl:* movitz::+movitz-fixnum-factor+ end)) ; keep end in (:esp)
-		    (:movl ,(cl:* 1 start) :ecx)
-		    (:xorl :eax :eax)
-		   io-read-loop
-		    (:cmpl ,end :ecx)
-		    (:ja 'end-io-read-loop)
-		    (:addl 1 :ecx)
-		    (:inw :dx :ax)
-		    (:movw :ax (:ebx ,(+ offset -2) (:ecx 2)))
-		    (:jmp 'io-read-loop)
-		   end-io-read-loop))))
+		      (:movl ,(cl:* 1 start) :ecx)
+		     io-read-loop
+		      (:cmpl ,end :ecx)
+		      (:ja 'end-io-read-loop)
+		      (:addl 1 :ecx)
+		      (:inw :dx :ax)
+		      (:movw :ax (:ebx ,(+ offset -2) (:ecx 2)))
+		      (:jmp 'io-read-loop)
+		     end-io-read-loop
+		      (:movl :edi :edx)
+		      (:movl :ebx :eax)
+		      (:cld))))))
 	    (t (error "~S byte-size ~S not implemented." (car form) byte-size)))))
        ((and (movitz:movitz-constantp offset env))
-	(let ((offset (movitz:movitz-eval offset env)))
+	(let ((start-var (gensym "start-"))
+	      (end-var (gensym "end-"))
+	      (offset (movitz:movitz-eval offset env)))
 	  (case byte-size
 	    (:8-bit
 	     (assert (= 4 movitz:+movitz-fixnum-factor+))
-	     `(with-inline-assembly-case ()
-		(do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
-		  (:compile-form (:result-mode :push) ,port)
-		  (:compile-form (:result-mode :push) ,object)
-		  (:compile-two-forms (:ecx :eax) ,start ,end)
-		  (:popl :ebx)		; object
-		  (:popl :edx)		; port
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :eax)
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :ecx)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :edx)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :eax)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
-		  (:pushl :eax)		; keep end in (:esp)
-		 io-read-loop
-		  (:cmpl :ecx (:esp))
-		  (:jbe 'end-io-read-loop)
-		  (:inb :dx :al)
-		  (:addl 1 :ecx)
-		  (:movb :al (:ebx ,(+ offset -1) (:ecx 1)))
-		  (:jmp 'io-read-loop)
-		  (:popl :eax)		; increment :esp, and put a lispval in :eax.
-		 end-io-read-loop)))
+	     `(let ((,port-var ,port)
+		    (,object-var ,object)
+		    (,start-var ,start)
+		    (,end-var ,end))
+		(with-inline-assembly-case ()
+		  (do-case (t :eax :labels (io-read-loop not-fixnum zero-length))
+		    (:std)
+		    (:compile-two-forms (:edx :ebx) ,port-var ,object-var)
+		    (:compile-two-forms (:ecx :eax) ,start-var ,end-var)
+		    (:subl :ecx :eax)	; EAX = length
+		    (:jna 'zero-length)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
+		    (:pushl :eax)	; keep length in (:esp)
+		   io-read-loop
+		    (:inb :dx :al)
+		    (:addl 1 :ecx)
+		    (:subl ,movitz:+movitz-fixnum-factor+ (:esp))
+		    (:movb :al (:ebx ,(+ offset -1) (:ecx 1)))
+		    (:jnz 'io-read-loop)
+		    (:popl :edx)	; increment :esp, and put a lispval in :edx.
+		   zero-length
+		    (:movl :ebx :eax)
+		    (:cld)))))
 	    (:16-bit
 	     (assert (= 4 movitz:+movitz-fixnum-factor+))
-	     `(with-inline-assembly-case ()
-		(do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
-		  (:compile-form (:result-mode :push) ,port)
-		  (:compile-form (:result-mode :push) ,object)
-		  (:compile-two-forms (:ecx :eax) ,start ,end)
-		  (:popl :ebx)		; object
-		  (:popl :edx)		; port
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :eax)
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :ecx)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :edx)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :eax)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
-		  (:pushl :eax)		; keep end in (:esp)
-		 io-read-loop
-		  (:cmpl :ecx (:esp))
-		  (:jbe 'end-io-read-loop)
-		  (:inw :dx :ax)
-		  (:addl 2 :ecx)
-		  (:movw :ax (:ebx ,(+ offset -2) :ecx))
-		  (:jmp 'io-read-loop)
-		  (:popl :eax)		; increment :esp, and put a lispval in :eax.
-		 end-io-read-loop)))
+	     `(let ((,port-var ,port)
+		    (,object-var ,object)
+		    (,start-var ,start)
+		    (,end-var ,end))
+		(with-inline-assembly-case ()
+		  (do-case (t :eax :labels (io-read-loop not-fixnum zero-length))
+		    (:std)		; only EBX is GC root now
+		    (:compile-two-forms (:edx :ebx) ,port-var ,object-var)
+		    (:compile-two-forms (:ecx :eax) ,start-var ,end-var)
+		    (:subl :ecx :eax)	; EAX = length
+		    (:jna 'zero-length)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
+		    (:pushl :eax)	; keep end in (:esp)
+		   io-read-loop
+		    (:inw :dx :ax)
+		    (:addl 2 :ecx)
+		    (:subl ,(* 2 movitz:+movitz-fixnum-factor+) (:esp))
+		    (:movw :ax (:ebx ,(+ offset -2) (:ecx 1)))
+		    (:jnz 'io-read-loop)
+		    (:popl :edx)	; increment :esp, and put a lispval in :edx.
+		   zero-length
+		    (:movl :ebx :eax)
+		    (:cld)))))
 	    (:32-bit
 	     (assert (= 4 movitz:+movitz-fixnum-factor+))
-	     `(with-inline-assembly-case ()
-		(do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
-		  (:compile-form (:result-mode :push) ,port)
-		  (:compile-form (:result-mode :push) ,object)
-		  (:compile-two-forms (:ecx :eax) ,start ,end)
-		  (:popl :ebx)		; object
-		  (:popl :edx)		; port
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :edx)
-		  (:pushl :eax)		; keep end in (:esp)
-		 io-read-loop
-		  (:cmpl :ecx (:esp))
-		  (:jbe 'end-io-read-loop)
-		  (:inl :dx :eax)
-		  (:addl 4 :ecx)
-		  (:movl :eax (:ebx ,(+ offset -4) :ecx))
-		  (:jmp 'io-read-loop)
-		  (:popl :eax)		; increment :esp, and put a lispval in :eax.
-		 end-io-read-loop)))
+	     `(let ((,port-var ,port)
+		    (,object-var ,object)
+		    (,start-var ,start)
+		    (,end-var ,end))
+		(with-inline-assembly-case ()
+		  (do-case (t :eax :labels (io-read-loop end-io-read-loop not-fixnum))
+		    (:std)		; only EBX is GC root now
+		    (:compile-two-forms (:edx :ebx) ,port-var ,object-var)
+		    (:compile-two-forms (:ecx :eax) ,start-var ,end-var)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+		    (:pushl :eax)	; keep end in (:esp)
+		   io-read-loop
+		    (:cmpl :ecx (:esp))
+		    (:jbe 'end-io-read-loop)
+		    (:inw :dx :ax)
+		    (:addl 4 :ecx)
+		    (:movw :ax (:ebx ,(+ offset -4) :ecx))
+		    (:jmp 'io-read-loop)
+		   end-io-read-loop
+		    (:popl :edx)	; increment :esp, and put a lispval in :edx.
+		    (:movl :ebx :eax)
+		    (:cld)))))
 	    (t (error "~S byte-size ~S not implemented." (car form) byte-size)))))
        (t (error "Variable offset not implemented."))))))
 
@@ -451,7 +468,9 @@ that reads from <io-base-form> plus some offset."
 						  &environment env)
   (if (not (movitz:movitz-constantp byte-size env))
       form
-    (let ((byte-size (movitz:movitz-eval byte-size env)))
+    (let ((port-var (gensym "port-var-"))
+	  (object-var (gensym "object-var-"))
+	  (byte-size (movitz:movitz-eval byte-size env)))
       (cond
        ((and (movitz:movitz-constantp offset env)
 	     (movitz:movitz-constantp start env)
@@ -465,107 +484,120 @@ that reads from <io-base-form> plus some offset."
 	    (:32-bit
 	     (assert (= 4 movitz:+movitz-fixnum-factor+))
 	     (if (<= 1 count 20)
-		 `(with-inline-assembly-case ()
-		    (do-case (t :eax)
-		      (:compile-two-forms (:edx :ebx) ,port ,object)
-		      (:andl ,(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		 `(let ((,port-var ,port)
+			(,object-var ,object))
+		    (with-inline-assembly-case ()
+		      (do-case (t :eax)
+			(:std)
+			(:compile-two-forms (:edx :ebx) ,port-var ,object-var)
+			(:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+			,@(loop for i from start below end
+			      appending
+				`((:movl (:ebx ,(+ offset (* 4 i))) :eax)
+				  (:outl :eax :dx)))
+			(:movl :edi :edx)
+			(:movl :ebx :eax)
+			(:cld))))
+	       `(let ((,port-var ,port)
+		      (,object-var ,object))
+		  (with-inline-assembly-case ()
+		    (do-case (t :eax :labels (io-read-loop end-io-read-loop not-fixnum))
+		      (:std)
+		      (:compile-two-forms (:edx :ebx) ,port-var ,object-var)
 		      (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
-		      ,@(loop for i from start below end
-			    appending
-			      `((:movl (:ebx ,(+ offset (* 4 i))) :eax)
-				(:outl :eax :dx)))
-		      (:movl :ebx :eax)))
-	       `(with-inline-assembly-case ()
-		  (do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
-		    (:compile-two-forms (:edx :ebx) ,port ,object)
-		    (:andl ,(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		      (:movl ,(cl:* movitz::+movitz-fixnum-factor+ start) :ecx)
+		     io-read-loop
+		      (:cmpl :ecx ,(cl:* movitz::+movitz-fixnum-factor+ end)) ; XXX
+		      (:jbe 'end-io-read-loop)
+		      (:addl 4 :ecx)
+		      (:movl (:ebx ,(+ offset -4) :ecx) :eax)
+		      (:outl :eax :dx)
+		      (:jmp 'io-read-loop)
+		     end-io-read-loop
+		      (:movl :edi :edx)
+		      (:movl :ebx :eax)
+		      (:cld))))))
+	    (t (error "~S byte-size ~S not implemented." (car form) byte-size)))))
+       ((and (movitz:movitz-constantp offset env))
+	(let ((start-var (gensym "start-"))
+	      (end-var (gensym "end-"))
+	      (offset (movitz:movitz-eval offset env)))
+	  (case byte-size
+	    (:8-bit
+	     `(let ((,port-var ,port)
+		    (,object-var ,object)
+		    (,start-var ,start)
+		    (,end-var ,end))
+		(with-inline-assembly-case ()
+		  (do-case (t :eax :labels (io-read-loop not-fixnum zero-length))
+		    (:std)
+		    (:compile-two-forms (:edx :ebx) ,port-var ,object-var)
+		    (:compile-two-forms (:ecx :eax) ,start-var ,end-var)
+		    (:subl :ecx :eax)	; EAX = length
+		    (:jna 'zero-length)
 		    (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
-		    (:pushl ,(cl:* movitz::+movitz-fixnum-factor+ end)) ; keep end in (:esp)
-		    (:movl ,(cl:* movitz::+movitz-fixnum-factor+ start) :ecx)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
+		    (:pushl :eax)	; keep end in (:esp)
+		   io-read-loop
+		    (:addl 1 :ecx)
+		    (:subl ,movitz:+movitz-fixnum-factor+ (:esp))
+		    (:movb (:ebx ,(+ offset -1) (:ecx 1)) :al)
+		    (:outb :al :dx)
+		    (:jnz 'io-read-loop)
+		    (:popl :edx)	; increment :esp, and put a lispval in :edx.
+		   zero-length
+		    (:movl :ebx :eax)
+		    (:cld)))))
+	    (:16-bit
+	     `(let ((,port-var ,port)
+		    (,object-var ,object)
+		    (,start-var ,start)
+		    (,end-var ,end))
+		(with-inline-assembly-case ()
+		  (do-case (t :eax :labels (io-read-loop not-fixnum zero-length))
+		    (:std)
+		    (:compile-two-forms (:edx :ebx) ,port-var ,object-var)
+		    (:compile-two-forms (:ecx :eax) ,start-var ,end-var)
+		    (:subl :ecx :eax)	; EAX = length
+		    (:jna 'zero-length)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
+		    (:pushl :eax)	; keep end in (:esp)
+		   io-read-loop
+		    (:addl 2 :ecx)
+		    (:subl ,(* 2 movitz:+movitz-fixnum-factor+) (:esp))
+		    (:movw (:ebx ,(+ offset -2) (:ecx 1)) :ax)
+		    (:outw :ax :dx)
+		    (:jnz 'io-read-loop)
+		    (:popl :edx)	; increment :esp, and put a lispval in :edx.
+		   zero-length
+		    (:movl :ebx :eax)
+		    (:cld)))))
+	    (:32-bit
+	     (assert (= 4 movitz:+movitz-fixnum-factor+))
+	     `(let ((,port-var ,port)
+		    (,object-var ,object)
+		    (,start-var ,start)
+		    (,end-var ,end))
+		(with-inline-assembly-case ()
+		  (do-case (t :eax :labels (io-read-loop not-fixnum end-io-read-loop))
+		    (:std)
+		    (:compile-two-forms (:edx :ebx) ,port-var ,object-var)
+		    (:compile-two-forms (:ecx :eax) ,start-var ,end-var)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
+		    (:pushl :eax)	; keep end in (:esp)
 		   io-read-loop
 		    (:cmpl :ecx (:esp))
 		    (:jbe 'end-io-read-loop)
 		    (:addl 4 :ecx)
-		    (:movl (:ebx ,(+ offset -4) :ecx) :eax)
+		    (:movl (:ebx ,(+ offset -4) (:ecx 1)) :eax)
 		    (:outl :eax :dx)
 		    (:jmp 'io-read-loop)
-		    (:popl :eax)	; increment :esp, and put a lispval in :eax.
-		   end-io-read-loop))))
-	    (t (error "~S byte-size ~S not implemented." (car form) byte-size)))))
-       ((and (movitz:movitz-constantp offset env))
-	(let ((offset (movitz:movitz-eval offset env)))
-	  (case byte-size
-	    (:8-bit
-	     (assert (= 4 movitz:+movitz-fixnum-factor+))
-	     `(with-inline-assembly-case ()
-		(do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
-		  (:compile-form (:result-mode :push) ,port)
-		  (:compile-form (:result-mode :push) ,object)
-		  (:compile-two-forms (:ecx :eax) ,start ,end)
-		  (:popl :ebx)		; object
-		  (:popl :edx)		; port
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :eax)
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :ecx)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :edx)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :eax)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
-		  (:pushl :eax)		; keep end in (:esp)
-		 io-read-loop
-		  (:cmpl :ecx (:esp))
-		  (:jbe 'end-io-read-loop)
-		  (:addl 1 :ecx)
-		  (:movb (:ebx ,(+ offset -1) (:ecx 1)) :al)
-		  (:outb :al :dx)
-		  (:jmp 'io-read-loop)
-		  (:popl :eax)		; increment :esp, and put a lispval in :eax.
-		 end-io-read-loop)))
-	    (:16-bit
-	     (assert (= 4 movitz:+movitz-fixnum-factor+))
-	     `(with-inline-assembly-case ()
-		(do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
-		  (:compile-form (:result-mode :push) ,port)
-		  (:compile-form (:result-mode :push) ,object)
-		  (:compile-two-forms (:ecx :eax) ,start ,end)
-		  (:popl :ebx)		; object
-		  (:popl :edx)		; port
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :eax)
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :ecx)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :edx)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :eax)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
-		  (:pushl :eax)		; keep end in (:esp)
-		 io-read-loop
-		  (:cmpl :ecx (:esp))
-		  (:jbe 'end-io-read-loop)
-		  (:addl 2 :ecx)
-		  (:movw (:ebx ,(+ offset -2) :ecx) :ax)
-		  (:outw :ax :dx)
-		  (:jmp 'io-read-loop)
-		  (:popl :eax)		; increment :esp, and put a lispval in :eax.
-		 end-io-read-loop)))
-	    (:32-bit
-	     (assert (= 4 movitz:+movitz-fixnum-factor+))
-	     `(with-inline-assembly-case ()
-		(do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
-		  (:compile-form (:result-mode :push) ,port)
-		  (:compile-form (:result-mode :push) ,object)
-		  (:compile-two-forms (:ecx :eax) ,start ,end)
-		  (:popl :ebx)		; object
-		  (:popl :edx)		; port
-		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
-		  (:shrl #.movitz::+movitz-fixnum-shift+ :edx)
-		  (:pushl :eax)		; keep end in (:esp)
-		 io-read-loop
-		  (:cmpl :ecx (:esp))
-		  (:jbe 'end-io-read-loop)
-		  (:addl 4 :ecx)
-		  (:movl (:ebx ,(+ offset -4) :ecx) :eax)
-		  (:outl :eax :dx)
-		  (:jmp 'io-read-loop)
-		  (:popl :eax)		; increment :esp, and put a lispval in :eax.
-		 end-io-read-loop)))
+		   end-io-read-loop
+		    (:popl :edx)	; increment :esp, and put a lispval in :edx.
+		    (:movl :ebx :eax)
+		    (:cld)))))
 	    (t (error "~S byte-size ~S not implemented." (car form) byte-size)))))
        (t (error "Variable offset not implemented."))))))
 
