@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.25 2004/07/13 13:02:45 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.26 2004/07/15 00:27:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,14 +18,14 @@
 
 (in-package muerte.init)
 
-(defconstant +space-size+ #xfffd)
-
-(defun make-space (location)
+(defvar *gc-quiet* nil)
+    
+(defun make-space (location size)
   "Make a space vector at a fixed location."
   (assert (evenp location))
   (macrolet ((x (index)
 	       `(memref location 0 ,index :unsigned-byte32)))
-    (setf (x 1) (* #.movitz:+movitz-fixnum-factor+ +space-size+)
+    (setf (x 1) (* #.movitz:+movitz-fixnum-factor+ size)
 	  (x 0) #.(cl:dpb (bt:enum-value 'movitz:movitz-vector-element-type :u32)
 			  (cl:byte 8 8)
 			  (bt:enum-value 'movitz:other-type-byte :basic-vector))))
@@ -247,12 +247,16 @@ Preserve EAX and EBX."
     (setf (exception-handler 113)
       (lambda (exception interrupt-frame)
 	(declare (ignore exception interrupt-frame))
-	(format t "~&;; GC.. ")
+	(unless *gc-quiet*
+	  (format t "~&;; GC.. "))
 	(stop-and-copy)
 	;; This is  a nice opportunity to poll the keyboard..
-	(case (muerte.x86-pc.keyboard:poll-char)
-	  ((#\esc)
-	   (break "Los0 GC keyboard poll.")))))
+	(loop
+	  (case (muerte.x86-pc.keyboard:poll-char)
+	    ((#\esc)
+	     (break "Los0 GC keyboard poll."))
+	    ((nil)
+	     (return))))))
     (let ((conser (symbol-value 'los0-fast-cons)))
       (check-type conser vector)
       (setf (%run-time-context-slot 'muerte::fast-cons)
@@ -406,10 +410,11 @@ Preserve EAX and EBX."
 	      "Fail: i=~D, x: ~S/~Z, y: ~S/~Z, o: ~Z, n: ~Z" i x x y y oldspace newspace)))
 
 	;; GC completed, oldspace is evacuated.
-	(let ((old-size (truncate (- (space-fresh-pointer oldspace) 2) 2))
-	      (new-size (truncate (- (space-fresh-pointer newspace) 2) 2)))
-	  (format t "Old space: ~/muerte:pprint-clumps/, new space: ~
+	(unless *gc-quiet*
+	  (let ((old-size (truncate (- (space-fresh-pointer oldspace) 2) 2))
+		(new-size (truncate (- (space-fresh-pointer newspace) 2) 2)))
+	    (format t "Old space: ~/muerte:pprint-clumps/, new space: ~
 ~/muerte:pprint-clumps/, freed: ~/muerte:pprint-clumps/.~%"
-		  old-size new-size (- old-size new-size)))
+		    old-size new-size (- old-size new-size))))
 	(initialize-space oldspace))))
   (values))
