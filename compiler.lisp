@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.67 2004/06/10 12:05:56 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.68 2004/06/10 19:30:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -60,6 +60,9 @@ compile, using the host compiler, the code rather than just using eval.")
 (defvar *compiler-do-type-inference* t
   "Spend time and effort performing type inference and optimization.")
 
+(defvar *compiler-produce-defensive-code* t
+  "Try make code be extra cautious.")
+
 (defvar *compiling-function-name*)
 (defvar muerte.cl:*compile-file-pathname* nil)
 
@@ -68,6 +71,7 @@ compile, using the host compiler, the code rather than just using eval.")
 
 (defvar *extended-code-find-write-binding-and-type*
     (make-hash-table :test #'eq))
+
 
 (defconstant +enter-stack-frame-code+
     '((:pushl :ebp)
