@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.24 2004/07/13 02:38:27 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.25 2004/07/13 13:02:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -247,8 +247,12 @@ Preserve EAX and EBX."
     (setf (exception-handler 113)
       (lambda (exception interrupt-frame)
 	(declare (ignore exception interrupt-frame))
-	(format t "~&;; Handling out-of-memory exception..")
-	(stop-and-copy)))
+	(format t "~&;; GC.. ")
+	(stop-and-copy)
+	;; This is  a nice opportunity to poll the keyboard..
+	(case (muerte.x86-pc.keyboard:poll-char)
+	  ((#\esc)
+	   (break "Los0 GC keyboard poll.")))))
     (let ((conser (symbol-value 'los0-fast-cons)))
       (check-type conser vector)
       (setf (%run-time-context-slot 'muerte::fast-cons)
@@ -365,7 +369,7 @@ Preserve EAX and EBX."
 			   (vector-push (object-location x) *x*)
 			   (vector-push (object-location fw) *x*)
 			   fw))))
-		    (t (let ((forwarded-x (memref (object-location x) 0 1 :lisp)))
+		    (t (let ((forwarded-x (memref (object-location x) 0 0 :lisp)))
 			 (if (object-in-space-p newspace forwarded-x)
 			     (progn
 			       (assert (eq (object-tag forwarded-x)
@@ -374,7 +378,7 @@ Preserve EAX and EBX."
 			   (let ((forward-x (shallow-copy x)))
 			     (when (typep x 'muerte::bignum)
 			       (assert (= x forward-x)))
-			     (setf (memref (object-location x) 0 1 :lisp) forward-x)
+			     (setf (memref (object-location x) 0 0 :lisp) forward-x)
 			     forward-x)))))))))
 	;; Scavenge roots
 	(map-heap-words evacuator 0 (+ (malloc-buffer-start)
@@ -404,7 +408,7 @@ Preserve EAX and EBX."
 	;; GC completed, oldspace is evacuated.
 	(let ((old-size (truncate (- (space-fresh-pointer oldspace) 2) 2))
 	      (new-size (truncate (- (space-fresh-pointer newspace) 2) 2)))
-	  (format t "~&;; Old space: ~/muerte:pprint-clumps/, new space: ~
+	  (format t "Old space: ~/muerte:pprint-clumps/, new space: ~
 ~/muerte:pprint-clumps/, freed: ~/muerte:pprint-clumps/.~%"
 		  old-size new-size (- old-size new-size)))
 	(initialize-space oldspace))))
