@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.13 2004/06/06 02:10:55 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.14 2004/06/07 22:13:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -291,8 +291,9 @@
 		     $eax $ecx))
 	  (62 (error "Trying to save too many values: ~@Z." $ecx))
 	  ((5 55)
-	   (let* ((stack (%run-time-context-slot 'movitz::stack-vector))
-		  (old-bottom (stack-bottom))
+	   (let* ((old-bottom (prog1 (stack-bottom)
+				(setf (stack-bottom) 0)))
+		  (stack (%run-time-context-slot 'movitz::stack-vector))
 		  (real-bottom (- (object-location stack) 2))
 		  (stack-left (- old-bottom real-bottom))
 		  (new-bottom (cond
