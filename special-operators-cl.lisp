@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.41 2005/01/04 16:54:02 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.42 2005/01/04 20:22:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -722,7 +722,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				;; catcher
 				(:locally (:pushl (:edi (:edi-offset dynamic-env))))
 				(:pushl ',label-set-name)
-				(:pushl :eax)
+				(:locally (:pushl (:edi (:edi-offset unbound-function))))
 				(:pushl :ebp)
 				(:locally (:movl :esp (:edi (:edi-offset dynamic-env)))))
 			      maybe-store-esp-code
