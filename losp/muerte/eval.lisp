@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.3 2004/03/28 13:23:57 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.4 2004/04/01 16:07:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -388,3 +388,13 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 	    (apply (lookup-setf-function (caar p))
 		   (eval-form value-form env)
 		   place-subvalues)))))))
+
+(defun compile (name &optional definition)
+  "=> function, warnings-p, failure-p"
+  (let ((function (eval (or definition (symbol-function name)))))
+    (check-type function function)
+    (warn ";; There is no real compiler here.")
+    (values (if (not name)
+		function
+	      (setf (symbol-function name) function))
+	    t nil)))
