@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.78 2004/07/20 09:08:38 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.79 2004/07/20 11:39:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3209,68 +3209,69 @@ loading borrowed bindings."
     (warn "The variable ~S is used even if it was declared ignored."
 	  (binding-name binding)))
   (let ((protect-registers (cons :edx protect-registers)))
-    (flet ((chose-tmp-register (&optional preferred)
-	     (or tmp-register
-		 (unless (member preferred protect-registers)
-		   preferred)
-		 (first (set-difference '(:eax :ebx :edx)
-					protect-registers))
-		 (error "Unable to chose a temporary register.")))
-	   (install-for-single-value (lexb lexb-location result-mode indirect-p)
-	     (cond
-	      ((and (eq result-mode :untagged-fixnum-ecx)
-		    (integerp lexb-location))
-	       (assert (not indirect-p))
-	       `((:movl ,(make-indirect-reference :ebp (stack-frame-offset lexb-location))
-			:ecx)
-		 (:sarl ,+movitz-fixnum-shift+ :ecx)))
-	      ((integerp lexb-location)
-	       (append `((:movl ,(make-indirect-reference :ebp (stack-frame-offset lexb-location))
-				,(single-value-register result-mode)))
-		       (when indirect-p
-			 `((:movl (-1 ,(single-value-register result-mode))
-				  ,(single-value-register result-mode))))))
-	      (t (ecase (operator lexb-location)
-		   (:push
-		    (assert (member result-mode '(:eax :ebx :ecx :edx)))
-		    (assert (not indirect-p))
-		    `((:popl ,result-mode)))
-		   (:eax
-		    (assert (not indirect-p))
-		    (ecase result-mode
-		      ((:ebx :ecx :edx :esi) `((:movl :eax ,result-mode)))
-		      ((:eax :single-value) nil)
-		      (:untagged-fixnum-ecx
-		       `((:movl :eax :ecx)
-			 (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)))))
-		   ((:ebx :ecx :edx)
-		    (assert (not indirect-p))
-		    (unless (eq result-mode lexb-location)
-		      (ecase result-mode
-			((:eax :single-value) `((:movl ,lexb-location :eax)))
-			((:ebx :ecx :edx :esi) `((:movl ,lexb-location ,result-mode)))
-			(:untagged-fixnum-ecx
-			 `((:movl ,lexb-location :ecx)
-			   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx))))))
-		   (:argument-stack
-		    (assert (<= 2 (function-argument-argnum lexb)) ()
-		      "lexical :argument-stack argnum can't be ~A." (function-argument-argnum lexb))
-		    (cond
-		     ((eq result-mode :untagged-fixnum-ecx)
+    (labels ((chose-tmp-register (&optional preferred)
+	       (or tmp-register
+		   (unless (member preferred protect-registers)
+		     preferred)
+		   (first (set-difference '(:eax :ebx :edx)
+					  protect-registers))
+		   (error "Unable to chose a temporary register.")))
+	     (install-for-single-value (lexb lexb-location result-mode indirect-p)
+	       (cond
+		((and (eq result-mode :untagged-fixnum-ecx)
+		      (integerp lexb-location))
+		 (assert (not indirect-p))
+		 (assert (not (member :eax protect-registers)))
+		 (append (install-for-single-value lexb lexb-location :eax nil)
+			 `((,*compiler-global-segment-prefix*
+			    :call (:edi ,(global-constant-offset 'unbox-u32))))))
+		((integerp lexb-location)
+		 (append `((:movl ,(make-indirect-reference :ebp (stack-frame-offset lexb-location))
+				  ,(single-value-register result-mode)))
+			 (when indirect-p
+			   `((:movl (-1 ,(single-value-register result-mode))
+				    ,(single-value-register result-mode))))))
+		(t (ecase (operator lexb-location)
+		     (:push
+		      (assert (member result-mode '(:eax :ebx :ecx :edx)))
 		      (assert (not indirect-p))
-		      `((:movl (:ebp ,(argument-stack-offset lexb)) :ecx)
-			(:sarl ,+movitz-fixnum-shift+ :ecx)))
-		     (t (append `((:movl (:ebp ,(argument-stack-offset lexb))
-					 ,(single-value-register result-mode)))
-				(when indirect-p
-				  `((:movl (-1 ,(single-value-register result-mode))
-					   ,(single-value-register result-mode))))))))
-		   (:untagged-fixnum-ecx
-		    (ecase result-mode
-		      ((:eax :ebx :ecx :edx)
-		       `((:leal ((:ecx ,+movitz-fixnum-factor+)) ,result-mode)))
-		      (:untagged-fixnum-ecx
-		       nil))))))))
+		      `((:popl ,result-mode)))
+		     (:eax
+		      (assert (not indirect-p))
+		      (ecase result-mode
+			((:ebx :ecx :edx :esi) `((:movl :eax ,result-mode)))
+			((:eax :single-value) nil)
+			(:untagged-fixnum-ecx
+			 `((:movl :eax :ecx)
+			   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)))))
+		     ((:ebx :ecx :edx)
+		      (assert (not indirect-p))
+		      (unless (eq result-mode lexb-location)
+			(ecase result-mode
+			  ((:eax :single-value) `((:movl ,lexb-location :eax)))
+			  ((:ebx :ecx :edx :esi) `((:movl ,lexb-location ,result-mode)))
+			  (:untagged-fixnum-ecx
+			   `((:movl ,lexb-location :ecx)
+			     (:sarl ,movitz:+movitz-fixnum-shift+ :ecx))))))
+		     (:argument-stack
+		      (assert (<= 2 (function-argument-argnum lexb)) ()
+			"lexical :argument-stack argnum can't be ~A." (function-argument-argnum lexb))
+		      (cond
+		       ((eq result-mode :untagged-fixnum-ecx)
+			(assert (not indirect-p))
+			`((:movl (:ebp ,(argument-stack-offset lexb)) :ecx)
+			  (:sarl ,+movitz-fixnum-shift+ :ecx)))
+		       (t (append `((:movl (:ebp ,(argument-stack-offset lexb))
+					   ,(single-value-register result-mode)))
+				  (when indirect-p
+				    `((:movl (-1 ,(single-value-register result-mode))
+					     ,(single-value-register result-mode))))))))
+		     (:untagged-fixnum-ecx
+		      (ecase result-mode
+			((:eax :ebx :ecx :edx)
+			 `((:leal ((:ecx ,+movitz-fixnum-factor+)) ,result-mode)))
+			(:untagged-fixnum-ecx
+			 nil))))))))
       (etypecase binding
 	(forwarding-binding
 	 (assert (not (binding-lended-p binding)) (binding)
