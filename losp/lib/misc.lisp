@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon May 12 17:13:31 2003
 ;;;;                
-;;;; $Id: misc.lisp,v 1.3 2004/01/19 11:23:44 ffjeld Exp $
+;;;; $Id: misc.lisp,v 1.4 2004/02/26 11:40:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -21,21 +21,45 @@
 
 (defun checksum-octets (packet &optional (start 0) (end (length packet)))
   "Generate sum of 16-bit big-endian words for a sequence of octets."
-  (cond
-   ((or (and (evenp start) (evenp end))
-	(and (oddp start) (oddp end)))
-    (loop for i of-type (unsigned-byte 16) from start below end by 2
-	sum (aref packet i) into hi of-type (unsigned-byte 24)
-	sum (aref packet (1+ i)) into lo of-type (unsigned-byte 24)
-	finally (return (+ lo (ash hi 8)))))
-   (t (+ (loop for i of-type (unsigned-byte 16) from start below (1- end) by 2
-	     sum (aref packet i) into hi
-	     sum (aref packet (1+ i)) into lo
-	     finally (return (+ lo (ash hi 8))))
-	 (ash (aref packet (1- end)) 8))))
-  #+ignore
-  (with-inline-assembly (:returns :eax)
-    (:load-lexical)))
+  (typecase packet
+    (muerte:vector-u8
+     (assert (<= 0 start end (length packet)))
+     (with-inline-assembly (:returns :ebx)
+       (:compile-form (:result-mode :eax) packet)
+       (:compile-form (:result-mode :ebx) start)
+       (:compile-form (:result-mode :edx) end)
+       (:movl :ebx :ecx)		; ecx = start
+       (:subl :ebx :edx)		; edx = (- end start)
+       (:movl 0 :ebx)
+       (:jz 'end-checksum-loop)
+       (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
+       (:xorl :esi :esi)
+      checksum-loop
+       (:movw (:eax 2 :ecx) :bx)
+       (:xchgb :bl :bh)
+       (:addl :ebx :esi)
+       (:addl 2 :ecx)
+       (:subl #.(cl:* 2 movitz:+movitz-fixnum-factor+) :edx)
+       (:jnbe 'checksum-loop)
+       (:movw :si :bx)
+       (:shrl 16 :esi)
+       (:addw :si :bx)
+       (:movl (:ebp -4) :esi)       
+      end-checksum-loop
+       (:shll #.movitz:+movitz-fixnum-shift+ :ebx)))
+    (t (muerte:with-subvector-accessor (packet-ref packet start end)
+	 (cond
+	  ((or (and (evenp start) (evenp end))
+	       (and (oddp start) (oddp end)))
+	   (loop for i of-type (unsigned-byte 16) from start below end by 2
+	       sum (packet-ref i) into hi of-type (unsigned-byte 24)
+	       sum (packet-ref (1+ i)) into lo of-type (unsigned-byte 24)
+	       finally (return (+ lo (ash hi 8)))))
+	  (t (+ (loop for i of-type (unsigned-byte 16) from start below (1- end) by 2
+		    sum (packet-ref i) into hi
+		    sum (packet-ref (1+ i)) into lo
+		    finally (return (+ lo (ash hi 8))))
+		(ash (packet-ref (1- end)) 8))))))))
 
 
 (defstruct (counter-u32 (:constructor make-counter-u32-object)) lo hi)
