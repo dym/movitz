@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Jan 15 18:40:58 2004
 ;;;;                
-;;;; $Id: load.lisp,v 1.9 2004/02/13 22:17:41 ffjeld Exp $
+;;;; $Id: load.lisp,v 1.10 2004/02/18 14:42:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -46,7 +46,7 @@
 	    (excl:load-system :movitz)
 	    (setf excl:*tenured-bytes-limit* #x2000000)
 	    (setf (system::gsgc-parameter :generation-spread) 12)
-	    (sys:resize-areas :new (* 16 1024 1024)))
+	    (sys:resize-areas :new (* 64 1024 1024)))
 
 #+clisp (load "packages")
 #+clisp (defconstant movitz::&all 'movitz::&all) ; CLisp has this wonderful bug..
