@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:41:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: common-lisp.lisp,v 1.11 2004/07/20 23:51:01 ffjeld Exp $
+;;;; $Id: common-lisp.lisp,v 1.12 2004/07/27 13:54:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -37,6 +37,7 @@
 (require :muerte/los-closette)
 (require :muerte/defstruct)
 (require :muerte/hash-tables)
+(require :muerte/ratios)
 (require :muerte/packages)
 (require :muerte/format)
 (require :muerte/error)
