@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.23 2004/07/16 10:43:26 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.24 2004/07/17 01:52:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -275,11 +275,11 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	    (:jz '(:sub-program (should-never-happen)
 		   (:int 107)))
 	   shrink-loop
-	    (:cmpl ,movitz:+movitz-fixnum-factor+ :ecx)
+	    (:cmpl 4 :ecx)
 	    (:je 'shrink-no-more)
 	    (:cmpl 0 (:eax :ecx ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
 	    (:jnz 'shrink-done)
-	    (:subl ,movitz:+movitz-fixnum-factor+ :ecx)
+	    (:subl 4 :ecx)
 	    (:jmp 'shrink-loop)
 	   shrink-no-more
 	    (:cmpl ,(1+ movitz:+movitz-most-positive-fixnum+)
@@ -291,7 +291,9 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 		   (:jmp 'done)))
 	   shrink-done
 	    (:testb 3 :cl)
-	    (:jnz '(:sub-program () (:int 59)))
+	    (:jnz '(:sub-program () (:int 107)))
+	    (:testw :cx :cx)
+	    (:jz '(:sub-program () (:int 107)))
 	    (:movw :cx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length)))
 	   done
 	    )))
