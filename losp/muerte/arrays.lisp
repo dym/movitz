@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.42 2004/08/10 12:58:22 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.43 2004/09/22 14:46:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -604,136 +604,167 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 	    `(funcall%unsafe ,writer ,store-var ,@args)
 	    `(funcall%unsafe ,reader ,@args))))
 
-(defun make-basic-vector%character (dimensions fill-pointer initial-element initial-contents)
-  (let ((array (malloc-non-pointer-words (+ 2 (truncate (+ dimensions 3) 4)))))
-    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
-		  0 :lisp)
-      dimensions)
-    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::type)
-		  0 :unsigned-byte32)
-      #.(movitz:basic-vector-type-tag :character))	 
-    (check-type array string)
+(defun make-basic-vector%character (dimension fill-pointer initial-element initial-contents)
+  (check-type dimension (and fixnum (integer 0 *)))
+  (let* ((words (+ 2 (truncate (+ dimension 3) 4)))
+	 (array (macrolet
+		    ((do-it ()
+		       `(with-non-pointer-allocation-assembly (words :fixed-size-p t
+								     :object-register :eax)
+			  (:load-lexical (:lexical-binding dimension) :ecx)
+			  (:movl ,(movitz:basic-vector-type-tag :character)
+				 (:eax (:offset movitz-basic-vector type)))
+			  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements))))))
+		  (do-it))))
     (cond
      (fill-pointer
       (setf (fill-pointer array) fill-pointer))
      ((array-has-fill-pointer-p array)
-      (setf (fill-pointer array) dimensions)))
+      (setf (fill-pointer array) dimension)))
     (cond
      (initial-element
       (check-type initial-element character)
-      (dotimes (i dimensions)
+      (dotimes (i dimension)
 	(setf (char array i) initial-element)))
      (initial-contents
       (replace array initial-contents)))
     array))
 
-(defun make-basic-vector%u32 (dimensions fill-pointer initial-element initial-contents)
-  (let ((array (malloc-non-pointer-words (+ 2 dimensions))))
-    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
-		  0 :lisp)
-      dimensions)
-    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::type)
-		  0 :unsigned-byte32)
-      #.(movitz:basic-vector-type-tag :u32))
+(defun make-basic-vector%u32 (dimension fill-pointer initial-element initial-contents)
+  (check-type dimension (and fixnum (integer 0 *)))
+  (let* ((words (+ 2 dimension))
+	 (array (macrolet
+		    ((do-it ()
+		       `(with-non-pointer-allocation-assembly (words :fixed-size-p t
+								     :object-register :eax)
+			  (:load-lexical (:lexical-binding dimension) :ecx)
+			  (:movl ,(movitz:basic-vector-type-tag :u32)
+				 (:eax (:offset movitz-basic-vector type)))
+			  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements))))))
+		  (do-it))))
     (cond
      (fill-pointer
       (setf (fill-pointer array) fill-pointer))
      ((array-has-fill-pointer-p array)
-      (setf (fill-pointer array) dimensions)))
+      (setf (fill-pointer array) dimension)))
     (cond
      (initial-element
       ;; (check-type initial-element (unsigned-byte 32))
-      (dotimes (i dimensions)
+      (dotimes (i dimension)
 	(setf (u32ref%unsafe array i) initial-element)))
      (initial-contents
       (replace array initial-contents)))
     array))
 
-(defun make-basic-vector%u8 (length fill-pointer initial-element initial-contents)
-  (let ((array (malloc-non-pointer-words (+ 2 (truncate (+ length 3) 4)))))
-    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
-		  0 :lisp)
-      length)
-    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::type)
-		  0 :unsigned-byte32)
-      #.(movitz:basic-vector-type-tag :u8))
+(defun make-basic-vector%u8 (dimension fill-pointer initial-element initial-contents)
+  (check-type dimension (and fixnum (integer 0 *)))
+  (let* ((words (+ 2 (truncate (+ dimension 3) 4)))
+	 (array (macrolet
+		    ((do-it ()
+		       `(with-non-pointer-allocation-assembly (words :fixed-size-p t
+								     :object-register :eax)
+			  (:load-lexical (:lexical-binding dimension) :ecx)
+			  (:movl ,(movitz:basic-vector-type-tag :u8)
+				 (:eax (:offset movitz-basic-vector type)))
+			  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements))))))
+		  (do-it))))
     (cond
      (fill-pointer
       (setf (fill-pointer array) fill-pointer))
      ((array-has-fill-pointer-p array)
-      (setf (fill-pointer array) length)))
+      (setf (fill-pointer array) dimension)))
     (cond
      (initial-element
       (check-type initial-element (unsigned-byte 8))
-      (dotimes (i length)
+      (dotimes (i dimension)
 	(setf (u8ref%unsafe array i) initial-element)))
      (initial-contents
       (replace array initial-contents)))
     array))
 
-(defun make-basic-vector%bit (length fill-pointer initial-element initial-contents)
-  (let ((array (malloc-non-pointer-words (+ 2 (truncate (+ length 31) 32)))))
-    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
-		  0 :lisp)
-      length)
-    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::type)
-		  0 :unsigned-byte32)
-      #.(movitz:basic-vector-type-tag :bit))
+(defun make-basic-vector%bit (dimension fill-pointer initial-element initial-contents)
+  (check-type dimension (and fixnum (integer 0 *)))
+  (let* ((words (+ 2 (truncate (+ dimension 31) 32)))
+	 (array (macrolet
+		    ((do-it ()
+		       `(with-non-pointer-allocation-assembly (words :fixed-size-p t
+								     :object-register :eax)
+			  (:load-lexical (:lexical-binding dimension) :ecx)
+			  (:movl ,(movitz:basic-vector-type-tag :bit)
+				 (:eax (:offset movitz-basic-vector type)))
+			  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements))))))
+		  (do-it))))
     (cond
      (fill-pointer
       (setf (fill-pointer array) fill-pointer))
      ((array-has-fill-pointer-p array)
-      (setf (fill-pointer array) length)))
+      (setf (fill-pointer array) dimension)))
     (cond
      (initial-element
       (check-type initial-element bit)
-      (dotimes (i length)
+      (dotimes (i dimension)
 	(setf (aref array i) initial-element)))
      (initial-contents
       (replace array initial-contents)))
     array))
 
-(defun make-basic-vector%code (dimensions fill-pointer initial-element initial-contents)
-  (let ((array (malloc-non-pointer-words (+ 2 (truncate (+ dimensions 3) 4)))))
-    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
-		  0 :lisp)
-      dimensions)
-    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::type)
-		  0 :unsigned-byte32)
-      #.(movitz:basic-vector-type-tag :code))
+(defun make-basic-vector%code (dimension fill-pointer initial-element initial-contents)
+  (check-type dimension (and fixnum (integer 0 *)))
+  (let* ((words (+ 2 (truncate (+ dimension 3) 4)))
+	 (array (macrolet
+		    ((do-it ()
+		       `(with-non-pointer-allocation-assembly (words :fixed-size-p t
+								     :object-register :eax)
+			  (:load-lexical (:lexical-binding dimension) :ecx)
+			  (:movl ,(movitz:basic-vector-type-tag :code)
+				 (:eax (:offset movitz-basic-vector type)))
+			  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements))))))
+		  (do-it))))
     (cond
      (fill-pointer
       (setf (fill-pointer array) fill-pointer))
      ((array-has-fill-pointer-p array)
-      (setf (fill-pointer array) dimensions)))
+      (setf (fill-pointer array) dimension)))
     (cond
      (initial-element
       (check-type initial-element (unsigned-byte 8))
-      (dotimes (i dimensions)
+      (dotimes (i dimension)
 	(setf (u8ref%unsafe array i) initial-element)))
      (initial-contents
       (replace array initial-contents)))
     array))
 
-(defun make-basic-vector%t (dimensions fill-pointer initial-element initial-contents)
-  (check-type dimensions (and fixnum (integer 0 *)))
-  (let ((array (malloc-pointer-words (+ 2 dimensions))))
-    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
-		  0 :lisp)
-      dimensions)
-    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::type)
-		  0 :unsigned-byte16)
-      #.(movitz:basic-vector-type-tag :any-t))
+(defun make-basic-vector%t (dimension fill-pointer initial-element initial-contents)
+  (check-type dimension (and fixnum (integer 0 *)))
+  (let* ((words (+ 2 dimension))
+	 (array (macrolet
+		    ((do-it ()
+		       `(with-allocation-assembly (words :fixed-size-p t
+							 :object-register :eax)
+			  (:load-lexical (:lexical-binding dimension) :ecx)
+			  (:movl ,(movitz:basic-vector-type-tag :any-t)
+				 (:eax (:offset movitz-basic-vector type)))
+			  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements)))
+			  (:addl 4 :ecx)
+			  (:andl -8 :ecx)
+			  (:jz 'init-done)
+			  init-loop
+			  (:movl :edi (:eax (:offset movitz-basic-vector data) :ecx -4))
+			  (:subl 4 :ecx)
+			  (:jnz 'init-loop)
+			  init-done
+			  )))
+		  (do-it))))
     (cond
      (fill-pointer
       (setf (fill-pointer array) fill-pointer))
      ((array-has-fill-pointer-p array)
-      (setf (fill-pointer array) dimensions)))
+      (setf (fill-pointer array) dimension)))
     (cond
      (initial-contents
       (replace array initial-contents))
      (initial-element
-      (dotimes (i dimensions)
+      (dotimes (i dimension)
 	(setf (svref%unsafe array i) initial-element))))
     array))
 
