@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.114 2004/11/20 17:43:13 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.115 2004/11/21 12:30:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -65,6 +65,9 @@ non-local locations.")
 the system ensures one way or another that there can be no pointers below
 this size.")
 
+(defvar *compiler-use-into-unbound-protocol* t
+  "Use #x7fffffff as the <unbound-value> and thereby the INTO
+instruction for checking whether a value is the unbound value.")
 
 (defvar *compiler-compile-eval-whens* t
   "When encountering (eval-when (:compile-toplevel) <code>),
@@ -5614,24 +5617,42 @@ fifth:  all compiler-values for form1, as a list."
 	  :functional-p t
 	  :modifies nil
 	  :final-form form
-	  :code `((:load-constant ,form :eax)
-		  (,*compiler-local-segment-prefix*
-		   :call (:edi ,(global-constant-offset 'dynamic-variable-lookup)))
-		  (,*compiler-local-segment-prefix*
-		   :cmpl :eax (:edi ,(global-constant-offset 'unbound-value)))
-		  (:je '(:sub-program () (:int 99))))))
+	  :code (if *compiler-use-into-unbound-protocol*
+		    `((:load-constant ,form :ebx)
+		      (,*compiler-local-segment-prefix*
+		       :call (:edi ,(global-constant-offset 'dynamic-variable-lookup)))
+		      (:cmpl -1 :eax)
+		      (:into))
+		  (let ((not-unbound (gensym "not-unbound-")))
+		    `((:load-constant ,form :ebx)
+		      (,*compiler-local-segment-prefix*
+		       :call (:edi ,(global-constant-offset 'dynamic-variable-lookup)))
+		      (,*compiler-local-segment-prefix*
+		       :cmpl :eax (:edi ,(global-constant-offset 'unbound-value)))
+		      (:jne ',not-unbound)
+		      (:int 99)
+		      ,not-unbound)))))
        (t (check-type binding dynamic-binding)
 	  (compiler-values ()
 	    :returns :eax
 	    :functional-p t
 	    :modifies nil
 	    :final-form form
-	    :code `((:load-constant ,form :eax)
-		    (,*compiler-local-segment-prefix*
-		     :call (:edi ,(global-constant-offset 'dynamic-variable-lookup)))
-		    (,*compiler-local-segment-prefix*
-		     :cmpl :eax (:edi ,(global-constant-offset 'unbound-value)))
-		    (:je '(:sub-program () (:int 99))))))))))
+	    :code (if *compiler-use-into-unbound-protocol*
+		    `((:load-constant ,form :ebx)
+		      (,*compiler-local-segment-prefix*
+		       :call (:edi ,(global-constant-offset 'dynamic-variable-lookup)))
+		      (:cmpl -1 :eax)
+		      (:into))
+		  (let ((not-unbound (gensym "not-unbound-")))
+		    `((:load-constant ,form :ebx)
+		      (,*compiler-local-segment-prefix*
+		       :call (:edi ,(global-constant-offset 'dynamic-variable-lookup)))
+		      (,*compiler-local-segment-prefix*
+		       :cmpl :eax (:edi ,(global-constant-offset 'unbound-value)))
+		      (:jne ',not-unbound)
+		      (:int 99)
+		      ,not-unbound)))))))))
 
 (define-compiler compile-lambda-form (&form form)
   "3.1.2.2.4 Lambda Forms"
