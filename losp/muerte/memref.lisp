@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.34 2004/10/20 10:51:06 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.35 2004/10/21 16:31:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -785,6 +785,23 @@
 		    (:addl :ebx :ecx)
 		    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale down address
 		    (,prefixes :movzxb (:ecx) :ecx)))))))
+	(:signed-byte8
+	 (cond
+	  ((and (eq 0 offset) (eq 0 index))
+	   `(with-inline-assembly (:returns :ecx :type (signed-byte 8))
+	      (:compile-form (:result-mode :untagged-fixnum-ecx) ,address)
+	      (,prefixes :movsxb (:ecx) :ecx)
+	      (:shll ,movitz:+movitz-fixnum-shift+ :ecx)))
+	  (t (let ((address-var (gensym "memref-int-address-")))
+	       `(let ((,address-var ,address))
+		  (with-inline-assembly (:returns :ecx :type (signed-byte 8))
+		    (:compile-two-forms (:eax :ecx) ,offset ,index)
+		    (:load-lexical (:lexical-binding ,address-var) :ebx)
+		    (:addl :eax :ecx)
+		    (:addl :ebx :ecx)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale down address
+		    (,prefixes :movsxb (:ecx) :ecx)
+		    (:shll ,movitz:+movitz-fixnum-shift+ :ecx)))))))
 	(:unsigned-byte16
 	 (cond
 	  ((and (eq 0 offset) (eq 0 index))
