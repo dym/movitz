@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.15 2004/02/21 02:04:50 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.16 2004/03/28 16:20:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -958,15 +958,16 @@ on the current result."
 						  :protect-registers ,(cons protected-register
 									    protect-registers))))))))
 	     (t ;; just put the (singular) result of form1 on the stack..
-	      (when (not (typep cover-returns 'keyword))
-		;; if it's a (non-modified) lexical-binding, we can do better..
-		(warn "Covering non-register ~S" cover-returns))
-	      (when (type-specifier-singleton (type-specifier-primary cover-type))
-		(warn "Covering constant ~S"
-		      (type-specifier-singleton cover-type)))  
+;;;	      (when (not (typep cover-returns 'keyword))
+;;;		;; if it's a (non-modified) lexical-binding, we can do better..
+;;;		(warn "Covering non-register ~S" cover-returns))
+;;;	      (when (type-specifier-singleton (type-specifier-primary cover-type))
+;;;		(warn "Covering constant ~S"
+;;;		      (type-specifier-singleton cover-type)))  
 	      (let ((protected-register (case cover-returns
 					  ((:ebx :ecx :edx) cover-returns)
 					  (t :eax))))
+		#+ignore
 		(when (>= 2 (length cloaked-code))
 		  (warn "simple-cloaking for ~S: ~{~&~S~}" cover-returns cloaked-code))
 		(setf (stack-used cloaked-env) 1)
