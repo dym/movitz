@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.40 2004/09/21 13:01:23 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.41 2004/10/07 12:48:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1204,7 +1204,7 @@ on the current result."
 				       (:globally (:call (:edi (:edi-offset dynamic-unwind-next))))
 				       (:store-lexical ,next-continuation-step-binding :eax :type t)
 				       ))))
-			;; now outside of m-v-prog1's cloak, with final dynamic-slot in ESP..
+			;; now outside of m-v-prog1's cloak, with final dynamic-slot in ..
 			;; ..unwind it and transfer control.
 			;;
 			;; * 12 dynamic-env uplink
