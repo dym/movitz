@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.19 2004/04/16 19:21:13 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.20 2004/04/19 15:04:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1186,10 +1186,12 @@
 	   map-active-restarts
 	   with-basic-restart
 
-	   vector-u8
-	   vector-u16
-	   vector-u32
-	   pointer
+	   #:vector-u8
+	   #:vector-u16
+	   #:vector-u32
+	   #:pointer
+	   #:basic-restart
+	   #:run-time-context
 	   
 	   make-funobj
 	   funobj-type
