@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.55 2004/04/19 15:02:53 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.56 2004/04/19 20:34:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3763,10 +3763,7 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
   (let ((required-vars (required-vars env))
 	(min-args (min-args env))
 	(max-args (max-args env)))
-    (let (#+ignore (max-used-arg (loop for (binding) in frame-map
-				     when (typep binding 'positional-function-argument)
-				     maximize (function-argument-argnum binding)))
-	  (stack-setup-size stack-frame-size)
+    (let ((stack-setup-size stack-frame-size)
 	  (edx-needs-saving-p (and (edx-var env)
 				   (new-binding-location (edx-var env) frame-map :default nil))))
       (multiple-value-bind (eax-ebx-code eax-ebx-code-post-stackframe)
@@ -3830,8 +3827,8 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 				   after-code
 				   `((:movl (:ebp (:ecx 4)
 						  ,(* -4 (1- (function-argument-argnum binding))))
-					    :eax)
-				     (:movl :eax (:ebp ,(stack-frame-offset
+					    :edx)
+				     (:movl :edx (:ebp ,(stack-frame-offset
 							 (new-binding-location binding frame-map)))))))))))
 		(values before-code after-code)))
 	     (t (values (append
@@ -3877,10 +3874,11 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 			    append
 			      `((:movl (:ebp (:ecx 4)
 					     ,(* -4 (1- (function-argument-argnum binding))))
-				       :eax)
-				(:movl :eax (:ebp ,(stack-frame-offset
+				       :edx)
+				(:movl :edx (:ebp ,(stack-frame-offset
 						    (new-binding-location binding frame-map)))))
-			    and do (setq need-normalized-ecx-p t))))))
+			    and do
+				(setq need-normalized-ecx-p t))))))
 	(assert (not (minusp stack-setup-size)))
 	(let ((stack-frame-init-code
 	       (append (when (and do-check-stack-p use-stack-frame-p
@@ -3889,9 +3887,9 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 			 `((,*compiler-local-segment-prefix*
 			    :bound (:edi ,(global-constant-offset 'stack-bottom)) :esp)))
 		       (when use-stack-frame-p
-			`((:pushl :ebp)
-			  (:movl :esp :ebp)
-			  (:pushl :esi))))))
+			 `((:pushl :ebp)
+			   (:movl :esp :ebp)
+			   (:pushl :esi))))))
 	  (values
 	   (append
 	    (cond
@@ -4002,7 +4000,7 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 			    (:movl :edi (:ebp ,(stack-frame-offset (1+ lended-cons-position)))) ; car
 			    (:leal (:ebp 1 ,(stack-frame-offset (1+ lended-cons-position))) :edx)
 			    (:movl :edx (:ebp ,(stack-frame-offset location))))))))))
-		  need-normalized-ecx-p))))))
+	   need-normalized-ecx-p))))))
 
 (defparameter *restify-stats* (make-hash-table :test #'eql))
 
