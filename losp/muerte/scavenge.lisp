@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.18 2004/07/13 22:44:37 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.19 2004/07/15 00:27:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -181,7 +181,7 @@ at the start-stack-frame location."
 			  (map-heap-words function (1+ interrupted-esp) frame)
 			(error "Don't know how to scavenge across interrupt frame at ~S."
 			       interrupt-frame)))))))
-	     (t (error "Don't know how to scavenge across a frame of kind ~S." funobj)))))
+	     (t (error "Don't know how to scavenge across frame ~S of kind ~S." frame funobj)))))
   (values))
 
 (defparameter *primitive-funcall-patterns*
