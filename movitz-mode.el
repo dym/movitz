@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep 27 18:12:17 2001
 ;;;;                
-;;;; $Id: movitz-mode.el,v 1.1 2004/01/13 11:04:59 ffjeld Exp $
+;;;; $Id: movitz-mode.el,v 1.2 2004/01/15 17:37:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -108,7 +108,7 @@
 	     (fi:eval-in-lisp "movitz::*bootblock-build*")
 	     display-shortcut)
     (call-process "/bin/sh" nil 0 nil "-c"
-		  (format "cd ~/src/movitz && DISPLAY=\"%s\" ~/tmp/bochs-cvs/bochs -nocp > bochs-parameters"
+		  (format "DISPLAY=\"%s\" ~/tmp/bochs-cvs/bochs -nocp > bochs-parameters"
 			  display-shortcut))))
 
 (defun movitz-compile-file ()
