@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.30 2004/07/17 12:17:35 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.31 2004/07/20 12:40:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1057,11 +1057,14 @@ on the current result."
 (define-special-operator muerte::compiler-macro-call (&all all &form form &env env)
   (destructuring-bind (operator &rest arguments)
       (cdr form)
-    (assert (movitz-compiler-macro-function operator env) ()
-      "There is no compiler-macro ~S." operator)
-    (compiler-call #'compile-compiler-macro-form
-      :forward all
-      :form (cons operator arguments))))
+    (let ((name (if (not (setf-name operator))
+		    operator
+		  (movitz-env-setf-operator-name (setf-name operator)))))
+      (assert (movitz-compiler-macro-function name env) ()
+	"There is no compiler-macro ~S." name)
+      (compiler-call #'compile-compiler-macro-form
+	:forward all
+	:form (cons name arguments)))))
 
 (define-special-operator muerte::do-result-mode-case (&all all &result-mode result-mode &form form)
   (loop for (cases . then-forms) in (cddr form)
