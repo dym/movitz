@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.20 2004/06/06 03:00:13 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.21 2004/06/06 10:24:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -719,48 +719,36 @@
       (:andb #.(cl:logxor #xff movitz::+movitz-fixnum-zmask+) :al)))
    (t (if (= 0 integer) 0 (error "Illegal ash count: ~D" count)))))
 
-
 ;;; Multiplication
 
-(define-compiler-macro *%2op (&whole form &environment env factor1 factor2)
-  (cond
-   ((and (movitz:movitz-constantp factor1 env)
-	 (movitz:movitz-constantp factor2 env))
-    (* (movitz:movitz-eval factor1 env)
-       (movitz:movitz-eval factor2 env)))
-   ((movitz:movitz-constantp factor2 env)
-    `(*%2op ,(movitz:movitz-eval factor2 env) ,factor1))
-   ((movitz:movitz-constantp factor1 env)
-    (let ((f1 (movitz:movitz-eval factor1 env)))
-      (check-type f1 fixnum)
-      (case f1
-	(0 `(progn ,factor2 0))
-	(1 factor2)
-	(2 `(ash ,factor2 1))
-	(t `(with-inline-assembly (:returns :eax :type integer)
-	      (:compile-form (:result-mode :eax) ,factor2)
-	      (:testb #.movitz::+movitz-fixnum-zmask+ :al)
-	      (:jnz '(:sub-program () (:int 107)))
-	      (:imull ,f1 :eax :eax)
-	      (:into))))))
-   (t `(no-macro-call * ,factor1 ,factor2))))
-
-;;;(defun *%2op (factor1 factor2)
-;;;  (check-type factor1 fixnum)
-;;;  (check-type factor2 fixnum)
-;;;  (with-inline-assembly (:returns :eax)
-;;;    (:compile-form (:result-mode :eax) factor1)
-;;;    (:compile-form (:result-mode :ebx) factor2)
-;;;    (:sarl #.movitz::+movitz-fixnum-shift+ :eax)
-;;;    (:imull :ebx :eax :edx)
-;;;    (:into)))
-
-(define-compiler-macro * (&whole form &rest operands)
+(define-compiler-macro * (&whole form &rest operands &environment env)
   (case (length operands)
     (0 0)
     (1 (first operands))
-    (2 `(*%2op ,(first operands) ,(second operands)))
-    (t `(* (*%2op ,(first operands) ,(second operands)) ,@(cddr operands)))))
+    (2 (let ((factor1 (first operands))
+	     (factor2 (second operands)))
+	 (cond
+	  ((and (movitz:movitz-constantp factor1 env)
+		(movitz:movitz-constantp factor2 env))
+	   (* (movitz:movitz-eval factor1 env)
+	      (movitz:movitz-eval factor2 env)))
+	  ((movitz:movitz-constantp factor2 env)
+	   `(* ,(movitz:movitz-eval factor2 env) ,factor1))
+	  ((movitz:movitz-constantp factor1 env)
+	   (let ((f1 (movitz:movitz-eval factor1 env)))
+	     (check-type f1 fixnum)
+	     (case f1
+	       (0 `(progn ,factor2 0))
+	       (1 factor2)
+	       (2 `(ash ,factor2 1))
+	       (t `(with-inline-assembly (:returns :eax :type integer)
+		     (:compile-form (:result-mode :eax) ,factor2)
+		     (:testb #.movitz::+movitz-fixnum-zmask+ :al)
+		     (:jnz '(:sub-program () (:int 107)))
+		     (:imull ,f1 :eax :eax)
+		     (:into))))))
+	  (t `(no-macro-call * ,factor1 ,factor2)))))
+    (t `(* (* ,(first operands) ,(second operands)) ,@(cddr operands)))))
 
 (defun * (&rest factors)
   (numargs-case
@@ -782,7 +770,7 @@
       (declare (dynamic-extent factors))
       (if (null factors)
 	  1
-	(reduce '*%2op factors)))))
+	(reduce '* factors)))))
 
 ;;; Division
 
@@ -1353,7 +1341,7 @@
 
 (defun print-bignum (x)
   (check-type x bignum)
-  (loop for i from 0 to (%bignum-bigits x)
-      do (format t "~8,'0X " (memref x -6 i :unsigned-byte32)))
+  (dotimes (i (1+ (%bignum-bigits x)))
+    (format t "~8,'0X " (memref x -6 i :unsigned-byte32)))
   (terpri)
   (values))
