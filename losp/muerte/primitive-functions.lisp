@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.37 2004/08/04 13:00:33 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.38 2004/08/06 20:54:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -296,122 +296,6 @@ with EAX still holding the tag."
    search-failed
     (:ret)))				; success: ZF=0, eax=value
 
-(define-primitive-function resolve-key-args (pos)
-  ""
-  ;; 1. Match each provided argument.
-  (with-inline-assembly (:returns :multiple-values)
-    (:leal (:ebp (:ecx 4) -4) :edx)
-    (:movl (:edx) :eax)
-    
-    
-    ))
-
-
-;;;(define-primitive-function trampoline-restify-dynamic-extent-at0%2op ()
-;;;  "Process &rest at position 0 in lambda-list, when 2 args are provided (ECX=2 is implied).
-;;;EAX: arg0, EBX: arg1, Returns list in EAX and 2 in ECX.
-;;;This is a special case of restify-dynamic-extent."
-;;;  (with-inline-assembly (:returns :nothing)
-;;;    (:popl :edx)			; return address
-;;;    (:pushl :edi)
-;;;    (:popl :edi)
-;;;    (:andl -8 :esp)
-;;;    (:pushl :ebx)			; cadr
-;;;    (:pushl :edi)			; cddr
-;;;    (:pushl :eax)			; car
-;;;    (:movl :esp :eax)
-;;;    (:subl 7 :eax)
-;;;    (:pushl :eax)
-;;;    (:addl 8 :eax)
-;;;    (:movl 2 :ecx)
-;;;    (:ret)))
-  
-
-(define-primitive-function restify-dynamic-extent ()
-  "Process &rest.
-EAX: arg0, EBX: arg1, ECX: numargs, EDX: rest-position,
-EBP: stack-frame with rest of arguments, as per calling conventions.
-Returns list in EAX and preserves numargs in ECX."
-  (with-inline-assembly (:returns :nothing)
-    (:cmpl :edx :ecx)
-    (:jle '(:sub-program ()
-	    (:movl :edi :eax) (:ret)))	; no rest at all.
-
-    ;; Pop the return address into (:esp -8) and (:esp -12).
-    (:popl (:esp -8))
-    (:subl 4 :esp)
-    (:popl (:esp -12))
-	     
-    (:pushl :edi)
-    (:popl :edi)
-    ;; Now the stack (below) looks like this:
-    ;; (:esp 0) = ???
-    ;; (:esp -4) = EDI
-    ;; (:esp -8) = Return address
-    ;; (:esp -12) = Return address
-
-    (:andl -8 :esp)			; align stack to 8 (subtracts 4 when required)
-
-    ;; We now know the return address is in (:esp -8).
-    
-    (:testl :edx :edx)
-    (:jnz 'rest-pos-not-zero)		; arg0 doesn't go into rest.
-
-    (:pushl :esp)			; cdr
-    (:subl 15 (:esp))
-
-    (:subl 4 :esp)
-    (:popl (:esp -12))			; keep return address in (:esp -8)
-    
-    (:pushl :eax)			; car = eax
-
-    (:movl :esp :eax)
-    (:incl :eax)			; store head of list in eax.
-
-    (:incl :edx)
-    (:cmpl :edx :ecx)
-    (:je '(:sub-program (done-early)
-	   (:movl :edi (:esp 4))	; terminate list
-	   (:movl (:esp -8) :ebx)	; load return address into ebx
-	   (:jmp :ebx)))		; return
-    (:jmp 'rest-pos-was-zero)
-    
-   rest-pos-not-zero
-    (:leal (:esp -7) :eax)		; store head of list in eax.
-
-   rest-pos-was-zero
-    (:cmpl 1 :edx)
-    (:jnz 'rest-pos-not-one-or-zero)
-
-    (:pushl :esp)
-    (:subl 15 (:esp))			; cdr
-
-    (:subl 4 :esp)
-    (:popl (:esp -12))			; keep return address in (:esp -8)
-
-    (:pushl :ebx)			; car = ebx
-
-    (:incl :edx)
-    (:cmpl :edx :ecx)
-    (:je 'done-early)
-
-   rest-pos-not-one-or-zero
-
-    (:movl (:esp -8) :ebx)		; load return address into ebx
-    (:negl :edx)
-    (:addl :ecx :edx)			; edx = (- ecx edx)
-    
-   loop
-    (:pushl :esp)
-    (:subl 15 (:esp))			; cdr
-    (:pushl (:ebp (:edx 4) 4))		; car = next arg
-    (:decl :edx)
-    (:jnz 'loop)
-    
-   done
-    
-    (:movl :edi (:esp 4))		; terminate list
-    (:jmp :ebx)))			; return
 
 (define-primitive-function malloc-pointer-words ()
   "Stupid allocator.. Number of words in EAX/fixnum.
