@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.6 2004/03/31 16:49:23 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.7 2004/03/31 18:33:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -30,13 +30,13 @@
 (define-compiler-macro memref (&whole form object offset index type &environment env)
 ;;;  (assert (typep offset '(integer 0 0)) (offset)
 ;;;    (error "memref offset not supported."))
-  (if (not (movitz:movitz-constantp type))
+  (if (not (movitz:movitz-constantp type env))
       form
     (labels ((extract-constant-delta (form)
 	     "Try to extract at compile-time an integer offset from form."
 	     (cond
 	      ((movitz:movitz-constantp form env)
-	       (let ((x (movitz::eval-form form env)))
+	       (let ((x (movitz:movitz-eval form env)))
 		 (check-type x integer)
 		 (values x 0)))
 	      ((not (consp form))
@@ -49,7 +49,7 @@
 			(2 (values 0 (second form)))
 			(t (loop with x = 0 and f = nil for sub-form in (cdr form)
 			       as sub-value = (when (movitz:movitz-constantp sub-form env)
-						(movitz::eval-form sub-form env))
+						(movitz:movitz-eval sub-form env))
 			       do (if (integerp sub-value)
 				      (incf x sub-value)
 				    (push sub-form f))
@@ -66,37 +66,46 @@
 	    (warn "o: ~S, co: ~S, i: ~S, ci: ~S"
 		  offset constant-offset
 		  index constant-index)
-	    (let ((type (movitz::eval-form type env)))
+	    (let ((type (movitz:movitz-eval type env)))
 	      (case type
 		(:unsigned-byte8
-		 `(with-inline-assembly (:returns :untagged-fixnum-eax)
-		    (:compile-form (:result-mode :push) ,object)
-		    (:compile-two-forms (:ecx :ebx) ,offset ,index)
-		    (:popl :eax)	; object
-		    (:addl :ecx :ebx)	; index += offset
-		    (:sarl #.movitz::+movitz-fixnum-shift+ :ebx)
-		    (:movzxb (:eax :ebx ,(offset-by 1)) :eax)))
-		(:unsigned-byte16
-		 `(with-inline-assembly (:returns :untagged-fixnum-ecx)
-		    (:compile-form (:result-mode :push) ,object)
-		    (:compile-two-forms (:eax :ebx) ,offset ,index)
-		    (:sarl #.(cl:1- movitz::+movitz-fixnum-shift+) :ebx)
-		    (:sarl #.movitz::+movitz-fixnum-shift+ :eax)
-		    (:addl :eax :ebx)
-		    (:popl :eax)	; object
-		    (:movzxw (:eax :ebx ,(offset-by 2)) :ecx)))
-		(:unsigned-byte32
-		 (assert (= 2 movitz::+movitz-fixnum-shift+))
-		 (let ((overflow (gensym "overflow-")))
+		 (cond
+		  ((and (eq 0 offset) (eq 0 index))
 		   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
-		      (:compile-form (:result-mode :push) ,object)
-		      (:compile-two-forms (:ecx :ebx) ,offset ,index)
-		      (:sarl #.movitz::+movitz-fixnum-shift+ :ecx)
-		      (:addl :ebx :ecx)
-		      (:popl :eax)	; object
-		      (:movl (:eax :ecx ,(offset-by 4)) :ecx)
-		      (:cmpl ,movitz::+movitz-most-positive-fixnum+ :ecx)
-		      (:jg '(:sub-program (,overflow) (:int 4))))))
+		      (:compile-form (:result-mode :eax) ,object)
+		      (:movzxb (:eax ,(offset-by 1)) :ecx)))
+		  ((eq 0 offset)
+		   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		      (:compile-two-forms (:eax :ecx) ,object ,index)
+		      (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
+		      (:movzxb (:eax :ecx ,(offset-by 1)) :ecx)))
+		  (t (let ((object-var (gensym "memref-object-")))
+		       `(let ((,object-var ,object))
+			  (with-inline-assembly (:returns :untagged-fixnum-ecx)
+			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
+			    (:load-lexical (:lexical-binding ,object-var) :eax)
+			    (:addl :ebx :ecx) ; index += offset
+			    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
+			    (:movzxb (:eax :ecx ,(offset-by 1)) :ecx)))))))
+		(:unsigned-byte16
+		 (cond
+		  ((and (eq 0 offset) (eq 0 index))
+		   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		      (:compile-form (:result-mode :eax) ,object)
+		      (:movzxw (:eax ,(offset-by 2)) :ecx)))
+		  ((eq 0 offset)
+		   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		      (:compile-two-forms (:eax :ecx) ,object ,index)
+		      (:sarl ,(1- movitz:+movitz-fixnum-shift+) :ecx)
+		      (:movzxw (:eax :ecx ,(offset-by 2)) :ecx)))
+		  (t (let ((object-var (gensym "memref-object-")))
+		       `(let ((,object-var ,object))
+			  (with-inline-assembly (:returns :untagged-fixnum-ecx)
+			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
+			    (:leal (:ecx (:ebx 2)) :ecx)
+			    (:load-lexical (:lexical-binding ,object-var) :eax)
+			    (:sarl #.movitz::+movitz-fixnum-shift+ :ecx)
+			    (:movzxw (:eax :ecx ,(offset-by 2)) :ecx)))))))
 		(:unsigned-byte29+3
 		 ;; Two values: the 29 upper bits as unsigned integer,
 		 ;; and secondly the lower 3 bits as unsigned.
@@ -133,7 +142,7 @@
 		    (:movl 2 :ecx)
 		    (:stc)))
 		(:character
-		 (when (eq 0 index) (warn "zero char index!"))
+		 (when (eq 0 index) (warn "memref zero char index!"))
 		 (cond
 		  ((eq 0 offset)
 		   `(with-inline-assembly (:returns :eax)
@@ -142,15 +151,41 @@
 		      (:movb #.(movitz:tag :character) :al)
 		      (:sarl #.movitz::+movitz-fixnum-shift+ :ebx) ; scale index
 		      (:movb (:ecx :ebx ,(offset-by 1)) :ah)))
-		  (t `(with-inline-assembly (:returns :eax)
-			(:compile-form (:result-mode :push) ,object)
-			(:compile-two-forms (:ecx :ebx) ,offset ,index)
-			(:addl :ecx :ebx)
-			(:xorl :eax :eax)
-			(:movb #.(movitz:tag :character) :al)
-			(:popl :ecx)	; pop object
-			(:sarl #.movitz::+movitz-fixnum-shift+ :ebx) ; scale offset+index
-			(:movb (:ebx :ecx ,(offset-by 1)) :ah)))))
+		  (t (let ((object-var (gensym "memref-object-")))
+		       `(let ((,object-var ,object))
+			  (with-inline-assembly (:returns :eax)
+			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
+			    (:addl :ebx :ecx)
+			    (:xorl :eax :eax)
+			    (:movb #.(movitz:tag :character) :al)
+			    (:load-lexical (:lexical-binding ,object-var) :ebx)
+			    (:sarl #.movitz::+movitz-fixnum-shift+ :ecx) ; scale offset+index
+			    (:movb (:ebx :ecx ,(offset-by 1)) :ah)))))))
+		(:unsigned-byte32
+		 (assert (= 4 movitz::+movitz-fixnum-factor+))
+		 (cond
+		  ((and (eq 0 offset) (eq 0 index))
+		   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		      (:compile-form (:result-mode :eax) ,object)
+		      (:movl (:eax ,(offset-by 4)) :ecx)
+		      (:cmpl ,movitz::+movitz-most-positive-fixnum+ :ecx)
+		      (:jg '(:sub-program () (:int 4)))))
+		  ((eq 0 offset)
+		   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		      (:compile-two-forms (:eax :ecx) ,object ,index)
+		      (:movl (:eax :ecx ,(offset-by 4)) :ecx)
+		      (:cmpl ,movitz::+movitz-most-positive-fixnum+ :ecx)
+		      (:jg '(:sub-program () (:int 4)))))
+		  (t (let ((object-var (gensym "memref-object-")))
+		       `(let ((,object-var ,object))
+			  (with-inline-assembly (:returns :untagged-fixnum-ecx)
+			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
+			    (:sarl #.movitz::+movitz-fixnum-shift+ :ecx)
+			    (:load-lexical (:lexical-binding ,object-var) :eax)
+			    (:addl :ebx :ecx)
+			    (:movl (:eax :ecx ,(offset-by 4)) :ecx)
+			    (:cmpl ,movitz::+movitz-most-positive-fixnum+ :ecx)
+			    (:jg '(:sub-program () (:int 4)))))))))
 		(:lisp
 		 (cond
 		  ((and (eq 0 index) (eq 0 offset))
@@ -163,14 +198,17 @@
 		      ,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
 			  `((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ecx))
 		      (:movl (:eax :ecx ,(offset-by 4)) :eax)))
-		  (t `(with-inline-assembly (:returns :eax)
-			(:compile-form (:result-mode :push) ,object)
-			(:compile-two-forms (:untagged-fixnum-eax :ecx) ,offset ,index)
-			,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
-			    `((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ecx))
-			(:addl :ecx :eax)
-			(:popl :ebx)	; pop object
-			(:movl (:eax :ebx ,(offset-by 4)) :eax)))))
+		  (t (assert (not (movitz:movitz-constantp offset env)))
+		     (assert (not (movitz:movitz-constantp index env)))
+		     (let ((object-var (gensym "memref-object-")))
+		       (assert (= 4 movitz:+movitz-fixnum-factor+))
+		       `(let ((,object-var ,object))
+			  (with-inline-assembly (:returns :eax)
+			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
+			    (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+			    (:load-lexical (:lexical-binding ,object-var) :eax)
+			    (:addl :ebx :ecx)
+			    (:movl (:eax :ecx ,(offset-by 4)) :eax)))))))
 		(t (error "Unknown memref type: ~S" (movitz::eval-form type nil nil))
 		   form)))))))))
 
