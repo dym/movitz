@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.28 2004/07/21 11:48:16 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.29 2004/07/21 11:49:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -205,12 +205,8 @@ after the point that called this stack-frame."
     (structure-object
      (copy-structure old))))
 
-(defvar *objects-equalp-last-x*)
-(defvar *objects-equalp-last-y*)
-
 (defun objects-equalp (x y)
-  (setf *objects-equalp-last-x* x
-	*objects-equalp-last-y* y)
+  "Basically, this verifies whether x is a shallow-copy of y, or vice versa."
   (or (eql x y)
       (if (not (and (typep x 'pointer)
 		    (typep y 'pointer)))
