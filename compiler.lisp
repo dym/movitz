@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.57 2004/04/20 23:04:12 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.58 2004/04/21 15:06:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5831,7 +5831,6 @@ and a list of any intervening unwind-protect environment-slots."
 (define-extended-code-expander :endp (instruction funobj frame-map)
   (destructuring-bind (cell result-mode)
       (cdr instruction)
-    (check-type cell lexical-binding)
     (let* ((binding (binding-target (ensure-local-binding (binding-target cell) funobj)))
 	   (location (new-binding-location (binding-target binding) frame-map))
 	   (binding-is-list-p (binding-store-subtypep binding 'list))
@@ -5844,11 +5843,6 @@ and a list of any intervening unwind-protect environment-slots."
 	     (member location '(:eax :ebx :ecx :edx)))
 	(make-result-and-returns-glue result-mode :boolean-zf=1
 				      `((:cmpl :edi ,location))))
-;;;       ((and binding-is-list-p
-;;;	     (eq (result-mode-type result-mode)
-;;;		 :boolean-branch-on-false))
-;;;	(cond
-;;;	 ((member location '(:eax :ebx :ecx :edx))
        ((eq :boolean-branch-on-true (result-mode-type result-mode))
 	(let ((tmp-register (or tmp-register :ecx)))
 	  (append (make-load-lexical binding
