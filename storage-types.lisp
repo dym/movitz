@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2000-2004,
+;;;;    Copyright (C) 2000-2005,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      storage-types.lisp
@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.47 2004/12/20 10:53:47 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.48 2005/01/03 11:55:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -760,6 +760,8 @@ integer (native lisp) value."
     :initarg :extent
     :initform :unused
     :accessor movitz-funobj-extent)
+   (allocation
+    :accessor movitz-allocation)
    (usage
     :initform nil
     :accessor movitz-funobj-usage)

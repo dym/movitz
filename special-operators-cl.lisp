@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2000-2004,
+;;;;    Copyright (C) 2000-2005,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      special-operators-cl.lisp
@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.39 2004/12/09 22:45:36 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.40 2005/01/03 11:55:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -862,24 +862,29 @@ where zot is not in foo's scope, but _is_ in foo's extent."
     (let ((block-env (movitz-env-get block-name :block-name nil env)))
       (assert block-env (block-name)
 	"Block-name not found for return-from: ~S." block-name)
-      (cond
-       ((and (eq funobj (movitz-environment-funobj block-env))
-	     (null (nth-value 2 (stack-delta env block-env))))
-	(compiler-values-bind (&code return-code &returns return-mode)
-	    (compiler-call #'compile-form
-	      :forward all
-	      :form result-form
-	      :result-mode (exit-result-mode block-env))
-	  (compiler-values ()
-	    :returns :non-local-exit
-	    :code (append return-code
-			  `((:lexical-control-transfer nil ,return-mode ,env ,block-env))))))
-       ((not (and (eq funobj (movitz-environment-funobj block-env))
-		  (null (nth-value 2 (stack-delta env block-env)))))
-	(compiler-call #'compile-form-unprotected
-	  :forward all
-	  :form `(muerte::exact-throw ,(save-esp-variable block-env)
-				      ,result-form)))))))
+      (multiple-value-bind (stack-distance num-dynamic-slots unwind-protects)
+	  (stack-delta env block-env)
+	(declare (ignore stack-distance))
+	(cond
+	 ((and (eq funobj (movitz-environment-funobj block-env))
+	       (not (eq t num-dynamic-slots))
+	       (null unwind-protects))
+	  (compiler-values-bind (&code return-code &returns return-mode)
+	      (compiler-call #'compile-form
+		:forward all
+		:form result-form
+		:result-mode (exit-result-mode block-env))
+	    (compiler-values ()
+	      :returns :non-local-exit
+	      :code (append return-code
+			    `((:lexical-control-transfer nil ,return-mode ,env ,block-env))))))
+	 ((not (and (eq funobj (movitz-environment-funobj block-env))
+		    (not (eq t num-dynamic-slots))
+		    (null unwind-protects)))
+	  (compiler-call #'compile-form-unprotected
+	    :forward all
+	    :form `(muerte::exact-throw ,(save-esp-variable block-env)
+					,result-form))))))))
 
 (define-special-operator require (&form form)
   (let ((*require-dependency-chain*
@@ -1023,31 +1028,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		   :functional-p t
 		   :returns lambda-result-mode
 		   :modifies nil
-		   :code `((:load-lambda ,lambda-binding ,lambda-result-mode)))))
-	     #+old-compiler
-	     (cond
-	      ((movitz-funobj-borrowed-bindings closure-funobj)
-	       (compiler-values ()
-		 :type 'function
-		 :functional-p nil
-		 :returns :edx
-		 :modifies (movitz-funobj-borrowed-bindings closure-funobj)
-		 :code (append
-			(compiler-call #'compile-form
-			  :env env
-			  :funobj funobj
-			  :result-mode :edx
-			  :form `(muerte::copy-funobj ,closure-funobj))
-			(loop for borrowing-binding in (movitz-funobj-borrowed-bindings closure-funobj)
-			    as lended-binding = (borrowed-binding-target borrowing-binding)
-			    append
-			      `((:lend-lexical ,lended-binding ,borrowing-binding :edx))))))
-	      ((null (movitz-funobj-borrowed-bindings closure-funobj))
-	       (compiler-call #'compile-self-evaluating
-		 :env env
-		 :funobj funobj
-		 :result-mode result-mode
-		 :form closure-funobj))))))))))
+		   :code `((:load-lambda ,lambda-binding ,lambda-result-mode ,env))))))))))))
 
 (define-special-operator flet (&all forward &form form &env env &funobj funobj)
   (destructuring-bind (flet-specs &body declarations-and-body)
@@ -1063,18 +1044,28 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		    (multiple-value-bind (flet-body flet-declarations flet-docstring)
 			(parse-docstring-declarations-and-body flet-dd-body)
 		      (declare (ignore flet-docstring))
-		      (make-instance 'function-binding
-			:name flet-name
-			:parent-funobj funobj
-			:funobj (make-compiled-funobj-pass1 (list 'muerte.cl::flet
-								  (movitz-funobj-name funobj)
-								  flet-name)
-							    flet-lambda-list
-							    flet-declarations
-							    (list* 'muerte.cl:block
-								   (compute-function-block-name flet-name)
-								   flet-body)
-							    env nil)))
+		      (let ((flet-funobj
+			     (make-compiled-funobj-pass1 (list 'muerte.cl::flet
+							       (movitz-funobj-name funobj)
+							       flet-name)
+							 flet-lambda-list
+							 flet-declarations
+							 (list* 'muerte.cl:block
+								(compute-function-block-name flet-name)
+								flet-body)
+							 env nil)))
+			(when (find-if (lambda (declaration)
+					 (and (eq 'muerte.cl:dynamic-extent (car declaration))
+					      (member `(muerte.cl:function ,flet-name)
+						      (cdr declaration)
+						      :test #'equal)))
+				       declarations)
+			  (setf (movitz-funobj-extent flet-funobj) :dynamic-extent)
+			  (warn "dynamic-extent flet: ~S" flet-name))
+			(make-instance 'function-binding
+			  :name flet-name
+			  :parent-funobj funobj
+			  :funobj flet-funobj)))
 		  do (movitz-env-add-binding flet-env flet-binding)
 		  collect `(:local-function-init ,flet-binding))))
 	(compiler-values-bind (&all body-values &code body-code)
@@ -1089,7 +1080,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
   (destructuring-bind (symbols-form values-form &body body)
       (cdr form)
     (compiler-values-bind (&code body-code &returns body-returns)
-	(let ((body-env (make-instance 'with-things-on-stack-env
+	(let ((body-env (make-instance 'progv-env
 			  :uplink env
 			  :funobj funobj
 			  :stack-used t

@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2000-2004
+;;;;    Copyright (C) 2000-2005
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      environment.lisp
@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.10 2004/12/09 14:03:28 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.11 2005/01/03 11:55:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -101,10 +101,15 @@ integer: that many words pushed on stack."
     :initarg :num-specials
     :accessor num-specials)))
 
+(defclass progv-env (with-things-on-stack-env)
+  ((stack-used
+    :initform t)
+   (num-specials
+    :initform t)))
+
 (defun make-stack-use-env (stack-used)
   (make-instance 'with-things-on-stack-env
     :stack-used stack-used))
-
 
 (defclass let-env (with-things-on-stack-env)
   ((bindings
@@ -120,6 +125,45 @@ integer: that many words pushed on stack."
    (special-variable-shadows
     :initform nil
     :accessor special-variable-shadows)))
+
+(defclass with-dynamic-extent-scope-env (let-env)
+  ((save-esp-binding
+    :initarg :save-esp-binding
+    :accessor save-esp-binding)
+   (base-binding
+    :initarg :base-binding
+    :accessor base-binding)
+   (scope-tag
+    :initarg :scope-tag
+    :reader dynamic-extent-scope-tag)
+   (stack-used
+    :initform t)
+   (members
+    :initform nil
+    :accessor dynamic-extent-scope-members)))
+
+(defun dynamic-extent-allocation (env)
+  (loop for e = env then (movitz-environment-uplink e)
+      while e
+      do (when (typep e 'with-dynamic-extent-allocation-env)
+	   (return e))))
+
+(defun dynamic-extent-object-offset (scope-env object)
+  (loop with offset = 0
+      for x in (dynamic-extent-scope-members scope-env)
+      do (if (eq x object)
+	     (return (* 8 offset))
+	   (incf offset (truncate (+ (sizeof x) 4) 8)))))
+
+(defmethod print-object ((env with-dynamic-extent-scope-env) stream)
+  (print-unreadable-object (env stream :type t)
+    (princ (dynamic-extent-scope-tag env) stream))
+  env)
+
+(defclass with-dynamic-extent-allocation-env (movitz-environment)
+  ((scope
+    :initarg :scope
+    :reader allocation-env-scope)))
 
 (defclass funobj-env (let-env)
   ()
@@ -189,7 +233,7 @@ the function sets up itself. Its parent env. must be a funobj-env."))
     t)
    (t (sub-env-p (movitz-environment-uplink sub-env) env))))
 
-(defmethod num-dynamic-slots ((x let-env))
+(defmethod num-dynamic-slots ((x with-things-on-stack-env))
   (num-specials x))
 
 (defmethod print-object ((object let-env) stream)

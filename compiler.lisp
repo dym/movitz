@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001,2000, 2002-2004,
+;;;;    Copyright (C) 2001,2000, 2002-2005,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Description:   A simple lisp compiler.
@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.123 2004/12/21 14:23:49 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.124 2005/01/03 11:55:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -96,7 +96,7 @@ compile, using the host compiler, the code rather than just using eval.")
     (make-hash-table :test #'eq))
 
 
-(defconstant +enter-stack-frame-code+
+(defparameter +enter-stack-frame-code+
     '((:pushl :ebp)
       (:movl :esp :ebp)
       (:pushl :esi)))
@@ -189,6 +189,13 @@ compile, using the host compiler, the code rather than just using eval.")
    (funobj-env
     :initarg :funobj-env
     :accessor funobj-env)
+   (extent
+    :initarg :extent
+    :initform :unused
+    :accessor movitz-funobj-extent)
+   (allocation
+    :initform nil
+    :accessor movitz-allocation)
    (entry-protocol
     :initform :default
     :initarg :entry-protocol
@@ -643,18 +650,30 @@ of all function-bindings seen."
 		     (:call-lexical
 		      (process-binding funobj (second instruction) '(:call)))
 		     (:load-lambda
-		      (let ((lambda-binding (second instruction)))
+		      (destructuring-bind (lambda-binding lambda-result-mode capture-env)
+			  (cdr instruction)
+			(declare (ignore lambda-result-mode))
 			(assert (eq funobj (binding-funobj lambda-binding)) ()
 			  "A non-local lambda doesn't make sense. There must be a bug.")
-			(resolve-sub-funobj funobj (function-binding-funobj lambda-binding))
-			(process-binding funobj lambda-binding '(:read))
-			;; This funobj is effectively using every binding that the lambda
-			;; is borrowing..
-			(map nil (lambda (borrowed-binding)
-				   (process-binding funobj
-						    (borrowed-binding-target borrowed-binding)
-						    '(:read)))
-			     (borrowed-bindings (function-binding-funobj lambda-binding)))))
+			(let ((lambda-funobj (function-binding-funobj lambda-binding)))
+			  (let ((dynamic-extent (dynamic-extent-allocation capture-env)))
+			    (when dynamic-extent
+			      (let ((dynamic-scope (allocation-env-scope dynamic-extent)))
+				;; (warn "Adding ~S to ~S/~S" lambda-funobj dynamic-extent dynamic-scope)
+				(setf (movitz-funobj-extent lambda-funobj) :dynamic-extent
+				      (movitz-allocation lambda-funobj) dynamic-scope)
+				(push lambda-funobj
+				      (dynamic-extent-scope-members (allocation-env-scope dynamic-extent)))
+				(process-binding funobj (base-binding dynamic-scope) '(:read)))))
+			  (resolve-sub-funobj funobj lambda-funobj)
+			  (process-binding funobj lambda-binding '(:read))
+			  ;; This funobj is effectively using every binding that the lambda
+			  ;; is borrowing..
+			  (map nil (lambda (borrowed-binding)
+				     (process-binding funobj
+						      (borrowed-binding-target borrowed-binding)
+						      '(:read)))
+			       (borrowed-bindings (function-binding-funobj lambda-binding))))))
 		     (:local-function-init
 		      (let ((function-binding (second instruction)))
 			(assert (eq funobj (binding-funobj function-binding)) ()
@@ -696,6 +715,7 @@ of all function-bindings seen."
 		 do (pushnew borrowed-binding
 			     (getf (binding-lending (borrowed-binding-target borrowed-binding))
 				   :lended-to)))
+	     ;; (warn "old extent: ~S" (movitz-funobj-extent sub-funobj))
 	     (cond
 	      ((or (null usage)
 		   (null (borrowed-bindings sub-funobj)))
@@ -708,12 +728,16 @@ of all function-bindings seen."
 	       (change-class function-binding 'closure-binding)
 	       (setf (movitz-funobj-extent sub-funobj)
 		 :lexical-extent))
+	      ((eq :dynamic-extent (movitz-funobj-extent sub-funobj))
+	       (change-class function-binding 'closure-binding))
 	      (t (change-class function-binding 'closure-binding)
 		 (setf (movitz-funobj-extent sub-funobj)
 		   :indefinite-extent))) ; XXX
-	     #+ignore (warn "extent: ~S => ~S"
-			    sub-funobj
-			    (movitz-funobj-extent sub-funobj)))))
+	     #+ignore
+	     (warn "extent usage ~S: ~S => ~S"
+		   usage
+		   sub-funobj
+		   (movitz-funobj-extent sub-funobj)))))
   (loop for function-binding in function-binding-usage by #'cddr
       do (finalize-funobj (function-binding-funobj function-binding)))
   (finalize-funobj toplevel-funobj))
@@ -1003,8 +1027,18 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 (defun check-locate-concistency (code-vector)
   (loop for x from 0 below (length code-vector) by 8
       do (when (and (= (tag :basic-vector) (aref code-vector x))
-		    (= (enum-value 'movitz-vector-element-type :code) (aref code-vector (1+ x))))
-	   (break "Code-vector can break %find-code-vector at offset ~D." x)))
+		    (= (enum-value 'movitz-vector-element-type :code) (aref code-vector (1+ x)))
+		    (or (<= #x4000 (length code-vector))
+			(and (= (ldb (byte 8 0) (length code-vector))
+				(aref code-vector (+ x 2)))
+			     (= (ldb (byte 8 8) (length code-vector))
+				(aref code-vector (+ x 3))))))
+	   (break "Code-vector (length #x~X) can break %find-code-vector at ~D: #x~2,'0X~2,'0X ~2,'0X~2,'0X."
+		  (length code-vector) x
+		  (aref code-vector (+ x 0))
+		  (aref code-vector (+ x 1))
+		  (aref code-vector (+ x 2))
+		  (aref code-vector (+ x 3)))))
   (values))
 
 #+ignore
@@ -1585,10 +1619,10 @@ There is (propably) a bug in the peephole optimizer." recursive-count))
 	       (0 nil)
 	       (1 (cadr c))
 	       (2 (twop-dst c)))))
-	 (non-destructuve-p (c)
+	 (non-destructive-p (c)
 	   (let ((c (ignore-instruction-prefixes c)))
 	     (and (consp c)
-		  (member (car c) '(:testl :testb :pushl :cmpl :cmpb :frame-map :std)))))
+		  (member (car c) '(:testl :testb :cmpl :cmpb :frame-map :std)))))
 	 (simple-instruction-p (c)
 	   (let ((c (ignore-instruction-prefixes c)))
 	     (and (listp c)
@@ -1627,7 +1661,7 @@ There is (propably) a bug in the peephole optimizer." recursive-count))
 		  (or (global-funcall-p i)
 		      (instruction-is i :frame-map)
 		      (branch-instruction-label i)
-		      (non-destructuve-p i)
+		      (non-destructive-p i)
 		      (and (simple-instruction-p i)
 			   (not (eql stack-location (stack-frame-operand (idst i)))))))))
 	 (preserves-register-p (i register)
@@ -1637,10 +1671,12 @@ There is (propably) a bug in the peephole optimizer." recursive-count))
 			   (not (eq register (idst i))))
 		      (instruction-is i :frame-map)
 		      (branch-instruction-label i)
-		      (non-destructuve-p i)
+		      (non-destructive-p i)
 		      (and (member register '(:edx))
 			   (member (global-funcall-p i)
-				   '(fast-car fast-cdr fast-car-ebx fast-cdr-ebx)))))))
+				   '(fast-car fast-cdr fast-car-ebx fast-cdr-ebx)))
+		      (and (not (eq register :esp))
+			   (instruction-is i :pushl))))))
 	 (operand-register-indirect-p (operand register)
 	   (and (consp operand)
 		(tree-search operand register)))
@@ -1811,7 +1847,7 @@ falling below the label."
 					     (twop-src ii))
 				    (pushnew (store-stack-frame-p ii)
 					     modifieds))
-				   ((non-destructuve-p ii))
+				   ((non-destructive-p ii))
 				   ((branch-instruction-label ii))
 				   ((simple-instruction-p ii)
 				    (let ((op (idst ii)))
@@ -2813,14 +2849,16 @@ the sub-program options (&optional label) as secondary value."
 	  (cdr (first init-pc))
 	(declare (ignore protect-registers protect-carry init-with-type))
 	(assert (eq binding init-binding))
-	(let* ((load-instruction
-		(find-if (lambda (i)
-			   (and (not (instruction-is i :init-lexvar))
-				(member binding (find-read-bindings i)
-					:test #'binding-eql)))
-			 (cdr init-pc)))
-	       (binding-destination (third load-instruction))
-	       (distance (position load-instruction (cdr init-pc))))
+	(multiple-value-bind (load-instruction binding-destination distance)
+	    (loop for i in (cdr init-pc) as distance upfrom 0
+		do (when (not (instruction-is i :init-lexvar))
+		     (multiple-value-bind (read-bindings read-destinations)
+			 (find-read-bindings i)
+		       (let ((pos (position binding read-bindings :test #'binding-eql)))
+			 (when pos
+			   (return (values i (nth pos read-destinations) distance)))))))
+	  (declare (ignore load-instruction))
+	  ;; (warn "load: ~S, dist: ~S, dest: ~S" load-instruction distance binding-destination)
 	  (multiple-value-bind (free-registers more-later-p)
 	      (and distance (compute-free-registers (cdr init-pc) distance funobj frame-map))
 	    (let ((free-registers-no-ecx (remove :ecx free-registers)))
@@ -2912,6 +2950,15 @@ the sub-program options (&optional label) as secondary value."
 			  ((:local-function-init :load-lambda)
 			   (let ((function-binding (second instruction)))
 			     (take-note-of-binding function-binding)
+			     (let ((sub-funobj (function-binding-funobj function-binding)))
+			       #+ignore
+			       (warn "fun-ext: ~S ~S ~S"
+				     sub-funobj
+				     (movitz-funobj-extent sub-funobj)
+				     (movitz-allocation sub-funobj))
+			       (when (typep (movitz-allocation sub-funobj)
+					    'with-dynamic-extent-scope-env)
+				 (take-note-of-binding (base-binding (movitz-allocation sub-funobj)))))
 			     (let ((closure-funobj (function-binding-funobj function-binding)))
 			       (dolist (borrowing-binding (borrowed-bindings closure-funobj))
 				 (lend-lexical borrowing-binding nil)))))
@@ -3189,6 +3236,11 @@ the sub-program options (&optional label) as secondary value."
 				(:load-lambda
 				 (or (when load
 				       (binding-eql binding (second instruction)))
+				     (let ((allocation (movitz-allocation
+							(function-binding-funobj (second instruction)))))
+				       (when (and load
+						  (typep allocation 'with-dynamic-extent-scope-env))
+					 (binding-eql binding (base-binding allocation))))
 				     (search-funobj (function-binding-funobj (second instruction))
 						    binding load store call)))
 				(:call-lexical
@@ -3320,9 +3372,6 @@ bindings are located in the appropriate register, so no stack location is needed
 			       `((:init-lexvar ,binding :init-with-register :ebx :init-with-type t))))
 			   code)
 		   env stack-frame-position frame-map))
-
-(defconstant +dynamic-frame-marker+ #xd193)
-(defconstant +dynamic-catch-marker+ #xd293)
 
 (defun single-value-register (mode)
   (ecase mode
@@ -3670,10 +3719,19 @@ loading borrowed bindings."
 	       (assert (eq funobj-register :edx))
 	       (when (getf (binding-lending lended-binding) :dynamic-extent-p)
 		 (assert dynamic-extent-p))
-	       ;; (warn "lending: ~W" lended-binding)
+	       #+ignore
+	       (warn "lending: ~W: ~S"
+		     lended-binding
+		     (mapcar #'movitz-funobj-extent
+			     (mapcar #'binding-funobj 
+				     (getf (binding-lending lended-binding) :lended-to))))
 	       (append (make-load-lexical lended-binding :eax funobj t frame-map)
 		       (unless (or (typep lended-binding 'borrowed-binding)
-				   (getf (binding-lending lended-binding) :dynamic-extent-p))
+				   (getf (binding-lending lended-binding) :dynamic-extent-p)
+				   (every (lambda (borrower)
+					    (member (movitz-funobj-extent (binding-funobj borrower))
+						    '(:lexical-extent :dynamic-extent)))
+					  (getf (binding-lending lended-binding) :lended-to)))
 			 (append `((:pushl :edx)
 				   (:globally (:call (:edi (:edi-offset ensure-heap-cons-variable))))
 				   (:popl :edx))
@@ -3754,8 +3812,23 @@ loading borrowed bindings."
 			nil)
 		       ((typep function-binding 'funobj-binding)
 			nil)
-		       (t (when (null (borrowed-bindings sub-funobj))
-			    (warn "null lending for ~S" sub-funobj))
+		       #+ignore
+		       ((member (movitz-funobj-extent sub-funobj)
+				'(:dynamic-extent :lexical-extent))
+			(check-type function-binding closure-binding)
+			(when (plusp (movitz-funobj-num-jumpers sub-funobj))
+			  (break "Don't know yet how to stack a funobj with jumpers."))
+			(let ((words (+ (movitz-funobj-num-constants sub-funobj)
+					(/ (sizeof 'movitz-funobj) 4))))
+			  (break "words for ~S: ~S" words sub-funobj)
+			  (append `((:movl :esp :eax)
+				    (:testl 4 :eax)
+				    (:jz 'no-alignment-needed)
+				    (:pushl :edi)
+				    no-alignment-needed)
+				  (make-load-constant sub-funobj :eax funobj frame-map)
+				  )))
+		       (t (assert (not (null (borrowed-bindings sub-funobj))))
 			  (append (make-load-constant sub-funobj :eax funobj frame-map)
 				  `((:movl (:edi ,(global-constant-offset 'copy-funobj)) :esi)
 				    (:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%1op)))
@@ -3765,8 +3838,9 @@ loading borrowed bindings."
 				      append (make-lend-lexical bb :edx nil))))))
 		    funobj frame-map)))
 		(:load-lambda
-		 (destructuring-bind (function-binding register)
+		 (destructuring-bind (function-binding register capture-env)
 		     (operands instruction)
+		   (declare (ignore capture-env))
 		   ;; (warn "load-lambda not completed for ~S" function-binding)
 		   (finalize-code
 		    (let* ((sub-funobj (function-binding-funobj function-binding))
@@ -3777,6 +3851,17 @@ loading borrowed bindings."
 		       ((null lend-code)
 			;; (warn "null lambda lending")
 			(append (make-load-constant sub-funobj register funobj frame-map)))
+		       ((typep (movitz-allocation sub-funobj)
+			       'with-dynamic-extent-scope-env)
+			(let ((dynamic-scope (movitz-allocation sub-funobj)))
+			  (append (make-load-lexical (base-binding dynamic-scope) :edx
+						     funobj nil frame-map)
+				  `((:leal (:edx ,(tag :other)
+						 ,(dynamic-extent-object-offset dynamic-scope
+										sub-funobj))
+					   :edx))
+				  lend-code
+				  `((:movl :edx ,register)))))
 		       (t (append (make-load-constant sub-funobj :eax funobj frame-map)
 				  `((:movl (:edi ,(global-constant-offset 'copy-funobj)) :esi)
 				    (:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%1op)))
@@ -3921,7 +4006,7 @@ loading borrowed bindings."
 	    `((,op ,(new-make-compiled-constant-reference movitz-obj funobj)
 		   ,result-mode))))))))
 
-(defconstant +movitz-lambda-list-keywords+
+(defparameter +movitz-lambda-list-keywords+
     '(muerte.cl:&OPTIONAL
       muerte.cl:&REST
       muerte.cl:&KEY
@@ -5825,16 +5910,18 @@ cleanup-forms etc.) to <to-env> with <return-code>'s result intact."
     (assert (null unwind-protects) ()
       "Lexical unwind-protect not implemented, to-env: ~S. (this is not supposed to happen)"
       to-env)
+    ;; (warn "dist: ~S, slots: ~S" stack-distance num-dynamic-slots)
     (cond
      ((and (eq t stack-distance)
-	   (zerop num-dynamic-slots))
+	   (eql 0 num-dynamic-slots))
       (compiler-values ()
 	:returns :non-local-exit
 	:code (append return-code
 		      (unless (eq :function (exit-result-mode to-env))
-			`((:load-lexical ,(save-esp-variable to-env) :esp)))
+			`((:load-lexical ,(movitz-binding (save-esp-variable to-env) to-env nil) :esp)))
 		      `((:jmp ',to-label)))))
-     ((eq t stack-distance)
+     ((or (eq t stack-distance)
+	  (eq t num-dynamic-slots))
       (compiler-values ()
 	:returns :non-local-exit
 	:code (append return-code
@@ -5850,7 +5937,7 @@ cleanup-forms etc.) to <to-env> with <return-code>'s result intact."
 				   (:locally (:call (:edi (:edi-offset dynamic-unwind-next))))
 				   (:locally (:movl :eax (:edi (:edi-offset dynamic-env))))
 				   (:jc '(:sub-program () (:int 63))))))
-		      `((:load-lexical ,(save-esp-variable to-env) :esp)
+		      `((:load-lexical ,(movitz-binding (save-esp-variable to-env) to-env nil) :esp)
 			(:jmp ',to-label)))))
      ((zerop num-dynamic-slots)
       (compiler-values ()
@@ -5923,6 +6010,8 @@ and a list of any intervening unwind-protect environment-slots."
 	     (+ x y)
 	   t))
        (find-stack-delta (env stack-distance num-dynamic-slots unwind-protects)
+	 #+ignore (warn "find-stack-delta: ~S dist ~S, slots ~S" env
+			(stack-used env) (num-dynamic-slots env))
 	 (cond
 	  ((eq outer-env env)
 	   ;; Each dynamic-slot is 4 stack-distances, so let's check that..
@@ -5935,7 +6024,7 @@ and a list of any intervening unwind-protect environment-slots."
 	   (values nil 0 nil))
 	  (t (find-stack-delta (movitz-environment-uplink env)
 			       (stack-distance-add stack-distance (stack-used env))
-			       (+ num-dynamic-slots (num-dynamic-slots env))
+			       (stack-distance-add num-dynamic-slots (num-dynamic-slots env))
 			       (if (typep env 'unwind-protect-env)
 				   (cons env unwind-protects)
 				 unwind-protects))))))
@@ -6000,9 +6089,7 @@ and a list of any intervening unwind-protect environment-slots."
     (let* ((operator (car extended-instruction))
 	   (finder (gethash operator *extended-code-find-read-binding*)))
       (when finder
-	(let ((result (funcall finder extended-instruction)))
-	  (check-type result list "a list of read bindings")
-	  result)))))
+	(funcall finder extended-instruction)))))
 
 (defmacro define-find-write-binding-and-type (name lambda-list &body body)
   (let ((defun-name (intern
@@ -6098,9 +6185,9 @@ and a list of any intervening unwind-protect environment-slots."
 	      (list source)))))
 
 (define-find-read-bindings :load-lexical (source destination &key &allow-other-keys)
-  (declare (ignore destination))
   (check-type source binding)
-  (list source))
+  (values (list source)
+	  (list destination)))
 
 (define-extended-code-expander :load-lexical (instruction funobj frame-map)
   (destructuring-bind (source destination &key shared-reference-p tmp-register protect-registers)
@@ -6781,3 +6868,67 @@ and a list of any intervening unwind-protect environment-slots."
 			(:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%2op)))
 			,eql-done))))
 	   (t (error "unknown eql: ~S" instruction))))))))
+
+(define-find-read-bindings :load-lambda (lambda-binding result-mode capture-env)
+  (declare (ignore result-mode capture-env))
+  (let ((allocation (movitz-allocation (function-binding-funobj lambda-binding))))
+    (when (typep allocation 'with-dynamic-extent-scope-env)
+      (values (list (base-binding allocation))
+	      (list :edx)))))
+
+(define-find-write-binding-and-type :enter-dynamic-scope (instruction)
+  (destructuring-bind (scope-env)
+      (cdr instruction)
+    (if (null (dynamic-extent-scope-members scope-env))
+	(values nil)
+      (values (base-binding scope-env) 'fixnum))))
+
+(define-extended-code-expander :enter-dynamic-scope (instruction funobj frame-map)
+  (declare (ignore funobj frame-map))
+  (destructuring-bind (scope-env)
+      (cdr instruction)
+    (if (null (dynamic-extent-scope-members scope-env))
+	nil
+      (append `((:pushl :edi)
+		(:movl :esp :eax)
+		(:andl 4 :eax)
+		(:addl :eax :esp))
+	      (loop for object in (reverse (dynamic-extent-scope-members scope-env))
+		  appending
+		    (etypecase object
+		      (movitz-funobj
+		       (append (unless (zerop (mod (sizeof object) 8))
+				 `((:pushl :edi)))
+			       `((:load-constant ,object :eax))
+			       (loop for i from (1- (movitz-funobj-num-constants object))
+				   downto (movitz-funobj-num-jumpers object)
+				   collect `(:pushl (:eax ,(slot-offset 'movitz-funobj 'constant0)
+							  ,(* 4 i))))
+			       (loop repeat (movitz-funobj-num-jumpers object)
+				   do (error "Can't handle jumpers.")
+				   collect `(:pushl 0))
+			       `((:pushl (:eax ,(slot-offset 'movitz-funobj 'num-jumpers)))
+				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'name)))
+				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'lambda-list)))
+				 
+;;;				 (:pushl 0) ; %3op
+;;;				 (:pushl 0) ; %2op
+;;;				 (:pushl 0) ; %1op
+;;;				 (:pushl 0) ; (default)
+				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'code-vector%3op)))
+				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'code-vector%2op)))
+				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'code-vector%1op)))
+				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'code-vector)))
+				 
+				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'type))))))))))))
+
+;;;(define-extended-code-expander :exit-dynamic-scope (instruction funobj frame-map)
+;;;  nil)
+
+(define-find-read-bindings :lexical-control-transfer (return-code return-mode from-env to-env
+								  &optional to-label)
+  (declare (ignore return-code return-mode to-label))
+  (let ((distance (stack-delta from-env to-env)))
+    (when (eq t distance)
+      (values (list (movitz-binding (save-esp-variable to-env) to-env nil))
+	      (list :esp)))))

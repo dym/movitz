@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.22 2004/12/09 14:20:43 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.23 2005/01/03 11:56:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -104,10 +104,10 @@
 		   (return t))))))))))
 
 (define-compiler-macro dotimes (&whole form-decline (var count-form &optional result-form)
-				&body declarations-and-body)
-  (if (not (movitz:movitz-constantp count-form))
+				&body declarations-and-body &environment env)
+  (if (not (movitz:movitz-constantp count-form env))
       form-decline
-    (let ((count (movitz::eval-form count-form)))
+    (let ((count (movitz:movitz-eval count-form env)))
       (check-type count (integer 0 *))
       (cond
        ((= 0 count)
@@ -236,8 +236,6 @@ respect to multiple threads."
 	   ,@body)
        (setf (muerte::%run-time-context-slot 'bochs-flags) old-flags))))
 
-  
-  
 
 (defmacro handler-bind (bindings &body forms)
   (if (null bindings)
@@ -245,31 +243,14 @@ respect to multiple threads."
     (labels ((make-handler (binding)
 	       (destructuring-bind (type handler)
 		   binding
-		 (cond
-		  #+ignore
-		  ((and (listp handler)
-			(eq 'lambda (first handler))
-			(= 1 (length (second handler))))
-		   `(cons t (lambda (x)
-			      (when (typep x ',type)
-				(let ((,(first (second handler)) x))
-				  ,@(cddr handler)))
-			      nil)))
-		  #+ignore
-		  ((and (listp handler)
-			(eq 'function (first handler))
-			(listp (second handler))
-			(eq 'lambda (first (second handler)))
-			(= 1 (length (second (second handler)))))
-		   (make-handler (list type (second handler))))
-		  (t `(cons ',type ,handler))))))
-      `(let ((*active-condition-handlers*
-	      (cons (list ,@(mapcar #'make-handler #+ignore (lambda (binding)
-							      `(cons ',(first binding)
-								     ,(second binding)))
-				    bindings))
-		    *active-condition-handlers*)))
-	 ,@forms))))
+		 `(cons ',type ,handler))))
+      (let ((scope-tag (gensym "handler-bind-extent-scope-")))
+	`(with-dynamic-extent-scope (,scope-tag)
+	   (let ((*active-condition-handlers*
+		  (with-dynamic-extent-allocation (,scope-tag)
+		    (cons (list ,@(mapcar #'make-handler bindings))
+			  *active-condition-handlers*))))
+	     ,@forms))))))
 
 (defmacro handler-case (expression &rest clauses)
   (multiple-value-bind (normal-clauses no-error-clauses)

@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 20012000, 2002-2004,
+;;;;    Copyright (C) 20012000, 2002-2005,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      special-operators.lisp
@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.45 2004/11/19 23:03:49 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.46 2005/01/03 11:55:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1148,15 +1148,15 @@ on the current result."
 	  :form keyform
 	  :result-mode :eax
 	  :forward all)
+;;;      (declare (ignore keyform-type))
 ;;;      (warn "keyform type: ~S" keyform-type)
 ;;;      (warn "clause-types: ~S" (mapcar #'car clauses))
-      (declare (ignore keyform-type))
+      #+ignore
       (let ((clause (find 'muerte.cl::t clauses :key #'car)))
 	(assert clause)
 	(compiler-call #'compile-implicit-progn
 	  :form (cdr clause)
 	  :forward all))
-      #+ignore
       (loop for (clause-type . clause-forms) in clauses
 	  when (movitz-subtypep (type-specifier-primary keyform-type) clause-type)
 	  return (compiler-call #'compile-implicit-progn
@@ -1317,3 +1317,56 @@ is zero (i.e. not found)."
 	:returns returns
 	:code `((:eql ,x ,y ,returns))))))
 			     
+
+(define-special-operator muerte::with-dynamic-extent-scope
+    (&all all &form form &env env &funobj funobj)
+  (destructuring-bind ((scope-tag) &body body)
+      (cdr form)
+    (let* ((save-esp-binding (make-instance 'located-binding
+			       :name (gensym "dynamic-extent-save-esp-")))
+	   (base-binding (make-instance 'located-binding
+			   :name (gensym "dynamic-extent-base-")))
+	   (scope-env
+	    (make-local-movitz-environment env funobj
+					   :type 'with-dynamic-extent-scope-env
+					   :scope-tag scope-tag
+					   :save-esp-binding save-esp-binding
+					   :base-binding base-binding)))
+      (movitz-env-add-binding scope-env save-esp-binding)
+      (movitz-env-add-binding scope-env base-binding)
+      (compiler-values-bind (&code body-code &all body-values)
+	  (compiler-call #'compile-implicit-progn
+	    :env scope-env
+	    :form body
+	    :forward all)
+	(compiler-values (body-values)
+	  :code (append `((:init-lexvar ,save-esp-binding
+					:init-with-register :esp
+					:init-with-type fixnum)
+			  (:enter-dynamic-scope ,scope-env)
+			  (:init-lexvar ,base-binding
+					:init-with-register :esp
+					:init-with-type fixnum))
+			body-code
+			`((:load-lexical ,save-esp-binding :esp))))))))
+
+(define-special-operator muerte::with-dynamic-extent-allocation
+    (&all all &form form &env env &funobj funobj)
+  (destructuring-bind ((scope-tag) &body body)
+      (cdr form)
+    (let* ((scope-env (loop for e = env then (movitz-environment-uplink e)
+			  unless e
+			  do (error "Dynamic-extent scope ~S not seen." scope-tag)
+			  when (and (typep e 'with-dynamic-extent-scope-env)
+				    (eq scope-tag (dynamic-extent-scope-tag e)))
+			  return e))
+	   (allocation-env
+	    (make-local-movitz-environment env funobj
+					   :type 'with-dynamic-extent-allocation-env
+					   :scope scope-env)))
+      (compiler-call #'compile-implicit-progn
+	:form body
+	:forward all
+	:env allocation-env))))
+						       
+  
