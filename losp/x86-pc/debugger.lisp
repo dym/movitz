@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.18 2004/07/20 23:53:48 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.19 2004/07/24 01:29:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -429,6 +429,7 @@ be provided for those cases."
   (declare (dynamic-extent args))
   (handler-case (apply #'print-stack-frame-arglist args)
     (serious-condition (conditon)
+      (declare (ignore conditon))
       (write-string "#<error printing frame>"))))
 
 (defun backtrace (&key stack
