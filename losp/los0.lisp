@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.21 2004/09/15 10:22:57 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.22 2004/09/21 13:11:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -988,8 +988,9 @@ s#+ignore
   (muerte::with-bochs-tracing ()
     (eval form)))
 
-(muerte.toplevel:define-toplevel-command :mapkey (code-char)
-  (let ((char (etypecase code-char
+(muerte.toplevel:define-toplevel-command :mapkey (code-char-form)
+  (let* ((code-char (eval code-char-form))
+	 (char (etypecase code-char
 		(character code-char)
 		(integer (code-char code-char)))))
     (format t "~&Hit the (single) key you want to map to ~S..." char)
@@ -1083,7 +1084,7 @@ s#+ignore
 (defun test-clc (&optional timeout)
   (test-timer timeout)
   (loop
-    (clc::test-clc)))
+    (funcall (find-symbol (string :test-clc) :clc))))
 
 (defun test-timer (&optional timeout)
   (setf (exception-handler 32)
@@ -1128,7 +1129,7 @@ s#+ignore
 		       (current-stack-frame))
       (setf *timer-stack* (muerte::copy-current-control-stack))
       (setf (pit8253-timer-mode 0) +pit8253-mode-single-timeout+
-	    (pit8253-timer-count 0) (or timeout (+ 10 (random 4000))))
+	    (pit8253-timer-count 0) (or timeout (+ 5 (random 2000))))
       (with-inline-assembly (:returns :nothing)
 	(:compile-form (:result-mode :ecx) muerte.x86-pc::*screen*)
 	(:shrl 2 :ecx)
@@ -1140,7 +1141,7 @@ s#+ignore
     (:shrl 2 :ecx)
     ((:gs-override) :movw #x4646 (:ecx 158)))
   (setf (pit8253-timer-mode 0) +pit8253-mode-single-timeout+
-	(pit8253-timer-count 0) (or timeout (+ 10 (random 4000))))
+	(pit8253-timer-count 0) (or timeout (+ 10 (random 1000))))
   (setf (pic8259-irq-mask) #xfffe)
   (pic8259-end-of-interrupt 0)
   (with-inline-assembly (:returns :nothing) (:sti))
@@ -1163,14 +1164,20 @@ s#+ignore
     ))
 
 (defun test-throwing (&optional (x #xffff))
-  (test-timer x)
+  (when x
+    (test-timer x))
   (loop
     (catch 'foo
-      (funcall (lambda ()
-		 (unless (logbitp 9 (eflags))
-		   (break "Someone switched off interrupts!"))
-		 (incf (memref-int muerte.x86-pc::*screen* 0 0 :unsigned-byte16 t))
-		 (throw 'foo nil))))))
+      (unwind-protect 
+	  (funcall (lambda ()
+		     (unwind-protect
+			 (progn
+;;;			   (unless (logbitp 9 (eflags))
+;;;			     (break "Someone switched off interrupts!"))
+			   (incf (memref-int muerte.x86-pc::*screen* 0 0 :unsigned-byte16 t))
+			   (throw 'foo 'inner-peace))
+		       (incf (memref-int muerte.x86-pc::*screen* 0 80 :unsigned-byte16 t)))))
+	(incf (memref-int muerte.x86-pc::*screen* 0 160 :unsigned-byte16 t))))))
 
 
 (defun genesis ()
@@ -1203,7 +1210,7 @@ s#+ignore
       (setf *package* (find-package "INIT"))
       (clos-bootstrap)
       (when muerte::*multiboot-data*
-	(set-textmode +vga-state-90x60+))
+	(set-textmode +vga-state-90x30+))
       
       (cond
        ((not (cpu-featurep :tsc))
