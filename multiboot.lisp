@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Jun 12 12:14:12 2002
 ;;;;                
-;;;; $Id: multiboot.lisp,v 1.4 2004/03/26 01:42:45 ffjeld Exp $
+;;;; $Id: multiboot.lisp,v 1.5 2004/07/28 14:23:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -43,7 +43,7 @@
     :binary-type lu32
     :initform 0
     :map-binary-write (lambda (x type)
-			(declare (ignore x y))
+			(declare (ignore x type))
 			(- (sizeof 'multiboot-header) 8)))
    (magic
     :accessor magic
