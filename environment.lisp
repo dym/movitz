@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.7 2004/08/12 17:16:46 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.8 2004/10/07 12:41:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -225,6 +225,8 @@ the function sets up itself. Its parent env. must be a funobj-env."))
    (lexical-catch-tag-variable
     :initarg :lexical-catch-tag-variable
     :reader movitz-env-lexical-catch-tag-variable)))
+
+(defclass tagbody-env (lexical-exit-point-env) ())
 
 (defclass unwind-protect-env (movitz-environment)
   ())
