@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Mar 23 01:18:36 2002
 ;;;;                
-;;;; $Id: format.lisp,v 1.8 2004/10/12 14:42:41 ffjeld Exp $
+;;;; $Id: format.lisp,v 1.9 2004/11/07 21:10:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -160,13 +160,13 @@ clause."
 		     (write (pop args) :level nil :length nil))
 		    (t (write (pop args)))))
 	      (#\B (format-integer (pop args) 2 at-sign-p colon-p
-				   (nreverse prefix-parameters)))
+				   (reverse prefix-parameters)))
 	      (#\O (format-integer (pop args) 8 at-sign-p colon-p
-				   (nreverse prefix-parameters)))
+				   (reverse prefix-parameters)))
 	      (#\D (format-integer (pop args) 10 at-sign-p colon-p
-				   (nreverse prefix-parameters)))
+				   (reverse prefix-parameters)))
 	      (#\X (format-integer (pop args) 16 at-sign-p colon-p
-				   (nreverse prefix-parameters)))
+				   (reverse prefix-parameters)))
 	      (#\F (apply 'format-float (pop args) at-sign-p colon-p (nreverse prefix-parameters)))
 	      (#\C (if colon-p
 		       (let ((c (pop args)))
