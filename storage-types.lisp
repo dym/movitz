@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.32 2004/07/24 01:30:40 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.33 2004/07/27 09:13:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -363,9 +363,19 @@ integer (native lisp) value."
     :binary-lisp-type :label)		; data follows physically here
    (symbolic-data
     :initarg :symbolic-data
+    :initform nil
     :accessor movitz-vector-symbolic-data))
   (:slot-align type #.+other-type-offset+))
 
+(defmethod print-object ((object movitz-basic-vector) stream)
+  (cond
+   ((eq :character (movitz-vector-element-type object))
+    (print-unreadable-object (object stream :type t :identity nil)
+      (write (map 'string #'identity (movitz-vector-symbolic-data object))
+	     :stream stream))
+    object)
+   (t (call-next-method))))
+    
 (defun vector-type-tag (element-type)
   (dpb (enum-value 'movitz-vector-element-type element-type)
        (byte 8 8)
