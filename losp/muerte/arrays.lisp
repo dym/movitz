@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.12 2004/03/28 16:20:44 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.13 2004/03/29 14:32:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -505,45 +505,46 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
      (setf fill-pointer (if (integerp fill-pointer) fill-pointer dimensions))
      (cond
       ((equal element-type 'character)
-       (let ((a (inline-malloc (+ #.(bt:sizeof 'movitz::movitz-vector) dimensions)
-			       :other-tag :vector
-			       :wide-other-tag #.(bt:enum-value 'movitz::movitz-vector-element-type
-								:character))))
-	 (setf (memref a #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
+       (let ((array (malloc-data-clumps (truncate (+ dimensions 7 8) 8))))
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
 		       0 :unsigned-byte16)
 	   0)
-	 (setf (memref a #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
 		       0 :unsigned-byte16)
 	   dimensions)
-	 (setf (fill-pointer a) fill-pointer)
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
+		       0 :unsigned-byte16)
+	   #.(movitz:vector-type-tag :character))
+	 (check-type array string)
+	 (setf (fill-pointer array) fill-pointer)
 	 (cond
 	  (initial-element
 	   (check-type initial-element character)
 	   (dotimes (i dimensions)
-	     (setf (char%unsafe a i) initial-element)))
+	     (setf (char array i) initial-element)))
 	  (initial-contents
 	   (dotimes (i dimensions)
-	     (setf (char a i) (elt initial-contents i)))))
-	 a))
+	     (setf (char array i) (elt initial-contents i)))))
+	 array))
       ((member element-type '(u8 (unsigned-byte 8)) :test #'equal)
-       (let ((a (inline-malloc (+ #.(bt:sizeof 'movitz::movitz-vector) dimensions)
-			       :other-tag :vector
-			       :wide-other-tag #.(bt:enum-value 'movitz::movitz-vector-element-type
-								:u8))))
-	 (setf (memref a #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
+       (let ((array (malloc-data-clumps (truncate (+ dimensions 7 8) 8))))
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
 		       0 :unsigned-byte16)
 	   0)
-	 (setf (memref a #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
 		       0 :unsigned-byte16)
 	   dimensions)
-	 (setf (fill-pointer a) fill-pointer)
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
+		       0 :unsigned-byte16)
+	   #.(movitz:vector-type-tag :u8))
+	 (setf (fill-pointer array) fill-pointer)
 	 (cond
 	  (initial-element
 	   (dotimes (i dimensions)
-	     (setf (aref a i) initial-element)))
+	     (setf (aref array i) initial-element)))
 	  (initial-contents
-	   (replace a initial-contents)))
-	 a))
+	   (replace array initial-contents)))
+	 array))
       ((member element-type '(u32 (unsigned-byte 32)) :test #'equal)
        (let ((a (inline-malloc (+ #.(bt:sizeof 'movitz::movitz-vector) (* 4 dimensions))
 			       :other-tag :vector
