@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.58 2004/07/14 12:28:06 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.59 2004/07/14 12:36:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -362,6 +362,12 @@
 		   
 		    pfix-pbig-done)
 		   ))
+		(((integer * -1) (integer 0 *))
+		 (- y (- x)))
+		(((integer 0 *) (integer * -1))
+		 (- x (- y)))
+		(((integer * -1) (integer * -1))
+		 (+ (- x) (- y)))
 		)))
 	(do-it)))
    (t (&rest terms)
