@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.1 2004/07/17 12:16:03 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.2 2004/07/18 08:45:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -400,3 +400,48 @@
     (expt (movitz:movitz-eval base-number env)
 	  (movitz:movitz-eval power-number env))))
     
+
+(define-compiler-macro %bignum-compare (x y)
+  "Set ZF and CF according to (:cmpl y x), disregarding sign."
+  `(with-inline-assembly (:returns :nothing :labels (eax-shortest-loop
+						     ebx-shortest-loop
+						     equal-length-loop
+						     done))
+     (:compile-two-forms (:eax :ebx) ,x ,y)
+     (:xorl :ecx :ecx)
+     (:xorl :edx :edx)
+     (:movw (:eax (:offset movitz-bignum length)) :cx)
+     (:movw (:ebx (:offset movitz-bignum length)) :dx)
+     (:cmpl :ecx :edx)
+     (:je 'equal-length-loop)
+     (:jnc 'eax-shortest-loop)
+    ebx-shortest-loop
+     (:cmpl 0 (:eax :ecx (:offset movitz-bignum bigit0 -4)))
+     (:jne 'done)
+     (:subl 4 :ecx)
+     (:cmpl :edx :ecx)
+     (:jne 'ebx-shortest-loop)
+     (:jmp 'equal-length-loop)
+    eax-shortest-loop
+     (:cmpl 0 (:ebx :edx (:offset movitz-bignum bigit0 -4)))
+     (:cmc)				; Complement CF
+     (:jne 'done)
+     (:subl 4 :edx)
+     (:cmpl :edx :ecx)
+     (:jne 'eax-shortest-loop)
+    equal-length-loop			; Compare from EDX down
+     (:subl 4 :edx)
+     (:movl (:eax :edx (:offset movitz-bignum bigit0)) :ecx)
+     (:cmpl (:ebx :edx (:offset movitz-bignum bigit0)) :ecx)
+     (:jne 'done)
+     (:testl :edx :edx)
+     (:jnz 'equal-length-loop)
+    done))
+
+(define-compiler-macro %bignum< (x y)
+  `(with-inline-assembly (:returns :boolean-below)
+     (:compile-form (:result-mode :ignore) (%bignum-compare ,x ,y))))
+
+(define-compiler-macro %bignum= (x y)
+  `(with-inline-assembly (:returns :boolean-zf=1)
+     (:compile-form (:result-mode :ignore) (%bignum-compare ,x ,y))))
