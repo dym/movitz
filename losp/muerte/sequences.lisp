@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.14 2004/07/08 11:30:36 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.15 2004/07/11 22:47:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -735,11 +735,6 @@
 	       (memcopy sequence-1 sequence-2 2 start1 start2
 			(min (- end1 start1) (- end2 start2))
 			:unsigned-byte8))
-	      ((:u32 :u32)
-	       (%copy-words (object-location sequence-1)
-			    (object-location sequence-2)
-			    (min (- end1 start1) (- end2 start2))
-			    start1 start2))
 	      (t (with-subvector-accessor (sequence-1-ref sequence-1 start1 end1)
 		   (with-subvector-accessor (sequence-2-ref sequence-2 start2 end2)
 		     (cond
