@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.33 2004/11/26 14:59:59 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.34 2004/12/13 11:27:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -23,7 +23,7 @@
 
 (require :lib/readline)
 (require :lib/toplevel)
-(require :lib/net/ip6)
+;; (require :lib/net/ip6)
 (require :lib/net/ip4)
 (require :lib/repl)
 
@@ -37,7 +37,7 @@
 	#:muerte.readline
 	#:muerte.toplevel
 	#:muerte.ethernet
-	#:muerte.ip6
+;; 	#:muerte.ip6
 	#:muerte.ip4
 	#:muerte.mop
 	#+ignore muerte.x86-pc.serial))
@@ -624,7 +624,7 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
 
 
 
-s#+ignore
+#+ignore
 (defun test-ncase (x y z)
   (numargs-case
    (1 (x) (values x 'one))
@@ -931,7 +931,7 @@ s#+ignore
 			 (prog ()
 			  loop
 			   (case (muerte.x86-pc.keyboard:poll-char)
-			     ((#\esc)
+			     ((#\escape)
 			      (break "Console pager"))
 			     ((#\n #\N)	; No more
 			      (return-from paging (values)))
@@ -1151,7 +1151,7 @@ Can be used to measure the overhead of primitive function."
 (defparameter *timer-stack* nil)
 (defparameter *timer-prevstack* nil)
 (defparameter *timer-esi* nil)
-(defparameter *timer-frame* #100())
+(defparameter *timer-frame* #100(nil))
 (defparameter *timer-base* 2)
 (defparameter *timer-variation* 1000)
 
@@ -1281,7 +1281,7 @@ Can be used to measure the overhead of primitive function."
 				    :quiet t
 				    :mac (muerte.ip4::polling-arp :129.242.16.1
 								  (lambda ()
-								    (eql #\esc (muerte.x86-pc.keyboard:poll-char)))))))
+								    (eql #\escape (muerte.x86-pc.keyboard:poll-char)))))))
 
 (defun mumbojumbo (x)
   (with-inline-assembly (:returns :eax)
@@ -1436,7 +1436,7 @@ Can be used to measure the overhead of primitive function."
 	 (when (receive outside buffer)
 	   (transmit inside buffer))
 	 (case (muerte.x86-pc.keyboard:poll-char)
-	   (#\esc (break "Under the bridge."))
+	   (#\escape (break "Under the bridge."))
 	   (#\e (error "this is an error!"))))))))
 
 
