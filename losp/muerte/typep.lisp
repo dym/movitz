@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.5 2004/03/29 14:34:20 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.6 2004/04/07 00:17:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -285,7 +285,7 @@
 
 (defun typep (object type-specifier)
   (block nil
-    (etypecase type-specifier
+    (typecase type-specifier
       (symbol
        (let ((typep-function (gethash type-specifier *simple-typespecs*)))
 	 (when typep-function
