@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.25 2004/07/08 21:50:03 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.26 2004/07/14 10:53:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -289,7 +289,7 @@
 			   `(typep ,object 'integer))
 			  ((null lower-limit)
 			   `(let ((x ,object))
-			      (and (typep x 'integer) (<= x upper-limit))))
+			      (and (typep x 'integer) (<= x ,upper-limit))))
 			  ((and (null upper-limit)
 				(= (1+ movitz:+movitz-most-positive-fixnum+) lower-limit))
 			   `(with-inline-assembly-case ()
