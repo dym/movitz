@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.64 2004/07/14 23:45:12 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.65 2004/07/15 00:26:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -86,6 +86,19 @@
 
 (define-simple-typep (bit bitp) (x)
   (or (eq x 0) (eq x 1)))
+
+;;; 
+
+(defun %negatef (x p0 p1)
+  "Negate x. If x is not eq to p0 or p1, negate x destructively."
+  (etypecase x
+    (fixnum (- x))
+    (bignum
+     (if (or (eq x p0) (eq x p1))
+	 (- x)
+       (with-inline-assembly (:returns :eax)
+	 (:compile-form (:result-mode :eax) x)
+	 (:xorl #xff00 (:eax #.movitz:+other-type-offset+)))))))
 
 ;;; Addition
 
@@ -364,7 +377,6 @@
 		     (:call-global-constant cons-commit)
 		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 				      (:edi (:edi-offset atomically-status))))
-		   
 		    pfix-pbig-done)
 		   ))
 		(((integer * -1) (integer 0 *))
@@ -372,7 +384,7 @@
 		(((integer 0 *) (integer * -1))
 		 (- x (- y)))
 		(((integer * -1) (integer * -1))
-		 (+ (- x) (- y)))
+		 (%negatef (+ (- x) (- y)) x y))
 		)))
 	(do-it)))
    (t (&rest terms)
@@ -511,7 +523,7 @@
 		(((integer 0 *) (integer * -1))
 		 (+ minuend (- subtrahend)))
 		(((integer * -1) (integer 0 *))
-		 (- (+ (- minuend) subtrahend)))
+		 (%negatef (+ (- minuend) subtrahend) minuend subtrahend))
 		(((integer * -1) (integer * -1))
 		 (+ minuend (- subtrahend)))
 		)))
@@ -520,7 +532,7 @@
       (declare (dynamic-extent subtrahends))
       (if subtrahends
 	  (reduce #'- subtrahends :initial-value minuend)
-	(- 0 minuend)))))
+	(- minuend)))))
     
 (define-modify-macro decf (&optional (delta-form 1)) -)
 
@@ -1469,15 +1481,17 @@ Preserve EAX and EBX."
 	(((integer * -1) (integer 0 *))
 	 (multiple-value-bind (q r)
 	     (truncate (- number) divisor)
-	   (values (- q) (- r))))
+	   (values (%negatef q number divisor)
+		   (%negatef r number divisor))))
 	(((integer 0 *) (integer * -1))
 	 (multiple-value-bind (q r)
 	     (truncate (- number) divisor)
-	   (values (- q) r)))
+	   (values (%negatef q number divisor)
+		   r)))
 	(((integer * -1) (integer * -1))
 	 (multiple-value-bind (q r)
 	     (truncate (- number) divisor)
-	   (values q (- r))))
+	   (values q (%negatef r number divisor))))
 	))))
 
 (defun / (number &rest denominators)
