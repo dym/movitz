@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.11 2004/03/19 10:49:39 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.12 2004/03/22 16:45:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -72,6 +72,7 @@
   :funobj #x30
   :std-instance #x40
   :run-time-context #x50
+  :infant-object #x65
 
   ;; :simple-vector #x20
   ;; :character-vector 
