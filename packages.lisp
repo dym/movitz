@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.4 2004/02/09 23:42:18 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.5 2004/02/10 18:06:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1237,57 +1237,60 @@
 
 (defpackage #:movitz
   (:use :common-lisp :binary-types)
-  (:export parse-docstring-and-declarations
-	   global-constant-offset
-	   tag tag-name
-	   movitz-print
-	   stream-image
-	   with-procfs-image
-	   *image* *i*
-	   *default-image-file*
-	   *default-image-init-file*
-	   movitz-constantp
-	   movitz-eval
+  (:export #:create-image
+	   #:dump-image
 
-	   movitz-compile-file
-	   
-	   movitz-std-instance
-	   movitz-struct
-	   type
-	   movitz-funobj
-	   funobj-type
-	   code-vector
-	   code-vector%1op
-	   code-vector%2op
-	   code-vector%3op
-	   
-	   +movitz-fixnum-factor+
-	   +movitz-fixnum-shift+
-	   constant0
-	   
-	   movitz-object-browser-properties
-	   movitz-heap-object
-	   
-	   movitz-vector
-	   movitz-vector-num-elements
-	   movitz-vector-element-type
-	   movitz-vector-symbolic-data
-	   
-	   movitz-symbol
-	   movitz-string
+	   #:parse-docstring-and-declarations
+	   #:global-constant-offset
+	   #:tag #:tag-name
+	   #:movitz-print
+	   #:stream-image
+	   #:with-procfs-image
+	   #:*image* #:*i*
+	   #:*default-image-file*
+	   #:*default-image-init-file*
+	   #:movitz-constantp
+	   #:movitz-eval
 
-	   movitz-character
-	   movitz-char
+	   #:movitz-compile-file
+	   
+	   #:movitz-std-instance
+	   #:movitz-struct
+	   #:type
+	   #:movitz-funobj
+	   #:funobj-type
+	   #:code-vector
+	   #:code-vector%1op
+	   #:code-vector%2op
+	   #:code-vector%3op
+	   
+	   #:+movitz-fixnum-factor+
+	   #:+movitz-fixnum-shift+
+	   #:constant0
+	   
+	   #:movitz-object-browser-properties
+	   #:movitz-heap-object
+	   
+	   #:movitz-vector
+	   #:movitz-vector-num-elements
+	   #:movitz-vector-element-type
+	   #:movitz-vector-symbolic-data
+	   
+	   #:movitz-symbol
+	   #:movitz-string
 
-	   movitz-struct
-	   movitz-struct-length	
-	   movitz-struct-slot-values
+	   #:movitz-character
+	   #:movitz-char
+
+	   #:movitz-struct
+	   #:movitz-struct-length	
+	   #:movitz-struct-slot-values
    
-	   movitz-intern
-	   movitz-read
-	   movitz-read-and-intern
-	   movitz-word
-	   word
+	   #:movitz-intern
+	   #:movitz-read
+	   #:movitz-read-and-intern
+	   #:movitz-word
+	   #:word
 
 	   #:*warn-function-change-p*
 	   #:*compiler-do-optimize*

@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.20 2004/02/10 00:28:34 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.21 2004/02/10 18:05:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1070,10 +1070,11 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	(delete-file path))))
   (values))
 
-(defun movitz-compile-file-internal (path &optional (*default-load-priority*
-						     (and (boundp '*default-load-priority*)
-							  *default-load-priority*
-							  (1+ *default-load-priority*))))
+(defun movitz-compile-file-internal (path
+				     &optional (*default-load-priority*
+						(and (boundp '*default-load-priority*)
+						     (symbol-value '*default-load-priority*)
+						     (1+ (symbol-value '*default-load-priority*)))))
   (declare (special *default-load-priority*))
   (with-retries-until-true (retry "Restart Movitz compilation of ~S." path)
     (let* ((muerte.cl::*compile-file-pathname* path)
@@ -1642,7 +1643,6 @@ falling below the label."
 		   unoptimized-code
 		 (append (nreverse new-code)
 			 old-code)))))))
-    (declare (ignorable load-funobj-constant-p isrc))
     (let* ((unoptimized-code (frame-map-code (optimize-stack-frame-init unoptimized-code)))
 	   (code-modified-p nil)
 	   (stack-frame-used-map (loop with map = nil
@@ -1767,10 +1767,10 @@ falling below the label."
 			  (not (assoc (load-stack-frame-p i3) (second i2))))
 		     (let ((reg (cdr (assoc (load-stack-frame-p i3) (third i2)))))
 		       (explain nil "factor out load from loop: ~S" i3)
+		       (assert (eq reg (twop-dst i3)))
 		       (setq p (if (eq reg (twop-dst i3))
 				   (list i3 i i2)
-				 (append (error "weewf")
-					 (list i3 i i2)
+				 (append (list i3 i i2)
 					 `((:movl ,reg ,(twop-dst i3)))))
 			     next-pc (cdddr pc))))
 		    ;; ((:jmp x) ...(no labels).... x ..)
@@ -3668,8 +3668,8 @@ Return arg-init-code, need-normalized-ecx-p."
 					  (when (= 0 (function-argument-argnum binding))
 					    `((:popl :ebx)))
 					  `((:popl :ecx)))
-				(progn (error "WEgewgew")
-				       `((:store-lexical ,binding :edi :type null))))
+				(progn (error "Unsupported situation.")
+				       #+ignore `((:store-lexical ,binding :edi :type null))))
 			    ,@(when (and (= 0 (function-argument-argnum binding))
 					 (not last-optional-p))
 				`((:popl :ebx))) ; protect ebx

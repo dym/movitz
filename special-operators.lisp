@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.7 2004/02/08 23:27:56 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.8 2004/02/10 18:06:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -593,9 +593,7 @@ The valid parameters are~{ ~S~}."
       (cdr form)
     (assert (not argument))
     (compiler-values ()
-      :code `(,@(when argument
-		  `((:load-lexical ,argument :eax)))
-		(:call (:edi ,(slot-offset 'movitz-constant-block if-name))))
+      :code `((:call (:edi ,(slot-offset 'movitz-constant-block if-name))))
       :returns :nothing)))
 
 (define-special-operator inlined-not (&all forward &form form &result-mode result-mode)
@@ -979,6 +977,7 @@ on the current result."
 	       (let ((term2-type (type-specifier-primary term2-type)))
 ;;;		 (warn "t2-type: ~S, t2-ret: ~S, rm: ~S"
 ;;;		       term2-type term2-returns result-mode)
+		 (declare (ignore term2-type))
 		 (case term2-returns
 		   (:untagged-fixnum-eax
 		    (case result-mode
@@ -1063,8 +1062,9 @@ on the current result."
 		     (:into))))))))
 
 (define-special-operator muerte::include (&form form)
-  (let ((*require-dependency-chain* (and (boundp '*require-dependency-chain*)
-					 *require-dependency-chain*)))
+  (let ((*require-dependency-chain*
+	 (and (boundp '*require-dependency-chain*)
+	      (symbol-value '*require-dependency-chain*))))
     (declare (special *require-dependency-chain*))
     (destructuring-bind (module-name &optional path-spec)
 	(cdr form)
@@ -1142,6 +1142,7 @@ on the current result."
 	       (make-compiled-argument-forms sub-forms (all :funobj) (all :env))
 	     (multiple-value-bind (stack-restore-code new-returns)
 		 (make-compiled-stack-restore stack-displacement result-mode :multiple-values)
+	       (declare (ignore stack-restore-code))
 	       (compiler-values ()
 		 :returns new-returns
 		 :type `(values ,@arguments-types)

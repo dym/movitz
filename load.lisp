@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Jan 15 18:40:58 2004
 ;;;;                
-;;;; $Id: load.lisp,v 1.7 2004/01/19 19:21:14 ffjeld Exp $
+;;;; $Id: load.lisp,v 1.8 2004/02/10 18:06:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -85,3 +85,6 @@
 			    "compiler"
 			    "special-operators"
 			    "special-operators-cl"))))))
+
+#+cmu18 (setf movitz:*compiler-compile-eval-whens* nil
+	      movitz:*compiler-compile-macro-expanders* nil)
