@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.18 2004/07/17 01:53:17 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.19 2004/07/17 12:16:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -96,8 +96,7 @@
 			 (index-var (gensym "memref-index-")))
 		     `(let ((,object-var ,object)
 			    (,index-var ,index))
-			(with-inline-assembly (:returns :untagged-fixnum-ecx
-							:type (unsiged-byte 16))
+			(with-inline-assembly (:returns :untagged-fixnum-ecx)
 			  (:compile-two-forms (:eax :ecx) ,object-var ,index-var)
 			  (:sarl ,(1- movitz:+movitz-fixnum-shift+) :ecx)
 			  (:movzxw (:eax :ecx ,(offset-by 2)) :ecx)))))
