@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.55 2004/07/14 11:01:43 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.56 2004/07/14 12:03:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -942,7 +942,7 @@ Preserve EAX and EBX."
 
 (define-compiler-macro abs (x)
   `(let ((x ,x))
-     (if (>= 0 x) x (- x))))
+     (if (>= x 0) x (- x))))
 
 (defun abs (x)
   (abs x))
@@ -1427,7 +1427,14 @@ Preserve EAX and EBX."
 		       (setf q (1+ q)
 			     r (- r divisor))
 		     (setf q (+ q guess)
-			   r (- r (* divisor guess))))))))))))))
+			   r (- r (* divisor guess))))))))))
+	(((integer * -1) (integer 0 *))
+	 (- (truncate (- number) divisor)))
+	(((integer 0 *) (integer * -1))
+	 (- (truncate number (- divisor))))
+	(((integer * -1) (integer * -1))
+	 (truncate (- number) (- divisor)))
+	))))
 
 (defun / (number &rest denominators)
   (declare (dynamic-extent denominators))
@@ -2275,20 +2282,18 @@ Preserve EAX and EBX."
 	   (u (abs u) (truncate u 2))
 	   (v (abs v) (truncate v 2)))
 	  ((or (oddp u) (oddp v))
-	   (do ((temp (if (oddp u) (- v) (ash u -1))
-		      (ash temp -1)))
+	   (do ((temp (if (oddp u)
+			  (- v)
+			(truncate u 2))
+		      (truncate temp 2)))
 	       (nil)
-	     (declare (fixnum temp))
 	     (when (oddp temp)
 	       (if (plusp temp)
 		   (setq u temp)
 		 (setq v (- temp)))
 	       (setq temp (- u v))
 	       (when (zerop temp)
-		 (let ((res (ash u k)))
-		   (declare (type (signed-byte 31) res)
-			    (optimize (inhibit-warnings 3)))
-		   (return res))))))))
+		 (return (ash u k))))))))
    (t (&rest numbers)
       (declare (dynamic-extent numbers))
       (do ((gcd (car numbers)
