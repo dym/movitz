@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.13 2004/04/14 20:05:26 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.14 2004/06/06 11:32:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -603,11 +603,7 @@
 	    (:addl :ecx :eax)
 	    (:shrl ,movitz::+movitz-fixnum-shift+ :eax) ; scale down address
 	    (,prefixes :movl (:eax) :ecx)
-	    (:cmpl ,movitz::+movitz-most-positive-fixnum+ :ecx)
-	    (:jg '(:sub-program (overflow) (:int 4)))
-	    (:leal ((:ecx ,movitz::+movitz-fixnum-factor+)
-		    :edi ,(- (movitz::image-nil-word movitz::*image*)))
-		   :eax)))
+	    (:call-global-constant box-u32-ecx)))
 	(:unsigned-byte16
 	 (cond
 	  ((and (eq 0 offset) (eq 0 index))
