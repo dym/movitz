@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.81 2004/07/21 14:18:03 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.82 2004/07/21 22:30:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -232,20 +232,31 @@ Preserve EAX and EBX."
 (defmacro define-number-relational (name 2op-name condition &key (defun-p t) 3op-name)
   `(progn
      ,(when condition
-	`(define-compiler-macro ,2op-name (n1 n2)
+	`(define-compiler-macro ,2op-name (n1 n2 &environment env)
 	   (cond
-	    ((movitz:movitz-constantp n1)
-	     (let ((n1 (movitz::movitz-eval n1)))
-	       (check-type n1 (signed-byte 30))
-	       `(with-inline-assembly (:returns ,,condition :side-effects nil)
-		  (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-		  (:call-global-pf fast-compare-fixnum-real))))
-	    ((movitz:movitz-constantp n2)
-	     (let ((n2 (movitz::movitz-eval n2)))
-	       (check-type n2 (signed-byte 30))
-	       `(with-inline-assembly (:returns ,,condition :side-effects nil)
-		  (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-		  (:call-global-pf fast-compare-real-fixnum))))
+	    ((and (movitz:movitz-constantp n1 env)
+		  (movitz:movitz-constantp n2 env))
+	     (list ',2op-name (movitz:movitz-eval n1 env) (movitz:movitz-eval n2 env)))
+	    ((movitz:movitz-constantp n1 env)
+	     (let ((n1 (movitz::movitz-eval n1 env)))
+	       (check-type n1 number)
+	       (if (typep n1 '(signed-byte 30))
+		   `(with-inline-assembly (:returns ,,condition :side-effects nil)
+		      (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+		      (:call-global-pf fast-compare-fixnum-real))
+		 `(with-inline-assembly (:returns ,,condition :side-effects nil)
+		    (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+		    (:call-global-pf fast-compare-two-reals)))))
+	    ((movitz:movitz-constantp n2 env)
+	     (let ((n2 (movitz:movitz-eval n2 env)))
+	       (check-type n2 number)
+	       (if (typep n2 '(signed-byte 30))
+		   `(with-inline-assembly (:returns ,,condition :side-effects nil)
+		      (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+		      (:call-global-pf fast-compare-real-fixnum))
+		 `(with-inline-assembly (:returns ,,condition :side-effects nil)
+		    (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+		    (:call-global-pf fast-compare-two-reals)))))
 	    (t `(with-inline-assembly (:returns ,,condition :side-effects nil)
 		  (:compile-two-forms (:eax :ebx) ,n1 ,n2)
 		  (:call-global-pf fast-compare-two-reals))))))
