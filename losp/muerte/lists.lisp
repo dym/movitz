@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.8 2004/07/21 14:15:37 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.9 2004/08/12 16:58:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,11 +20,9 @@
 (in-package muerte)
 
 (defun first (x)
-  (declare (type list x))
   (car x))
 
 (defun rest (x)
-  (declare (type list x))
   (cdr x))
 
 ;; Compiler-macros for first and rest in basic-macros.lisp.
