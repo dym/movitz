@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.13 2004/02/10 18:06:13 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.14 2004/02/11 16:22:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -543,7 +543,7 @@
 	      new-ptr))))))
 
 (defmethod image-memref ((image symbolic-image) address &optional (errorp nil))
-  (let ((obj (gethash address (image-address-hash image))))
+  (let ((obj (gethash address (image-address-hash image) :nothing)))
     (when (and errorp (not (typep obj 'movitz-object)))
       (error "Found non-movitz-object at image-address #x~X: ~A" address obj))
     obj))
@@ -614,7 +614,7 @@
     (:character
      (make-instance 'movitz-character :char (code-char (ldb (byte 8 8) word))))
     (:null
-     (image-memref *image* (+ 3 word) t))
+     (image-nil-word image))
     (t (image-memref *image* (logand word #xfffffff8) t))))
 
 (defun movitz-intern-code-vector (object &optional (type 'code-vector-word))
