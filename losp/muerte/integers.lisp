@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.60 2004/07/14 13:48:11 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.61 2004/07/14 13:53:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1509,7 +1509,9 @@ Preserve EAX and EBX."
 (defun ceiling (number &optional (divisor 1))
   (case (+ (if (minusp number) #b10 0)
 	   (if (minusp divisor) #b01 0))
-    (#b00 (truncate (+ number divisor -1) divisor))
+    (#b00 (multiple-value-bind (q r)
+	      (truncate (+ number divisor -1) divisor)
+	    (values q (- r (1- divisor)))))
     (t (error "Don't know."))))
 
 (defun rem (dividend divisor)
