@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.32 2004/11/19 20:16:15 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.33 2004/11/23 16:05:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -286,7 +286,15 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	(case vector
 	  (0 (error 'division-by-zero))
 	  (3 (break "Break instruction at ~@Z." $eip))
-	  (4 (error "Primitive overflow assertion failed."))
+	  (4 (warn "into ~@Z" $eax)
+	     (if (not (eq (load-global-constant new-unbound-value)
+			  (dereference $eax)))
+		 (error "Primitive overflow assertion failed.")
+	       (let ((name (dereference $ebx)))
+		 (with-simple-restart (new-value "Set the value of ~S." name)
+		   (error 'unbound-variable :name name))
+		 (format *query-io* "~&Enter a value for ~S: " name)
+		 (setf (dereference $eax) (read *query-io*)))))
 	  (6 (error "Illegal instruction at ~@Z." $eip))
 	  (13  (error "General protection error. EIP=~@Z, error-code: #x~X, EAX: ~@Z, EBX: ~@Z, ECX: ~@Z"
 		     $eip
@@ -360,10 +368,6 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	   (let ((name (dereference $edx)))
 	     (when (symbolp name)
 	       (error 'undefined-function :name name))))
-	  (99
-	   (let ((name (dereference $edx)))
-	     (when (symbolp name)
-	       (error 'unbound-variable :name name))))
 	  ((100);; 101 102 103 104 105)
 	   (let ((funobj (dereference (+ dit-frame (dit-frame-index :esi))))
 		 (code (dit-frame-ref nil dit-frame :ecx :unsigned-byte8)))
