@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.27 2004/07/15 21:06:46 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.28 2004/07/20 23:50:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -61,6 +61,13 @@
   `(progn
      (muerte::define-compiler-macro-compile-time ,name ,lambda-list ,body)
      ',name))
+
+(defmacro define-primitive-function (function-name lambda-list docstring &body body)
+  (declare (ignore lambda-list))
+  (assert (stringp docstring) (docstring)
+    "Mandatory docstring for define-primitive-function.")
+  `(make-primitive-function ,function-name ,docstring
+			    ,(cons 'cl:progn body)))
 
 (defmacro defpackage (package-name &rest options)
   (pushnew '(:use) options :key #'car)

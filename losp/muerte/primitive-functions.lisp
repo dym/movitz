@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.32 2004/07/20 13:00:00 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.33 2004/07/20 23:51:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,13 +18,6 @@
 (provide :muerte/primitive-functions)
 
 (in-package muerte)
-
-(defmacro define-primitive-function (function-name lambda-list docstring &body body)
-  (declare (ignore lambda-list))
-  (assert (stringp docstring) (docstring)
-    "Mandatory docstring for define-primitive-function.")
-  `(make-primitive-function ,function-name ,docstring
-			    ,(cons 'cl:progn body)))
 
 (define-primitive-function trampoline-funcall%1op ()
   "Call a function with 1 argument"
@@ -470,23 +463,13 @@ Result in EAX, with tag 6."
     (:leal (:eax :ecx 6) :eax)
     (:ret)))
 
-(define-compiler-macro malloc-pointer-words (words)
-  `(with-inline-assembly (:returns :eax :type pointer)
-     (:compile-form (:result-mode :eax) ,words)
-     (:call-local-pf malloc-pointer-words)))
-
 (defun malloc-pointer-words (words)
   (check-type words (integer 2 *))
-  (malloc-pointer-words words))
-
-(define-compiler-macro malloc-non-pointer-words (words)
-  `(with-inline-assembly (:returns :eax :type pointer)
-     (:compile-form (:result-mode :eax) ,words)
-     (:call-local-pf malloc-non-pointer-words)))
+  (compiler-macro-call malloc-pointer-words words))
 
 (defun malloc-non-pointer-words (words)
   (check-type words (integer 2 *))
-  (malloc-non-pointer-words words))
+  (compiler-macro-call malloc-non-pointer-words words))
 
 (define-primitive-function muerte::get-cons-pointer ()
   "Return in EAX the next object location with space for EAX words, with tag 6.

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.15 2004/07/20 08:54:24 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.16 2004/07/20 23:51:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -983,7 +983,7 @@ next-emf as its target for call-next-method."
 (defclass rational (real) () (:metaclass built-in-class))
 (defclass integer (rational) () (:metaclass built-in-class))
 (defclass fixnum (integer) () (:metaclass built-in-class))
-;; (defclass ratio (rational) () (:metaclass built-in-class))
+(defclass ratio (rational) () (:metaclass built-in-class))
 (defclass float (real) () (:metaclass built-in-class))
 (defclass complex (number) () (:metaclass built-in-class))
 

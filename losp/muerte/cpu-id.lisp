@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Apr 15 22:47:13 2002
 ;;;;                
-;;;; $Id: cpu-id.lisp,v 1.6 2004/07/13 02:27:20 ffjeld Exp $
+;;;; $Id: cpu-id.lisp,v 1.7 2004/07/20 23:51:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -204,17 +204,6 @@ This is an illegal instruction on lesser CPUs."
     (:cld)
     (:movl 2 :ecx)
     (:stc)))
-
-(define-compiler-macro read-time-stamp-counter ()
-  `(with-inline-assembly-case ()
-     (do-case (:register :same)
-       (:std)
-       (:rdtsc)
-       (:movl :edi :edx)
-       (:leal ((:eax ,movitz:+movitz-fixnum-factor+)) (:result-register))
-       (:cld))
-     (do-case (t :multiple-values)
-       (:compile-form (:result-mode :multiple-values) (no-macro-call read-time-stamp-counter)))))
 		      
 (defun clear-time-stamp-counter ()
   "Reset the i686 time-stamp-counter.
