@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.13 2004/07/07 17:37:20 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.14 2004/07/08 15:23:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -245,7 +245,7 @@ The unit clump is 8 bytes, or two words."
 	   (+ -1 object-location
 	      #.(movitz::movitz-type-word-size :movitz-funobj)
 	      (funobj-num-constants object))))
-      ((or vector-u8 string code-vector)
+      ((or string code-vector (simple-array (unsigned-byte 8)))
        (<= object-location
 	   location
 	   (+ -1 object-location
