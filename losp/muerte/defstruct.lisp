@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.13 2004/09/15 10:22:59 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.14 2004/09/23 09:31:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -229,60 +229,50 @@ Parameters: struct-name."
 		    . (:translate-when :eval ,slot-names :cl :muerte.cl)))
 		(defclass ,struct-name (,superclass) ()
 			  (:metaclass structure-class)
-			  (:slots ,(loop for (name) in canonical-slot-descriptions
+			  (:slots ,(loop for (name init-form type read-only init-arg)
+				       in canonical-slot-descriptions
 				       as location upfrom 0
 				       collect (movitz-make-instance 'structure-slot-definition
 								     :name name
+								     :initarg init-arg
+								     :initform init-form
+								     :type type
+								     :readonly read-only
 								     :location location))))
 		,@(loop for constructor in (getf options :constructor)
 		      if (and constructor (symbolp constructor))
 		      collect
-			`(defun ,constructor (&key ,@key-lambda)
-			   (let ((s (malloc-pointer-words ,(+ 2 (length slot-names)))))
-			     (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::class)
-					   0 :lisp)
-			       (compile-time-find-class ,struct-name))
-			     (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::type)
-					   0 :unsigned-byte8)
-			       #.(movitz::tag :defstruct))
-			     (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::length)
-					   0 :unsigned-byte16)
-			       ,(* movitz:+movitz-fixnum-factor+ (length slot-names)))
-			     ,@(loop for slot-name in slot-names as i upfrom 0 collecting
-				     `(setf (memref s #.(bt:slot-offset 'movitz::movitz-struct
-									'movitz::slot0)
-						    ,i :lisp)
-					,slot-name))
-			     s))
+			`(defun ,constructor (&rest args) ; &key ,@key-lambda)
+			   (declare (dynamic-extent args))
+			   (apply 'make-structure ',struct-name args))
 		      else if (and constructor (listp constructor))
 		      collect
 			(let* ((boa-constructor (car constructor))
 			       (boa-lambda-list (cdr constructor))
 			       (boa-variables (movitz::list-normal-lambda-list-variables boa-lambda-list)))
 			  `(defun ,boa-constructor ,boa-lambda-list
-			     (let ((s (malloc-pointer-words ,(+ 2 (length slot-names)))))
-			       (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::class)
-						      0 :lisp)
-				 (compile-time-find-class ,struct-name))
-			       (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::type)
-						      0 :unsigned-byte8)
-				 #.(movitz::tag :defstruct))
-			       (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::length)
-						      0 :unsigned-byte16)
-				 ,(* movitz:+movitz-fixnum-factor+ (length slot-names)))
-			       ,@(loop for slot-name in slot-names as i upfrom 0
-				     if (member slot-name boa-variables)
-				     collect
-				       `(setf (memref s #.(bt:slot-offset 'movitz::movitz-struct
-										   'movitz::slot0)
-							       ,i :lisp)
-					  ,slot-name)
-				     else collect
-					  `(setf (memref s #.(bt:slot-offset 'movitz::movitz-struct
-										      'movitz::slot0)
-								  ,i :lisp)
-					     nil))
-			       s)))
+			     (let ((class (compile-time-find-class ,struct-name)))
+			       (with-allocation-assembly (,(+ 2 (length slot-names))
+							  :fixed-size-p t
+							  :object-register :eax)
+				 (:movl ,(dpb (length slot-names)
+					      (byte 18 14)
+					      (movitz:tag :defstruct))
+					(:eax (:offset movitz-struct type)))
+				 (:load-lexical (:lexical-binding class) :ebx)
+				 (:movl :ebx (:eax (:offset movitz-struct class)))
+				 ,@(loop for slot-name in slot-names as i upfrom 0
+				       if (member slot-name boa-variables)
+				       append
+					 `((:load-lexical (:lexical-binding ,slot-name) :ebx)
+					   (:movl :ebx (:eax (:offset movitz-struct slot0)
+							     ,(* 4 i))))
+				       else append
+					    `((:movl :edi (:eax (:offset movitz-struct slot0)
+								,(* 4 i)))))
+				 ,@(when (oddp (length slot-names))
+				     `((:movl :edi (:eax (:offset movitz-struct slot0)
+							 ,(* 4 (length slot-names))))))))))
 		      else if constructor
 		      do (error "Don't know how to make class-struct constructor: ~S" constructor))
 		,(when predicate-name
