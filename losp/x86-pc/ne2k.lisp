@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:16:00 2002
 ;;;;                
-;;;; $Id: ne2k.lisp,v 1.6 2004/02/02 14:57:34 ffjeld Exp $
+;;;; $Id: ne2k.lisp,v 1.7 2004/02/02 21:59:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -112,8 +112,10 @@
 
 (defun pop-ringbuffer (device &optional packet (start 0))
   "When the ring-buffer isn't empty, fetch the next packet."
+  (assert (evenp start))
   (unless (ring-empty-p device)
-    (let ((asic-io (asic-io-base device))
+    (let ((io-start (truncate start 2))
+	  (asic-io (asic-io-base device))
 	  (bnry (cached-bnry device))
 	  (packet (or packet (make-array +max-ethernet-frame-size+ :element-type 'muerte::u8))))
       (check-type packet 'vector-u8)
@@ -132,7 +134,8 @@
 		       (< next-bnry (ring-stop device))) ()
 	    "Illegal next-bnry #x~X at #x~X, length ~D."
 	    next-bnry bnry packet-length)
-	  (let ((rx-end (+ start packet-length)))
+	  (let* ((rx-end (+ start packet-length))
+		 (io-end (truncate (1+ rx-end))))
 	    (declare (type (unsigned-byte 16) rx-end))
 	    (assert (evenp start))
 	    (setf (fill-pointer packet) rx-end)
@@ -140,23 +143,18 @@
 	     ((< (+ bnry (ash (1- packet-length) -8))
 		 (ring-stop device))
 	      (with-dp8390-dma (dp8390 remote-read packet-length (+ (* 256 bnry) 4))
-		(%io-port-read-succession asic-io packet 2 start rx-end :16-bit)
-		(when (oddp rx-end)
-		  (setf (aref packet (1- rx-end))
-		    (ldb (byte 8 0) (io-port asic-io :unsigned-byte16)))))
+		(%io-port-read-succession asic-io packet 2 io-start io-end :16-bit))
 	      (setf (dp8390 ($page0-write bnry)) next-bnry
 		    (cached-bnry device) next-bnry))
-	     (t (let ((split-point (+ -4 (ash (- (ring-stop device) bnry) 8))))
+	     (t (let* ((split-point (+ -4 (ash (- (ring-stop device) bnry) 8)))
+		       (io-split-point (truncate split-point 2)))
 		  (with-dp8390-dma (dp8390 remote-read split-point)
-		    (%io-port-read-succession asic-io packet 2 start (+ start split-point) :16-bit))
+		    (%io-port-read-succession asic-io packet 2
+					      io-start (+ io-start io-split-point) :16-bit))
 		  (with-dp8390-dma (dp8390 remote-read
 					   (- rx-end start split-point)
 					   (* 256 (ring-start device)))
-		    (%io-port-read-succession asic-io packet 2 (+ start split-point) rx-end :16-bit)
-		    (when (oddp rx-end)
-		      (setf (aref packet (1- rx-end))
-			(ldb (byte 8 0)
-			     (io-port asic-io :unsigned-byte16)))))
+		    (%io-port-read-succession asic-io packet 2 (+ io-start io-split-point) io-end :16-bit))
 		  (setf (dp8390 ($page0-write bnry)) next-bnry
 			(cached-bnry device) next-bnry)
 		  #+ignore (warn "split-point: ~D/~D bnry: ~S"
@@ -213,11 +211,8 @@
     (let ((packet-length (- end start)))
       (with-dp8390-dma (dp8390 remote-write packet-length
 			       (ash (transmit-buffer device) 8))
-	(io-port-write-sequence packet (asic-io-base device) :unsigned-byte8 :16-bits
-				:start start :end end)
-	(when (oddp packet-length)
-	  (setf (io-port (asic-io-base device) :unsigned-byte16)
-	    (aref packet (1- end)))))
+	(%io-port-write-succession (asic-io-base device) packet 2
+				   (truncate start 2) (truncate (1+ end) 2) :16-bit))
       (loop while (logbitp ($command-bit transmit) (dp8390 ($page0-read cr))))
       (setf (io-register8x2 dp8390 ($page0-write tbcr1) ($page0-write tbcr0)) packet-length
 	    (dp8390 ($page0-write cr)) ($command transmit start abort-complete))
