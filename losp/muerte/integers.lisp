@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.15 2004/06/02 23:20:46 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.16 2004/06/02 23:48:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -756,8 +756,8 @@
 	(:jne '(:sub-program (not-fixnum)
 		(:int 107)))
 	(:movl :ebx :ecx)
-	(:sarl #.movitz::+movitz-fixnum-shift+ :ebx)
-	(:imull :ebx :eax :edx)
+	(:sarl #.movitz::+movitz-fixnum-shift+ :ecx)
+	(:imull :ecx :eax :edx)
 	(:into)))
    (t (&rest factors)
       (declare (dynamic-extent factors))
