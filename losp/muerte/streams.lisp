@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Jun 30 14:33:15 2003
 ;;;;                
-;;;; $Id: streams.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
+;;;; $Id: streams.lisp,v 1.3 2004/05/20 18:13:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -24,7 +24,7 @@
   (:no-clos-fallback stream-no-clos))
 
 (defmethod stream-write-char ((stream string) character)
-  (vector-push character stream)
+  (vector-push-extend character stream)
   character)
 
 (defmethod stream-write-char ((stream function) character)
@@ -100,10 +100,10 @@
     (string
      (case (funobj-name *forward-generic-function*)
        (stream-write-char
-	(vector-push (car args) stream)
+	(vector-push-extend (car args) stream)
 	(car args))
        (stream-fresh-line
-	(vector-push #\newline stream)
+	(vector-push-extend #\newline stream)
 	t)))
     (function
      (apply stream (funobj-name *forward-generic-function*) args))))
