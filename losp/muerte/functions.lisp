@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.23 2004/10/12 14:43:27 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.24 2004/10/21 20:34:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -307,31 +307,37 @@ represented as that vector."
 
 (defun funobj-lambda-list (funobj)
   (check-type funobj function)
-  (movitz-accessor funobj movitz-funobj lambda-list))
+  (memref funobj (movitz-type-slot-offset 'movitz-funobj 'lambda-list)))
 
 (defun (setf funobj-lambda-list) (lambda-list funobj)
   (check-type funobj function)
   (check-type lambda-list list)
-  (setf-movitz-accessor (funobj movitz-funobj lambda-list) lambda-list))
+  (setf (memref funobj (movitz-type-slot-offset 'movitz-funobj 'lambda-list))
+    lambda-list))
 
 (defun funobj-num-constants (funobj)
   (check-type funobj function)
-  (movitz-accessor-u16 funobj movitz-funobj num-constants))
+  (memref funobj (movitz-type-slot-offset 'movitz-funobj 'num-constants)
+	  :type :unsigned-byte16))
 
 (defun (setf funobj-num-constants) (num-constants funobj)
   (check-type funobj function)
   (check-type num-constants (unsigned-byte 16))
-  (set-movitz-accessor-u16 funobj movitz-funobj num-constants num-constants))
+  (setf (memref funobj (movitz-type-slot-offset 'movitz-funobj 'num-constants)
+		:type :unsigned-byte16)
+    num-constants))
 
 (defun funobj-num-jumpers (funobj)
   (check-type funobj function)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) funobj)
-    (:movzxw (:eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::num-jumpers)) :eax)))
+  (memref funobj (movitz-type-slot-offset 'movitz-funobj 'num-jumpers)
+	  :type :unsigned-byte14))
 
 (defun (setf funobj-num-jumpers) (num-jumpers funobj)
   (check-type funobj function)
-  (check-type num-jumpers (unsigned-byte 14))
+  (setf (memref funobj (movitz-type-slot-offset 'movitz-funobj 'num-jumpers)
+		:type :unsigned-byte14)
+    num-jumpers)
+  #+ignore
   (with-inline-assembly (:returns :eax)
     (:compile-two-forms (:eax :ebx) num-jumpers funobj)
     (:movw :ax (:ebx #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::num-jumpers)))))

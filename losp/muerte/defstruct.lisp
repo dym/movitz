@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.15 2004/10/11 13:52:27 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.16 2004/10/21 20:34:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -56,12 +56,13 @@ Parameters: struct-name."
 	    (:jne '(:sub-program (type-error) (:int 66)))
 	    ;; type test passed, read slot
 	    ,@(if (= 4 movitz::+movitz-fixnum-factor+)
-		  `((:compile-form  (:result-mode :ebx) slot-number)
-		    (:movl (:eax :ebx (:offset movitz-struct slot0))
+		  `((:compile-form  (:result-mode :ecx) slot-number)
+		    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+		     :movl (:eax :ecx (:offset movitz-struct slot0))
 			   :eax))
 		`((:compile-form  (:result-mode :untagged-fixnum-ecx) slot-number)
-		  (:movl (:eax (:ecx 4) (:offset movitz-struct slot0))
-			 :eax))))))
+		  (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+		   :movl (:eax (:ecx 4) (:offset movitz-struct slot0)) :eax))))))
     (do-it)))
 
 (defun (setf structure-ref) (value object slot-number)
@@ -83,7 +84,8 @@ Parameters: struct-name."
 	    (:jae '(:sub-program (out-of-range) (:int 65)))
 	    ;; type test passed, write slot
 	    (:compile-form (:result-mode :edx) value)
-	    (:movl :edx (:eax :ebx (:offset movitz-struct slot0))))))
+	    (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
+	     :movl :edx (:eax :ebx (:offset movitz-struct slot0))))))
     (do-it)))
 
 (defun struct-accessor-prototype (object)
@@ -101,8 +103,9 @@ Parameters: struct-name."
 ;;;    (:jne '(:sub-program (type-error) (:int 66)))
     ;; type test passed, read slot
     (:load-constant slot-number :ecx)
-    (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
-    (:movl (:eax (:ecx 4) #.(bt:slot-offset 'movitz::movitz-struct 'movitz::slot0))
+;;;    (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax (:ecx 1) #.(bt:slot-offset 'movitz::movitz-struct 'movitz::slot0))
 	   :eax)))
 
 (defun (setf struct-accessor-prototype) (value obj)
@@ -120,8 +123,9 @@ Parameters: struct-name."
 ;;;    (:jne '(:sub-program (type-error) (:int 66)))
     ;; type test passed, write slot
     (:load-constant slot-number :ecx)
-    (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
-    (:movl :eax (:ebx (:ecx 4) #.(bt:slot-offset 'movitz::movitz-struct 'movitz::slot0)))))
+;;;    (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
+    (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
+     :movl :eax (:ebx (:ecx 1) #.(bt:slot-offset 'movitz::movitz-struct 'movitz::slot0)))))
 
 (defun list-struct-accessor-prototype (s)
   (nth 'slot-number s))

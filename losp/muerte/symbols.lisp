@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.21 2004/10/12 14:45:16 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.22 2004/10/21 20:34:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -95,12 +95,12 @@
 (defun %unbounded-symbol-function (symbol)
   (check-type symbol symbol)
   (memref symbol (movitz-type-slot-offset 'movitz-symbol 'function-value)))
-  ;; (movitz-accessor symbol movitz-symbol function-value))
 
 (defun (setf symbol-function) (value symbol)
   (check-type symbol symbol)
   (check-type value compiled-function)
-  (setf-movitz-accessor (symbol movitz-symbol function-value) value))
+  (setf (memref symbol (movitz-type-slot-offset 'movitz-symbol 'function-value))
+    value))
 
 (defun symbol-name (symbol)
   (get-symbol-slot symbol name string))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.21 2004/09/25 15:38:47 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.22 2004/10/21 20:34:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -150,37 +150,40 @@
 
 (defun std-gf-instance-class (instance)
   (check-type instance standard-gf-instance)
-  (movitz-accessor instance movitz-funobj-standard-gf standard-gf-class))
+  (memref instance (movitz-type-slot-offset 'movitz-funobj-standard-gf 'standard-gf-class))
+  #+ignore (movitz-accessor instance movitz-funobj-standard-gf standard-gf-class))
 
 (defun std-gf-instance-slots (instance)
   (check-type instance standard-gf-instance)
-  (movitz-accessor instance movitz-funobj-standard-gf standard-gf-slots))
+  (memref instance (movitz-type-slot-offset 'movitz-funobj-standard-gf 'standard-gf-slots)))
+
+(define-compiler-macro std-gf-num-required-arguments (instance)
+  `(memref ,instance (movitz-type-slot-offset 'movitz-funobj-standard-gf 'num-required-arguments)))
 
 (defun std-gf-num-required-arguments (instance)
   (check-type instance standard-gf-instance)
-  (movitz-accessor instance movitz-funobj-standard-gf num-required-arguments))
-
-(define-compiler-macro std-gf-num-required-arguments (instance)
-  `(movitz-accessor ,instance movitz-funobj-standard-gf num-required-arguments))
+  (memref instance (movitz-type-slot-offset 'movitz-funobj-standard-gf 'num-required-arguments)))
 
 (defun std-gf-classes-to-emf-table (instance)
   (check-type instance standard-gf-instance)
-  (movitz-accessor instance movitz-funobj-standard-gf classes-to-emf-table))
+  (memref instance (movitz-type-slot-offset 'movitz-funobj-standard-gf 'classes-to-emf-table)))
 
 (define-compiler-macro std-gf-classes-to-emf-table (instance)
-  `(movitz-accessor ,instance movitz-funobj-standard-gf classes-to-emf-table))
+  `(memref ,instance (movitz-type-slot-offset 'movitz-funobj-standard-gf 'classes-to-emf-table)))
 
 (defun (setf std-gf-classes-to-emf-table) (value instance)
   (check-type instance standard-gf-instance)
-  (setf-movitz-accessor (instance movitz-funobj-standard-gf classes-to-emf-table) value))
+  (setf (memref instance (movitz-type-slot-offset 'movitz-funobj-standard-gf 'classes-to-emf-table))
+    value))
 
 (defun std-gf-eql-specializer-table (instance)
   (check-type instance standard-gf-instance)
-  (movitz-accessor instance movitz-funobj-standard-gf eql-specializer-table))
+  (memref instance (movitz-type-slot-offset 'movitz-funobj-standard-gf 'eql-specializer-table)))
 
 (defun (setf std-gf-eql-specializer-table) (value instance)
   (check-type instance standard-gf-instance)
-  (setf-movitz-accessor (instance movitz-funobj-standard-gf eql-specializer-table) value))
+  (setf (memref instance (movitz-type-slot-offset 'movitz-funobj-standard-gf 'eql-specializer-table))
+    value))
 
 (defun set-funcallable-instance-function (funcallable-instance function)
   "This function is called to set or to change the function of a funcallable instance.
@@ -188,13 +191,17 @@ After set-funcallable-instance-function is called, any subsequent calls to
 funcallable-instance will run the new function."
   (check-type funcallable-instance standard-gf-instance)
   (check-type function function)
-  (setf-movitz-accessor (funcallable-instance movitz-funobj-standard-gf standard-gf-function)
-			function)
+  (setf (memref funcallable-instance (movitz-type-slot-offset 'movitz-funobj-standard-gf
+							      'standard-gf-function))
+    function)
+;;;  (setf-movitz-accessor (funcallable-instance movitz-funobj-standard-gf standard-gf-function)
+;;;			function)
   (values))
 
 (defun funcallable-instance-function (funcallable-instance)
   (check-type funcallable-instance standard-gf-instance)
-  (movitz-accessor funcallable-instance movitz-funobj-standard-gf standard-gf-function))
+  (memref funcallable-instance (movitz-type-slot-offset 'movitz-funobj-standard-gf
+							'standard-gf-function)))
 
 (defun instance-slot-p (slot)
   (eq (slot-definition-allocation slot) :instance))
@@ -868,12 +875,13 @@ is no unspecialized method was called."))
   `(defun ,name (instance)
      (with-inline-assembly (:returns :multiple-values)
        (:compile-form (:result-mode :eax) instance)
-       (:movl (:eax ,(bt:slot-offset 'movitz::movitz-std-instance 'movitz::slots))
+       (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+	:movl (:eax (:offset movitz-std-instance slots))
 	      :eax)
-       (:movl (:eax ,(+ (bt:slot-offset 'movitz::movitz-basic-vector 'movitz::data)
-			(* location 4)))
-	      :eax)
-       (:cmpl :eax ,(movitz::make-indirect-reference :edi (movitz::global-constant-offset 'unbound-value)))
+       (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+	:movl (:eax (:offset movitz-basic-vector data ,(* location 4))) :eax)
+       (#.movitz:*compiler-global-segment-prefix*
+	:cmpl :eax ,(movitz::make-indirect-reference :edi (movitz::global-constant-offset 'unbound-value)))
        (:je '(:sub-program (unbound)
 	      (:compile-form (:result-mode :multiple-values) (slot-unbound-trampoline instance ,location))
 	      (:jmp 'done)))
@@ -968,7 +976,7 @@ next-emf as its target for call-next-method."
 (defclass sequence (t) () (:metaclass built-in-class))
 (defclass array (t) () (:metaclass built-in-class))
 (defclass character (t) () (:metaclass built-in-class))
-;; (defclass hash-table (t) () (:metaclass built-in-class))
+;;;(defclass hash-table (t) () (:metaclass built-in-class))
 ;;;(defclass package (t) () (:metaclass built-in-class))
 ;;;(defclass pathname (t) () (:metaclass built-in-class))
 ;;;(defclass readtable (t) () (:metaclass built-in-class))

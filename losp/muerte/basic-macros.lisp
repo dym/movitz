@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.42 2004/10/11 13:52:18 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.43 2004/10/21 20:33:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -362,16 +362,20 @@
 				      ',(mapcar #'first clauses)))))
 
 (defmacro movitz-accessor (object-form type slot-name)
+  (warn "movitz-accesor deprecated.")
   `(with-inline-assembly (:returns :register :side-effects nil)
      (:compile-form (:result-mode :eax) ,object-form)
-     (:movl (:eax ,(bt:slot-offset (find-symbol (string type) :movitz)
+     (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+      :movl (:eax ,(bt:slot-offset (find-symbol (string type) :movitz)
 				   (find-symbol (string slot-name) :movitz)))
 	    (:result-register))))
 
 (defmacro setf-movitz-accessor ((object-form type slot-name) value-form)
+  (warn "setf-movitz-accesor deprecated.")
   `(with-inline-assembly (:returns :eax :side-effects t)
      (:compile-two-forms (:eax :ebx) ,value-form ,object-form)
-     (:movl :eax (:ebx ,(bt:slot-offset (find-symbol (string type) :movitz)
+     (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
+      :movl :eax (:ebx ,(bt:slot-offset (find-symbol (string type) :movitz)
 					(find-symbol (string slot-name) :movitz))))))
 
 (defmacro movitz-accessor-u16 (object-form type slot-name)
@@ -563,9 +567,14 @@
    (t (if (member type '(standard-gf-instance function pointer atom
 			 integer fixnum positive-fixnum cons symbol character null list
 			 string vector simple-vector vector-u8 vector-u16 code-vector))
-	  `(unless (typep ,place ',type)
-	     (with-inline-assembly (:returns :non-local-exit)
-	       (:int 66)))
+	  `(with-inline-assembly (:returns :nothing :labels (fail))
+	     (:compile-form (:result-mode (:boolean-branch-on-false . check-type-failed))
+			    (typep ,place ',type))
+	     (() () '(:sub-program (check-type-failed) (:int 66))))
+	#+ignore
+	`(unless (typep ,place ',type)
+	   (with-inline-assembly (:returns :non-local-exit)
+	     (:int 66)))
 	form))))
 
 (defmacro assert (test-form &optional places datum-form &rest argument-forms)
@@ -623,7 +632,8 @@
 	 (:leal (:eax -1) :ecx)
 	 (:testb 7 :cl)
 	 (:jnz '(:sub-program () (:int 61)))
-	 (:movl :edi (:eax -1)))
+	 (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
+	  :movl :edi (:eax -1)))
     `(with-inline-assembly (:returns :eax)
        (:compile-two-forms (:eax :ebx) ,value ,cell)
        (:leal (:ebx -1) :ecx)
@@ -631,7 +641,8 @@
        (:jnz '(:sub-program ()
 	       (:movl :ebx :eax)
 	       (:int 61)))
-       (:movl :eax (:ebx -1)))))
+       (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
+	:movl :eax (:ebx -1)))))
 
 (define-compiler-macro (setf cdr) (value cell &environment env)
   (if (and (movitz:movitz-constantp value env)
@@ -641,7 +652,8 @@
 	 (:leal (:eax -1) :ecx)
 	 (:testb 7 :cl)
 	 (:jnz '(:sub-program () (:int 61)))
-	 (:movl :edi (:eax 3)))
+	 (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
+	  :movl :edi (:eax 3)))
     `(with-inline-assembly (:returns :eax)
        (:compile-two-forms (:eax :ebx) ,value ,cell)
        (:leal (:ebx -1) :ecx)
@@ -649,7 +661,8 @@
        (:jnz '(:sub-program ()
 	       (:movl :ebx :eax)
 	       (:int 61)))
-       (:movl :eax (:ebx 3)))))
+       (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
+	:movl :eax (:ebx 3)))))
 
 (define-compiler-macro rplaca (cons object)
   `(with-inline-assembly (:returns :eax)
@@ -657,7 +670,8 @@
      (:leal (:eax -1) :ecx)
      (:testb 7 :cl)
      (:jnz '(:sub-program () (:int 61)))
-     (:movl :ebx (:eax -1))))
+     (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
+      :movl :ebx (:eax -1))))
 
 (define-compiler-macro rplacd (cons object)
   `(with-inline-assembly (:returns :eax)
@@ -665,7 +679,8 @@
      (:leal (:eax -1) :ecx)
      (:testb 7 :cl)
      (:jnz '(:sub-program () (:int 61)))
-     (:movl :ebx (:eax 3))))
+     (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
+      :movl :ebx (:eax 3))))
 
 (define-compiler-macro endp (x)
   `(let ((cell ,x))
@@ -709,7 +724,7 @@
        (:leal (:edx -7) :ecx)
        (:andb 7 :cl)
        (:jnz 'not-symbol)
-       (:movl (:edx ,(bt:slot-offset 'movitz::movitz-symbol 'movitz::function-value)) :esi)
+       (:movl (:edx (:offset movitz-symbol function-value)) :esi)
        (:jmp 'funobj-ok)
       not-symbol
        (:cmpb 7 :cl)
@@ -925,7 +940,8 @@
 		:ecx)
 	 (:testb 7 :cl)
 	 (:jnz '(:sub-program () (:int 66)))
-	 (:movl ((:result-register) ,(bt:slot-offset 'movitz::movitz-std-instance slot))
+	 (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+	  :movl ((:result-register) ,(bt:slot-offset 'movitz::movitz-std-instance slot))
 		(:result-register))))))
 
 (defmacro std-instance-writer (slot value instance-form)
@@ -937,8 +953,8 @@
 		:ecx)
 	 (:testb 7 :cl)
 	 (:jnz '(:sub-program () (:int 66)))
-	 (:movl :eax
-		(:ebx ,(bt:slot-offset 'movitz::movitz-std-instance slot)))))))
+	 (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
+	  :movl :eax (:ebx ,(bt:slot-offset 'movitz::movitz-std-instance slot)))))))
 
 (define-compiler-macro std-instance-class (instance)
   `(std-instance-reader class ,instance))

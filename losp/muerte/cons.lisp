@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.7 2004/08/06 14:46:06 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.8 2004/10/21 20:33:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -24,8 +24,10 @@
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
     (:jnz '(:sub-program () (:int 61)))
-    (:movl (:eax -1) :ebx)
-    (:movl (:eax 3) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax -1) :ebx)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax 3) :eax)
     (:ret)))
 
 (define-primitive-function fast-car ()
@@ -34,7 +36,8 @@
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
     (:jnz '(:sub-program () (:int 61)))
-    (:movl (:eax -1) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax -1) :eax)
     (:ret)))
 
 (define-primitive-function fast-car-ebx ()
@@ -46,7 +49,8 @@ Cons cell is in EBX, which is preserved."
     (:jnz '(:sub-program ()
 	    (:movl :ebx :eax)
 	    (:int 66)))
-    (:movl (:ebx -1) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:ebx -1) :eax)
     (:ret)))
 
 (define-primitive-function fast-cdr ()
@@ -55,7 +59,8 @@ Cons cell is in EBX, which is preserved."
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
     (:jnz '(:sub-program () (:int 61)))
-    (:movl (:eax 3) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax 3) :eax)
     (:ret)))
 
 (define-primitive-function fast-cddr ()
@@ -64,11 +69,13 @@ Cons cell is in EBX, which is preserved."
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
     (:jnz '(:sub-program () (:int 61)))
-    (:movl (:eax 3) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax 3) :eax)
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
     (:jnz '(:sub-program () (:int 61)))
-    (:movl (:eax 3) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax 3) :eax)
     (:ret)))
 
 (define-primitive-function fast-cdddr ()
@@ -77,15 +84,18 @@ Cons cell is in EBX, which is preserved."
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
     (:jnz '(:sub-program (not-cons) (:int 61)))
-    (:movl (:eax 3) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax 3) :eax)
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
     (:jnz '(:sub-program (not-cons) (:int 61)))
-    (:movl (:eax 3) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax 3) :eax)
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
     (:jnz '(:sub-program (not-cons) (:int 61)))
-    (:movl (:eax 3) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax 3) :eax)
     (:ret)))
 
 (define-primitive-function fast-cdr-ebx ()
@@ -97,7 +107,8 @@ Cons cell is in EBX, which is preserved."
     (:jnz '(:sub-program ()
 	    (:movl :ebx :eax)
 	    (:int 61)))
-    (:movl (:ebx 3) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:ebx 3) :eax)
     (:ret)))
 
 ;; Prefetching versions. Only works on .. PII or so and upwards.
@@ -109,8 +120,10 @@ Cons cell is in EBX, which is preserved."
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
     (:jnz '(:sub-program () (:int 61)))
-    (:movl (:eax -1) :ebx)
-    (:movl (:eax 3) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax -1) :ebx)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax 3) :eax)
     (:ret)))
 
 (define-primitive-function prefetching-fast-car ()
@@ -120,7 +133,8 @@ Cons cell is in EBX, which is preserved."
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
     (:jnz '(:sub-program () (:int 61)))
-    (:movl (:eax -1) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax -1) :eax)
     (:ret)))
 
 (define-primitive-function prefetching-fast-car-ebx ()
@@ -133,7 +147,8 @@ Cons cell is in EBX, which is preserved."
     (:jnz '(:sub-program ()
 	    (:movl :ebx :eax)
 	    (:int 61)))
-    (:movl (:ebx -1) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:ebx -1) :eax)
     (:ret)))
 
 (define-primitive-function prefetching-fast-cdr ()
@@ -143,7 +158,8 @@ Cons cell is in EBX, which is preserved."
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
     (:jnz '(:sub-program () (:int 61)))
-    (:movl (:eax 3) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:eax 3) :eax)
     (:prefetch-nta (:eax))
     (:ret)))
 
@@ -157,7 +173,8 @@ Cons cell is in EBX, which is preserved."
     (:jnz '(:sub-program ()
 	    (:movl :ebx :eax)
 	    (:int 61)))
-    (:movl (:ebx 3) :eax)
+    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+     :movl (:ebx 3) :eax)
     (:prefetch-nta (:eax))
     (:ret)))
 
@@ -170,7 +187,8 @@ Cons cell is in EBX, which is preserved."
     (:jnz '(:sub-program ()
 	    (:movl :ebx :eax)
 	    (:int 61)))
-    (:movl :eax (:ebx -1))))
+    (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
+     :movl :eax (:ebx -1))))
 
 (defun (setf cdr) (value cell)
   (with-inline-assembly (:returns :eax)
@@ -181,8 +199,8 @@ Cons cell is in EBX, which is preserved."
     (:jnz '(:sub-program ()
 	    (:movl :ebx :eax)
 	    (:int 61)))
-    (:movl :eax (:ebx 3))))
-
+    (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
+     :movl :eax (:ebx 3))))
 
 (defun car (x) (car x))
 (defun cdr (x) (cdr x))

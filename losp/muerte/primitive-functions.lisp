@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.46 2004/10/07 12:44:17 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.47 2004/10/21 20:34:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -306,7 +306,8 @@ with EAX still holding the tag."
     (:movl :ebx (:ecx 8))		; Store VALUE in binding.
     (:ret)
    no-binding
-    (:movl :ebx (:eax #.(bt:slot-offset 'movitz::movitz-symbol 'movitz::value)))
+    (#.movitz::*compiler-nonlocal-lispval-write-segment-prefix*
+     :movl :ebx (:eax (:offset movitz-symbol value)))
     (:ret)))
 
 (define-primitive-function keyword-search ()
@@ -595,9 +596,9 @@ BUFFER-SIZE is the number of words in the buffer."
     (ratio
      (find-class 'ratio))
     (std-instance
-     (movitz-accessor object movitz-std-instance class))
+     (memref object (movitz-type-slot-offset 'movitz-std-instance 'class)))
     (standard-gf-instance
-     (movitz-accessor object movitz-funobj-standard-gf standard-gf-class))
+     (memref object (movitz-type-slot-offset 'movitz-funobj-standard-gf 'standard-gf-class)))
     (string
      (find-class 'string))
     (bit-vector
