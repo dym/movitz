@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:47:19 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: bootblock.lisp,v 1.8 2004/04/16 19:15:20 ffjeld Exp $
+;;;; $Id: bootblock.lisp,v 1.9 2004/05/20 18:25:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -155,7 +155,6 @@
        (:movw :bx :es)
        (:xorw :bx :bx)
 
-       
        (:int #x13)			; Call BIOS routine
        (:jc 'read-error)
        (:movzxb :al :ecx)
@@ -285,7 +284,7 @@
        ;; Data
        welcome         (% format 8 "Loading Movitz ~D..~%"
 			  ,(incf *bootblock-build*))
-       entering        (% format 8 ")~%Enter..")
+       entering        (% format 8 "~%Enter..")
        error           (% format 8 "Failed!)")
        track-start-msg (% format 8 "(")
        track-end-msg   (% format 8 ")")
