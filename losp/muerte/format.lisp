@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Mar 23 01:18:36 2002
 ;;;;                
-;;;; $Id: format.lisp,v 1.3 2004/03/24 19:30:15 ffjeld Exp $
+;;;; $Id: format.lisp,v 1.4 2004/04/13 14:21:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -51,12 +51,13 @@
 	    (padchar (or (second prefix-parameters) #\space))
 	    (commachar (or (third prefix-parameters) #\,))
 	    (comma-interval (or (fourth prefix-parameters) 3)))
-	(write-integer x *standard-output* :radix nil :base base
-		       :mincol mincol :padchar padchar
-		       :comma-interval (and colon-p comma-interval)
-		       :comma-char commachar
-		       :sign-always at-sign-p))
-    (write x :escape nil :radix nil :base base :readably nil)))
+	(write-integer x *standard-output* base nil
+		       mincol padchar at-sign-p commachar (and colon-p comma-interval)))
+    (let ((*print-escape* nil)
+	  (*print-radix* nil)
+	  (*print-base* base)
+	  (*print-readably* nil))
+      (write x))))
 
 (defun find-directive (string i directive &optional recursive-skip-start
 						    (recursive-skip-end directive))
