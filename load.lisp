@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Jan 15 18:40:58 2004
 ;;;;                
-;;;; $Id: load.lisp,v 1.3 2004/01/15 19:00:09 ffjeld Exp $
+;;;; $Id: load.lisp,v 1.4 2004/01/16 16:22:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -29,10 +29,8 @@
 	(setf (ext:default-directory) pwd))))
   #-(or cmu sbcl) (load "load"))
 
-;; (load (compile-file #p"../infunix/procfs"))
-
-
 #+allegro (progn
+	    (load (compile-file #p"../infunix/procfs"))
 	    (load "packages.lisp")
 	    (load "movitz.lisp")
 	    (excl:compile-system :movitz)
@@ -41,23 +39,30 @@
 	    (setf (system::gsgc-parameter :generation-spread) 12)
 	    (sys:resize-areas :new (* 16 1024 1024)))
 
-#-allegro (with-compilation-unit ()
-	    #+cmu (setf bt::*ignore-hidden-slots-for-pcl* t)
-	    (mapcar (lambda (path)
-		      (load (compile-file (make-pathname :name path :type "lisp") :print nil)))
-		    '("packages"
-		      "movitz"
-		      "parse"
-		      "eval"
-		      "multiboot"
-		      "bootblock"
-		      "environment"
-		      "compiler-types"
-		      "compiler-protocol"
-		      "storage-types"
-		      "image"
-		      "stream-image"
-		      ;; "procfs-image"
-		      "assembly-syntax"
-		      "compiler-protocol"
-		      "compiler" "special-operators" "special-operators-cl")))
+#-allegro (do () (nil)
+	    (with-simple-restart (retry "Retry loading Movitz")
+	      (return
+		(with-compilation-unit ()
+		  #+cmu (setf bt::*ignore-hidden-slots-for-pcl* t)
+		  (mapcar (lambda (path)
+			    (do () (nil)
+			      (with-simple-restart (retry "Retry loading ~S" path)
+				(return
+				  (load (compile-file (make-pathname :name path :type "lisp")
+						      :print nil))))))
+			  '("packages"
+			    "movitz"
+			    "parse"
+			    "eval"
+			    "environment"
+			    "compiler-types"
+			    "compiler-protocol"
+			    "storage-types"
+			    "multiboot"
+			    "bootblock"
+			    "image"
+			    "stream-image"
+			    ;; "procfs-image"
+			    "assembly-syntax"
+			    "compiler-protocol"
+			    "compiler" "special-operators" "special-operators-cl"))))))
