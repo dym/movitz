@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.18 2004/06/17 09:49:28 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.19 2004/06/17 19:44:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -235,8 +235,10 @@
 		 (make-other-typep :funobj))
 		((basic-vector)
 		 (make-other-typep :basic-vector))
-		((vector array)
+		((old-vector)
 		 (make-other-typep :vector))
+		((vector array)
+		 `(typep ,object '(or old-vector basic-vector)))
 		(simple-vector
 		 (make-vector-typep :any-t))
 		(string
@@ -280,7 +282,7 @@
 				(= (1+ movitz:+movitz-most-positive-fixnum+) lower-limit))
 			   `(with-inline-assembly-case ()
 			      (do-case (t :boolean-zf=1 :labels (plusp-ok))
-				(:compile-form (:result-mode :eax) ,object)
+			(:compile-form (:result-mode :eax) ,object)
 				(:leal (:eax ,(- (movitz:tag :other))) :ecx)
 				(:testb 7 :cl)
 				(:jnz 'plusp-ok)

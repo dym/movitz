@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.11 2004/06/10 16:28:55 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.12 2004/06/17 19:44:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -54,8 +54,21 @@
      (t (sequence-double-dispatch-error ,seq0 ,seq1))))
 
 (defun length (sequence)
-  (sequence-dispatch sequence
-    (vector
+  (etypecase sequence
+    (basic-vector
+     (macrolet
+	 ((do-it ()
+	    `(with-inline-assembly (:returns :eax)
+	       (:compile-form (:result-mode :ebx) sequence)
+	       (:movl (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+		      :eax)
+	       (:testl ,(logxor #xffffffff (1- (expt 2 14))) :eax)
+	       (:jnz 'basic-vector-length-ok)
+	       (:movzxw (:ebx #.(bt:slot-offset 'movitz::movitz-basic-vector 'movitz::fill-pointer))
+			:eax)
+	      basic-vector-length-ok)))
+       (do-it)))
+    (old-vector
      (vector-fill-pointer sequence))
     (list
      (do ((x sequence (cdr x))
