@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.26 2004/07/20 12:37:59 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.27 2004/07/20 23:53:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -105,8 +105,8 @@ after the point that called this stack-frame."
     (<= bottom pointer top)))
 
 (defun stack-ref (pointer offset index type)
-  (assert (stack-ref-p pointer) (pointer)
-    "Stack pointer not in range: #x~X" pointer)
+  #+ignore (assert (stack-ref-p pointer) (pointer)
+	     "Stack pointer not in range: #x~X" pointer)
   (memref-int pointer offset index type))
 
 (defun current-dynamic-context ()
@@ -336,3 +336,25 @@ Obviously, this correspondence is not guaranteed to hold e.g. across GC."
 	      #.(movitz::movitz-type-word-size :movitz-struct)
 	      (* 2 (truncate (+ (structure-object-length object) 1) 2))))))))
 
+
+(defun copy-control-stack (&optional (stack (%run-time-context-slot 'stack-vector))
+				     (frame (current-stack-frame)))
+  (assert (location-in-object-p stack frame))
+  (let* ((stack-start-location (+ 2 (object-location stack)))
+	 (frame-index (- frame stack-start-location))
+	 (copy (subseq stack frame-index))
+	 (copy-start-location (+ 2 (object-location copy)))
+	 (cc (subseq copy 0)))
+    (do ((i 0)) (nil)
+      (let ((uplink-frame (svref%unsafe copy i)))
+	(cond
+	 ((= 0 uplink-frame)
+	  (setf (svref%unsafe copy i) 0)
+	  (return (values copy cc)))
+	 (t (let ((uplink-index (- uplink-frame stack-start-location frame-index)))
+	      (assert (< -1 uplink-index (length copy)) ()
+		"Uplink-index outside copy: ~S, i: ~S" uplink-index i)
+	      (let ((x  (+ uplink-index copy-start-location)))
+		(assert (location-in-object-p copy x))
+		(setf (svref%unsafe copy i) x)
+		(setf i uplink-index)))))))))
