@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:52:58 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: movitz.lisp,v 1.7 2004/04/21 15:09:25 ffjeld Exp $
+;;;; $Id: movitz.lisp,v 1.8 2004/07/21 22:28:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -132,7 +132,10 @@ make clear it's a Movitz object, with extra <..>"
 				      (list 'list
 					    (list 'quote 'backquote-comma-at)
 					    (un-backquote (cadr sub-form) (1- level))))))
-			     (t (list 'list (un-backquote sub-form level)))))))))))
+			     (t (list 'list (un-backquote sub-form level))))))
+		     when (not (listp (cdr sub-form-head)))
+		     collect (list 'quote (cdr sub-form-head)))
+		 ))))
      (array
       (error "Array backquote not implemented."))
      (t (list 'quote form)))))
