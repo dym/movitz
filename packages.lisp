@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2003-2004, 
+;;;;    Copyright (C) 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromsoe, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.43 2004/11/26 14:59:14 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.44 2005/02/25 07:58:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 

@@ -45,8 +45,7 @@ vga_update_interval: 100000
 # disable the mouse, since DLX is text only
 mouse: enabled=0
 
-ne2k: ioaddr=0x280, irq=9, mac=00:40:05:18:66:d8, ethmod=fbsd, ethdev=xl0
-ne2k: ioaddr=0x300, irq=3, mac=00:40:05:18:66:d9, ethmod=fbsd, ethdev=xl0
+ne2k: ioaddr=0x300, irq=3, mac=00:40:05:18:66:d9, ethmod=fbsd, ethdev=nge0
 
 # panic: action=report
 error: action=report
