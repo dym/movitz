@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.11 2004/04/07 00:15:02 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.12 2004/04/14 12:31:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -196,6 +196,43 @@
 		   `(with-inline-assembly (:returns :eax)
 		      (:compile-two-forms (:eax :untagged-fixnum-ecx) ,object ,offset)
 		      (:movl (:eax :ecx ,(offset-by 4)) :eax)))
+		  (t (assert (not (movitz:movitz-constantp offset env)))
+		     (assert (not (movitz:movitz-constantp index env)))
+		     (let ((object-var (gensym "memref-object-")))
+		       (assert (= 4 movitz:+movitz-fixnum-factor+))
+		       `(let ((,object-var ,object))
+			  (with-inline-assembly (:returns :eax)
+			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
+			    (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
+			    (:load-lexical (:lexical-binding ,object-var) :eax)
+			    (:addl :ebx :ecx)
+			    (:movl (:eax :ecx ,(offset-by 4)) :eax)))))))
+		(:code-vector
+		 ;; A code-vector is like a normal lisp word pointer,
+		 ;; except it's known to point to a code-vector, and
+		 ;; the pointer value is offset by 2. The trick is to
+		 ;; perform this pointer arithmetics while never
+		 ;; keeping a non-lisp-word pointer in a register.
+		 (cond
+		  ((and (eql 0 index) (eql 0 offset))
+		   `(with-inline-assembly (:returns :eax)
+		      (:compile-form (:result-mode :ebx) ,object)
+		      (:movl ,(ldb (byte 32 0) (- movitz:+code-vector-word-offset+)) :eax)
+		      (:addl (:ebx ,(offset-by 4)) :eax)))
+		  ((eql 0 offset)
+		   `(with-inline-assembly (:returns :eax)
+		      (:compile-two-forms (:ebx :ecx) ,object ,index)
+		      ,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
+			  `((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ecx))
+		      (:movl ,(ldb (byte 32 0) (- movitz:+code-vector-word-offset+)) :eax)
+		      (:addl (:ebx :ecx ,(offset-by 4)) :eax)))
+		  ((eql 0 index)
+		   `(with-inline-assembly (:returns :eax)
+		      (:compile-two-forms (:ebx :untagged-fixnum-ecx) ,object ,offset)
+		      (:movl ,(ldb (byte 32 0) (- movitz:+code-vector-word-offset+)) :eax)
+		      (:addl (:ebx :ecx ,(offset-by 4)) :eax)))
+		  (t (error "variable memref type :code-vector not implemented."))
+		  #+ignore
 		  (t (assert (not (movitz:movitz-constantp offset env)))
 		     (assert (not (movitz:movitz-constantp index env)))
 		     (let ((object-var (gensym "memref-object-")))
@@ -454,6 +491,41 @@
 		    `((:sarl ,(- movitz:+movitz-fixnum-shift+ 2)) :ecx))
 		(:movl :eax (:ebx :ecx ,(movitz:movitz-eval offset env)))))))
 	(t (let ((value-var (gensym "memref-value-"))
+		 (object-var (gensym "memref-object-")))
+	     `(let ((,value-var ,value) (,object-var ,object))
+		(with-inline-assembly (:returns :eax)
+		  (:compile-two-forms (:untagged-fixnum-ecx :ebx) ,offset ,index)
+		  (:load-lexical (:lexical-binding ,value-var) :eax)
+		  ,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
+		      `((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ebx))
+		  (:addl :ebx :ecx)	; index += offset
+		  (:load-lexical (:lexical-binding ,object-var) :ebx)
+		  (:movl :eax (:ebx :ecx))))))))
+      (:code-vector
+       (cond
+	((and (movitz:movitz-constantp offset env)
+	      (movitz:movitz-constantp index env))
+	 `(with-inline-assembly (:returns :eax)
+	    (:compile-two-forms (:eax :ebx) ,value ,object)
+	    (:movl ,movitz:+code-vector-word-offset+
+		   (:ebx ,(+ (movitz:movitz-eval offset env)
+			     (* 4 (movitz:movitz-eval index env)))))
+	    (:addl :eax (:ebx ,(+ (movitz:movitz-eval offset env)
+				  (* 4 (movitz:movitz-eval index env)))))))
+	((movitz:movitz-constantp offset env)
+	 (let ((value-var (gensym "memref-value-")))
+	   `(let ((,value-var ,value))
+	      (with-inline-assembly (:returns :eax)
+		(:compile-two-forms (:ebx :ecx) ,object ,index)
+		(:load-lexical (:lexical-binding ,value-var) :eax)
+		,@(when (plusp (- movitz:+movitz-fixnum-shift+ 2))
+		    `((:sarl ,(- movitz:+movitz-fixnum-shift+ 2)) :ecx))
+		(:movl ,movitz:+code-vector-word-offset+
+		       (:ebx :ecx ,(movitz:movitz-eval offset env)))
+		(:addl :eax (:ebx :ecx ,(movitz:movitz-eval offset env)))))))
+	(t (error "variable (setf memref) type :code-vector not implemented.")
+	   #+ignore
+	   (let ((value-var (gensym "memref-value-"))
 		 (object-var (gensym "memref-object-")))
 	     `(let ((,value-var ,value) (,object-var ,object))
 		(with-inline-assembly (:returns :eax)
