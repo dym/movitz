@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.29 2004/07/17 01:49:23 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.30 2004/07/17 12:17:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1051,6 +1051,15 @@ on the current result."
   (destructuring-bind (operator &rest arguments)
       (cdr form)
     (compiler-call #'compile-apply-symbol
+      :forward all
+      :form (cons operator arguments))))
+
+(define-special-operator muerte::compiler-macro-call (&all all &form form &env env)
+  (destructuring-bind (operator &rest arguments)
+      (cdr form)
+    (assert (movitz-compiler-macro-function operator env) ()
+      "There is no compiler-macro ~S." operator)
+    (compiler-call #'compile-compiler-macro-form
       :forward all
       :form (cons operator arguments))))
 
