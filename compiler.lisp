@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.112 2004/11/19 23:56:14 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.113 2004/11/20 01:29:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2575,8 +2575,11 @@ the sub-program options (&optional label) as secondary value."
 
 (defun instruction-uncontinues-p (instruction)
   "Is it impossible for control to return after instruction?"
-  (member (instruction-is instruction)
-	  '(:jmp :ret)))
+  (or (member (instruction-is instruction)
+	      '(:jmp :ret))
+      (member instruction
+	      '((:int 100))
+	      :test #'equalp)))
   
 (defun sub-environment-p (env1 env2)
   (cond
@@ -6589,7 +6592,7 @@ and a list of any intervening unwind-protect environment-slots."
 	(rotatef x y)
 	(rotatef x-type y-type)
 	(rotatef x-singleton y-singleton))
-      (let (;;(x-loc (new-binding-location (binding-target x) frame-map :default nil))
+      (let (;; (x-loc (new-binding-location (binding-target x) frame-map :default nil))
 	    (y-loc (new-binding-location (binding-target y) frame-map :default nil)))
 	#+ignore
 	(warn "eql ~S/~S ~S/~S"
@@ -6617,7 +6620,6 @@ and a list of any intervening unwind-protect environment-slots."
 	      (case (operator return-mode)
 		(:boolean-branch-on-false
 		 (when (not eql)
-		   (warn "constant eql ~S to ~S" instruction (operands return-mode))
 		   `((:jmp ',(operands return-mode)))))
 		(t (break "Constant EQL: ~S ~S" (car x-singleton) (car y-singleton))))))
 	   ((and x-singleton
@@ -6652,15 +6654,22 @@ and a list of any intervening unwind-protect environment-slots."
 				 (movitz-immediate-value (car x-singleton))
 				 y-loc)))
 		      (make-branch))))
+	   ((and x-singleton
+		 (typep (car x-singleton) 'movitz-symbol)
+		 (member y-loc '(:eax :ebx :edx)))
+	    (append (make-load-constant (car x-singleton) y-loc funobj frame-map :op :cmpl)
+		    (make-branch)))
 	   (y-singleton
 	    (break "y-singleton"))
-	   ((or (movitz-subtypep x-type 'fixnum)
-		(movitz-subtypep x-type 'character)
-		(movitz-subtypep y-type 'fixnum)
-		(movitz-subtypep y-type 'character))
+	   ((or (movitz-subtypep x-type '(or fixnum character symbol vector))
+		(movitz-subtypep y-type '(or fixnum character symbol vector)))
 	    (append (make-load-eax-ebx)
 		    `((:cmpl :eax :ebx))
 		    (make-branch)))
+	   #+ignore
+	   ((warn "eql ~S/~S ~S/~S"
+		  x x-loc
+		  y y-loc))
 	   ((eq :boolean-branch-on-false (operator return-mode))
 	    (let ((eql-done (gensym "eql-done-"))
 		  (on-false-label (operands return-mode)))
