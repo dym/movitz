@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Apr 15 22:47:13 2002
 ;;;;                
-;;;; $Id: cpu-id.lisp,v 1.4 2004/04/23 13:00:17 ffjeld Exp $
+;;;; $Id: cpu-id.lisp,v 1.5 2004/06/02 23:49:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -262,6 +262,16 @@ This is an illegal instruction on lesser CPUs, and a no-op on some, such as boch
 
 (defun eflags ()
   (eflags))
+
+(defconstant +eflags-map+
+    '(:cf nil :pf nil :af nil :zf :sf
+      :tf :if :df :of :iopl0 :iopl1 :nt nil
+      :rf :vm :ac :vif :vip :id))
+
+(defun decode-eflags (&optional (eflags (eflags)))
+  (loop for flag in +eflags-map+ as bit upfrom 0
+      when (and flag (logbitp bit eflags))
+      collect flag))
 
 (define-compiler-macro (setf eflags) (value)
   `(with-inline-assembly (:returns :register)
