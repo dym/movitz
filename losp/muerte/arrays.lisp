@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.25 2004/06/17 19:44:39 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.26 2004/06/22 22:38:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -229,7 +229,7 @@
 	     ((do-it ()
 		`(with-inline-assembly (:returns :eax)
 		   (:declare-label-set basic-vector-dispatcher
-				       (any-t unknown unknown unknown
+				       (any-t character u8 unknown
 					      unknown unknown unknown unknown))
 		   (:compile-two-forms (:eax :ebx) array index)
 		   (:movl (:eax ,movitz:+other-type-offset+) :ecx)
@@ -243,10 +243,6 @@
 			    (error "Illegal index: ~S." index))))
 		   (:shrl 8 :ecx)
 		   (:andl 7 :ecx)
-		   (:jmp (:esi (:ecx 4) 'basic-vector-dispatcher
-			       ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
-		   (() () '(:sub-program (unknown) (:int 100)))
-		  any-t
 		   (:cmpl :ebx
 			  (:eax ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)))
 		   (:jbe '(:sub-program (out-of-bounds)
@@ -256,8 +252,28 @@
 			     (memref array
 			      ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
 			      0 :lisp)))))
+		   (:jmp (:esi (:ecx 4) 'basic-vector-dispatcher
+			       ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
+		   
+		   (() () '(:sub-program (unknown) (:int 100)))
+		  u8
+		   (:movl :ebx :ecx)
+		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   (:movzxb (:eax :ecx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))
+			    :ecx)
+		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
+		   (:jmp 'return)
+		  character
+		   (:movl :ebx :ecx)
+		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   (:movl ,(movitz:tag :character) :eax)
+		   (:movb (:eax :ecx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))
+			  :ah)
+		   (:jmp 'return)
+		  any-t
 		   (:movl (:eax :ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))
-			  :eax))))
+			  :eax)
+		  return)))
 	   (do-it)))
 	(old-vector
 	 (let ((vector array))
@@ -332,89 +348,117 @@
 (defun (setf aref) (value vector &rest subscripts)
   (numargs-case
    (3 (value vector index)
-      (macrolet
-	  ((do-it ()
-	     `(with-inline-assembly (:returns :ebx)
-		(:compile-form (:result-mode :ebx) value)
-		(:compile-form (:result-mode :eax) vector)
+      (etypecase vector
+	(basic-vector
+	 (macrolet
+	     ((do-it ()
+		`(with-inline-assembly (:returns :eax)
+		   (:compile-two-forms (:eax :ebx) value vector)
+		   (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
+		   (:compile-form (:result-mode :edx) index)
+		   (:testb 7 :cl)
+		   (:jnz '(:sub-program (not-a-vector)
+			   (:compile-form (:result-mode :ignore)
+			    (error "Not a vector: ~S" vector))))
+		   (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
+		   (:andl #xffff :ecx)
+		   (:testb ,movitz:+movitz-fixnum-zmask+ :dl)
+		   (:jnz 'not-a-vector)
+		   (:cmpl ,(movitz:basic-vector-type-tag :any-t) :ecx)
+		   (:jne 'not-any-t-vector)
+		   (:movl :eax
+			  (:ebx :edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+		   (:jmp 'return)
+		  not-any-t-vector
+		   (:compile-form (:result-mode :ignore)
+				  (error "Not a vector: ~S" vector))
+		  return)
+		))
+	   (do-it)))
+	(old-vector
+	 (macrolet
+	     ((do-it ()
+		`(with-inline-assembly (:returns :ebx)
+		   (:compile-form (:result-mode :ebx) value)
+		   (:compile-form (:result-mode :eax) vector)
 
-		(:leal (:eax ,(- (movitz:tag :other))) :ecx)
-		(:testb 7 :cl)
-		(:jnz '(:sub-program ()
-			(:compile-form (:result-mode :ignore)
-			 (error "Not a vector: ~S" vector))))
-		(:movzxw (:eax ,movitz:+other-type-offset+) :edx)
+		   (:leal (:eax ,(- (movitz:tag :other))) :ecx)
+		   (:testb 7 :cl)
+		   (:jnz '(:sub-program ()
+			   (:compile-form (:result-mode :ignore)
+			    (error "Not a vector: ~S" vector))))
+		   (:movzxw (:eax ,movitz:+other-type-offset+) :edx)
     
-		(:compile-form (:result-mode :ecx) index)
-		(:testb ,movitz::+movitz-fixnum-zmask+ :cl)
-		(:jnz '(:sub-program () (:int 107))) ; index not fixnum
-		(:andl ,(ash #xffff movitz::+movitz-fixnum-shift+) :ecx)
-		(:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
+		   (:compile-form (:result-mode :ecx) index)
+		   (:testb ,movitz::+movitz-fixnum-zmask+ :cl)
+		   (:jnz '(:sub-program () (:int 107))) ; index not fixnum
+		   (:andl ,(ash #xffff movitz::+movitz-fixnum-shift+) :ecx)
+		   (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
 
-		(:cmpw (:eax ,(bt:slot-offset 'movitz:movitz-vector 'movitz::num-elements)) :cx)
-		(:jae '(:sub-program () (:int 61) (:jmp (:pc+ -4)))) ; index out of bounds
+		   (:cmpw (:eax ,(bt:slot-offset 'movitz:movitz-vector 'movitz::num-elements)) :cx)
+		   (:jae '(:sub-program () (:int 61) (:jmp (:pc+ -4)))) ; index out of bounds
 
-		(:cmpl ,(movitz:vector-type-tag :any-t) :edx)
-		(:jnz 'not-any-t)
+		   (:cmpl ,(movitz:vector-type-tag :any-t) :edx)
+		   (:jnz 'not-any-t)
 
-		(:movl :ebx (:eax (:ecx 4) 2))
-		(:jmp 'done)
+		   (:movl :ebx (:eax (:ecx 4) 2))
+		   (:jmp 'done)
 
-	       not-any-t
-		(:cmpl ,(movitz:vector-type-tag :character) :edx)
-		(:jnz 'not-character)
-		(:cmpb ,(movitz:tag :character) :bl)
-		(:jnz '(:sub-program (not-character-value)
-			(:compile-form (:result-mode :ignore)
-			 (error "Value not character: ~S" value))))
-		(:movb :bh (:eax :ecx 2))
-		(:jmp 'done)
+		  not-any-t
+		   (:cmpl ,(movitz:vector-type-tag :character) :edx)
+		   (:jnz 'not-character)
+		   (:cmpb ,(movitz:tag :character) :bl)
+		   (:jnz '(:sub-program (not-character-value)
+			   (:compile-form (:result-mode :ignore)
+			    (error "Value not character: ~S" value))))
+		   (:movb :bh (:eax :ecx 2))
+		   (:jmp 'done)
     
-	       not-character
-		(:cmpl ,(movitz:vector-type-tag :u8) :edx)
-		(:jnz 'not-u8)
-		(:testl ,(cl:ldb (cl:byte 32 0)
-				 (- -1 (* #xff movitz:+movitz-fixnum-factor+)))
-			:ebx)
-		(:jnz '(:sub-program (not-u8-value)
-			(:compile-form (:result-mode :ignore)
-			 (error "Value not (unsigned-byte 8): ~S" value))))
-		(:shrl ,movitz:+movitz-fixnum-shift+ :ebx)
-		(:movb :bl (:eax (:ecx 1) ,(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
-		(:leal ((:ebx ,movitz:+movitz-fixnum-factor+)) :ebx)
-		(:jmp 'done)
+		  not-character
+		   (:cmpl ,(movitz:vector-type-tag :u8) :edx)
+		   (:jnz 'not-u8)
+		   (:testl ,(cl:ldb (cl:byte 32 0)
+				    (- -1 (* #xff movitz:+movitz-fixnum-factor+)))
+			   :ebx)
+		   (:jnz '(:sub-program (not-u8-value)
+			   (:compile-form (:result-mode :ignore)
+			    (error "Value not (unsigned-byte 8): ~S" value))))
+		   (:shrl ,movitz:+movitz-fixnum-shift+ :ebx)
+		   (:movb :bl (:eax (:ecx 1) ,(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
+		   (:leal ((:ebx ,movitz:+movitz-fixnum-factor+)) :ebx)
+		   (:jmp 'done)
     
     
-	       not-u8
-		(:cmpl ,(movitz:vector-type-tag :u16) :edx)
-		(:jnz 'not-u16)
-		(:testl ,(ldb (byte 32 0)
-			      (- -1 (* #xffff movitz:+movitz-fixnum-factor+)))
-			:ebx)
-		(:jnz '(:sub-program (not-u16-value)
-			(:compile-form (:result-mode :ignore)
-			 (error "Value not (unsigned-byte 16): ~S" value))))
-		(:shrl ,movitz:+movitz-fixnum-shift+ :ebx)
-		(:movw :bx (:eax (:ecx 2) ,(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
-		(:leal ((:ebx ,movitz:+movitz-fixnum-factor+)) :ebx)
-		(:jmp 'done)
+		  not-u8
+		   (:cmpl ,(movitz:vector-type-tag :u16) :edx)
+		   (:jnz 'not-u16)
+		   (:testl ,(ldb (byte 32 0)
+				 (- -1 (* #xffff movitz:+movitz-fixnum-factor+)))
+			   :ebx)
+		   (:jnz '(:sub-program (not-u16-value)
+			   (:compile-form (:result-mode :ignore)
+			    (error "Value not (unsigned-byte 16): ~S" value))))
+		   (:shrl ,movitz:+movitz-fixnum-shift+ :ebx)
+		   (:movw :bx (:eax (:ecx 2) ,(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
+		   (:leal ((:ebx ,movitz:+movitz-fixnum-factor+)) :ebx)
+		   (:jmp 'done)
 
-	       not-u16
-		(:cmpl ,(movitz:vector-type-tag :u32) :edx)
-		(:jnz 'not-u32)
-		;; EBX=value, EAX=vector, ECX=index
-		(:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :edx)
-		(:xchgl :eax :ebx)
-		;; EAX=value, EBX=vector, EDX=index
-		(:call-global-constant unbox-u32)
-		(:movl :ecx (:ebx (:edx 1) ,(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
-		(:movl :eax :ebx)
-		(:jmp 'done)
+		  not-u16
+		   (:cmpl ,(movitz:vector-type-tag :u32) :edx)
+		   (:jnz 'not-u32)
+		   ;; EBX=value, EAX=vector, ECX=index
+		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :edx)
+		   (:xchgl :eax :ebx)
+		   ;; EAX=value, EBX=vector, EDX=index
+		   (:call-global-constant unbox-u32)
+		   (:movl :ecx (:ebx (:edx 1) ,(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
+		   (:movl :eax :ebx)
+		   (:jmp 'done)
 
-	       not-u32
-		(:compile-form (:result-mode :ignore) (error "Not a vector: ~S" vector))
-	       done)))
-	(do-it)))
+		  not-u32
+		   (:compile-form (:result-mode :ignore) (error "Not a vector: ~S" vector))
+		  done)))
+	   (do-it)))))
    (t (value vector &rest subscripts)
       (declare (ignore value vector subscripts))
       (error "Multi-dimensional arrays not implemented."))))
@@ -437,41 +481,88 @@
   (setf (svref%unsafe simple-vector index) value))
 
 (defun svref (simple-vector index)
-  (macrolet ((do-svref ()
-	       `(with-inline-assembly (:returns :eax)
-		  (:compile-two-forms (:eax :ebx) simple-vector index)
-		  (:leal (:eax ,(- (movitz::tag :other))) :ecx)
-		  (:testb 7 :cl)
-		  (:jnz '(:sub-program (not-simple-vector)
-			  (:int 66)))
-		  (:cmpw ,(dpb (bt:enum-value 'movitz::movitz-vector-element-type :any-t)
-			       (byte 8 8)
-			       (movitz:tag :vector))
-			 (:eax ,(bt:slot-offset 'movitz::movitz-vector 'movitz::type)))
-		  (:jne 'not-simple-vector)
-		  (:testb #.movitz::+movitz-fixnum-zmask+ :bl)
-		  (:jnz '(:sub-program (not-fixnum)
-			  (:int 107)))
-		  (:movzxw (:eax #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements))
-			   :ecx)
-		  (:shll #.movitz::+movitz-fixnum-shift+ :ecx)
-		  (:xchgl :ecx :ebx)
-		  (:cmpl :ecx :ebx)
-		  (:jna '(:sub-program (index-out-of-bounds)
-			  (:int 70)))
-		  ,@(if (= 4 movitz::+movitz-fixnum-factor+)
-			`((:movl (:eax :ecx #.(bt:slot-offset 'movitz::movitz-vector 'movitz::data))
-				 :eax))
-		      `((:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
-			(:movl (:eax (:ecx 4) #.(bt:slot-offset 'movitz::movitz-vector 'movitz::data))
-			       :eax))))))
-    (do-svref)))
+  (etypecase simple-vector
+    (basic-vector
+     (macrolet
+	 ((do-it ()
+	    `(with-inline-assembly (:returns :eax)
+	       (:compile-two-forms (:eax :ebx) simple-vector index)
+	       (:leal (:eax ,(- (movitz::tag :other))) :ecx)
+	       (:testb 7 :cl)
+	       (:jne '(:sub-program (not-basic-simple-vector)
+		       (:compile-form (:result-mode :ignore)
+			(error "Not a simple-vector: ~S." simple-vector))))
+	       (:movl (:eax ,movitz:+other-type-offset+) :ecx)
+	       (:testb ,movitz:+movitz-fixnum-zmask+ :bl)
+	       (:jnz '(:sub-program (illegal-index)
+		       (:compile-form (:result-mode :ignore)
+			(error "Illegal index: ~S." index))))
+	       (:cmpw ,(movitz:basic-vector-type-tag :any-t) :cx)
+	       (:jne 'not-basic-simple-vector)
+	       (:movl (:eax :ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))
+		      :eax)
+	       )))
+       (do-it)))
+    (old-vector
+     (macrolet
+	 ((do-svref ()
+	    `(with-inline-assembly (:returns :eax)
+	       (:compile-two-forms (:eax :ebx) simple-vector index)
+	       (:leal (:eax ,(- (movitz::tag :other))) :ecx)
+	       (:testb 7 :cl)
+	       (:jnz '(:sub-program (not-simple-vector)
+		       (:int 66)))
+	       (:cmpw ,(dpb (bt:enum-value 'movitz::movitz-vector-element-type :any-t)
+			    (byte 8 8)
+			    (movitz:tag :vector))
+		      (:eax ,(bt:slot-offset 'movitz::movitz-vector 'movitz::type)))
+	       (:jne 'not-simple-vector)
+	       (:testb #.movitz::+movitz-fixnum-zmask+ :bl)
+	       (:jnz '(:sub-program (not-fixnum)
+		       (:int 107)))
+	       (:movzxw (:eax #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements))
+			:ecx)
+	       (:shll #.movitz::+movitz-fixnum-shift+ :ecx)
+	       (:xchgl :ecx :ebx)
+	       (:cmpl :ecx :ebx)
+	       (:jna '(:sub-program (index-out-of-bounds)
+		       (:int 70)))
+	       ,@(if (= 4 movitz::+movitz-fixnum-factor+)
+		     `((:movl (:eax :ecx #.(bt:slot-offset 'movitz::movitz-vector 'movitz::data))
+			      :eax))
+		   `((:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
+		     (:movl (:eax (:ecx 4) #.(bt:slot-offset 'movitz::movitz-vector 'movitz::data))
+			    :eax))))))
+       (do-svref)))))
     
 
 (defun (setf svref) (value simple-vector index)
-  (check-type simple-vector simple-vector)
-  (assert (below index (vector-dimension simple-vector)))
-  (setf (memref simple-vector 2 index :lisp) value))
+  (etypecase simple-vector
+    (basic-vector
+     (macrolet
+	 ((do-it ()
+	    `(with-inline-assembly (:returns :eax)
+	       (:compile-two-forms (:ebx :edx) simple-vector index)
+	       (:leal (:ebx ,(- (movitz::tag :other))) :ecx)
+	       (:testb 7 :cl)
+	       (:jne '(:sub-program (not-basic-simple-vector)
+		       (:compile-form (:result-mode :ignore)
+			(error "Not a simple-vector: ~S." simple-vector))))
+	       (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
+	       (:testb ,movitz:+movitz-fixnum-zmask+ :dl)
+	       (:jnz '(:sub-program (illegal-index)
+		       (:compile-form (:result-mode :ignore)
+			(error "Illegal index: ~S." index))))
+	       (:compile-form (:result-mode :eax) value)
+	       (:cmpw ,(movitz:basic-vector-type-tag :any-t) :cx)
+	       (:jne 'not-basic-simple-vector)
+	       (:movl :eax
+		      (:ebx :edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))))))
+       (do-it)))
+    (old-vector
+     (check-type simple-vector simple-vector)
+     (assert (below index (vector-dimension simple-vector)))
+     (setf (memref simple-vector 2 index :lisp) value))))
 
 ;;; string accessors
 
@@ -585,72 +676,72 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
     (cons
      (error "Multi-dimensional arrays not supported."))
     (integer
-     (let ((fill-pointer (if (integerp fill-pointer)
-			     fill-pointer
-			   dimensions)))
-       (cond
-	((equal element-type 'character)
-	 (let ((array (malloc-data-clumps (truncate (+ dimensions 7 8) 8))))
-	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
-			 0 :unsigned-byte16)
-	     0)
-	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
-			 0 :unsigned-byte16)
-	     dimensions)
-	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
-			 0 :unsigned-byte16)
-	     #.(movitz:vector-type-tag :character))
-	   (check-type array string)
-	   (setf (fill-pointer array) fill-pointer)
-	   (cond
-	    (initial-element
-	     (check-type initial-element character)
-	     (dotimes (i dimensions)
-	       (setf (char array i) initial-element)))
-	    (initial-contents
-	     (dotimes (i dimensions)
-	       (setf (char array i) (elt initial-contents i)))))
-	   array))
-	((member element-type '(u8 (unsigned-byte 8)) :test #'equal)
-	 (let ((array (malloc-data-clumps (truncate (+ dimensions 7 8) 8))))
-	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
-			 0 :unsigned-byte16)
-	     0)
-	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
-			 0 :unsigned-byte16)
-	     dimensions)
-	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
-			 0 :unsigned-byte16)
-	     #.(movitz:vector-type-tag :u8))
-	   (setf (fill-pointer array) fill-pointer)
-	   (cond
-	    (initial-element
-	     (dotimes (i dimensions)
-	       (setf (aref array i) initial-element)))
-	    (initial-contents
-	     (replace array initial-contents)))
-	   array))
-	((member element-type '(u32 (unsigned-byte 32)) :test #'equal)
-	 (let ((array (malloc-data-words dimensions)))
-	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
-			 0 :unsigned-byte16)
-	     0)
-	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
-			 0 :unsigned-byte16)
-	     dimensions)
-	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
-			 0 :unsigned-byte16)
-	     #.(movitz:vector-type-tag :u32))	 
-	   (setf (fill-pointer array) fill-pointer)
-	   (cond
-	    (initial-element
-	     (dotimes (i dimensions)
-	       (setf (aref array i) initial-element)))
-	    (initial-contents
-	     (replace array initial-contents)))
-	   array))
-	((eq element-type :basic)
-	 (check-type dimensions (and fixnum (integer 0 *)))
+     (cond
+      ((equal element-type 'character)
+       (let ((array (malloc-data-clumps (truncate (+ dimensions 7 8) 8))))
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
+		       0 :unsigned-byte16)
+	   0)
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
+		       0 :unsigned-byte16)
+	   dimensions)
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
+		       0 :unsigned-byte16)
+	   #.(movitz:vector-type-tag :character))
+	 (check-type array string)
+	 (when fill-pointer
+	   (setf (fill-pointer array) fill-pointer))
+	 (cond
+	  (initial-element
+	   (check-type initial-element character)
+	   (dotimes (i dimensions)
+	     (setf (char array i) initial-element)))
+	  (initial-contents
+	   (dotimes (i dimensions)
+	     (setf (char array i) (elt initial-contents i)))))
+	 array))
+      ((member element-type '(u8 (unsigned-byte 8)) :test #'equal)
+       (let ((array (malloc-data-clumps (truncate (+ dimensions 7 8) 8))))
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
+		       0 :unsigned-byte16)
+	   0)
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
+		       0 :unsigned-byte16)
+	   dimensions)
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
+		       0 :unsigned-byte16)
+	   #.(movitz:vector-type-tag :u8))
+	 (setf (fill-pointer array)
+	   (or fill-pointer dimensions))
+	 (cond
+	  (initial-element
+	   (dotimes (i dimensions)
+	     (setf (aref array i) initial-element)))
+	  (initial-contents
+	   (replace array initial-contents)))
+	 array))
+      ((member element-type '(u32 (unsigned-byte 32)) :test #'equal)
+       (let ((array (malloc-data-words dimensions)))
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
+		       0 :unsigned-byte16)
+	   0)
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
+		       0 :unsigned-byte16)
+	   dimensions)
+	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
+		       0 :unsigned-byte16)
+	   #.(movitz:vector-type-tag :u32))	 
+	 (when fill-pointer
+	   (setf (fill-pointer array) fill-pointer))
+	 (cond
+	  (initial-element
+	   (dotimes (i dimensions)
+	     (setf (aref array i) initial-element)))
+	  (initial-contents
+	   (replace array initial-contents)))
+	 array))
+      (t #+ignore (eq element-type :basic)
+       (check-type dimensions (and fixnum (integer 0 *)))
 	 (let ((array (malloc-words dimensions)))
 	   (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
 			 0 :lisp)
@@ -658,8 +749,10 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 	   (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::type)
 			 0 :unsigned-byte16)
 	     #.(movitz:basic-vector-type-tag :any-t))
-	   (setf (fill-pointer array) fill-pointer)
-	   (warn "fp: ~S/~S" fill-pointer (fill-pointer array))
+	   (setf (fill-pointer array)
+	     (case fill-pointer
+	       ((nil t) dimensions)
+	       (t fill-pointer)))
 	   (cond
 	    (initial-contents
 	     (replace array initial-contents))
@@ -667,24 +760,26 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 	     (dotimes (i dimensions)
 	       (setf (svref%unsafe array i) initial-element))))
 	   array))
-	(t (let ((array (malloc-words dimensions)))
-	     (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
-			   0 :unsigned-byte16)
-	       0)
-	     (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
-			   0 :unsigned-byte16)
-	       dimensions)
-	     (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
-			   0 :unsigned-byte16)
-	       #.(movitz:vector-type-tag :any-t))
-	     (setf (fill-pointer array) fill-pointer)
-	     (cond
-	      (initial-contents
-	       (replace array initial-contents))
-	      (initial-element
-	       (dotimes (i dimensions)
-		 (setf (svref%unsafe array i) initial-element))))
-	     array)))))))
+      #+ignore
+      (t (let ((array (malloc-words dimensions)))
+	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
+			 0 :unsigned-byte16)
+	     0)
+	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
+			 0 :unsigned-byte16)
+	     dimensions)
+	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
+			 0 :unsigned-byte16)
+	     #.(movitz:vector-type-tag :any-t))
+	   (setf (fill-pointer array)
+	     (or fill-pointer dimensions))
+	   (cond
+	    (initial-contents
+	     (replace array initial-contents))
+	    (initial-element
+	     (dotimes (i dimensions)
+	       (setf (svref%unsafe array i) initial-element))))
+	   array))))))
 
 (defun vector (&rest objects)
   "=> vector"
