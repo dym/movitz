@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.74 2004/07/17 21:36:34 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.75 2004/07/17 22:34:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1098,6 +1098,15 @@ Preserve EAX and EBX."
 		 (if (< x y)
 		     (* y x)
 		   ;; X is the biggest factor.
+		   #-movitz-reference-code
+		   (do ((r (%bignum-set-zerof (%make-bignum (ceiling (+ (integer-length x)
+								    (integer-length y))
+								 32))))
+			(length (integer-length y))
+			(i 0 (+ i 29)))
+		       ((>= i length) (%bignum-canonicalize r))
+		     (setf r (%bignum-addf r (ash (* x (ldb (byte 29 i) y)) i))))
+		   #+movitz-reference-code
 		   (do ((r 0)
 			(length (integer-length y))
 			(i 0 (+ i 29)))
@@ -1238,27 +1247,47 @@ Preserve EAX and EBX."
 	 (cond
 	  ((= number divisor) (values 1 0))
 	  ((< number divisor) (values 0 number))
-	  (t (let* ((guess-pos (- (integer-length divisor) 29))
-		    (msb (ldb (byte 29 guess-pos) divisor))) 
-	       (when (eq msb most-positive-fixnum)
-		 (decf guess-pos)
-		 (setf msb (ash msb -1)))
-	       (incf msb)
-	       (do ((q 0)
-		    (r number))
-		   ((< r divisor)
-		    (assert (and (not (minusp r)) (not (minusp q))) ()
-		      "(trunc ~S ~S) r: ~S q: ~S" number divisor r q)
-;;;		    (assert (= number (+ r (* q divisor))) ()
-;;;		      "trunc failed: q: ~S R: ~S" q r)
-		    (values q r))
-		 (let* ((guess (ash (truncate r msb) (- guess-pos))))
-		   (let ((delta (* guess divisor)))
-		     (if (= 0 guess)
-			 (setf q (1+ q)
-			       r (- r divisor))
-		       (setf q (+ q guess)
-			     r (- r delta))))))))))
+	  (t 
+	   #-movitz-reference-code
+	   (let* ((guess-pos (- (integer-length divisor) 29))
+		  (msb (ldb (byte 29 guess-pos) divisor))) 
+	     (when (eq msb most-positive-fixnum)
+	       (decf guess-pos)
+	       (setf msb (ash msb -1)))
+	     (incf msb)
+	     (do ((shift (- guess-pos))
+		  (q (%bignum-set-zerof (%make-bignum (ceiling (- (integer-length number)
+								  (integer-length divisor))
+							       32))))
+		  (r number))
+		 ((< r divisor)
+		  (values (%bignum-canonicalize q)
+			  r))
+	       (let* ((guess (ash (truncate r msb) shift)))
+		 (let ((delta (* guess divisor)))
+		   (if (= 0 delta)
+		       (setf q (%bignum-addf-fixnum q 1)
+			     r (- r divisor))
+		     (setf q (%bignum-addf q guess)
+			   r (- r delta)))))))
+	   #+movitz-reference-code
+	   (let* ((guess-pos (- (integer-length divisor) 29))
+		  (msb (ldb (byte 29 guess-pos) divisor))) 
+	     (when (eq msb most-positive-fixnum)
+	       (decf guess-pos)
+	       (setf msb (ash msb -1)))
+	     (incf msb)
+	     (do ((q 0)
+		  (r number))
+		 ((< r divisor)
+		  (values q r))
+	       (let* ((guess (ash (truncate r msb) (- guess-pos))))
+		 (let ((delta (* guess divisor)))
+		   (if (= 0 guess)
+		       (setf q (1+ q)
+			     r (- r divisor))
+		     (setf q (+ q guess)
+			   r (- r delta))))))))))
 	(((integer * -1) (integer 0 *))
 	 (multiple-value-bind (q r)
 	     (truncate (- number) divisor)
