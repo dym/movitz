@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.8 2004/10/11 13:52:04 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.9 2004/11/23 16:00:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -95,18 +95,21 @@
 	 (movitz:movitz-constantp max env))
     (let ((min (movitz:movitz-eval min env))
 	  (max (movitz:movitz-eval max env)))
-      (check-type min fixnum)
-      (check-type max fixnum)
       (cond
        ((movitz:movitz-constantp x env)
 	(<= min (movitz:movitz-eval x env) max))
        ((< max min)
-	nil)
+	`(progn ,x nil))
        ((= max min)
 	`(= ,x ,min))
        ((minusp min)
 	`(let ((x ,x))
 	   (and (<= ,min x) (<= x ,max))))
+       ((or (not (typep min 'fixnum))
+	    (not (typep max 'fixnum)))
+	`(let ((x ,x))
+	   (and (<=%2op ,min x)
+		(<=%2op x ,max))))
        ((= 0 min)
 	`(with-inline-assembly (:returns :boolean-cf=1)
 	   (:compile-form (:result-mode :eax) ,x)
