@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.48 2004/07/21 12:32:26 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.49 2004/07/22 00:27:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1438,7 +1438,8 @@ this image will not be Multiboot compatible."
 		     (setf (gethash expr (image-string-constants *image*))
 		       (make-movitz-string expr))))
 	 (vector (make-movitz-vector (length expr)
-				     :initial-contents (map 'vector #'movitz-read expr)))
+				     :element-type (array-element-type expr)
+				     :initial-contents expr))
 	 (cons
 	  (or (gethash expr (image-cons-constants *image*))
 	      (setf (gethash expr (image-cons-constants *image*))

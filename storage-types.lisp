@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.29 2004/07/21 14:15:13 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.30 2004/07/22 00:27:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -441,18 +441,30 @@ integer (native lisp) value."
 	      8)))
 
 (defun movitz-vector-upgrade-type (type)
-  (case type
-    (movitz-unboxed-integer-u8
-     (values :u8 0))
-    (movitz-unboxed-integer-u32
-     (values :u32 0))
-    (movitz-character
-     (values :character #\null))
-    (movitz-code
-     (values :code 0))
-    (t (values :any-t nil))))
+  (cond
+   ((eq type 'code)
+    (values :code 0))
+   ((subtypep type '(unsigned-byte 8))
+    (values :u8 0))
+   ((subtypep type '(unsigned-byte 16))
+    (values :u16 0))
+   ((subtypep type '(unsigned-byte 32))
+    (values :u32 0))
+   ((subtypep type 'character)
+    (values :character #\null))
+   (t (values :any-t nil)))
+  #+ignore (case type
+	     (movitz-unboxed-integer-u8
+	      (values :u8 0))
+	     (movitz-unboxed-integer-u32
+	      (values :u32 0))
+	     (movitz-character
+	      (values :character #\null))
+	     (movitz-code
+	      (values :code 0))
+	     (t (values :any-t nil))))
 
-(defun make-movitz-vector (size &key (element-type 'movitz-object)
+(defun make-movitz-vector (size &key (element-type t)
 				     (initial-contents nil)
 				     (initial-element *movitz-nil* initial-element-p)
 				     (alignment 8)
@@ -462,13 +474,13 @@ integer (native lisp) value."
   (assert (or (null initial-contents)
 	      (= size (length initial-contents))) (size initial-contents)
     "The initial-contents must be the same length as SIZE.")
-  (assert (subtypep element-type 'movitz-object) ()
-    "ELEMENT-TYPE must be a subtype of MOVITZ-OBJECT.")
-  (assert (or initial-contents
-	      (not initial-element-p)
-	      (typep initial-element element-type)) ()
-    "INITIAL-ELEMENT's type ~A is not of ELEMENT-TYPE ~A."
-    (type-of initial-element) element-type)
+;;;  (assert (subtypep element-type 'movitz-object) ()
+;;;    "ELEMENT-TYPE must be a subtype of MOVITZ-OBJECT.")
+;;;  (assert (or initial-contents
+;;;	      (not initial-element-p)
+;;;	      (typep initial-element element-type)) ()
+;;;    "INITIAL-ELEMENT's type ~A is not of ELEMENT-TYPE ~A."
+;;;    (type-of initial-element) element-type)
   (assert (and (>= (log alignment 2) 3)
 	       (zerop (rem (log alignment 2) 1)))
       (alignment)
@@ -489,14 +501,17 @@ integer (native lisp) value."
     (make-instance 'movitz-basic-vector
       :element-type et
       :num-elements size
-      :symbolic-data initial-contents ;; sv
+      :symbolic-data (case et
+		       (:any-t
+			(map 'vector #'movitz-read initial-contents))
+		       (t initial-contents))
       :fill-pointer (if (integerp fill-pointer)
 			fill-pointer
 		      size))))
 
 (defun make-movitz-string (string)
   (make-movitz-vector (length string)
-		   :element-type 'movitz-character
+		   :element-type 'character
 		   :initial-contents (map 'list #'identity string)))
 ;; (map 'list #'make-movitz-character string)))
 
@@ -1177,8 +1192,8 @@ integer (native lisp) value."
 		   bytes)))))
     (let ((l32 (merge-bytes byte-list 8 32)))
       (movitz-intern (make-movitz-vector (length l32)
-				   :element-type 'movitz-unboxed-integer-u32
-				   :initial-contents l32)))))
+					 :element-type '(unsigned-byte 32)
+					 :initial-contents l32)))))
 
 
 ;;; std-instance

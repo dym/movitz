@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.81 2004/07/21 22:26:55 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.82 2004/07/22 00:27:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -108,7 +108,7 @@ compile, using the host compiler, the code rather than just using eval.")
 						  (case label
 						    (:nil-value (image-nil-word *image*)))))))
     (make-movitz-vector (length code-vector)
-			:element-type 'movitz-code
+			:element-type 'code
 			:initial-contents code-vector)))
 
 (defun register-function-code-size (funobj)
@@ -873,7 +873,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
       (setf (movitz-funobj-code-vector funobj)
 	(make-movitz-vector (length code-vector)
 			    :fill-pointer code-length
-			    :element-type 'movitz-code
+			    :element-type 'code
 			    :initial-contents code-vector
 			    ))))
   funobj)
