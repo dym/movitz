@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.7 2004/03/26 01:49:06 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.8 2004/03/29 14:32:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -331,10 +331,10 @@
   (getf (load-global-constant global-properties) property))
 
 (define-compiler-macro object-location (object)
+  "The location is the object's address divided by fixnum-factor."
   `(with-inline-assembly (:returns :register)
      (:compile-form (:result-mode :register) ,object)
      (:andl ,(* -2 movitz::+movitz-fixnum-factor+) (:result-register))))
-
   
 (defun object-location (object)
   "The location is the object's address divided by fixnum-factor."
@@ -355,4 +355,6 @@
 
 (defun %word-offset (word offset)
   (%word-offset word offset))
+
+
 
