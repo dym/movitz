@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.8 2004/06/02 14:31:15 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.9 2004/06/10 19:29:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -52,6 +52,12 @@ start-location and end-location."
 	 ((typep x '(or null fixnum character)))
 	 ((scavenge-typep x :illegal)
 	  (error "Illegal word ~Z at ~S." x scan))
+	 ((scavenge-typep x :bignum)
+	  ;; Just skip the bigits
+	  (let* ((bigits (memref scan 2 0 :unsigned-byte16))
+		 (size (+ 2 (logand bigits -2))))
+	    (assert (and (plusp bigits) (evenp size)))
+	    (incf scan size)))
 	 ((scavenge-typep x :funobj)
 	  ;; Process code-vector pointer specially..
 	  (let* ((funobj (%word-offset scan #.(movitz:tag :other)))
@@ -68,7 +74,7 @@ start-location and end-location."
 		))
 	    (incf scan (+ 7 num-jumpers)))) ; Don't scan the jumpers.
 	 ((scavenge-typep x :infant-object)
-	  (error "Scanning an infant object ~Z at ~S." x scan))
+	  (error "Scanning an infant object ~Z at ~S (end ~S)." x scan end-location))
 	 ((or (scavenge-wide-typep x :vector
 				   #.(bt:enum-value 'movitz:movitz-vector-element-type :u8))
 	      (scavenge-wide-typep x :vector
@@ -140,37 +146,57 @@ at the start-stack-frame location."
   (values))
 
 (defparameter *primitive-funcall-patterns*
-    '(#xff #x57 (:function-offset :signed8)))
+    '((:or
+       (#xff #x57 (:function-offset :signed8)) ; 
+       (#xff #x97 (:function-offset :signed32))))) ;
 
 (defun stack-frame-primitive-funcall (funobj stack-location eip-location)
+  "Is stack-frame in a primitive-function?
+If so, return the primitive-function's code-vector."
   (let ((return-address (memref stack-location 0 0 :unsigned-byte32))
 	(code-vector (funobj-code-vector funobj)))
     (multiple-value-bind (return-location return-delta)
 	(truncate return-address #.movitz:+movitz-fixnum-factor+)
       (if (not (location-in-object-p code-vector return-location))
-	  nil
-	(multiple-value-bind (success-p type code)
-	    (match-code-pattern *primitive-funcall-patterns*
-				code-vector (+ (* (- return-location
-						     (object-location code-vector))
-						  #.movitz:+movitz-fixnum-factor+)
-					       return-delta
-					       -3 -8)
-				:function-offset)
-	  (if (not success-p)
-	      (warn "mismatch in ~S at ~D from #x~X in ~Z."
-		    funobj
-		    (+ (* (- return-location
-			     (object-location code-vector))
-			  #.movitz:+movitz-fixnum-factor+)
-		       return-delta
-		       -3 -8)
-		    return-address code-vector)
-	    (let* ((offset (ecase type
-			     (:signed8
-			      (if (not (logbitp 7 code)) code (- code 256)))))
-		   (primitive-function (%word-offset (%run-time-context-ref offset) -2)))
-	      (check-type primitive-function vector-u8)
-	      (if (not (location-in-object-p primitive-function eip-location))
-		  nil
-		primitive-function))))))))
+	  nil				; A PF must have return-address on top of stack.
+	(dotimes (offset 5 (warn "mismatch in ~S at ~D from #x~X in ~Z."
+				 funobj
+				 (+ (* (- return-location
+					  (object-location code-vector))
+				       #.movitz:+movitz-fixnum-factor+)
+				    return-delta
+				    -3 -8)
+				 return-address code-vector))
+	  (multiple-value-bind (success-p type code ip)
+	      (match-code-pattern *primitive-funcall-patterns*
+				  code-vector (+ (* (- return-location
+						       (object-location code-vector))
+						    #.movitz:+movitz-fixnum-factor+)
+						 return-delta
+						 -3 -8 (- offset))
+				  :function-offset)
+	    (when success-p
+	      (return
+		(let* ((offset (case type
+				 (:signed8
+				  (if (not (logbitp 7 code)) code (- code 256)))
+				 (:signed32
+				  ;; We must read the unsigned-byte32 that starts at ip
+				  (let ((x (logior (aref code-vector (- ip 1))
+						       (* (aref code-vector (+ 0 ip)) #x100)
+						       (* (aref code-vector (+ 1 ip)) #x10000)
+						       (* (aref code-vector (+ 2 ip)) #x1000000))))
+				    (if (not (logbitp 7 (aref code-vector (+ ip 2))))
+					x
+				      (break "Negative 32-bit offset."))))
+				 (t (break "Match fail: vec: ~Z, ip: ~D"
+					   code-vector (+ (* (- return-location
+								(object-location code-vector))
+							     #.movitz:+movitz-fixnum-factor+)
+							  return-delta
+							  -3 -8)))))
+		       (primitive-function (%word-offset (%run-time-context-ref offset) -2)))
+		  (check-type primitive-function vector-u8)
+		  (if (not (location-in-object-p primitive-function eip-location))
+		      nil
+		    primitive-function))))))))))
