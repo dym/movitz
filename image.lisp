@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.64 2004/08/10 13:25:16 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.65 2004/08/18 09:15:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -265,12 +265,6 @@
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
    (fast-compare-real-fixnum
-    :binary-type code-vector-word
-    :initform nil
-    :map-binary-write 'movitz-intern-code-vector
-    :map-binary-read-delayed 'movitz-word-code-vector
-    :binary-tag :primitive-function)
-   (fast-eql
     :binary-type code-vector-word
     :initform nil
     :map-binary-write 'movitz-intern-code-vector
