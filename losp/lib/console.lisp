@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 14 18:14:16 2003
 ;;;;                
-;;;; $Id: console.lisp,v 1.4 2004/01/19 11:23:44 ffjeld Exp $
+;;;; $Id: console.lisp,v 1.5 2004/07/12 09:11:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -213,6 +213,7 @@
       (setf (console-char console x y)
 	(console-char console x (1+ y)))))
   (clear-line console 0 (1- (console-height console)))
+  (signal 'muerte::newline)
   nil)
 
 (defmethod scroll-down :after (console)
