@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.3 2004/02/02 13:40:36 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.4 2004/02/20 15:10:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -535,48 +535,16 @@
 	 nil))))
 
 (define-compiler-macro car (x)
-  `(with-inline-assembly-case (:side-effects nil)
-     (do-case (:ignore :nothing)
-       (:compile-form (:result-mode :ignore) ,x))
-     (do-case (t :eax)
-       (:compile-form (:result-mode :eax) ,x)
-       (:globally (:call (:edi (:edi-offset fast-car)))))))
+  `(let ((cell ,x))
+     (with-inline-assembly-case (:side-effects nil)
+       (do-case (t :register)
+	 (:cons-get :car (:lexical-binding cell) (:result-register))))))
 
 (define-compiler-macro cdr (x)
-  `(with-inline-assembly-case (:side-effects nil)
-     (do-case (:ignore :nothing)
-       (:compile-form (:result-mode :ignore) ,x))
-     (do-case (t :eax)
-       (:compile-form (:result-mode :eax) ,x)
-       (:globally (:call (:edi (:edi-offset fast-cdr)))))))
-
-#+ignore
-(define-compiler-macro cdr (x)
-  `(with-inline-assembly-case (:side-effects nil)
-     (do-case ((:boolean-branch-on-true :boolean-branch-on-false)
-	       :boolean-zf=0)
-       (:compile-form (:result-mode :eax) ,x)
-       (:leal (:eax -1) :ecx)
-       (:testb 3 :cl)
-       (:jnz '(:sub-program (cdr-failed)
-	       (:int 60)))
-       (:cmpl :edi (:eax 3)))
-     (do-case (:ignore :nothing)
-       (:warn "ignore cdr!"))
-     (do-case (:ecx :ecx)
-       (:compile-form (:result-mode :ecx) ,x)
-       (:decl :ecx)
-       (:testb 3 :cl)
-       (:jnz '(:sub-program (cdr-failed)
-	       (:int 60)))
-       (:movl (:ecx 4) :ecx))
-     (do-case (t :register)
-       (:compile-form (:result-mode :register) ,x)
-       (:leal ((:result-register) -1) :ecx)
-       (:testb 3 :cl)
-       (:jnz '(:sub-program (cdr-failed)
-	       (:int 60)))
-       (:movl ((:result-register) 3) (:result-register)))))
+  `(let ((cell ,x))
+     (with-inline-assembly-case (:side-effects nil)
+       (do-case (t :register)
+	 (:cons-get :cdr (:lexical-binding cell) (:result-register))))))
 
 (define-compiler-macro cadr (x)
   `(car (cdr ,x)))
@@ -633,14 +601,13 @@
      (:movl :ebx (:eax 3))))
 
 (define-compiler-macro endp (x)
-  (let ((endp-var (gensym "endp-var-")))
-    `(let ((,endp-var ,x))
-       (if ,endp-var
-	   (check-type ,endp-var list)
-	 t))))
+  `(let ((cell ,x))
+     (with-inline-assembly-case (:side-effects nil)
+       (do-case (t :same)
+	 (:endp (:lexical-binding cell) (:returns-mode))))))
 
 (define-compiler-macro cons (x y)
-  `(with-inline-assembly (:returns :eax :side-effects t)
+  `(with-inline-assembly (:returns :eax :side-effects nil :type cons)
      (:compile-two-forms (:eax :ebx) ,x ,y)
      (:globally (:call (:edi (:edi-offset fast-cons))))))
 
