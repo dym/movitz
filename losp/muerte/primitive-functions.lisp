@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.40 2004/08/23 13:51:57 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.41 2004/09/02 09:21:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -122,7 +122,7 @@ with EAX still holding the tag."
   (with-inline-assembly (:returns :push)
     (:pushl :ebp)
     (:movl :esp :ebp)			; set up a pseudo stack-frame
-    (:pushl 4)
+    (:pushl :edi)
     
     (:globally (:movl (:edi (:edi-offset unwind-protect-tag)) :edx))
     (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
@@ -637,77 +637,45 @@ BUFFER-SIZE is the number of words in the buffer."
      (find-class 'basic-restart))
     (t (find-class 'illegal-object))))
 
-(define-primitive-function push-current-values ()
-  "Push all current return-values on the stack. And, return number
-of values in ECX."
-  (with-inline-assembly (:returns :multiple-values)
-    (:jc 'maybe-not-exactly-one-value)
-    (:popl :edx)
-    (:movl 1 :ecx)
-    (:pushl :eax)
-    (:jmp :edx)				; return
-   maybe-not-exactly-one-value
-    ;; Set ECX=1 if CF=0
-    (:popl :edx)			; return address
-    (:jecxz 'done)
-    (:pushl :eax)
-    (:cmpl 1 :ecx)
-    (:jbe 'done)
-    (:pushl :ebx)
-    (:cmpl 2 :ecx)
-    (:jbe 'done)
-    (:subl 2 :ecx)
-    (:leal (:edi #.(movitz::global-constant-offset 'values)) :eax)
-    (:cmpl 127 :ecx)
-    (:ja '(:sub-program ()
-	   (:int 62)))
-   push-loop
-    (:locally (:pushl (:eax)))
-    (:addl 4 :eax)
-    (:subl 1 :ecx)
-    (:jnz 'push-loop)
-   push-done
-    (:locally (:movl (:edi (:edi-offset num-values)) :ecx))
-    (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 62)))
-    (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
-    (:addl 2 :ecx)
-   done
-    (:jmp :edx)))
-
 (define-primitive-function pop-current-values ()
-  "Input: ECX is number of values. Pop values into the standard
-location for the current multiple values (i.e. eax, ebx, and the values thread-wide array)."
+  "Input: ECX is (fixnum) number of values. Pop values into the standard location
+for the current multiple values (i.e. eax, ebx, CF, and the values run-time-context array).
+However, ESP is *NOT* reset, this must be done by the caller.
+The number of values (untagged) is returned in ECX, even if CF=0."
   (with-inline-assembly (:returns :multiple-values)
-    (:cmpl 1 :ecx)
+    (:testb #.movitz:+movitz-fixnum-zmask+ :cl)
+    (:jnz '(:sub-program () (:int 63)))
+    (:cmpl 4 :ecx)
     (:jb '(:sub-program (zero-values) (:stc) (:ret)))
-    (:popl :edx)
     (:je '(:sub-program (one-value)
-	   (:popl :eax)
+	   (:movl (:esp 4) :eax)
+	   (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
 	   (:clc)
-	   (:jmp :edx)))
-    (:cmpl 2 :ecx)
+	   (:ret)))
+    (:cmpl 8 :ecx)
     (:je '(:sub-program (two-values)
-	   (:popl :ebx)
-	   (:popl :eax)
+	   (:movl (:esp 8) :eax)
+	   (:movl (:esp 4) :ebx)
+	   (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
 	   (:stc)
-	   (:jmp :edx)))
+	   (:ret)))
     ;; three or more values
-    (:subl 2 :ecx)
-    (:shll #.movitz:+movitz-fixnum-shift+ :ecx)
+    (:subl 8 :ecx)
     (:locally (:movl :ecx (:edi (:edi-offset num-values))))
-    (:subl #.movitz:+movitz-fixnum-factor+ :ecx)
+    (:subl 4 :ecx)
+    (:xorl :edx :edx)			; pointer into stack
    pop-loop
-    (:locally (:popl (:edi (:ecx 1) (:edi-offset values))))
-    (:subl #.movitz:+movitz-fixnum-factor+ :ecx)
+    (:movl (:esp :edx 4) :eax)
+    (:locally (:movl :eax (:edi :ecx (:edi-offset values))))
+    (:addl 4 :edx)
+    (:subl 4 :ecx)
     (:jnc 'pop-loop)
-    (:locally (:movl (:edi (:edi-offset num-values)) :ecx))
+    (:leal (:edx 8) :ecx)
+    (:movl (:esp :edx 4) :ebx)
+    (:movl (:esp :edx 8) :eax)
     (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
-    (:popl :ebx)
-    (:popl :eax)
-    (:addl 2 :ecx)
     (:stc)
-    (:jmp :edx)))
+    (:ret)))
 
 (define-primitive-function assert-1arg ()
   "1 argument there must be."

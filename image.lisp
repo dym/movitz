@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.65 2004/08/18 09:15:14 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.66 2004/09/02 09:21:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -105,25 +105,6 @@
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
-   ;; various constants
-   (push-current-values
-    :binary-type code-vector-word
-    :initform nil
-    :map-binary-write 'movitz-intern-code-vector
-    :map-binary-read-delayed 'movitz-word-code-vector
-    :binary-tag :primitive-function)
-   (pop-current-values
-    :binary-type code-vector-word
-    :initform nil
-    :map-binary-write 'movitz-intern-code-vector
-    :map-binary-read-delayed 'movitz-word-code-vector
-    :binary-tag :primitive-function)
-   ;; function global constants
-;;;   (unbound-function
-;;;    :binary-type word
-;;;    :binary-tag :global-function
-;;;    :map-binary-read-delayed 'movitz-word
-;;;    :map-binary-write 'movitz-intern)   
    ;; per thread parameters
    (dynamic-env
     :binary-type lu32
@@ -174,6 +155,12 @@
     :map-binary-write 'movitz-read-and-intern
     :initform 'muerte::unbound)
    ;; primitive functions global constants
+   (pop-current-values
+    :binary-type code-vector-word
+    :initform nil
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)
    (dynamic-find-binding
     :map-binary-write 'movitz-intern-code-vector
     :binary-tag :primitive-function
