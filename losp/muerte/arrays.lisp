@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.31 2004/07/08 11:30:14 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.32 2004/07/08 15:28:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -205,7 +205,13 @@
 	     ((do-it ()
 		`(with-inline-assembly (:returns :eax)
 		   (:declare-label-set basic-vector-dispatcher
-				       (any-t character u8 unknown u32 unknown code unknown))
+				       ,(print (loop with x = (make-list 8 :initial-element 'unknown)
+					    for et in '(:any-t :character :u8 :u32 :code :bit)
+					    do (setf (elt x (bt:enum-value
+							     'movitz::movitz-vector-element-type
+							     et))
+						 et)
+					    finally (return x))))
 		   (:compile-two-forms (:eax :ebx) array index)
 		   (:movl (:eax ,movitz:+other-type-offset+) :ecx)
 		   (:cmpb ,(movitz:tag :basic-vector) :cl)
@@ -231,19 +237,19 @@
 			       ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
 		   
 		   (() () '(:sub-program (unknown) (:int 100)))
-		  u32
+		  :u32
 		   (:movl (:eax :ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))
 			  :ecx)
 		   (:call-global-constant box-u32-ecx)
 		   (:jmp 'return)
-		  u8 code
+		  :u8 :code
 		   (:movl :ebx :ecx)
 		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 		   (:movzxb (:eax :ecx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))
 			    :ecx)
 		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
 		   (:jmp 'return)
-		  character
+		  :character
 		   (:movl :ebx :ecx)
 		   (:movl :eax :ebx)
 		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
@@ -251,7 +257,16 @@
 		   (:movb (:ebx :ecx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))
 			  :ah)
 		   (:jmp 'return)
-		  any-t
+		  :bit
+		   (:movl :ebx :ecx)
+		   (:movl :eax :ebx)
+		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   (:xorl :eax :eax)
+		   (:btl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+		   (:jnc 'return)
+		   (:addl ,movitz:+movitz-fixnum-factor+ :eax)
+		   (:jmp 'return)
+		  :any-t
 		   (:movl (:eax :ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))
 			  :eax)
 		  return)))
@@ -274,13 +289,18 @@
 		   (:testb 7 :cl)
 		   (:jnz '(:sub-program (not-a-vector)
 			   (:compile-form (:result-mode :ignore)
-			    (error "Not a vector: ~S" vector))))
+			    (error "Not a vector: ~S." vector))))
 		   (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
 		   (:andl #xffff :ecx)
 		   (:testb ,movitz:+movitz-fixnum-zmask+ :dl)
 		   (:jnz '(:sub-program (not-an-index)
 			   (:compile-form (:result-mode :ignore)
-			    (error "Not a vector index: ~S" index))))
+			    (error "Not a vector index: ~S." index))))
+		   (:cmpl (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+			  :edx)
+		   (:jnc '(:sub-program (illegal-index)
+			   (:compile-form (:result-mode :ignore)
+			    (error "Index ~S out of range." index))))
 		   ;; t?
 		   (:cmpl ,(movitz:basic-vector-type-tag :any-t) :ecx)
 		   (:jne 'not-any-t-vector)
@@ -317,6 +337,7 @@
 		   (:jmp 'return)
 
 		  not-u8-vector
+		   ;; u32?
 		   (:cmpl ,(movitz:basic-vector-type-tag :u32) :ecx)
 		   (:jne 'not-u32-vector)
 		   (:call-global-constant unbox-u32)
@@ -325,6 +346,26 @@
 		   (:jmp 'return)
 
 		  not-u32-vector
+		   ;; bit?
+		   (:cmpl ,(movitz:basic-vector-type-tag :bit) :ecx)
+		   (:jne 'not-u8-vector)
+		   (:testl ,(logxor #xffffffff (* #x1 movitz:+movitz-fixnum-factor+))
+			   :eax)
+		   (:jne '(:sub-program (not-a-bit)
+			   (:compile-form (:result-mode :ignore)
+			    (error "Not a bit: ~S" value))))
+		   (:movl :edx :ecx)
+		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   
+		   (:testl :eax :eax)
+		   (:jnz 'set-one-bit)
+		   (:btrl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+		   (:jmp 'return)
+		  set-one-bit
+		   (:btsl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+		   (:jmp 'return)
+		   
+		  not-bit-vector
 		   (:compile-form (:result-mode :ignore)
 				  (error "Not a vector: ~S" vector))
 		  return)
@@ -554,11 +595,11 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
       (replace array initial-contents)))
     array))
 
-(defun make-basic-vector%u8 (dimensions fill-pointer initial-element initial-contents)
-  (let ((array (malloc-data-words (truncate (+ dimensions 3) 4))))
+(defun make-basic-vector%u8 (length fill-pointer initial-element initial-contents)
+  (let ((array (malloc-data-words (truncate (+ length 3) 4))))
     (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
 		  0 :lisp)
-      dimensions)
+      length)
     (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::type)
 		  0 :unsigned-byte32)
       #.(movitz:basic-vector-type-tag :u8))
@@ -566,12 +607,34 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
      (fill-pointer
       (setf (fill-pointer array) fill-pointer))
      ((array-has-fill-pointer-p array)
-      (setf (fill-pointer array) dimensions)))
+      (setf (fill-pointer array) length)))
     (cond
      (initial-element
       (check-type initial-element (unsigned-byte 8))
-      (dotimes (i dimensions)
+      (dotimes (i length)
 	(setf (u8ref%unsafe array i) initial-element)))
+     (initial-contents
+      (replace array initial-contents)))
+    array))
+
+(defun make-basic-vector%bit (length fill-pointer initial-element initial-contents)
+  (let ((array (malloc-data-words (truncate (+ length 31) 32))))
+    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
+		  0 :lisp)
+      length)
+    (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::type)
+		  0 :unsigned-byte32)
+      #.(movitz:basic-vector-type-tag :bit))
+    (cond
+     (fill-pointer
+      (setf (fill-pointer array) fill-pointer))
+     ((array-has-fill-pointer-p array)
+      (setf (fill-pointer array) length)))
+    (cond
+     (initial-element
+      (check-type initial-element (unsigned-byte 8))
+      (dotimes (i length)
+	(setf (aref array i) initial-element)))
      (initial-contents
       (replace array initial-contents)))
     array))
@@ -631,6 +694,8 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
       ;; These should be replaced by subtypep sometime.
       ((eq element-type 'character)
        (make-basic-vector%character dimensions fill-pointer initial-element initial-contents))
+      ((member element-type '(bit (unsigned-byte 1)) :test #'equal)
+       (make-basic-vector%bit dimensions fill-pointer initial-element initial-contents))
       ((member element-type '(u8 (unsigned-byte 8)) :test #'equal)
        (make-basic-vector%u8 dimensions fill-pointer initial-element initial-contents))
       ((member element-type '(u32 (unsigned-byte 32)) :test #'equal)
