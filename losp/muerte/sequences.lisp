@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.4 2004/01/28 21:06:08 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.5 2004/02/29 19:14:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -543,7 +543,21 @@
 	    (q first-sequence (cdr q)))
 	   ((or (null p) (null q))
 	    result-sequence)
-	 (setf (car p) (map (car q))))))))
+	 (setf (car p) (map (car q)))))
+      ((vector list)
+       (with-subvector-accessor (result-ref result-sequence)
+	 (do ((end (length result-sequence))
+	      (i 0 (1+ i))
+	      (p first-sequence (cdr p)))
+	     ((or (endp p) (>= i end)) result-sequence)
+	   (setf (result-ref i) (map (car p))))))
+      ((list vector)
+       (with-subvector-accessor (first-ref first-sequence)
+	 (do ((end (length first-sequence))
+	      (i 0 (1+ i))
+	      (p result-sequence (cdr p)))
+	     ((or (endp p) (>= i end)) result-sequence)
+	   (setf (car p) (map (first-ref i)))))))))
 
 (defun map-for-nil (function first-sequence &rest more-sequences)
   (numargs-case
