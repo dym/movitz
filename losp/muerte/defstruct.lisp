@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.5 2004/03/29 14:53:13 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.6 2004/04/18 23:16:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -57,9 +57,9 @@ Parameters: struct-name."
 		  (:compile-form (:result-mode :eax) object)
 		  (:leal (:eax ,(- (movitz:tag :other))) :ecx)
 		  (:testb 7 :cl)
-		  (:jne '(:sub-program (type-error) (:int 60)))
+		  (:jne '(:sub-program (type-error) (:int 66)))
 		  (:cmpb ,(movitz:tag :defstruct) (-2 :eax))
-		  (:jne '(:sub-program (type-error) (:int 60)))
+		  (:jne '(:sub-program (type-error) (:int 66)))
 		  ;; type test passed, read slot
 		  ,@(if (= 4 movitz::+movitz-fixnum-factor+)
 			`((:compile-form  (:result-mode :ebx) slot-number)
@@ -78,9 +78,9 @@ Parameters: struct-name."
 		  (:compile-two-forms (:eax :ebx) object slot-number)
 		  (:leal (:eax ,(- (movitz:tag :other))) :ecx)
 		  (:testb 7 :cl)
-		  (:jne '(:sub-program (type-error) (:int 60)))
+		  (:jne '(:sub-program (type-error) (:int 66)))
 		  (:cmpb ,(movitz:tag :defstruct) (-2 :eax))
-		  (:jne '(:sub-program (type-error) (:int 60)))
+		  (:jne '(:sub-program (type-error) (:int 66)))
 		  (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-struct 'movitz::length)) :ecx)
 		  (:leal ((:ecx ,movitz::+movitz-fixnum-factor+)) :ecx)
 		  (:testb ,movitz::+movitz-fixnum-zmask+ :bl)
@@ -99,12 +99,12 @@ Parameters: struct-name."
     (:compile-form (:result-mode :eax) object)
     (:leal (:eax #.(cl:- (movitz:tag :other))) :ecx)
     (:testb 7 :cl)
-    (:jne '(:sub-program (type-error) (:int 60)))
+    (:jne '(:sub-program (type-error) (:int 66)))
     (:cmpb #.(movitz:tag :defstruct) (-2 :eax))
-    (:jne '(:sub-program (type-error) (:int 60)))
+    (:jne '(:sub-program (type-error) (:int 66)))
     (:load-constant struct-name :ebx)
     (:cmpl :ebx (:eax #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)))
-    (:jne '(:sub-program (type-error) (:int 60)))
+    (:jne '(:sub-program (type-error) (:int 66)))
     ;; type test passed, read slot
     (:load-constant slot-number :ecx)
     (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
@@ -118,12 +118,12 @@ Parameters: struct-name."
     ;; type test
     (:leal (:ebx #.(cl:- (movitz:tag :other))) :ecx)
     (:testb 7 :cl)
-    (:jnz '(:sub-program (type-error) (:int 60)))
+    (:jnz '(:sub-program (type-error) (:int 66)))
     (:cmpb #.(movitz:tag :defstruct) (-2 :ebx))
-    (:jne '(:sub-program (type-error) (:int 60)))
+    (:jne '(:sub-program (type-error) (:int 66)))
     (:load-constant struct-name :ecx)
     (:cmpl :ecx (:ebx #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)))
-    (:jne '(:sub-program (type-error) (:int 60)))
+    (:jne '(:sub-program (type-error) (:int 66)))
     ;; type test passed, write slot
     (:load-constant slot-number :ecx)
     (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb  5 19:05:01 2001
 ;;;;                
-;;;; $Id: characters.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: characters.lisp,v 1.3 2004/04/18 23:16:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -26,7 +26,7 @@
   (with-inline-assembly (:returns :eax)
     (:compile-form (:result-mode :eax) character)
     (:cmpb #.(movitz::tag :character) :al)
-    (:jne '(:sub-program (not-a-character) (:int 60)))
+    (:jne '(:sub-program (not-a-character) (:int 66)))
     (:shrl #.(cl:- 8 movitz::+movitz-fixnum-shift+) :eax)))
 
 (defun code-char (code)
