@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.41 2004/04/01 17:27:03 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.42 2004/04/06 14:34:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,7 +28,7 @@ heuristics that fire. Used for debugging the optimizer.")
   "Allow the compiler to emit CMOV instructions, making the code
 incompatible with pre-pentium CPUs.")
   
-(defvar *compiler-auto-stack-checks-p* nil
+(defvar *compiler-auto-stack-checks-p* t
   "Make every compiled function check upon entry that the
 stack-pointer is within bounds. Costs 3 code-bytes and a few cycles.")
 
@@ -826,7 +826,8 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	       (let ((offset (cdr (assoc entry-label code-symtab))))
 		 (setf (slot-value funobj slot-name)
 		   (cons offset funobj))
-		 (vector-push offset code-vector)))
+		 (when (< offset #x100)
+		   (vector-push offset code-vector))))
 	      ((some (lambda (label) (assoc label code-symtab))
 		     (mapcar #'car rest))
 	       (vector-push 0 code-vector))))
@@ -4905,7 +4906,7 @@ preceding code). As secondary value, returns the new :returns value."
 	 (values (or (restore-by-pop :eax)
 		     `((:addl ,(* 4 stack-displacement) :esp)))
 		 :nothing))))))
-    
+
 (define-compiler compile-apply-symbol (&form form &funobj funobj &env env
 					     &result-mode result-mode)
   "3.1.2.1.2.3 Function Forms"
