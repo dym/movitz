@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.57 2004/07/29 16:18:47 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.58 2004/07/30 21:06:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -294,6 +294,11 @@
     :map-binary-write 'movitz-intern
     :map-binary-read-delayed 'movitz-word)
    (complicated-class-of
+    :binary-type word
+    :binary-tag :global-function
+    :map-binary-read-delayed 'movitz-word
+    :map-binary-write 'movitz-intern)
+   (complicated-compare
     :binary-type word
     :binary-tag :global-function
     :map-binary-read-delayed 'movitz-word

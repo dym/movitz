@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 20 00:39:59 2004
 ;;;;                
-;;;; $Id: ratios.lisp,v 1.2 2004/07/29 16:20:43 ffjeld Exp $
+;;;; $Id: ratios.lisp,v 1.3 2004/07/30 21:06:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -26,7 +26,6 @@
   numerator denominator)
 
 (defun make-rational (numerator denominator)
-  (assert (not (eq 0 denominator)))
   (check-type numerator integer)
   (check-type denominator integer)
   (cond

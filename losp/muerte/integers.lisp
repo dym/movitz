@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.87 2004/07/27 22:05:14 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.88 2004/07/30 21:06:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -47,11 +47,12 @@
 	    ;; Check that both numbers are bignums, and compare them.
 	    (:leal (:eax ,(- (movitz:tag :other))) :ecx)
 	    (:testb 7 :cl)
-	    (:jnz '(:sub-program (n1-not-bignum)
-		    (:int 64)))
+	    (:jnz '(:sub-program (go-complicated)
+		    (:globally (:movl (:edi (:edi-offset complicated-compare)) :esi))
+		    (:jmp (:esi (:offset movitz-funobj code-vector%2op)))))
 	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
 	    (:cmpb ,(movitz:tag :bignum) :cl)
-	    (:jne 'n1-not-bignum)
+	    (:jne 'go-complicated)
 
 	    (:cmpl :eax :ebx)		; If they are EQ, they are certainly =
 	    (:je '(:sub-program (n1-and-n2-are-eq)
@@ -59,12 +60,10 @@
 
 	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
 	    (:testb 7 :cl)
-	    (:jnz '(:sub-program (n2-not-bignum)
-		    (:movl :ebx :eax)
-		    (:int 64)))
+	    (:jnz 'go-complicated)
 	    (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
 	    (:cmpb ,(movitz:tag :bignum) :cl)
-	    (:jne 'n2-not-bignum)
+	    (:jne 'go-complicated)
 
 	    (:cmpb :ch (:eax (:offset movitz-bignum sign)))
 	    (:jne '(:sub-program (different-signs)
@@ -184,9 +183,9 @@ Preserve EAX and EBX."
 	   n2-not-fixnum
 	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
 	    (:testb 7 :cl)
-	    (:jnz '(:sub-program (not-integer)
-		    (:movl :ebx :eax)
-		    (:int 64)))
+	    (:jnz '(:sub-program (go-complicated)
+		    (:globally (:movl (:edi (:edi-offset complicated-compare)) :esi))
+		    (:jmp (:esi (:offset movitz-funobj code-vector%2op)))))
 	    (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
 	    (:cmpw ,(movitz:tag :bignum 0) :cx)
 	    (:jne 'not-plusbignum)
@@ -195,7 +194,7 @@ Preserve EAX and EBX."
 	    (:ret)
 	   not-plusbignum
 	    (:cmpw ,(movitz:tag :bignum #xff) :cx)
-	    (:jne 'not-integer)
+	    (:jne 'go-complicated)
 	    ;; compare ebx with something bigger
 	    (:cmpl #x-10000000 :edi)
 	    (:ret))))
@@ -211,8 +210,9 @@ Preserve EAX and EBX."
    not-fixnum
     (:leal (:eax #.(cl:- (movitz:tag :other))) :ecx)
     (:testb 7 :cl)
-    (:jnz '(:sub-program (not-integer)
-	    (:int 64)))
+    (:jnz '(:sub-program (go-complicated)
+	    (:globally (:movl (:edi (:edi-offset complicated-compare)) :esi))
+	    (:jmp (:esi (:offset movitz-funobj code-vector%2op)))))
     (:movl (:eax #.movitz:+other-type-offset+) :ecx)
     (:cmpw #.(movitz:tag :bignum 0) :cx)
     (:jne 'not-plusbignum)
@@ -221,10 +221,19 @@ Preserve EAX and EBX."
     (:ret)
    not-plusbignum
     (:cmpw #.(movitz:tag :bignum #xff) :cx)
-    (:jne 'not-integer)
+    (:jne 'go-complicated)
     ;; compare ebx with something bigger
     (:cmpl #x10000000 :edi)
     (:ret)))
+
+(defun complicated-compare (x y)
+  (let ((ix (* (numerator x) (denominator y)))
+	(iy (* (numerator y) (denominator x))))
+    (with-inline-assembly (:returns :multiple-values)
+      (:compile-two-forms (:eax :ebx) ix iy)
+      (:call-global-pf fast-compare-two-reals)
+      (:movl 1 :ecx)			; The real result is in EFLAGS.
+      (:movl :edi :eax))))
 
 ;;;
 
