@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.18 2004/07/22 01:02:22 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.19 2004/07/27 13:50:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -376,31 +376,28 @@
   (with-inline-assembly (:returns :nothing)
     (:sti)))
 
-(define-primitive-function primitive-software-interrupt ()
-  "A primitive code-vector that generates software interrupts."
-  (macrolet ((make-software-interrupt-code ()
-	       (cons 'progn
-		     (loop for vector from 0 to 255
-			 collect `(with-inline-assembly (:returns :nothing)
-				    ;; Each code-entry is 2+1+1=4 bytes.
-				    ((2) :int ,vector)
-				    ((1) :ret)
-				    ((1) :nop))))))
-    (make-software-interrupt-code)))
-
-(defun software-interrupt (interrupt-vector &optional (eax 0) (ebx 0))
-  "Generate software-interrupt number <interrupt-vector>."
+(defun raise-exception (exception &optional (eax 0) (ebx 0))
+  "Generate a CPU exception, with those values in EAX and EBX."
   ;; The problem now is that the x86 INT instruction only takes an
   ;; immediate argument.
-  ;; Hence the primitive-function primitive-software-interrupt.
-  (check-type interrupt-vector (unsigned-byte 8))
-  (let ((code-vector (symbol-value 'primitive-software-interrupt)))
-    (check-type code-vector vector)
-    (with-inline-assembly-case ()
-      (do-case (t :nothing)
-	(:compile-two-forms (:ecx :edx) interrupt-vector code-vector)
-	(:leal (:edx :ecx 2) :ecx)
-	(:compile-two-forms (:eax :ebx) eax ebx)
-	(:shrl 2 :eax)
-	(:shrl 2 :ebx)
-	(:call :ecx)))))
+  (check-type exception (unsigned-byte 8))
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :eax)
+	    (:load-lexical (:lexical-binding eax) :eax)
+	    (:load-lexical (:lexical-binding ebx) :ebx)
+	    (:load-lexical (:lexical-binding exception) :ecx)
+	    (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	    (:jnz 'not-0)
+	    (:int 0)
+	    (:jmp 'done)
+	   not-0
+	    ,@(loop for i from 1 to 255 as label = (gensym (format nil "not-~D" i))
+		  appending
+		    `((:decl :ecx)
+		      (:jnz ',label)
+		      (:int ,i)
+		      ;; (:jmp 'done)
+		      ,label))
+	   done)))
+    (do-it)))
