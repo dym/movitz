@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.7 2004/10/21 20:52:11 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.8 2004/11/23 16:14:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -25,11 +25,22 @@
 	   #:read-ip4-address
 	   #:ip4-address
 	   #:ip4-test
-	   #:ip4-free))
-
-(require :lib/net/arp)
+	   #:ip4-free
+	   #:*ip4-nic*
+	   #:*ip4-ip*))
 
 (in-package muerte.ip4)
+
+(defvar *ip4-nic* nil)
+(defvar *ip4-ip* nil)
+
+(defmacro ip4-ref (packet start offset type)
+  `(memref ,packet (+ (muerte:movitz-type-slot-offset 'movitz-basic-vector 'data)
+		      ,start ,offset)
+	   :endian :big
+	   :type ,type))
+
+(require :lib/net/arp)
 
 (defclass ip4-stack ()
   ((interface
@@ -62,10 +73,11 @@
   (20 options))
 
 (defun ip-protocol (packet &optional (start 14))
-  (aref packet (+ start +ip-header-protocol+)))
+  (ip4-ref packet start +ip-header-protocol+ :unsigned-byte8))
 
 (defun ip-header-length (packet &optional (start 14))
-  (ldb (byte 4 0) (aref packet (+ start +ip-header-version-header-length+))))
+  (ldb (byte 4 0)
+       (ip4-ref packet start +ip-header-version-header-length+ :unsigned-byte8)))
 
 (defun checksum-ok (x)
   (= #xffff
@@ -160,8 +172,6 @@
        (warn "Received unknown ARP packet of type ~D~@[ ~A~]"
 	     (arp-operation packet start)
 	     (integer-name 'arp-op (arp-operation packet start) nil)))))
-	   
-
 
 ;;; ICMP
 
@@ -173,27 +183,27 @@
   (8 echo-request))
 
 (defun icmp-type (packet &optional (start 34))
-  (aref packet start))
+  (ip4-ref packet start 0 :unsigned-byte8))
 
 (defun (setf icmp-type) (value packet &optional (start 34))
-  (setf (aref packet start) value))
+  (setf (ip4-ref packet start 0 :unsigned-byte8)
+    value))
 
 (defun icmp-code (packet &optional (start 34))
-  (aref packet (1+ start)))
+  (ip4-ref packet start 1 :unsigned-byte8))
 
 (defun icmp-checksum (packet &optional (start 34))
-  (bvref-u16 packet start 2))
+  (ip4-ref packet start 2 :unsigned-byte16))
 
 (defun icmp-identifier (packet &optional (start 34))
-  (bvref-u16 packet start 4))
+  (ip4-ref packet start 4 :unsigned-byte16))
 
 (defun icmp-seqno (packet &optional (start 34))
-  (bvref-u16 packet start 6))
+  (ip4-ref packet start 6 :unsigned-byte16))
 
 (defun (setf icmp-checksum) (value packet &optional (start 34))
-  (setf (aref packet (+ start 2)) (ldb (byte 8 8) value)
-	(aref packet (+ start 3)) (ldb (byte 8 0) value))
-  value)
+  (setf (ip4-ref packet start 2 :unsigned-byte16)
+    value))
 
 (defmethod icmp-input ((stack ip4-stack) packet ip-start icmp-start)
   (named-integer-case icmp-type (icmp-type packet icmp-start)
@@ -253,20 +263,20 @@
 ;;;; UDP
 
 (defun udp-src-port (packet &optional (start 34))
-  (bvref-u16 packet start 0))
+  (ip4-ref packet start 0 :unsigned-byte16))
 
 (defun (setf udp-src-port) (value packet &optional (start 34))
-  (setf (bvref-u16 packet start 0) value))
+  (setf (ip4-ref packet start 0 :unsigned-byte16)
+    value))
 
 (defun udp-dst-port (packet &optional (start 34))
-  (bvref-u16 packet start 2))
+  (ip4-ref packet start 2 :unsigned-byte16))
 
 (defun udp-length (packet &optional (start 34))
-  (bvref-u16 packet start 4))
+  (ip4-ref packet start 4 :unsigned-byte16))
 
 (defun udp-checksum (packet &optional (start 34))
-  (bvref-u16 packet start 6))
-
+  (ip4-ref packet start 6 :unsigned-byte16))
 
 (defmethod udp-input ((stack ip4-stack) packet ip-start udp-start)
   (warn "Got UDP packet of length ~D from ~@v/ip4:pprint-ip4/."
@@ -296,22 +306,24 @@
   (5 urg))
 
 (defun tcp-src-port (packet &optional (start 34))
-  (bvref-u16 packet start +tcp-header-src-port+))
+  (ip4-ref packet start +tcp-header-src-port+ :unsigned-byte16))
 
 (defun tcp-dst-port (packet &optional (start 34))
-  (bvref-u16 packet start +tcp-header-dst-port+))
+  (ip4-ref packet start +tcp-header-dst-port+ :unsigned-byte16))
 
 (defun tcp-header-length (packet &optional (start 34))
-  (ldb (byte 4 4) (aref packet (+ start +tcp-header-flags-length+))))
+  (ldb (byte 4 4)
+       (ip4-ref packet start +tcp-header-flags-length+ :unsigned-byte8)))
 
 (defun tcp-flags (packet &optional (start 34))
-  (ldb (byte 6 0) (aref packet (+ start +tcp-header-flags-length+ 1))))
+  (ldb (byte 6 0)
+       (ip4-ref packet start (+ +tcp-header-flags-length+ 1) :unsigned-byte8)))
 
 (defun tcp-window-size (packet &optional (start 34))
-  (bvref-u16 packet start +tcp-header-window-size+))
+  (ip4-ref packet start +tcp-header-window-size+ :unsigned-byte16))
 
 (defun tcp-checksum (packet &optional (start 34))
-  (bvref-u16 packet start +tcp-header-checksum+))
+  (ip4-ref packet start +tcp-header-checksum+ :unsigned-byte16))
 
 (defun print-flags (x set)
   (loop with first = t
@@ -383,23 +395,23 @@
     (setf *ne2000* nil))
   (values))
 
-(defvar *ne2000* nil)
+(defun ip4-init ()
+  (unless *ip4-nic*
+    (let ((ethernet
+	   (some #'muerte.x86-pc.ne2k:ne2k-probe
+		 muerte.x86-pc.ne2k:+ne2k-probe-addresses+)))
+      (assert ethernet ethernet "No ethernet device.")
+      (setf *ip4-nic* ethernet)))
+  (unless *ip4-ip*
+    (setf *ip4-ip* (ip4-address :129.242.16.173)))
+  (values *ip4-nic* *ip4-ip*))
 
-(defun ip4-test (&key (ip #(129 242 16 173))
-		      (ethernet *ne2000*)
-		      (router #(129 242 16 1)))
-  (unless ethernet
-    (setf ethernet
-      (some #'muerte.x86-pc.ne2k:ne2k-probe
-	    muerte.x86-pc.ne2k:+ne2k-probe-addresses+))
-    (assert ethernet ethernet "No ethernet device.")
-    (when ethernet
-      (setf (promiscuous-p ethernet) nil
-	    (accept-broadcasts-p ethernet) t)
-      (setf *ne2000* ethernet)))
-  (let ((stack (make-instance 'ip4-stack
-		 :interface ethernet
-		 :address (ip4-address ip))))
+(defun ip4-test (&key (router #(129 242 16 1)))
+  (ip4-init)
+  (let ((ethernet *ip4-nic*)
+	(stack (make-instance 'ip4-stack
+		 :interface *ip4-nic*
+		 :address *ip4-ip*)))
     (when router
       (transmit (interface stack)
 		(format-ethernet-packet (format-arp-request nil +arp-op-request+
