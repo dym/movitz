@@ -8,25 +8,48 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.4 2004/01/19 19:21:08 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.5 2004/02/02 09:59:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (in-package movitz)
 
-(defvar *warn-function-change-p* t)
-(defvar *explain-peephole-optimizations* nil)
+(defvar *warn-function-change-p* t
+  "Emit a warning whenever a named function's code-vector changes size.")
 
-(defvar *compiler-do-optimize* t)
-(defvar *compiler-use-cmov-p* nil)
-(defvar *compiler-auto-stack-checks-p* nil)
+(defvar *compiler-do-optimize* t
+  "Apply the peephole optimizer to function code.")
+
+(defvar *explain-peephole-optimizations* nil
+  "Emit some cryptic information about which peephole optimization
+heuristics that fire. Used for debugging the optimizer.")
+
+(defvar *compiler-use-cmov-p* nil
+  "Allow the compiler to emit CMOV instructions, making the code
+incompatible with pre-pentium CPUs.")
+  
+(defvar *compiler-auto-stack-checks-p* nil
+  "Make every compiled function check upon entry that the
+stack-pointer is within bounds. Costs 3 code-bytes and a few cycles.")
+
 (defvar *compiler-allow-transients* t
   "Allow the compiler to keep function arguments solely in registers.
 Hurst debugging, improves performance.")
-(defvar *compiler-local-segment-prefix* '(:fs-override))
-(defvar *compiler-global-segment-prefix* nil)
-(defvar *compiler-compile-eval-whens* t)
-(defvar *compiler-compile-macro-expanders* t)
+
+(defvar *compiler-local-segment-prefix* '(:fs-override)
+  "Use these assembly-instruction prefixes when accessing the thread-local
+run-time context.")
+
+(defvar *compiler-global-segment-prefix* nil
+  "Use these assembly-instruction prefixes when accessing the global
+run-time context.")
+
+(defvar *compiler-compile-eval-whens* t
+  "When encountering (eval-when (:compile-toplevel) <code>),
+compile, using the host compiler, the code rather than just using eval.")
+
+(defvar *compiler-compile-macro-expanders* t
+  "For macros of any kind, compile the macro-expanders using the host compiler.")
 
 (defvar *compiling-function-name*)
 (defvar muerte.cl:*compile-file-pathname* nil)
