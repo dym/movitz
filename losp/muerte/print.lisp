@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.10 2004/06/02 23:50:34 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.11 2004/07/08 15:23:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -263,6 +263,10 @@
 		   (write-string "#:" stream))
 		 (write-symbol-name object stream))
 		(t (error "Huh?")))))
+	    (bit-vector
+	     (write-string "#*")
+	     (dotimes (i (length object))
+	       (write (aref object i) :radix nil)))
 	    (vector
 	     (let ((level *print-level*)
 		   (length *print-length*))
