@@ -1,16 +1,16 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001, 
-;;;;    Department of Computer Science, University of Tromsø, Norway.
+;;;;    Copyright (C) 2001, 2004
+;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
 ;;;; 
 ;;;; Filename:      movitz-mode.el
-;;;; Description:   
+;;;; Description:   Modifies Franz' ELI slightly to integrate with Movitz.
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep 27 18:12:17 2001
 ;;;;                
-;;;; $Id: movitz-mode.el,v 1.4 2004/05/19 14:56:46 ffjeld Exp $
+;;;; $Id: movitz-mode.el,v 1.5 2004/05/19 14:57:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
