@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:52:58 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: movitz.lisp,v 1.9 2004/07/29 00:13:09 ffjeld Exp $
+;;;; $Id: movitz.lisp,v 1.10 2004/11/15 14:42:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -31,7 +31,7 @@
     (ldb (byte 32 0)
 	 (- +code-vector-word-offset+)))
 
-(defconstant +movitz-multiple-values-limit+ 127)
+(defvar +movitz-multiple-values-limit+ 63)
 
 (defvar *bq-level* 0)
 (defvar *default-image-init-file* #p"losp/los0.lisp")
