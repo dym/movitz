@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.3 2004/04/13 16:55:17 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.4 2004/04/15 13:18:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -111,18 +111,12 @@
     (:locally (:pushl (:edi (:edi-offset num-values))))
     
     ;; call handler
-    (:movl (:ebp 4) :ebx)		; interrupt number into EBX
+    (:movl (:ebp 4) :ecx)		; interrupt number into ECX
     (:locally (:movl (:edi (:edi-offset interrupt-handlers)) :eax))
-    (:movl (:eax 2 (:ebx 4)) :eax)	; symbol at (aref EBX interrupt-handlers) into :esi
-    (:leal (:eax -7) :ecx)
-    (:testb 7 :cl)
-    (:jnz 'skip-interrupt-handler)	; if it's not a symbol, never mind.
-    (:movl (:eax #.(movitz::slot-offset 'movitz::movitz-symbol 'movitz::function-value))
-	   :esi)			; load new funobj from symbol into ESI
+    (:movl (:eax 2 (:ecx 4)) :esi)	; funobj at (aref EBX interrupt-handlers) into :esi
     (:movl :ebp :ebx)			; pass interrupt-frame as arg1
-    ;; (:movl :ebx (:ebp -4))		; put interrupt-frame as our fake stack-frame's funobj.
-    (:movl (:ebp 4) :eax)		; pass interrupt number as arg 0.
-    (:shll #.movitz::+movitz-fixnum-shift+ :eax)
+    (:movl (:ebp 4) :ecx)		; pass interrupt number as arg 0.
+    (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :eax)
     (:call (:esi #.(movitz::slot-offset 'movitz::movitz-funobj 'movitz::code-vector%2op)))
 
    skip-interrupt-handler
@@ -251,8 +245,7 @@
     (svref vector n)))
 
 (defun (setf interrupt-handler) (handler n)
-  (check-type handler symbol)
-  (assert (fboundp handler))
+  (check-type handler function)
   (let ((vector (load-global-constant interrupt-handlers)))
     (setf (svref vector n) handler)))
 
