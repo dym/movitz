@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.17 2004/08/16 08:26:40 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.18 2004/09/02 09:44:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -736,23 +736,18 @@
 	 (sequence-dispatch sequence-2
 	   (vector
 	    (setf end2 (or end2 (length sequence-2)))
-	    (vector-double-dispatch (sequence-1 sequence-2)
-	      ((:u8 :u8)
-	       (memcopy sequence-1 sequence-2 2 start1 start2
-			(min (- end1 start1) (- end2 start2))
-			:unsigned-byte8))
-	      (t (with-subvector-accessor (sequence-1-ref sequence-1 start1 end1)
-		   (with-subvector-accessor (sequence-2-ref sequence-2 start2 end2)
-		     (cond
-		      ((< (- end1 start1) (- end2 start2))
-		       (do ((i start1 (1+ i))
-			    (j start2 (1+ j)))
-			   ((>= i end1) sequence-1)
-			 (setf (sequence-1-ref i) (sequence-2-ref j))))
-		      (t (do ((i start1 (1+ i))
-			      (j start2 (1+ j)))
-			     ((>= j end2) sequence-1)
-			   (setf (sequence-1-ref i) (sequence-2-ref j))))))))))
+	    (with-subvector-accessor (sequence-1-ref sequence-1 start1 end1)
+	      (with-subvector-accessor (sequence-2-ref sequence-2 start2 end2)
+		(cond
+		 ((< (- end1 start1) (- end2 start2))
+		  (do ((i start1 (1+ i))
+		       (j start2 (1+ j)))
+		      ((>= i end1) sequence-1)
+		    (setf (sequence-1-ref i) (sequence-2-ref j))))
+		 (t (do ((i start1 (1+ i))
+			 (j start2 (1+ j)))
+			((>= j end2) sequence-1)
+		      (setf (sequence-1-ref i) (sequence-2-ref j))))))))
 	   (list
 	    (with-subvector-accessor (sequence-1-ref sequence-1 start1 end1)
 	      (if (not end2)
