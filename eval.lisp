@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  2 17:45:05 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: eval.lisp,v 1.2 2004/01/19 11:23:41 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.3 2004/03/26 01:43:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -97,7 +97,8 @@
   (declare (ignore top-level-p))
   (cond
    ((typep (movitz-binding form env) 'constant-object-binding)
-    (movitz-print (constant-object (movitz-binding form env))))
+    (translate-program (movitz-print (constant-object (movitz-binding form env)))
+		       :cl :muerte.cl))
    ((movitz-constantp form env)
     (symbol-value form))
 ;;;   ((movitz-lexical-binding form env)
