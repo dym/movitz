@@ -6,15 +6,25 @@
 ;;;;    For distribution policy, see the accompanying file COPYING.
 ;;;; 
 ;;;; Filename:      load.lisp
-;;;; Description:   
+;;;; Description:   Load the Movitz development system.
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Jan 15 18:40:58 2004
 ;;;;                
-;;;; $Id: load.lisp,v 1.8 2004/02/10 18:06:22 ffjeld Exp $
+;;;; $Id: load.lisp,v 1.9 2004/02/13 22:17:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (in-package :cl-user)
+
+#+lispworks-personal-edition (progn
+			       (dbg::clear-all-source-level-debugging)
+			       (hcl:toggle-source-debugging nil)
+			       (compiler::clear-xref-info t)
+			       (setf compiler:*source-level-debugging* nil
+				     compiler:*load-xref-info* nil
+				     compiler:*produce-xref-info* nil)
+			       (proclaim '(optimize (space 3) (speed 0) 
+					   (debug 0) (compilation-speed 3))))
 
 (load (compile-file #p"../binary-types/binary-types"))
 
@@ -61,6 +71,7 @@
 		  #+cmu (setf bt::*ignore-hidden-slots-for-pcl* t)
 		  (mapcar (lambda (path)
 			    (do () (nil)
+			      #+lispworks-personal-edition (hcl:mark-and-sweep 3)
 			      (with-simple-restart (retry "Retry loading ~S" path)
 				(return
 				  (handler-bind 
@@ -86,5 +97,14 @@
 			    "special-operators"
 			    "special-operators-cl"))))))
 
-#+cmu18 (setf movitz:*compiler-compile-eval-whens* nil
-	      movitz:*compiler-compile-macro-expanders* nil)
+#+(and cmu18 (not cmu19))
+(setf movitz:*compiler-compile-eval-whens* nil
+      movitz:*compiler-compile-macro-expanders* nil)
+
+#+lispworks (load "muerte-packages")	; work around an apparent bug in defpackage.
+#+lispworks-personal-edition
+(progn
+  ;; (setf movitz:*compiler-compile-eval-whens* nil)
+  (setf movitz::*compiler-do-optimize-p* nil
+	movitz::*compiler-do-type-inference* nil)
+  (mark-and-sweep 3))
