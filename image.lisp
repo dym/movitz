@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.1 2004/01/13 11:04:59 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.2 2004/01/15 17:36:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1378,9 +1378,10 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 			   (movitz-print (movitz-funobj-code-vector funobj)))))
       (when verbose
 	(pprint command) (terpri) (force-output))
-      (if destination
-	  (excl::run-shell-command (format nil "./udp6-send.py ~A 1 ~S" destination command))
-	command))))
+      command
+      #+allegro (if destination
+		    (excl::run-shell-command (format nil "./udp6-send.py ~A 1 ~S" destination command))
+		  command))))
 	    
 
 ;;; "Printer"
