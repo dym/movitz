@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.8 2004/02/10 18:06:44 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.9 2004/02/12 17:54:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -975,60 +975,75 @@ on the current result."
 		   :form term-form)
 	       (assert term2-type)
 	       (let ((term2-type (type-specifier-primary term2-type)))
+;;;		 (declare (ignore term2-type))
 ;;;		 (warn "t2-type: ~S, t2-ret: ~S, rm: ~S"
 ;;;		       term2-type term2-returns result-mode)
-		 (declare (ignore term2-type))
-		 (case term2-returns
-		   (:untagged-fixnum-eax
-		    (case result-mode
-		      (:untagged-fixnum-eax
-		       (compiler-values ()
-			 :returns :untagged-fixnum-eax
-			 :type 'integer
-			 :functional-p term2-functional-p
-			 :modifies term2-modifies
-			 :code (append term2-code
-				       `((:addl ,constant-term :eax))
-				       (unless (< #x-10000 constant-term #x10000)
-					 '((:into))))))
-		      (t (let ((result-register (accept-register-mode result-mode)))
-			   ;; (warn "XX")
-			   (compiler-values ()
-			     :returns result-register
-			     :modifies term2-modifies
-			     :functional-p term2-functional-p
-			     :code (append term2-code
-					   `((:leal ((:eax ,+movitz-fixnum-factor+)
-						     ,(* +movitz-fixnum-factor+ constant-term))
-						    ,result-register))))))))
-		   (t (multiple-value-bind (new-load-term-code add-result-mode)
-			  (make-result-and-returns-glue (accept-register-mode term2-returns)
-							term2-returns
-							term2-code)
-			(let ((add-register (single-value-register add-result-mode))
-			      (label (gensym "not-integer-")))
+		 (cond
+		  #+ignore
+		  ((and (eq 'binding-type (operator term2-type))
+			(eq (second term2-type) result-mode))
+		   (let ((binding result-mode))
+		     (check-type binding lexical-binding)
+		     (warn "yes, for ~S" binding)
+		     (compiler-values ()
+		       :returns binding
+		       :type (binding-type-specifier binding)
+		       :code (append
+			      (compiler-call #'compile-form-unprotected
+				:result-mode :ignore
+				:defaults all
+				:form term-form)
+			      `((:incf-lexvar ,binding ,constant-term))))))
+		  ((eq :untagged-fixnum-eax term2-returns)
+		   (case result-mode
+		     (:untagged-fixnum-eax
+		      (compiler-values ()
+			:returns :untagged-fixnum-eax
+			:type 'integer
+			:functional-p term2-functional-p
+			:modifies term2-modifies
+			:code (append term2-code
+				      `((:addl ,constant-term :eax))
+				      (unless (< #x-10000 constant-term #x10000)
+					'((:into))))))
+		     (t (let ((result-register (accept-register-mode result-mode)))
+			  ;; (warn "XX")
 			  (compiler-values ()
-			    :returns add-register
-			    :functional-p term2-functional-p
+			    :returns result-register
 			    :modifies term2-modifies
-			    :type 'integer
-			    :code (append
-				   new-load-term-code
-				   (unless nil
-				     #+ignore (subtypep (translate-program term2-type :muerte.cl :cl)
-							`(integer ,+movitz-most-negative-fixnum+
-								  ,+movitz-most-positive-fixnum+))
-				     `((:testb ,+movitz-fixnum-zmask+
-					       ,(register32-to-low8 add-register))
-				       (:jnz '(:sub-program (,label) (:int 107) (:jmp (:pc+ -4))))))
-				   `((:addl ,(* constant-term +movitz-fixnum-factor+) ,add-register))
-				   (unless nil
-				     #+ignore (subtypep (translate-program term2-type :muerte.cl :cl)
-							`(integer ,(+ +movitz-most-negative-fixnum+
-								      constant-term)
-								  ,(+ +movitz-most-positive-fixnum+
-								      constant-term)))
-				     '((:into)))))))))))))
+			    :functional-p term2-functional-p
+			    :code (append term2-code
+					  `((:leal ((:eax ,+movitz-fixnum-factor+)
+						    ,(* +movitz-fixnum-factor+ constant-term))
+						   ,result-register))))))))
+		  (t (multiple-value-bind (new-load-term-code add-result-mode)
+			 (make-result-and-returns-glue (accept-register-mode term2-returns)
+						       term2-returns
+						       term2-code)
+		       (let ((add-register (single-value-register add-result-mode))
+			     (label (gensym "not-integer-")))
+			 (compiler-values ()
+			   :returns add-register
+			   :functional-p term2-functional-p
+			   :modifies term2-modifies
+			   :type 'integer
+			   :code (append
+				  new-load-term-code
+				  (unless nil
+				    #+ignore (subtypep (translate-program term2-type :muerte.cl :cl)
+						       `(integer ,+movitz-most-negative-fixnum+
+								 ,+movitz-most-positive-fixnum+))
+				    `((:testb ,+movitz-fixnum-zmask+
+					      ,(register32-to-low8 add-register))
+				      (:jnz '(:sub-program (,label) (:int 107) (:jmp (:pc+ -4))))))
+				  `((:addl ,(* constant-term +movitz-fixnum-factor+) ,add-register))
+				  (unless nil
+				    #+ignore (subtypep (translate-program term2-type :muerte.cl :cl)
+						       `(integer ,(+ +movitz-most-negative-fixnum+
+								     constant-term)
+								 ,(+ +movitz-most-positive-fixnum+
+								     constant-term)))
+				    '((:into)))))))))))))
       (cond
        ((and (movitz-constantp term1 env)
 	     (movitz-constantp term2 env))

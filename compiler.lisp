@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.21 2004/02/10 18:05:54 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.22 2004/02/12 17:54:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -158,10 +158,11 @@ Gensym a name whose symbol-function is set to the macro-expander, and return tha
 		      (format *error-output*
 			      "~&;; While Movitz compiling ~S in ~A:"
 			      name muerte.cl:*compile-file-pathname*)))))
-    (register-function-code-size
-     (make-compiled-funobj-pass2
-      (make-compiled-funobj-pass1 name lambda-list declarations
-				  form env top-level-p :funobj funobj)))))
+    (with-retries-until-true (retry-funobj "Retry compilation of ~S." name)
+      (register-function-code-size
+       (make-compiled-funobj-pass2
+	(make-compiled-funobj-pass1 name lambda-list declarations
+				    form env top-level-p :funobj funobj))))))
 
 (defun make-compiled-funobj-pass1 (name lambda-list declarations form env top-level-p
 				   &key funobj)
@@ -324,9 +325,15 @@ Otherwise coerce funobj to class."
 	(analyze-bindings
 	 (resolve-sub-functions toplevel-funobj function-binding-usage)))))))
 
+(defstruct (type-analysis (:type list))
+  (binding-types)
+  (encoded-type
+   (multiple-value-list (type-specifier-encode nil))))
+
 (defun analyze-bindings (toplevel-funobj)
   "Figure out usage of bindings in a toplevel funobj."
-  (let ((bindings ()))
+  (let ((more-binding-references-p nil)
+	(binding-usage (make-hash-table :test 'eq)))
     (labels ((type-is-t (type-specifier)
 	       (or (eq type-specifier t)
 		   (and (listp type-specifier)
@@ -338,16 +345,36 @@ Otherwise coerce funobj to class."
 	       (assert (or (typep type 'binding)
 			   (eql 1 (type-specifier-num-values type))) ()
 		 "store-lexical with multiple-valued type: ~S for ~S" type binding)
-	       (pushnew binding bindings)
-	       (pushnew (translate-program type :muerte.cl :cl)
-			(binding-store-type binding)))
+	       (let ((analysis (or (gethash binding binding-usage)
+				   (setf (gethash binding binding-usage)
+				     (make-type-analysis)))))
+		 (cond
+		  ((and (consp type) (eq 'binding-type (car type)))
+		   (let ((target-binding (binding-target (cadr type))))
+		     (cond
+		      ((eq binding target-binding))
+		      ((typep binding 'constant-object-binding)
+		       (setf (type-analysis-encoded-type analysis)
+			 (multiple-value-list
+			  (multiple-value-call
+			      #'encoded-types-or 
+			    (values-list (type-analysis-encoded-type analysis))
+			    (member-type-encode (constant-object target-binding))))))
+		      (t (pushnew target-binding (type-analysis-binding-types analysis))
+			 (setf more-binding-references-p t)))))
+		  (t (setf (type-analysis-encoded-type analysis)
+		       (multiple-value-list
+			(multiple-value-call
+			    #'encoded-types-or 
+			  (values-list (type-analysis-encoded-type analysis))
+			  (type-specifier-encode type))))))))
 	     (analyze-code (code)
 	       (dolist (instruction code)
 		 (when (listp instruction)
 		   (multiple-value-bind (store-binding store-type)
 		       (find-written-binding-and-type instruction)
 		     (when store-binding
-		       (analyze-store store-binding store-type)))
+		       (analyze-store (binding-target store-binding) store-type)))
 		   (analyze-code (instruction-sub-program instruction)))))
 	     (analyze-funobj (funobj)
 	       (loop for (nil . function-env) in (function-envs funobj)
@@ -355,12 +382,60 @@ Otherwise coerce funobj to class."
 	       (loop for function-binding in (sub-function-binding-usage funobj) by #'cddr
 		   do (analyze-funobj (function-binding-funobj function-binding)))
 	       funobj))
+;;;      ;; 1. Examine each store to lexical bindings.
 ;;;      (analyze-funobj toplevel-funobj)
-;;;      (dolist (binding bindings)
-;;;	(let ((types (binding-store-type binding)))
-;;;	  (when (or t (notany #'type-is-t types))
-;;;	    (warn "binding: ~S~%      types: ~S"
-;;;		  binding types))))
+;;;      ;; 2.
+;;;      (loop repeat 10 while more-binding-references-p
+;;;	  doing
+;;;	    (setf more-binding-references-p nil)
+;;;	    (maphash (lambda (binding analysis)
+;;;		       (dolist (target-binding (type-analysis-binding-types analysis))
+;;;			 (let* ((target-analysis
+;;;				 (or (gethash target-binding binding-usage)
+;;;				     (and (typep target-binding 'function-argument)
+;;;					  (make-type-analysis
+;;;					   :encoded-type (multiple-value-list
+;;;							  (type-specifier-encode t))))
+;;;				     (error "Type-reference by ~S to unknown binding ~S"
+;;;					    binding target-binding)))
+;;;				(new-type (setf (type-analysis-encoded-type analysis)
+;;;					    (multiple-value-list
+;;;					     (multiple-value-call
+;;;						 #'encoded-types-or 
+;;;					       (values-list
+;;;						(type-analysis-encoded-type analysis))
+;;;					       (values-list
+;;;						(type-analysis-encoded-type target-analysis)))))))
+;;;			   (cond
+;;;			    ((apply #'encoded-allp new-type)
+;;;			     ;; If the type is already T, no need to look further.
+;;;			     (setf (type-analysis-binding-types analysis) nil))
+;;;			    ((setf (type-analysis-binding-types analysis)
+;;;			       (remove target-binding
+;;;				       (remove binding
+;;;					       (union (type-analysis-binding-types analysis)
+;;;						      (type-analysis-binding-types target-analysis)))))
+;;;			     (setf more-binding-references-p t))))))
+;;;		     binding-usage))
+;;;      (when more-binding-references-p
+;;;	(warn "Unable to remove all binding-references duding lexical type analysis."))
+;;;      ;; 3.
+;;;      (maphash (lambda (binding analysis)
+;;;		 (assert (null (type-analysis-binding-types analysis)) ()
+;;;		   "binding ~S type ~S still refers to ~S"
+;;;		   binding
+;;;		   (apply #'encoded-type-decode (type-analysis-encoded-type analysis))
+;;;		   (type-analysis-binding-types analysis))
+;;;		 (setf (binding-store-type binding)
+;;;		   (type-analysis-encoded-type analysis))
+;;;		 (unless (apply #'encoded-allp (type-analysis-encoded-type analysis))
+;;;		   (warn "Type: ~A => ~A"
+;;;			 (binding-name binding)
+;;;			 (apply #'encoded-type-decode (type-analysis-encoded-type analysis))))
+;;;		 #+ignore (warn "binding: ~S~% types: ~S"
+;;;				binding
+;;;				(apply #'encoded-type-decode (type-analysis-encoded-type analysis))))
+;;;	       binding-usage)
       toplevel-funobj)))
 
 (defun resolve-borrowed-bindings (toplevel-funobj)
@@ -388,13 +463,13 @@ of all function-bindings seen."
 		 binding)
 		(t #+ignore (warn "binding ~S is not local to ~S [~S])) .." binding funobj
 			 (mapcar #'borrowed-binding-target (borrowed-bindings funobj)))
-		 (let ((borrowing-binding
+		   (let ((borrowing-binding
 			  (or (find binding (borrowed-bindings funobj)
 				    :key #'borrowed-binding-target)
 			      (car (push (movitz-env-add-binding (funobj-env funobj)
-							      (make-instance 'borrowed-binding
-								:name (binding-name binding)
-								:target-binding binding))
+								 (make-instance 'borrowed-binding
+								   :name (binding-name binding)
+								   :target-binding binding))
 					 (borrowed-bindings funobj))))))
 		     (pushnew borrowing-binding 
 			      (getf (binding-lended-p binding) :lended-to))
@@ -2510,6 +2585,14 @@ the sub-program options (&optional label) as secondary value."
 		   (when x (return t)))))))
     (code-search code binding load store call)))
 
+(defun binding-target (binding)
+  "Resolve a binding in terms of forwarding."
+  (etypecase binding
+    (forwarding-binding
+     (forwarding-binding-target binding))
+    (binding
+     binding)))
+
 (defun binding-eql (x y)
   (check-type x binding)
   (check-type y binding)
@@ -3916,14 +3999,14 @@ Return arg-init-code, need-normalized-ecx-p."
 (defun make-result-and-returns-glue (desired-result returns-provided
 				     &optional code
 				     &key (type t) provider really-desired)
-  "Returns new-code and new-returns-provided."
+  "Returns new-code and new-returns-provided, and glue-side-effects-p."
   (declare (optimize (debug 3)))
   (case returns-provided
     (:non-local-exit
      ;; when CODE does a non-local exit, we certainly don't need any glue.
      (return-from make-result-and-returns-glue
        (values code :non-local-exit))))
-  (multiple-value-bind (new-code new-returns-provided)
+  (multiple-value-bind (new-code new-returns-provided glue-side-effects-p)
       (case (result-mode-type desired-result)
 	((:lexical-binding)
 	 (case (result-mode-type returns-provided)
@@ -3935,24 +4018,26 @@ Return arg-init-code, need-normalized-ecx-p."
 	    (values (append code
 			    `((:store-lexical ,desired-result :eax
 					      :type ,(type-specifier-primary type))))
-		    desired-result))
+		    desired-result
+		    t))
 	   ((:ebx)
 	    (values (append code
 			    `((:store-lexical ,desired-result
 					      ,(result-mode-type returns-provided)
 					      :type ,(type-specifier-primary type))))
-		    desired-result))))
+		    desired-result
+		    t))))
 	(:ignore (values code :nothing))
 	((:boolean-ecx)
 	 (let ((true (first (operands desired-result)))
 	       (false (second (operands desired-result))))
-	   (ecase (operator returns-provided)
-	     (:boolean-ecx
+	   (etypecase (operator returns-provided)
+	     ((eql :boolean-ecx)
 	      (if (equal (operands desired-result)
 			 (operands returns-provided))
 		  (values code desired-result)
 		))
-	     (:boolean-cf=1
+	     ((eql :boolean-cf=1)
 	      (cond
 	       ((and (= -1 true) (= 0 false))
 		(values (append code
@@ -3964,7 +4049,7 @@ Return arg-init-code, need-normalized-ecx-p."
 				  (:notl :ecx)))
 			'(:boolean-ecx 0 -1)))
 	       (t (error "Don't know modes ~S => ~S." returns-provided desired-result))))
-	     (:eax
+	     ((eql :eax)
 	      (make-result-and-returns-glue desired-result
 					    :boolean-cf=1
 					    (append code
@@ -3976,51 +4061,59 @@ Return arg-init-code, need-normalized-ecx-p."
 					    :really-desired desired-result)))))
 	(:boolean-branch-on-true
 	 ;; (warn "rm :b-true with ~S." returns-provided)
-	 (ecase (operator returns-provided)
-	   (:boolean-branch-on-true
+	 (etypecase (operator returns-provided)
+	   ((member :boolean-branch-on-true)
 	    (assert (eq (operands desired-result) (operands returns-provided)))
 	    (values code returns-provided))
-	   ((:eax :multiple-values)
+	   ((member :eax :multiple-values)
 	    (values (append code
 			    `((:cmpl :edi :eax)
 			      (:jne ',(operands desired-result))))
 		    desired-result))
-	   ((:ebx :ecx :edx)
+	   ((member :ebx :ecx :edx)
 	    (values (append code
 			    `((:cmpl :edi ,returns-provided)
 			      (:jne ',(operands desired-result))))
 		    desired-result))
-	   (:nothing
+	   ((member :nothing)
 	    ;; no branch, nothing is nil is false.
 	    (values code desired-result))
-	   (#.+boolean-modes+
+	   ((member . #.+boolean-modes+)
 	    (values (append code
 			    (list (make-branch-on-boolean returns-provided (operands desired-result))))
+		    desired-result))
+	   (lexical-binding
+	    (values (append code
+			    `((:load-lexical ,returns-provided ,desired-result)))
 		    desired-result))))
 	(:boolean-branch-on-false
-	 (ecase (operator returns-provided)
-	   (:boolean-branch-on-false
+	 (etypecase (operator returns-provided)
+	   ((member :boolean-branch-on-false)
 	    (assert (eq (operands desired-result)
 			(operands returns-provided)))
 	    (values code desired-result))
-	   (:nothing
+	   ((member :nothing)
 	    (values (append code
 			    `((:jmp ',(operands desired-result))))
 		    desired-result))
-	   (#.+boolean-modes+
+	   ((member . #.+boolean-modes+)
 	    (values (append code
 			    (list (make-branch-on-boolean returns-provided (operands desired-result)
 							  :invert t)))
 		    desired-result))
-	   ((:ebx :ecx :edx)
+	   ((member :ebx :ecx :edx)
 	    (values (append code
 			    `((:cmpl :edi ,returns-provided)
 			      (:je ',(operands desired-result))))
 		    desired-result))
-	   ((:eax :multiple-values)
+	   ((member :eax :multiple-values)
 	    (values (append code
 			    `((:cmpl :edi :eax)
 			      (:je ',(operands desired-result))))
+		    desired-result))
+	   (lexical-binding
+	    (values (append code
+			    `((:load-lexical ,returns-provided ,desired-result)))
 		    desired-result))))
 	(:untagged-fixnum-eax
 	 (case returns-provided
@@ -4050,98 +4143,100 @@ Return arg-init-code, need-normalized-ecx-p."
 			      (:sarl ,+movitz-fixnum-shift+ :ecx)))
 		    :untagged-fixnum-ecx))))
 	((:single-value :eax)
-	 (case (operator returns-provided)
-	   (:untagged-fixnum-eax
-	    (values (append code `((:shll ,+movitz-fixnum-shift+ :eax))) :eax))
-	   (:values
-	    (case (first (operands returns-provided))
-	      (0 (values (append code '((:movl :edi :eax)))
-			 :eax))
-	      (t (values code :eax))))
-	   ((:single-value :eax :function :multiple-values)
-	    (values code :eax))
-	   (:nothing
-	    (values (append code '((:movl :edi :eax)))
-		    :eax))
-	   ((:ebx :ecx :edx :edi)
-	    (values (append code `((:movl ,returns-provided :eax)))
-		    :eax))
-	   (:boolean-ecx
-	    (let ((true-false (operands returns-provided)))
-	      (cond
-	       ((equal '(0 1) true-false)
-		(values (append code `((:movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-zero))
-					      :eax)))
+	 (cond
+	  ((eq returns-provided :eax)
+	   (values code :eax))
+	  ((typep returns-provided 'lexical-binding)
+	   (values (append code `((:load-lexical ,returns-provided :eax)))
+		   :eax))
+	  (t (case (operator returns-provided)
+	       (:untagged-fixnum-eax
+		(values (append code `((:shll ,+movitz-fixnum-shift+ :eax))) :eax))
+	       (:values
+		(case (first (operands returns-provided))
+		  (0 (values (append code '((:movl :edi :eax)))
+			     :eax))
+		  (t (values code :eax))))
+	       ((:single-value :eax :function :multiple-values)
+		(values code :eax))
+	       (:nothing
+		(values (append code '((:movl :edi :eax)))
 			:eax))
-	       ((equal '(1 0) true-false)
-		(values (append code `((:movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-one))
-					      :eax)))
+	       ((:ebx :ecx :edx :edi)
+		(values (append code `((:movl ,returns-provided :eax)))
 			:eax))
-	       (t (error "Don't know ECX mode ~S." returns-provided)))))
-;;;	   (:boolean-ecx=0
-;;;	    (values (append code `((:movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-zero))
-;;;					  :eax)))
-;;;		    :eax))
-;;;	   (:boolean-ecx=1
-;;;	    (values (append code `((:movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-one))
-;;;					  :eax)))
-;;;		    :eax))
-	   (:boolean-cf=1
-	    (values (append code
-			    `((:sbbl :ecx :ecx)
-			      (:movl (:edi (:ecx 4) ,(global-constant-offset 'null-cons))
-				     :eax)))
-		    :eax))
-	   (#.+boolean-modes+
-	    ;; (warn "bool for ~S" returns-provided)
-	    (let ((boolean-false-label (make-symbol "boolean-false-label")))
-	      (values (append code
-			      '((:movl :edi :eax))
-			      (if *compiler-use-cmov-p*
-				  `(,(make-cmov-on-boolean returns-provided
-							   `(:edi ,(global-constant-offset 't-symbol))
-							   :eax
-							   :invert nil))
-				`(,(make-branch-on-boolean returns-provided
-							   boolean-false-label
-							   :invert t)
-				  (:movl (:edi ,(global-constant-offset 't-symbol))
-					 :eax)
-				  ,boolean-false-label)))
-		      :eax)))))
+	       (:boolean-ecx
+		(let ((true-false (operands returns-provided)))
+		  (cond
+		   ((equal '(0 1) true-false)
+		    (values (append code `((:movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-zero))
+						  :eax)))
+			    :eax))
+		   ((equal '(1 0) true-false)
+		    (values (append code `((:movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-one))
+						  :eax)))
+			    :eax))
+		   (t (error "Don't know ECX mode ~S." returns-provided)))))
+	       (:boolean-cf=1
+		(values (append code
+				`((:sbbl :ecx :ecx)
+				  (:movl (:edi (:ecx 4) ,(global-constant-offset 'null-cons))
+					 :eax)))
+			:eax))
+	       (#.+boolean-modes+
+		;; (warn "bool for ~S" returns-provided)
+		(let ((boolean-false-label (make-symbol "boolean-false-label")))
+		  (values (append code
+				  '((:movl :edi :eax))
+				  (if *compiler-use-cmov-p*
+				      `(,(make-cmov-on-boolean returns-provided
+							       `(:edi ,(global-constant-offset 't-symbol))
+							       :eax
+							       :invert nil))
+				    `(,(make-branch-on-boolean returns-provided
+							       boolean-false-label
+							       :invert t)
+				      (:movl (:edi ,(global-constant-offset 't-symbol))
+					     :eax)
+				      ,boolean-false-label)))
+			  :eax)))))))
 	((:ebx :ecx :edx :esp :esi)
-	 (if (eq returns-provided desired-result)
-	     (values code returns-provided)
-	   (case (operator returns-provided)
-	     #+ignore
-	     (:untagged-fixnum-eax
-	      (values (append code
-			      `((:leal ((:eax 4)) ,desired-result)))
-		      desired-result))
-	     (:nothing
-	      (values (append code
-			      `((:movl :edi ,desired-result)))
-		      desired-result))
-	     ((:ebx :ecx :edx :esp)
-	      (values (append code
-			      `((:movl ,returns-provided ,desired-result)))
-		      desired-result))
-	     ((:eax :single-value :multiple-values :function)
-	      (values (append code
-			      `((:movl :eax ,desired-result)))
-		      desired-result))
-	     (:boolean-ecx
-	      (let ((true-false (operands returns-provided)))
-		(cond
-		 ((equal '(0 1) true-false)
-		  (values (append code `((:movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-zero))
-						,desired-result)))
-			  desired-result))
-		 ((equal '(1 0) true-false)
-		  (values (append code `((:movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-one))
-						,desired-result)))
-			  desired-result))
-		 (t (error "Don't know ECX mode ~S." returns-provided)))))
+	 (cond
+	  ((eq returns-provided desired-result)
+	   (values code returns-provided))
+	  ((typep returns-provided 'lexical-binding)
+	   (values (append code `((:load-lexical ,returns-provided ,desired-result)))
+		   desired-result))
+	  (t (case (operator returns-provided)
+	       #+ignore
+	       (:untagged-fixnum-eax
+		(values (append code
+				`((:leal ((:eax 4)) ,desired-result)))
+			desired-result))
+	       (:nothing
+		(values (append code
+				`((:movl :edi ,desired-result)))
+			desired-result))
+	       ((:ebx :ecx :edx :esp)
+		(values (append code
+				`((:movl ,returns-provided ,desired-result)))
+			desired-result))
+	       ((:eax :single-value :multiple-values :function)
+		(values (append code
+				`((:movl :eax ,desired-result)))
+			desired-result))
+	       (:boolean-ecx
+		(let ((true-false (operands returns-provided)))
+		  (cond
+		   ((equal '(0 1) true-false)
+		    (values (append code `((:movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-zero))
+						  ,desired-result)))
+			    desired-result))
+		   ((equal '(1 0) true-false)
+		    (values (append code `((:movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-one))
+						  ,desired-result)))
+			    desired-result))
+		   (t (error "Don't know ECX mode ~S." returns-provided)))))
 ;;;	     (:boolean-ecx=0
 ;;;	      (values (append code `((:movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-zero))
 ;;;					    ,desired-result)))
@@ -4150,45 +4245,47 @@ Return arg-init-code, need-normalized-ecx-p."
 ;;;	      (values (append code `((:movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-one))
 ;;;					    ,desired-result)))
 ;;;		      desired-result))
-	     (:boolean-cf=1
-	      (values (append code
-			      `((:sbbl :ecx :ecx)
-				(:movl (:edi (:ecx 4) ,(global-constant-offset 'null-cons))
-				       ,desired-result)))
-		      desired-result))
-	     (#.+boolean-modes+
-	      ;; (warn "bool to ~S for ~S" desired-result returns-provided)
-	      (values (append code
-			      (cond
-			       (*compiler-use-cmov-p*
-				`((:movl :edi ,desired-result)
-				  ,(make-cmov-on-boolean returns-provided
-							 `(:edi ,(global-constant-offset 't-symbol))
-							 desired-result)))
-			       ((not *compiler-use-cmov-p*)
-				(let ((boolean-false-label (make-symbol "boolean-false-label")))
+	       (:boolean-cf=1
+		(values (append code
+				`((:sbbl :ecx :ecx)
+				  (:movl (:edi (:ecx 4) ,(global-constant-offset 'null-cons))
+					 ,desired-result)))
+			desired-result))
+	       (#.+boolean-modes+
+		;; (warn "bool to ~S for ~S" desired-result returns-provided)
+		(values (append code
+				(cond
+				 (*compiler-use-cmov-p*
 				  `((:movl :edi ,desired-result)
-				    ,(make-branch-on-boolean returns-provided
-							     boolean-false-label
-							     :invert t)
-				    (:movl (:edi ,(global-constant-offset 't-symbol))
-					   ,desired-result)
-				    ,boolean-false-label)))))
-		      desired-result)))))
+				    ,(make-cmov-on-boolean returns-provided
+							   `(:edi ,(global-constant-offset 't-symbol))
+							   desired-result)))
+				 ((not *compiler-use-cmov-p*)
+				  (let ((boolean-false-label (make-symbol "boolean-false-label")))
+				    `((:movl :edi ,desired-result)
+				      ,(make-branch-on-boolean returns-provided
+							       boolean-false-label
+							       :invert t)
+				      (:movl (:edi ,(global-constant-offset 't-symbol))
+					     ,desired-result)
+				      ,boolean-false-label)))))
+			desired-result))))))
 	(:push
-	 (case returns-provided
-	   (:push (values code :push))
-	   (:nothing
+	 (typecase returns-provided
+	   ((member :push) (values code :push))
+	   ((member :nothing)
 	    (values (append code '((:pushl :edi)))
 		    :push))
-	   ((:single-value :eax :multiple-values :function)
+	   ((member :single-value :eax :multiple-values :function)
 	    (values (append code `((:pushl :eax)))
 		    :push))
-	   ((:ebx :ecx :edx)
+	   ((member :ebx :ecx :edx)
 	    (values (append code `((:pushl ,returns-provided)))
+		    :push))
+	   (lexical-binding
+	    (values (append code `((:load-lexical ,returns-provided :push)))
 		    :push))))
 	(:values
-;;;	 (warn "desired: ~W, provided: ~W" desired-result returns-provided)
 	 (case (operator returns-provided)
 	   (:values
 	    (values code returns-provided))
@@ -4215,7 +4312,7 @@ Return arg-init-code, need-normalized-ecx-p."
 			      '((:clc)))
 		      :multiple-values)))))
     (unless new-returns-provided
-      (multiple-value-setq (new-code new-returns-provided)
+      (multiple-value-setq (new-code new-returns-provided glue-side-effects-p)
 	(case (operator returns-provided)
 	  (#.+boolean-modes+
 	   (make-result-and-returns-glue desired-result :eax
@@ -4245,19 +4342,20 @@ Return arg-init-code, need-normalized-ecx-p."
     (assert new-returns-provided ()
       "Don't know how to match desired-result ~S with returns-provided ~S~@[ from ~S~]."
       (or really-desired desired-result) returns-provided provider)
-    (values new-code new-returns-provided)))
+    (values new-code new-returns-provided glue-side-effects-p)))
 
 (define-compiler compile-form (&all form-info &result-mode result-mode)
   "3.1.2.1 Form Evaluation. Guaranteed to honor RESULT-MODE."
   (compiler-values-bind (&all unprotected-values &code form-code &returns form-returns
-			 &producer producer &type form-type)
+			 &producer producer &type form-type &functional-p functional-p)
       (compiler-call #'compile-form-unprotected :forward form-info)
-    (multiple-value-bind (new-code new-returns-provided)
+    (multiple-value-bind (new-code new-returns-provided glue-side-effects-p)
 	(make-result-and-returns-glue result-mode form-returns form-code
 				      :provider producer
 				      :type form-type)
       (compiler-values (unprotected-values)
 	:type form-type
+	:functional-p (and functional-p (not glue-side-effects-p))
 	:producer producer
 	:code new-code
 	:returns new-returns-provided))))
@@ -4776,7 +4874,7 @@ fifth:  all compiler-values for form1, as a list."
 	   (compiler-values ()
 	     :code (make-compiled-lexical-load binding returns)
 	     :final-form binding
-	     :type `(binding-type ,binding)
+	     :type (binding-type-specifier binding)
 	     :returns returns
 	     :functional-p t))))))
 
@@ -5096,6 +5194,15 @@ and a list of any intervening unwind-protect environment-slots."
 		       (borrowed-binding-target binding)))
 	  (error "Can't install non-local binding ~W." binding)))))
 
+(defun binding-type-specifier (binding)
+  (etypecase binding
+    (forwarding-binding
+     (binding-type-specifier (forwarding-binding-target binding)))
+    (constant-object-binding
+     `(eql ,(constant-object binding)))
+    (binding
+     `(binding-type ,binding))))
+
 ;;;;;;;
 ;;;;;;; Extended-code handlers
 ;;;;;;;
@@ -5107,7 +5214,7 @@ and a list of any intervening unwind-protect environment-slots."
   (destructuring-bind (source destination &key &allow-other-keys)
       (cdr instruction)
     (when (typep destination 'binding)
-      (values destination source))))
+      (values destination (binding-type-specifier source)))))
 
 (define-find-read-bindings :load-lexical (source destination &key &allow-other-keys)
   (declare (ignore destination))
@@ -5199,10 +5306,12 @@ and a list of any intervening unwind-protect environment-slots."
 
 ;;;;;;;;;;;;;;;;;; car
 
+
 (define-extended-code-expander :car (instruction funobj frame-map)
   (declare (ignore funobj frame-map))
   (destructuring-bind (x dst)
       (cdr instruction)
+    (assert (member dst '(:eax :ebx :ecx :edx)))
     (etypecase x
       (binding
        `((:load-lexical ,x :eax)
@@ -5219,3 +5328,26 @@ and a list of any intervening unwind-protect environment-slots."
 		      (:call (:edi ,(global-constant-offset 'fast-car))))))
 	       (when (not (eq dst :eax))
 		 `((:movl :eax ,dst))))))))
+
+;;;;;;;;;;;;;;;;;; incf-lexvar
+
+(define-find-write-binding-and-type :incf-lexvar (instruction)
+  (destructuring-bind (binding delta)
+      (cdr instruction)
+    (declare (ignore delta))
+    (values binding 'integer)))
+
+(define-extended-code-expander :incf-lexvar (instruction funobj frame-map)
+  (declare (ignore funobj))
+  (destructuring-bind (binding delta)
+      (cdr instruction)
+    (check-type binding binding)
+    (check-type delta integer)
+    (let ((location (new-binding-location binding frame-map)))
+      (assert location)
+      (warn "incf type: ~S location: ~S"
+	    (binding-store-type binding)
+	    location)
+      `((:addl ,(* delta +movitz-fixnum-factor+)
+	       (:ebp ,(stack-frame-offset location)))
+	(:into)))))
