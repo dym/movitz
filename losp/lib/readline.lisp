@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov  2 13:58:58 2001
 ;;;;                
-;;;; $Id: readline.lisp,v 1.5 2004/07/29 16:20:18 ffjeld Exp $
+;;;; $Id: readline.lisp,v 1.6 2004/11/24 16:23:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,6 +22,9 @@
   (:use #:muerte.cl #:muerte.lib)
   (:export #:readline
 	   #:readline-buffer
+	   #:readline-keypress
+	   #:readline-keypress-key
+	   #:*readline-signal-keypresses*
 	   #:make-readline-buffer
 	   #:readline-buffer-string
 	   #:readline-buffer-cursor-position
@@ -31,6 +34,8 @@
 	   #:complete-symbol-name))
 
 (in-package muerte.readline)
+
+(defvar *readline-signal-keypresses* nil)
 
 (defun complete-symbol-name (string &key (start 0) (end (length string)) (collect-matches nil)
 					 filter-matches (package *package*))
@@ -108,7 +113,12 @@ completion-start and completion-end are bounding indexes into completion's name.
   (cursor-end 0)
   string)
 
-(defun readline (readline-buffer console &optional (terminator-keys '(#\newline)))
+(define-condition readline-keypress ()
+  ((key
+    :accessor readline-keypress-key
+    :initarg :key)))
+
+(defun readline (readline-buffer console &key (terminators '(#\newline)))
   (with-accessors ((buffer readline-buffer-string)
 		   (pos readline-buffer-cursor-position)
 		   (end readline-buffer-cursor-end))
@@ -118,113 +128,98 @@ completion-start and completion-end are bounding indexes into completion's name.
       (write-string buffer t :end end)
       (setf (cursor-x console) (+ cursor-origin pos)))
     (loop with previous-key-was-tab-p = nil
+	with keypress-condition = (when *readline-signal-keypresses*
+				    (make-condition 'readline-keypress))
 	and displayed-completions-p = nil
-	as key = (read-char console)
-	do (when (integerp key)
-	     (with-saved-excursion (console)
-	       (warn "key: ~S" key)))
-;;;	do (setf key
-;;;	     (case key
-;;;	       (#\^k :kill)
-;;;	       (#\^y :yank)
-;;;	       (#\^p :previous)
-;;;	       (#\^n :next)
-;;;	       (t key)))
-	do (unless (char= key #\tab)
-	     (setf previous-key-was-tab-p nil))
-	when (member key terminator-keys)
-	do (when displayed-completions-p
-	     (do ((y (1+ (cursor-y console)) (1+ y)))
-		 ((>= y (console-height console)))
-	       (clear-line console 0 y)))
-	and return key
-	do (case key
-	     (#\tab
-	      (when (plusp pos)
-		(let ((token-pos pos))
-		  (do ()		; move to start of token
-		      ((or (zerop token-pos)
-			   (member (char buffer (1- token-pos))
-				   '(#\space #\( #\) #\newline #\'))))
-		    (decf token-pos))
-		  (multiple-value-bind (completion completion-count completion-start
-					completion-end completion-collection)
-		      (complete-symbol-name
-		       buffer
-		       :start token-pos
-		       :end pos
-		       :collect-matches previous-key-was-tab-p
-		       :filter-matches (if (and (< 0 token-pos)
-						(char= #\( (char buffer (1- token-pos)))
-						(not (and (< 1 token-pos)
-							  (char= #\( (char buffer (- token-pos 2))))))
-					   #'fboundp
-					 nil))
-		    ;; (warn "comp: ~S" completion-collection)
-		    ;; move tail string forward
-		    (when completion
-		      (let ((completion-length (- completion-end completion-start)))
-			(incf end completion-length)
-			(dotimes (i (- end pos completion-length))
-			  (setf (char buffer (- end i 1))
-			    (char buffer (- end i 1 completion-length))))
-			;; insert completion
-			(loop for i from completion-start below completion-end
-			    do (write-char 
-				(setf (char buffer pos) (char-downcase (char (symbol-name completion) i))))
-			    do (incf pos))
-			(let ((x (cursor-x console)))
-			  (write-string buffer t :start pos :end end)
-			  (setf (cursor-x console) x))))
-		    (when displayed-completions-p
-		      (do ((y (1+ (cursor-y console)) (1+ y)))
-			  ((>= y (console-height console)))
-			(clear-line console 0 y))
-		      (setf displayed-completions-p nil))
-		    (when previous-key-was-tab-p
-		      (with-saved-excursion (console)
-			(cond
-			 ((null completion-collection)
-			  (format t "~%No completions."))
-			 ((< completion-count 20)
-			  (format t "~%Completions:~{ ~A~}." completion-collection))
-			 (t (format t "~%~D completions!" completion-count))))
-		      (setf displayed-completions-p t)))))
-	      (setf previous-key-was-tab-p (not previous-key-was-tab-p)))
-	     ((:left #\^b)
-	      (unless (zerop pos)
-		(decf pos)
-		(decf (cursor-x console))))
-	     (#\^a
-	      (decf (cursor-x console) pos)
-	      (setf pos 0))
-	     ((:right #\^f)
-	      (when (< pos end)
-		(incf pos)
-		(incf (cursor-x console))))
-	     (#\^e
-	      (incf (cursor-x console) (- end pos))
-	      (setf pos end))
-	     ((:kill #\^k)
-	      (let ((x (cursor-x console)))
-		(dotimes (i (- end pos))
-		  (write-char #\space))
-		(setf (cursor-x console) x
-		      end pos)))
-	     ((#\delete #\^d)
-	      (when (< pos end)
-		(dotimes (i (- end pos))
-		  (setf (char buffer (+ pos i))
-		    (char buffer (+ pos i 1))))
-		(decf end)
+	as key = (muerte:read-key console)
+	do (with-saved-excursion (console)
+	     (when keypress-condition
+	       (setf (readline-keypress-key keypress-condition) key)
+	       (with-simple-restart (continue "Proceed with interactive READLINE.")
+		 (signal keypress-condition))))
+	   (when (characterp key)
+	     (unless (char= key #\tab)
+	       (setf previous-key-was-tab-p nil))
+	     (when (member key terminators)
+	       (when displayed-completions-p
+		 (do ((y (1+ (cursor-y console)) (1+ y)))
+		     ((>= y (console-height console)))
+		   (clear-line console 0 y)))
+	       (return key))
+	     (case key
+	       (#\tab
+		(when (plusp pos)
+		  (let ((token-pos pos))
+		    (do ()		; move to start of token
+			((or (zerop token-pos)
+			     (member (char buffer (1- token-pos))
+				     '(#\space #\( #\) #\newline #\'))))
+		      (decf token-pos))
+		    (multiple-value-bind (completion completion-count completion-start
+					  completion-end completion-collection)
+			(complete-symbol-name
+			 buffer
+			 :start token-pos
+			 :end pos
+			 :collect-matches previous-key-was-tab-p
+			 :filter-matches (if (and (< 0 token-pos)
+						  (char= #\( (char buffer (1- token-pos)))
+						  (not (and (< 1 token-pos)
+							    (char= #\( (char buffer (- token-pos 2))))))
+					     #'fboundp
+					   nil))
+		      ;; (warn "comp: ~S" completion-collection)
+		      ;; move tail string forward
+		      (when completion
+			(let ((completion-length (- completion-end completion-start)))
+			  (incf end completion-length)
+			  (dotimes (i (- end pos completion-length))
+			    (setf (char buffer (- end i 1))
+			      (char buffer (- end i 1 completion-length))))
+			  ;; insert completion
+			  (loop for i from completion-start below completion-end
+			      do (write-char 
+				  (setf (char buffer pos) (char-downcase (char (symbol-name completion) i))))
+			      do (incf pos))
+			  (let ((x (cursor-x console)))
+			    (write-string buffer t :start pos :end end)
+			    (setf (cursor-x console) x))))
+		      (when displayed-completions-p
+			(do ((y (1+ (cursor-y console)) (1+ y)))
+			    ((>= y (console-height console)))
+			  (clear-line console 0 y))
+			(setf displayed-completions-p nil))
+		      (when previous-key-was-tab-p
+			(with-saved-excursion (console)
+			  (cond
+			   ((null completion-collection)
+			    (format t "~%No completions."))
+			   ((< completion-count 20)
+			    (format t "~%Completions:~{ ~A~}." completion-collection))
+			   (t (format t "~%~D completions!" completion-count))))
+			(setf displayed-completions-p t)))))
+		(setf previous-key-was-tab-p (not previous-key-was-tab-p)))
+	       ((:left #\^b)
+		(unless (zerop pos)
+		  (decf pos)
+		  (decf (cursor-x console))))
+	       (#\^a
+		(decf (cursor-x console) pos)
+		(setf pos 0))
+	       ((:right #\^f)
+		(when (< pos end)
+		  (incf pos)
+		  (incf (cursor-x console))))
+	       (#\^e
+		(incf (cursor-x console) (- end pos))
+		(setf pos end))
+	       ((:kill #\^k)
 		(let ((x (cursor-x console)))
-		  (write-string buffer t :start pos :end end)
-		  (write-char #\space)
-		  (setf (cursor-x console) x))))
-	     (#\backspace
-	      (unless (zerop pos)
-		(decf pos)
-		(decf (cursor-x console))
+		  (dotimes (i (- end pos))
+		    (write-char #\space))
+		  (setf (cursor-x console) x
+			end pos)))
+	       ((#\delete #\^d)
 		(when (< pos end)
 		  (dotimes (i (- end pos))
 		    (setf (char buffer (+ pos i))
@@ -233,19 +228,32 @@ completion-start and completion-end are bounding indexes into completion's name.
 		  (let ((x (cursor-x console)))
 		    (write-string buffer t :start pos :end end)
 		    (write-char #\space)
-		    (setf (cursor-x console) x)))))
-	     (t (when (and (characterp key)
-			   (< 1 (- (console-width console)
-				   (cursor-x console))))
-		  (dotimes (i (- end pos))
-		    (setf (char buffer (- end i))
-		      (char buffer (- end i 1))))
-		  (setf (char buffer pos) key)
-		  (incf end)
-		  (let ((x (cursor-x console)))
-		    (write-string buffer t :start pos :end end)
-		    (setf (cursor-x console) (1+ x)))
-		  (incf pos)))))))
+		    (setf (cursor-x console) x))))
+	       (#\backspace
+		(unless (zerop pos)
+		  (decf pos)
+		  (decf (cursor-x console))
+		  (when (< pos end)
+		    (dotimes (i (- end pos))
+		      (setf (char buffer (+ pos i))
+			(char buffer (+ pos i 1))))
+		    (decf end)
+		    (let ((x (cursor-x console)))
+		      (write-string buffer t :start pos :end end)
+		      (write-char #\space)
+		      (setf (cursor-x console) x)))))
+	       (t (when (and (characterp key)
+			     (< 1 (- (console-width console)
+				     (cursor-x console))))
+		    (dotimes (i (- end pos))
+		      (setf (char buffer (- end i))
+			(char buffer (- end i 1))))
+		    (setf (char buffer pos) key)
+		    (incf end)
+		    (let ((x (cursor-x console)))
+		      (write-string buffer t :start pos :end end)
+		      (setf (cursor-x console) (1+ x)))
+		    (incf pos))))))))
 
 (defstruct readline-context-state
   scratch
@@ -299,8 +307,8 @@ completion-start and completion-end are bounding indexes into completion's name.
 	  as terminator =
 	    (readline (replace-buffer scratch (aref buffers edit-buffer))
 		      *standard-output*
-		      (append break-characters
-			      '(#\^c #\newline #\^p #\^n :up :down)))
+		      :terminators (append break-characters
+					   '(#\^c #\newline #\^p #\^n :up :down)))
 	  do (when (or (eql #\^c terminator)
 		       (member terminator break-characters))
 	       (signal 'readline-break :character terminator))
@@ -333,7 +341,8 @@ completion-start and completion-end are bounding indexes into completion's name.
 	       ((#\^n :down)
 		(replace-buffer (aref buffers edit-buffer) scratch)
 		(setf (cursor-x *standard-output*) cursor-origin
-		      edit-buffer (mod (1+ edit-buffer) (length buffers)))))))))
+		      edit-buffer (mod (1+ edit-buffer) (length buffers))))
+	       (t (warn "unknown terminator: ~S" terminator)))))))
 
 
 
