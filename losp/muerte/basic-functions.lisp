@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.5 2004/03/23 10:53:25 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.6 2004/03/25 11:27:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -355,3 +355,17 @@
 
 (defun %word-offset (word offset)
   (%word-offset word offset))
+
+(defun malloc-words (words)
+  (malloc-clumps (1+ (truncate (1+ words) 2))))
+
+(defun malloc-clumps (clumps)
+  (let ((x (with-inline-assembly (:returns :eax :side-effects t)
+	     (:compile-form (:result-mode :ebx) clumps)
+	     (:shll 1 :ebx)
+	     (:globally (:call (:edi (:edi-offset malloc))))
+	     (:addl #.(movitz::tag :other) :eax))))
+    (dotimes (i clumps)
+      (setf (memref x -6 i :lisp) nil
+	    (memref x -2 i :lisp) nil))
+    x))
