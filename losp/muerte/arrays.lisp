@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.18 2004/04/23 14:59:55 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.19 2004/05/20 17:41:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -611,7 +611,16 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 
 (defun vector-push-extend (new-element vector &optional extension)
   (declare (ignore extension))
-  (vector-push new-element vector))
+  (check-type vector vector)
+  (let ((p (vector-fill-pointer vector)))
+    (declare (type (unsigned-byte 16) p))
+    (cond
+     ((< p (vector-dimension vector))
+      (setf (aref vector p) new-element
+	    (fill-pointer vector) (1+ p)))
+     (t (error "Vector-push extending not implemented yet.")))
+    p))
+
 
 (define-compiler-macro bvref-u16 (&whole form vector offset index &environment env)
   (let ((actual-index (and (movitz:movitz-constantp index env)
