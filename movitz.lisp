@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:52:58 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: movitz.lisp,v 1.3 2004/01/16 12:02:05 ffjeld Exp $
+;;;; $Id: movitz.lisp,v 1.4 2004/02/02 13:06:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -29,6 +29,16 @@
 (defvar *bq-level* 0)
 (defvar *default-image-init-file* #p"losp/los0.lisp")
 (defvar *default-image-file* #p"los0-image")
+
+(defmacro print-unreadable-movitz-object ((object stream &rest key-args) &body body)
+  "Just like print-unreadable-object, just adorn output so as to
+make clear it's a Movitz object, with extra <..>"
+  (let ((stream-var (gensym "unreadable-movitz-stream-")))
+    `(let ((,stream-var ,stream))
+       (print-unreadable-object (,object ,stream-var ,@key-args)
+	 (write-char #\< ,stream-var)
+	 ,@body
+	 (write-char #\> ,stream-var)))))
 
 (defmacro with-movitz-syntax (options &body body)
   (declare (ignore options))
