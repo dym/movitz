@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.39 2004/07/21 22:33:55 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.40 2004/07/22 01:09:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -60,7 +60,7 @@
     (#.(bt:enum-value 'movitz::movitz-vector-element-type :character)
        'character)
     (#.(bt:enum-value 'movitz::movitz-vector-element-type :u8)
-       'muerte::u8)
+       '(unsigned-byte 8))
     (#.(bt:enum-value 'movitz::movitz-vector-element-type :u16)
        '(unsigned-byte 16))
     (#.(bt:enum-value 'movitz::movitz-vector-element-type :u32)
@@ -737,19 +737,20 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
                      (car dimensions))
                     (t
                      (error "Multi-dimensional arrays not supported.")))))
-    (cond
-      ;; These should be replaced by subtypep sometime.
-      ((eq element-type 'character)
-       (make-basic-vector%character size fill-pointer initial-element initial-contents))
-      ((member element-type '(bit (unsigned-byte 1)) :test #'equal)
-       (make-basic-vector%bit size fill-pointer initial-element initial-contents))
-      ((member element-type '(u8 (unsigned-byte 8)) :test #'equal)
-       (make-basic-vector%u8 size fill-pointer initial-element initial-contents))
-      ((member element-type '(u32 (unsigned-byte 32)) :test #'equal)
-       (make-basic-vector%u32 size fill-pointer initial-element initial-contents))
-      ((eq element-type 'code)
-       (make-basic-vector%code size fill-pointer initial-element initial-contents))
-      (t (make-basic-vector%t size fill-pointer initial-element initial-contents)))))
+    (let ((upgraded-element-type (upgraded-array-element-type element-type)))
+      (cond
+       ;; These should be replaced by subtypep sometime.
+       ((eq upgraded-element-type 'character)
+	(make-basic-vector%character size fill-pointer initial-element initial-contents))
+       ((eq upgraded-element-type 'bit)
+	(make-basic-vector%bit size fill-pointer initial-element initial-contents))
+       ((member upgraded-element-type '(u8 (unsigned-byte 8)) :test #'equal)
+	(make-basic-vector%u8 size fill-pointer initial-element initial-contents))
+       ((member upgraded-element-type '(u32 (unsigned-byte 32)) :test #'equal)
+	(make-basic-vector%u32 size fill-pointer initial-element initial-contents))
+       ((eq upgraded-element-type 'code)
+	(make-basic-vector%code size fill-pointer initial-element initial-contents))
+       (t (make-basic-vector%t size fill-pointer initial-element initial-contents))))))
 
 (defun vector (&rest objects)
   "=> vector"
@@ -829,8 +830,14 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 	   (and (integerp dimension-spec)
 		(= dimension-spec (array-dimensions x)))
 	   (and (listp dimension-spec)
-		(do ((d 0 (1+ d))
+		(do ((array-rank (array-dimensions x))
+		     (d 0 (1+ d))
 		     (q dimension-spec))
-		    ((null q) t)
-		  (unless (= (pop q) (array-dimension x d))
-		    (return nil)))))))
+		    ((null q) (= d array-rank))
+		  (let ((dim (pop q)))
+		    (cond
+		     ((>= d array-rank)
+		      (return nil))
+		     ((eq dim '*))
+		     ((= dim (array-dimension x d)))
+		     (t (return nil)))))))))
