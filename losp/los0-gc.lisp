@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.12 2004/05/24 19:32:46 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.13 2004/06/01 13:42:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -56,21 +56,33 @@
 
 (define-primitive-function los0-fast-cons ()
   "Allocate a cons cell from nursery-space."
-  (with-inline-assembly (:returns :eax)
-   retry-cons
-    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
-    (:movl (:edx 2) :ecx)
-    (:cmpl #x3fff4 :ecx)
-    (:jge '(:sub-program ()
-	    (:int 113)
-	    ;; This interrupt can be retried.
-	    (:jmp 'retry-cons)))
-    (:movl :eax (:edx :ecx 2))
-    (:movl :ebx (:edx :ecx 6))
-    (:leal (:edx :ecx 3) :eax)
-    (:addl 8 :ecx)
-    (:movl :ecx (:edx 2))
-    (:ret)))
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :eax)
+	   retry-cons
+	    ;; Set up thread-atomical execution
+	    (:locally (:movl ,(movitz::atomically-status-simple-pf 'fast-cons)
+			     (:edi (:edi-offset atomically-status))))
+	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
+	    (:movl (:edx 2) :ecx)
+	    (:cmpl #x3fff4 :ecx)
+	    (:jge '(:sub-program (allocation-failed)
+		    ;; Exit thread-atomical
+;;;		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+;;;			       (:edi (:edi-offset atomically-status))))
+		    (:int 113)
+		    ;; This interrupt can be retried.
+		    (:jmp 'retry-cons)))
+	    (:movl :eax (:edx :ecx 2))
+	    (:movl :ebx (:edx :ecx 6))
+	    (:addl 8 :ecx)
+	    (:movl :ecx (:edx 2))	; Commit allocation
+	    ;; Exit thread-atomical
+	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+			     (:edi (:edi-offset atomically-status))))
+	    (:leal (:edx :ecx -5) :eax)
+	    (:ret))))
+    (do-it)))
 
 (define-primitive-function los0-box-u32-ecx ()
   "Make u32 in ECX into a fixnum or bignum."

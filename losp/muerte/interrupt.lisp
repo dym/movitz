@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.7 2004/04/18 23:17:58 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.8 2004/06/01 13:42:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -29,12 +29,12 @@
 	form
       (- 5 (position name
 		     '(nil :eflags :eip :error-code :exception :ebp nil
-		       :ecx :eax :edx :ebx :esi :edi))))))
+		       :ecx :eax :edx :ebx :esi :edi :atomically-status))))))
 
 (defun interrupt-frame-index (name)
   (- 5 (position name
 		 '(nil :eflags :eip :error-code :exception :ebp nil
-		   :ecx :eax :edx :ebx :esi :edi))))
+		   :ecx :eax :edx :ebx :esi :edi :atomically-status))))
 
 (define-compiler-macro interrupt-frame-ref (&whole form frame reg type &optional (offset 0)
 					    &environment env)
@@ -48,100 +48,134 @@
 
 (define-primitive-function default-interrupt-trampoline ()
   "Default first-stage interrupt handler."
-  #.(cl:list* 'with-inline-assembly '(:returns :nothing)
-	      (cl:loop :for i :from 0 :to movitz::+idt-size+
+;;;	 `(cl:list* 'with-inline-assembly '(:returns :nothing)
+;;;		    (cl:loop :for i :from 0 :to movitz::+idt-size+
+;;;		:append (cl:if (cl:member i '(8 10 11 12 13 14 17))
+;;;			    `(((5) :pushl ,i)
+;;;			      ((5) :jmp 'ok))
+;;;			  `(((2) :pushl 0) ; replace Error Code
+;;;			    ((2) :pushl ,i)
+;;;			    ((1) :nop)
+;;;			    ((5) :jmp 'ok)))))
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :multiple-values)
+	    ,@(loop :for i :from 0 :to movitz::+idt-size+
 		:append (cl:if (cl:member i '(8 10 11 12 13 14 17))
 			    `(((5) :pushl ,i)
 			      ((5) :jmp 'ok))
 			  `(((2) :pushl 0) ; replace Error Code
 			    ((2) :pushl ,i)
 			    ((1) :nop)
-			    ((5) :jmp 'ok)))))
-  (with-inline-assembly (:returns :multiple-values)
-   ok
-    ;; Stack:
-    ;; 20: Interruptee EFLAGS (later EIP)
-    ;; 16: Interruptee CS     (later EFLAGS)
-    ;; 12: Interruptee EIP
-    ;;  8: Error code
-    ;;  4: Exception number
-    ;;  0: EBP
-    (:pushl :ebp)
-    (:movl :esp :ebp)
-    (:pushl 0)				; 0 means default-interrupt-trampoline frame
-    (:pushl :ecx)			; -8
-    (:pushl :eax)			; -12
-    (:pushl :edx)			; -16
-    (:pushl :ebx)			; -20
-    (:pushl :esi)			; -24
-    (:pushl :edi)			; -28
+			    ((5) :jmp 'ok))))
+	   ok
+	    ;; Stack:
+	    ;; 20: Interruptee EFLAGS (later EIP)
+	    ;; 16: Interruptee CS     (later EFLAGS)
+	    ;; 12: Interruptee EIP
+	    ;;  8: Error code
+	    ;;  4: Exception number
+	    ;;  0: EBP
+	    (:pushl :ebp)
+	    (:movl :esp :ebp)
+	    (:pushl 0)			; 0 means default-interrupt-trampoline frame
+	    (:pushl :ecx)		; -8
+	    (:pushl :eax)		; -12
+	    (:pushl :edx)		; -16
+	    (:pushl :ebx)		; -20
+	    (:pushl :esi)		; -24
+	    (:pushl :edi)		; -28
+	    (:movl ':nil-value :edi)	; We want NIL!
+	    (:locally (:pushl (:edi (:edi-offset atomically-status)))) ; -32
 
-    ;; rearrange stack for return
-    (:movl (:ebp 12) :eax)		; load return address
-    (:movl (:ebp 20) :ebx)		; load EFLAGS
-    (:movl :ebx (:ebp 16))		; EFLAGS at next-to-bottom of stack
-    (:movl :eax (:ebp 20))		; return address at bottom of stack
+	    (:locally (:movl 0 (:edi (:edi-offset atomically-status))))
 
-    (:xorl :eax :eax)			; Ensure safe value
-    (:xorl :edx :edx)			; Ensure safe value
+	    ;; rearrange stack for return
+	    (:movl (:ebp 12) :eax)	; load return address
+	    (:movl (:ebp 20) :ebx)	; load EFLAGS
+	    (:movl :ebx (:ebp 16))	; EFLAGS at next-to-bottom of stack
+	    (:movl :eax (:ebp 20))	; return address at bottom of stack
 
-    (:movl ':nil-value :edi)		; We want NIL!
+	    (:xorl :eax :eax)		; Ensure safe value
+	    (:xorl :edx :edx)		; Ensure safe value
+
+	    (:pushl (:ebp 16))		; EFLAGS
+	    (:pushl :cs)		; push CS
+	    (:call (:pc+ 0))		; push EIP.
+	    ;; Now add a few bytes to the on-stack EIP so the iret goes to
+	    ;; *DEST* below.
+	    ((4) :addl 5 (:esp))	; 4 bytes
+	    ((1) :iretd)		; 1 byte
     
-    (:pushl (:ebp 16))			; EFLAGS
-    (:pushl :cs)			; push CS
-    (:call (:pc+ 0))			; push EIP.
-    ;; Now add a few bytes to the on-stack EIP so the iret goes to
-    ;; *DEST* below.
-    ((4) :addl 5 (:esp))		; 4 bytes
-    ((1) :iretd)			; 1 byte
+	    ;; *DEST* iret branches to here.
+	    ;; we're now in the context of the interruptee.
+
+	    ;; Save/push thread-local values
+	    (:locally (:movl (:edi (:edi-offset num-values)) :ecx))
+	    (:jecxz 'push-values-done)
+	    (:leal (:edi #.(movitz::global-constant-offset 'values)) :eax)
+	   push-values-loop
+	    (:locally (:pushl (:eax)))
+	    (:addl 4 :eax)
+	    (:subl 1 :ecx)
+	    (:jnz 'push-values-loop)
+	   push-values-done
+	    (:locally (:pushl (:edi (:edi-offset num-values))))
     
-    ;; *DEST* iret branches to here.
-    ;; we're now in the context of the interruptee.
+	    ;; call handler
+	    (:movl (:ebp 4) :ecx)	; interrupt number into ECX
+	    (:locally (:movl (:edi (:edi-offset interrupt-handlers)) :eax))
+	    (:movl (:eax 2 (:ecx 4)) :esi) ; funobj at (aref EBX interrupt-handlers) into :esi
+	    (:movl :ebp :ebx)		; pass interrupt-frame as arg1
+	    (:movl (:ebp 4) :ecx)	; pass interrupt number as arg 0.
+	    (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
+	    (:call (:esi ,(bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector%2op)))
 
-    ;; Save/push thread-local values
-    (:locally (:movl (:edi (:edi-offset num-values)) :ecx))
-    (:jecxz 'push-values-done)
-    (:leal (:edi #.(movitz::global-constant-offset 'values)) :eax)
-   push-values-loop
-    (:locally (:pushl (:eax)))
-    (:addl 4 :eax)
-    (:subl 1 :ecx)
-    (:jnz 'push-values-loop)
-   push-values-done
-    (:locally (:pushl (:edi (:edi-offset num-values))))
+	   skip-interrupt-handler
+	    ;; Restore thread-local values
+	    (:popl :ecx)
+	    (:locally (:movl :ecx (:edi (:edi-offset num-values))))
+	    (:jecxz 'pop-values-done)
+	   pop-values-loop
+	    ;; ((:fs-override) :popl (:edi #.(movitz::global-constant-offset 'values) (:ecx 4) -4))
+	    (:locally (:popl (:edi (:edi-offset values) (:ecx 4) -4)))
+	    (:subl 1 :ecx)
+	    (:jnz 'pop-values-loop)
+	   pop-values-done
+
+	    (:movl (:ebp -32) :ecx)	; Check interruptee's atomically status
+	    (:testb :cl :cl)
+	    (:jnz 'restart-atomical-block)
+
+	    ;; Interrupted code was non-atomical, the normal case.
+	   normal-return		; With atomically-status-to-restore in ECX
+	    (:locally (:movl :ecx (:edi (:edi-offset atomically-status))))
+	    (:movl (:ebp -28) :edi)
+	    (:movl (:ebp -24) :esi)
+	    (:movl (:ebp -20) :ebx)
+	    (:movl (:ebp -16) :edx)
+	    (:movl (:ebp -12) :eax)
+	    (:movl (:ebp -8)  :ecx)
+	    (:leave)
+	    (:addl 12 :esp)
+	    (:popfl)			; pop EFLAGS
+	    (:ret)			; pop EIP
     
-    ;; call handler
-    (:movl (:ebp 4) :ecx)		; interrupt number into ECX
-    (:locally (:movl (:edi (:edi-offset interrupt-handlers)) :eax))
-    (:movl (:eax 2 (:ecx 4)) :esi)	; funobj at (aref EBX interrupt-handlers) into :esi
-    (:movl :ebp :ebx)			; pass interrupt-frame as arg1
-    (:movl (:ebp 4) :ecx)		; pass interrupt number as arg 0.
-    (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :eax)
-    (:call (:esi #.(movitz::slot-offset 'movitz::movitz-funobj 'movitz::code-vector%2op)))
-
-   skip-interrupt-handler
-    ;; Restore thread-local values
-    (:popl :ecx)
-    (:locally (:movl :ecx (:edi (:edi-offset num-values))))
-    (:jecxz 'pop-values-done)
-   pop-values-loop
-    ;; ((:fs-override) :popl (:edi #.(movitz::global-constant-offset 'values) (:ecx 4) -4))
-    (:locally (:popl (:edi (:edi-offset values) (:ecx 4) -4)))
-    (:subl 1 :ecx)
-    (:jnz 'pop-values-loop)
-   pop-values-done
-
-    (:movl (:ebp -28) :edi)
-    (:movl (:ebp -24) :esi)
-    (:movl (:ebp -20) :ebx)
-    (:movl (:ebp -16) :edx)
-    (:movl (:ebp -12) :eax)
-    (:movl (:ebp -8)  :ecx)
-
-    (:leave)
-    (:addl 12 :esp)
-    (:popfl)				; pop EFLAGS
-    (:ret)))				; pop EIP
+	   restart-atomical-block
+	    (:cmpb ,(bt:enum-value 'movitz::atomically-status :restart-primitive-function) :cl)
+	    (:jne 'not-simple-atomical-pf-restart)
+	    (:cmpb 0 :ch)		; map of registers to restore
+	    (:jnz 'not-simple-atomical-pf-restart)
+	    (:sarl 16 :ecx)		; move atomically-status data into ECX
+	    (:movl (:edi (:ecx 4) ,(- (movitz:tag :null)))
+		   :ecx)		; This is the EIP to restart
+	    (:movl :ecx (:ebp 20))
+	    (:jmp 'normal-return)
+	   not-simple-atomical-pf-restart
+	    ;; Don't know what to do.
+	    (:int 90)
+	    (:jmp 'not-simple-atomical-pf-restart)
+	    )))))
 
 (defvar *last-interrupt-frame* nil)
 

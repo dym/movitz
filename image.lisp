@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.31 2004/05/24 19:05:59 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.32 2004/06/01 13:42:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -450,11 +450,39 @@
    (segment-descriptor-7
     :binary-type segment-descriptor
     :initform (make-segment-descriptor))
+   (atomically-status
+    :binary-type (define-bitfield atomically-status (lu32)
+		   (((:enum :byte (2 3))
+		     :inactive 0
+		     :restart-primitive-function 1) ; data = slot-offset of pf.
+		    ((:bits) :reset-status-p 7
+			     :eax 8
+			     :ebx 9
+			     :ecx 10
+			     :edx 11)
+		    ((:numeric :data 16 16))))
+    :initform '(:inactive))
+   (atomically-registers
+    :binary-type lu32
+    :initform 0)
    (bochs-flags
     :binary-type lu32
     :initform 0)
    )
   (:slot-align null-cons -1))
+
+(defun atomically-status-simple-pf (pf-name reset-status-p &rest registers)
+  (bt:enum-value 'movitz::atomically-status
+		 (list* :restart-primitive-function
+			(cons :reset-status-p
+			      (if reset-status-p 1 0))
+			(cons :data
+			      (truncate (+ (tag :null)
+					   (bt:slot-offset 'movitz-constant-block
+							   (intern (symbol-name pf-name)
+								   :movitz)))
+					4))
+			registers)))
 
 (defmethod movitz-object-offset ((obj movitz-constant-block)) 0)
 
