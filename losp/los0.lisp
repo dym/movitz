@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.25 2004/11/12 16:25:09 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.26 2004/11/12 20:55:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1530,6 +1530,47 @@ and also EDX must be preserved."
     (:stc)
     (:ret)))
 
+(define-primitive-function dynamic-unwind-next-shallow (dynamic-env)
+  "Locate the next unwind-protect entry between here and dynamic-env/EAX.
+If no such entry is found, return (same) dynamic-env in EAX and CF=0.
+Otherwise return the unwind-protect entry in EAX and CF=1. Preserve EDX.
+Point is: Return the 'next step' in unwinding towards dynamic-env.
+Note that it's an error if dynamic-env isn't in the current dynamic environment,
+it's supposed to have been found by e.g. dynamic-locate-catch-tag."
+  ;; XXX: Not really sure if there's any point in the CF return value,
+  ;;      because I don't think there's ever any need to know whether
+  ;;      the returned entry is an unwind-protect or the actual target.
+  (with-inline-assembly (:returns :nothing)
+    (:locally (:bound (:edi (:edi-offset stack-bottom)) :eax))
+    (:locally (:movl :eax (:edi (:edi-offset scratch2)))) ; Free up EAX
+    ;; (:globally (:movl (:edi (:edi-offset unwind-protect-tag)) :ebx))
+    (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
+    
+   search-loop
+    (:jecxz '(:sub-program () (:int 63)))
+    (:locally (:bound (:edi (:edi-offset stack-bottom)) :ecx))
+
+    (:locally (:cmpl :ecx (:edi (:edi-offset scratch2))))
+    (:je 'found-dynamic-env)
+
+    (:movl (:ecx 4) :ebx)
+    (:globally (:cmpl :ebx (:edi (:edi-offset unwind-protect-tag))))
+    (:je 'found-unwind-protect)
+
+    ;; If this entry is a dynamic variable binding, uninstall it.
+    (:movl (:ecx) :eax)			; symbol?
+    (:testb 3 :al)			;
+    (:jz 'not-variable-binding)		; not symbol?
+    (:movl :ebx (:eax (:offset movitz-symbol value))) ; uninstall.
+   not-variable-binding
+    (:movl (:ecx 12) :ecx)		; proceed search
+    (:jmp 'search-loop)
+   found-unwind-protect
+    (:stc)
+   found-dynamic-env
+    (:movl :ecx :eax)
+    (:ret)))
+
 (define-primitive-function dynamic-load-shallow (symbol)
   "Load the dynamic value of SYMBOL into EAX."
   (with-inline-assembly (:returns :multiple-values)
@@ -1560,6 +1601,7 @@ and also EDX must be preserved."
 		    (setf (%run-time-context-slot ',slot) (symbol-value ',function)))))
       (list (install muerte:dynamic-variable-install dynamic-variable-install-shallow)
 	    (install muerte:dynamic-variable-uninstall dynamic-variable-uninstall-shallow)
+	    (install muerte::dynamic-unwind-next dynamic-unwind-next-shallow)
 	    (install muerte::dynamic-store dynamic-store-shallow)
 	    (install muerte::dynamic-load-unprotected dynamic-load-unprotected-shallow)
 	    (prog1 (install muerte::dynamic-load dynamic-load-shallow)
