@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 21 22:14:08 2001
 ;;;;                
-;;;; $Id: io-port.lisp,v 1.4 2004/01/20 21:39:10 ffjeld Exp $
+;;;; $Id: io-port.lisp,v 1.5 2004/01/20 21:53:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -203,7 +203,7 @@ that reads from <io-base-form> plus some offset."
 	     (assert (= 4 movitz:+movitz-fixnum-factor+))
 	     (if (<= 1 count 20)
 		 `(with-inline-assembly-case ()
-		    (do-case (t :eax :labels (io-read-loop end-io-read-loop not-fixnum))
+		    (do-case (t :eax)
 		      (:compile-two-forms (:edx :ebx) ,port ,object)
 		      (:andl ,(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
 		      (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
@@ -316,6 +316,140 @@ that reads from <io-base-form> plus some offset."
      (%io-port-read-succession port object 2 start end :16-bit))
     (:32-bit
      (%io-port-read-succession port object 2 start end :32-bit))
+    (t (error "Unknown byte-size ~S." byte-size))))
+
+(define-compiler-macro %io-port-write-succession (&whole form port object offset start end byte-size
+						  &environment env)
+  (if (not (movitz:movitz-constantp byte-size env))
+      form
+    (let ((byte-size (movitz:movitz-eval byte-size env)))
+      (cond
+       ((and (movitz:movitz-constantp offset env)
+	     (movitz:movitz-constantp start env)
+	     (movitz:movitz-constantp end env))
+	(let* ((offset (movitz:movitz-eval offset env))
+	       (start (movitz:movitz-eval start env))
+	       (end (movitz:movitz-eval end env))
+	       (count (- end start)))
+	  (check-type count (integer 0 #x10000))
+	  (case byte-size
+	    (:32-bit
+	     (assert (= 4 movitz:+movitz-fixnum-factor+))
+	     (if (<= 1 count 20)
+		 `(with-inline-assembly-case ()
+		    (do-case (t :eax)
+		      (:compile-two-forms (:edx :ebx) ,port ,object)
+		      (:andl ,(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		      (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+		      ,@(loop for i from start below end
+			    appending
+			      `((:movl (:ebx ,(+ offset (* 4 i))) :eax)
+				(:outl :eax :dx)))
+		      (:movl :ebx :eax)))
+	       `(with-inline-assembly-case ()
+		  (do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
+		    (:compile-two-forms (:edx :ebx) ,port ,object)
+		    (:andl ,(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+		    (:pushl ,(cl:* movitz::+movitz-fixnum-factor+ end)) ; keep end in (:esp)
+		    (:movl ,(cl:* movitz::+movitz-fixnum-factor+ start) :ecx)
+		   io-read-loop
+		    (:cmpl :ecx (:esp))
+		    (:jbe 'end-io-read-loop)
+		    (:addl 4 :ecx)
+		    (:movl (:ebx ,(+ offset -4) :ecx) :eax)
+		    (:outl :eax :dx)
+		    (:jmp 'io-read-loop)
+		    (:popl :eax)	; increment :esp, and put a lispval in :eax.
+		   end-io-read-loop))))
+	    (t (error "~S byte-size ~S not implemented." (car form) byte-size)))))
+       ((and (movitz:movitz-constantp offset env))
+	(let ((offset (movitz:movitz-eval offset env)))
+	  (case byte-size
+	    (:8-bit
+	     (assert (= 4 movitz:+movitz-fixnum-factor+))
+	     `(with-inline-assembly-case ()
+		(do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
+		  (:compile-form (:result-mode :push) ,port)
+		  (:compile-form (:result-mode :push) ,object)
+		  (:compile-two-forms (:ecx :eax) ,start ,end)
+		  (:popl :ebx)		; object
+		  (:popl :edx)		; port
+		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :eax)
+		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :ecx)
+		  (:shrl #.movitz::+movitz-fixnum-shift+ :edx)
+		  (:shrl #.movitz::+movitz-fixnum-shift+ :eax)
+		  (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
+		  (:pushl :eax)		; keep end in (:esp)
+		 io-read-loop
+		  (:cmpl :ecx (:esp))
+		  (:jbe 'end-io-read-loop)
+		  (:addl 1 :ecx)
+		  (:movb (:ebx ,(+ offset -1) (:ecx 1)) :al)
+		  (:outb :al :dx)
+		  (:jmp 'io-read-loop)
+		  (:popl :eax)		; increment :esp, and put a lispval in :eax.
+		 end-io-read-loop)))
+	    (:16-bit
+	     (assert (= 4 movitz:+movitz-fixnum-factor+))
+	     `(with-inline-assembly-case ()
+		(do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
+		  (:compile-form (:result-mode :push) ,port)
+		  (:compile-form (:result-mode :push) ,object)
+		  (:compile-two-forms (:ecx :eax) ,start ,end)
+		  (:popl :ebx)		; object
+		  (:popl :edx)		; port
+		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :eax)
+		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :ecx)
+		  (:shrl #.movitz::+movitz-fixnum-shift+ :edx)
+		  (:shrl #.movitz::+movitz-fixnum-shift+ :eax)
+		  (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
+		  (:pushl :eax)		; keep end in (:esp)
+		 io-read-loop
+		  (:cmpl :ecx (:esp))
+		  (:jbe 'end-io-read-loop)
+		  (:addl 1 :ecx)
+		  (:movw (:ebx ,(+ offset -2) (:ecx 2)) :ax)
+		  (:outw :ax :dx)
+		  (:jmp 'io-read-loop)
+		  (:popl :eax)		; increment :esp, and put a lispval in :eax.
+		 end-io-read-loop)))
+	    (:32-bit
+	     (assert (= 4 movitz:+movitz-fixnum-factor+))
+	     `(with-inline-assembly-case ()
+		(do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
+		  (:compile-form (:result-mode :push) ,port)
+		  (:compile-form (:result-mode :push) ,object)
+		  (:compile-two-forms (:ecx :eax) ,start ,end)
+		  (:popl :ebx)		; object
+		  (:popl :edx)		; port
+		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		  (:shrl #.movitz::+movitz-fixnum-shift+ :edx)
+		  (:pushl :eax)		; keep end in (:esp)
+		 io-read-loop
+		  (:cmpl :ecx (:esp))
+		  (:jbe 'end-io-read-loop)
+		  (:addl 4 :ecx)
+		  (:movl (:ebx ,(+ offset -4) :ecx) :eax)
+		  (:outl :eax :dx)
+		  (:jmp 'io-read-loop)
+		  (:popl :eax)		; increment :esp, and put a lispval in :eax.
+		 end-io-read-loop)))
+	    (t (error "~S byte-size ~S not implemented." (car form) byte-size)))))
+       (t (error "Variable offset not implemented."))))))
+
+(defun %io-port-write-succession (port object offset start end byte-size)
+  (unless (= 2 offset)
+    (error "Only offset 2 implemented."))
+  (case byte-size
+    (:8-bit
+     (%io-port-write-succession port object 2 start end :8-bit))
+    (:16-bit
+     (%io-port-write-succession port object 2 start end :16-bit))
+    (:32-bit
+     (%io-port-write-succession port object 2 start end :32-bit))
     (t (error "Unknown byte-size ~S." byte-size))))
 
 
