@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Sep  1 00:49:11 2001
 ;;;;                
-;;;; $Id: error.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: error.lisp,v 1.3 2004/09/22 16:15:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -25,10 +25,12 @@
 (defvar *error-no-condition-for-debugger* nil
   "If true, don't create a simple-error object just for the debugger,
  (presumably) since this might trigger another bug.")
-
+(defvar *disable-interrupts-on-error* t)
 
 (defun error (&rest arguments)
   (declare (dynamic-extent arguments))
+  (when *disable-interrupts-on-error*
+    (cli))
   (unless arguments
     (error 'wrong-argument-count
 	   :function #'error
