@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.12 2004/07/11 23:03:18 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.13 2004/07/13 02:26:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -279,9 +279,10 @@
    (3 (x y z)
       (with-inline-assembly (:returns :multiple-values)
 	(:compile-two-forms (:eax :ebx) x y)
-	((:fs-override) :movl 1 (:edi #.(movitz::global-constant-offset 'num-values)))
-	(:compile-form (:result-mode :ecx) z)
-	((:fs-override) :movl :ecx (:edi #.(movitz::global-constant-offset 'values)))
+	((:fs-override) :movl #.movitz:+movitz-fixnum-factor+
+			(:edi #.(movitz::global-constant-offset 'num-values)))
+	(:compile-form (:result-mode :edx) z)
+	((:fs-override) :movl :edx (:edi #.(movitz::global-constant-offset 'values)))
 	(:movl 3 :ecx)
 	(:stc)))
    (t (&rest objects)
@@ -298,18 +299,19 @@
 	(:jz 'done)
 	(:subl 2 :ecx)
 	(:jc 'copy-done)
-	((:fs-override) :movl :ecx (:edi #.(movitz::global-constant-offset 'num-values)))
+	(:leal ((:ecx #.movitz::+movitz-fixnum-factor+)) :edx)
+	((:fs-override) :movl :edx (:edi #.(movitz::global-constant-offset 'num-values)))
 	(:pushl :eax)
 	(:xorl :eax :eax)
        copy-loop
 	(:movl (:ebp (:ecx 4) 4) :edx)
-	((:fs-override) :movl :edx (:edi (:eax 4) #.(movitz::global-constant-offset 'values)))
-	(:addl 1 :eax)
+	((:fs-override) :movl :edx (:edi (:eax 1) #.(movitz::global-constant-offset 'values)))
+	(:addl 4 :eax)
 	(:subl 1 :ecx)
 	(:jnc 'copy-loop)
+	(:leal (:eax #.(cl:- movitz:+movitz-fixnum-factor+)) :ecx)
 	(:popl :eax)
-	((:fs-override) :movl (:edi #.(movitz::global-constant-offset 'num-values))
-			:ecx)
+	(:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
        copy-done
 	(:addl 2 :ecx)
 	(:jnz 'done)
@@ -333,7 +335,7 @@
 
 (define-compiler-macro object-location (object)
   "The location is the object's address divided by fixnum-factor."
-  `(with-inline-assembly (:returns :register)
+  `(with-inline-assembly (:returns :register :type fixnum)
      (:compile-form (:result-mode :register) ,object)
      (:andl ,(* -2 movitz::+movitz-fixnum-factor+) (:result-register))))
   

@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.25 2004/07/10 13:29:18 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.26 2004/07/13 02:26:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -906,7 +906,8 @@ on the current result."
 								   (* 4 i))))))
 				cloaked-code
 				(when (<= 3 num-values)
-				  `((:locally (:movl ,(- num-values 2)
+				  `((:locally (:movl ,(* +movitz-fixnum-factor+
+							 (- num-values 2))
 						     (:edi (:edi-offset num-values))))))
 				(loop for i downfrom (- num-values 2 1) to 0
 				    collect
@@ -1224,9 +1225,10 @@ on the current result."
 			       (loop for i from (- (length sub-forms) 3) downto 0
 				   collecting
 				     `(:locally (:popl (:edi (:edi-offset values ,(* i 4))))))
-			       (make-immediate-move (- (length sub-forms) 2) :ecx)
-			       `((:locally (:movl :ecx (:edi (:edi-offset num-values))))
-				 (:addl 2 :ecx)
+			       (make-immediate-move (length sub-forms) :ecx)
+			       `((:leal ((:ecx ,+movitz-fixnum-factor+) ,(* -2 +movitz-fixnum-factor+))
+					:edx)
+				 (:locally (:movl :edx (:edi (:edi-offset num-values))))
 				 (:stc))
 			       #+ignore
 			       (make-compiled-funcall-by-symbol 'muerte.cl::values

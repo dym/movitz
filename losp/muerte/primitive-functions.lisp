@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.26 2004/07/08 15:28:57 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.27 2004/07/13 02:26:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -713,6 +713,9 @@ of values in ECX."
     (:jnz 'push-loop)
    push-done
     (:locally (:movl (:edi (:edi-offset num-values)) :ecx))
+    (:testb 3 :cl)
+    (:jnz '(:sub-program () (:int 62)))
+    (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
     (:addl 2 :ecx)
    done
     (:jmp :edx)))
@@ -736,13 +739,15 @@ location for the current multiple values (i.e. eax, ebx, and the values thread-w
 	   (:jmp :edx)))
     ;; three or more values
     (:subl 2 :ecx)
+    (:shll #.movitz:+movitz-fixnum-shift+ :ecx)
     (:locally (:movl :ecx (:edi (:edi-offset num-values))))
-    (:subl 1 :ecx)
+    (:subl #.movitz:+movitz-fixnum-factor+ :ecx)
    pop-loop
-    (:locally (:popl (:edi (:ecx 4) (:edi-offset values))))
-    (:subl 1 :ecx)
+    (:locally (:popl (:edi (:ecx 1) (:edi-offset values))))
+    (:subl #.movitz:+movitz-fixnum-factor+ :ecx)
     (:jnc 'pop-loop)
     (:locally (:movl (:edi (:edi-offset num-values)) :ecx))
+    (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
     (:popl :ebx)
     (:popl :eax)
     (:addl 2 :ecx)

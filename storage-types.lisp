@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.27 2004/07/12 11:09:12 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.28 2004/07/13 02:26:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -891,10 +891,12 @@ integer (native lisp) value."
     :initform 0
     :accessor movitz-funobj-num-jumpers
     :map-binary-write (lambda (x &optional type)
-		       (declare (ignore typE))
-			(* x +movitz-fixnum-factor+))
+		       (declare (ignore type))
+		       (check-type x (unsigned-byte 14))
+		       (* x +movitz-fixnum-factor+))
     :map-binary-read (lambda (x &optional type)
-		       (declare (ignore typE))
+		       (declare (ignore type))
+		       (assert (zerop (ldb (byte 2 0) x)))
 		       (/ x +movitz-fixnum-factor+)))
    (num-constants
     :binary-type lu16
