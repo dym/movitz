@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.32 2004/07/22 01:00:47 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.33 2004/07/23 14:36:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -608,13 +608,15 @@
 	 (:compile-form (:result-mode :eax) ,cell)
 	 (:leal (:eax -1) :ecx)
 	 (:testb 7 :cl)
-	 (:jnz '(:sub-program () (:int 66)))
+	 (:jnz '(:sub-program () (:int 61)))
 	 (:movl :edi (:eax -1)))
     `(with-inline-assembly (:returns :eax)
        (:compile-two-forms (:eax :ebx) ,value ,cell)
        (:leal (:ebx -1) :ecx)
        (:testb 7 :cl)
-       (:jnz '(:sub-program () (:int 66)))
+       (:jnz '(:sub-program ()
+	       (:movl :ebx :eax)
+	       (:int 61)))
        (:movl :eax (:ebx -1)))))
 
 (define-compiler-macro (setf cdr) (value cell &environment env)
@@ -624,13 +626,15 @@
 	 (:compile-form (:result-mode :eax) ,cell)
 	 (:leal (:eax -1) :ecx)
 	 (:testb 7 :cl)
-	 (:jnz '(:sub-program () (:int 66)))
+	 (:jnz '(:sub-program () (:int 61)))
 	 (:movl :edi (:eax 3)))
     `(with-inline-assembly (:returns :eax)
        (:compile-two-forms (:eax :ebx) ,value ,cell)
        (:leal (:ebx -1) :ecx)
        (:testb 7 :cl)
-       (:jnz '(:sub-program () (:int 66)))
+       (:jnz '(:sub-program ()
+	       (:movl :ebx :eax)
+	       (:int 61)))
        (:movl :eax (:ebx 3)))))
 
 (define-compiler-macro rplaca (cons object)
@@ -638,7 +642,7 @@
      (:compile-two-forms (:eax :ebx) ,cons ,object)
      (:leal (:eax -1) :ecx)
      (:testb 7 :cl)
-     (:jnz '(:sub-program () (:int 66)))
+     (:jnz '(:sub-program () (:int 61)))
      (:movl :ebx (:eax -1))))
 
 (define-compiler-macro rplacd (cons object)
@@ -646,7 +650,7 @@
      (:compile-two-forms (:eax :ebx) ,cons ,object)
      (:leal (:eax -1) :ecx)
      (:testb 7 :cl)
-     (:jnz '(:sub-program () (:int 66)))
+     (:jnz '(:sub-program () (:int 61)))
      (:movl :ebx (:eax 3))))
 
 (define-compiler-macro endp (x)
@@ -795,7 +799,8 @@
 	   (:jne 'not-funobj)
 	   (:movl :edx :esi)
 	  funobj-ok
-	   (:call (:esi ,(bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector%3op))))))))
+	   (:call (:esi ,(bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector%3op)))
+	   (:leal (:esp 4) :esp))))))
 
 (define-compiler-macro funcall%unsafe%1ops (function arg0)
   `(with-inline-assembly (:returns :multiple-values)
@@ -813,14 +818,9 @@
   `(let ((fn ,function))
      (with-inline-assembly (:returns :multiple-values)
        (:compile-arglist () ,arg0 ,arg1 ,arg2)
-;;;     (:compile-form (:result-mode :push) ,function)
-;;;     (:compile-form (:result-mode :push) ,arg0)
-;;;     (:compile-two-forms (:ebx :ecx) ,arg1 ,arg2)
-;;;     (:popl :eax)
-;;;     (:popl :esi)
-;;;     (:pushl :ecx)
        (:compile-form (:result-mode :esi) fn)
-       (:call (:esi ,(bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector%3op))))))
+       (:call (:esi ,(bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector%3op)))
+       (:leal (:esp 4) :esp))))
 
 (define-compiler-macro funcall%unsafe (function &rest args)
   (case (length args)
