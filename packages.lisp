@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.1 2004/01/13 11:04:59 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.2 2004/02/02 13:06:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1100,6 +1100,7 @@
 	   simple-read-from-string
 	   print-word
 	   fixnump below
+	   print-unreadable-movitz-object
 
 	   stack-ref
 	   with-each-dynamic-context
@@ -1208,6 +1209,8 @@
 	   #:io-delay
 	   #:io-port-read-sequence
 	   #:io-port-write-sequence
+	   #:%io-port-read-succession
+	   #:%io-port-write-succession
 	   #:with-io-register-syntax
 	   #:with-register-syntax
 	   #:cpu-id
