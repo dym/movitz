@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.26 2004/07/15 00:27:13 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.27 2004/07/15 11:22:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -99,7 +99,7 @@
 	    (:ret))))
     (do-it)))
 
-(define-primitive-function muerte::get-cons-pointer ()
+(define-primitive-function los0-get-cons-pointer ()
   "Return in EAX the next object location with space for EAX words, with tag 6.
 Preserve ECX."
   (macrolet
@@ -123,7 +123,7 @@ Preserve ECX."
 	    (:ret))))
     (do-it)))
 
-(define-primitive-function muerte::cons-commit ()
+(define-primitive-function los0-cons-commit ()
   "Commit allocation of ECX/fixnum words.
 Preserve EAX and EBX."
   (macrolet
@@ -240,42 +240,44 @@ Preserve EAX and EBX."
 	    (:leal (:edx :ecx 8) :eax))))
     (do-it)))
 
-(defun install-los0-consing (&optional (space-kilobytes 1024))
-  (let ((size (* space-kilobytes #x100)))
-    (setf (%run-time-context-slot 'nursery-space)
-      (allocate-duo-space size))
-    (setf (exception-handler 113)
-      (lambda (exception interrupt-frame)
-	(declare (ignore exception interrupt-frame))
-	(unless *gc-quiet*
-	  (format t "~&;; GC.. "))
-	(stop-and-copy)
-	;; This is  a nice opportunity to poll the keyboard..
-	(loop
-	  (case (muerte.x86-pc.keyboard:poll-char)
-	    ((#\esc)
-	     (break "Los0 GC keyboard poll."))
-	    ((nil)
-	     (return))))))
-    (let ((conser (symbol-value 'los0-fast-cons)))
-      (check-type conser vector)
-      (setf (%run-time-context-slot 'muerte::fast-cons)
-	conser))
-    (let ((conser (symbol-value 'los0-box-u32-ecx)))
-      (check-type conser vector)
-      (setf (%run-time-context-slot 'muerte::box-u32-ecx)
-	conser))
-    (let ((old-malloc (symbol-function 'muerte:malloc-clumps)))
-      (setf (symbol-function 'muerte:malloc-clumps)
-	(symbol-function 'los0-malloc-clumps))
-      (setf (symbol-function 'los0-malloc-clumps)
-	old-malloc))
-    (let ((old-malloc-data (symbol-function 'muerte:malloc-data-clumps)))
-      (setf (symbol-function 'muerte:malloc-data-clumps)
-	(symbol-function 'los0-malloc-data-clumps))
-      (setf (symbol-function 'los0-malloc-data-clumps)
-	old-malloc-data))
-    (values)))
+(defun install-los0-consing (&key (run-time-context (current-run-time-context))
+				  (kb-size 1024)
+				  duo-space)
+  "Install the 'Los0' GC architecture on run-time-context."
+  (setf (%run-time-context-slot 'nursery-space run-time-context)
+    (or duo-space
+	(allocate-duo-space (* kb-size #x100))))
+  (setf (exception-handler 113)
+    (lambda (exception interrupt-frame)
+      (declare (ignore exception interrupt-frame))
+      (unless *gc-quiet*
+	(format t "~&;; GC.. "))
+      (stop-and-copy)
+      (loop				; This is  a nice opportunity to poll the keyboard..
+	(case (muerte.x86-pc.keyboard:poll-char)
+	  ((#\esc)
+	   (break "Los0 GC keyboard poll."))
+	  ((nil)
+	   (return))))))
+  (flet ((install-primitive (name slot)
+	   (let ((code-vector (symbol-value name)))
+	     (check-type code-vector code-vector)
+	     (setf (%run-time-context-slot slot run-time-context) code-vector))))
+    (install-primitive 'los0-fast-cons 'muerte::fast-cons)
+    (install-primitive 'los0-box-u32-ecx 'muerte::box-u32-ecx)
+    (install-primitive 'los0-get-cons-pointer 'muerte::get-cons-pointer)
+    (install-primitive 'los0-cons-commit 'muerte::cons-commit))
+  (let ((old-malloc (symbol-function 'muerte:malloc-clumps)))
+    (setf (symbol-function 'muerte:malloc-clumps)
+      (symbol-function 'los0-malloc-clumps))
+    (setf (symbol-function 'los0-malloc-clumps)
+      old-malloc))
+  (let ((old-malloc-data (symbol-function 'muerte:malloc-data-clumps)))
+    (setf (symbol-function 'muerte:malloc-data-clumps)
+      (symbol-function 'los0-malloc-data-clumps))
+    (setf (symbol-function 'los0-malloc-data-clumps)
+      old-malloc-data))
+  (values))
 
 (defun install-old-consing ()
   (let ((conser (symbol-value 'muerte::fast-cons)))
