@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.39 2004/11/23 16:07:37 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.40 2004/12/21 14:28:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -205,6 +205,33 @@
 		 ;; Two values: the 30 upper bits as signed integer,
 		 ;; and secondly the lower 2 bits as unsigned.
 		 (assert (= 2 movitz::+movitz-fixnum-shift+))
+		 (let ((fix-ecx `((:leal ((:ecx 4)) :ebx)
+				  (:andl -4 :ecx)
+				  (:andl #b1100 :ebx)
+				  (:movl :ecx :eax)
+				  (:movl 2 :ecx)
+				  (:stc))))
+		   (cond
+		    ((and (eq 0 offset) (eq 0 index))
+		     `(with-inline-assembly (:returns :multiple-values)
+			(:compile-form (:result-mode :eax) ,object)
+			(:movl (:eax ,(offset-by 4)) :ecx)
+			,@fix-ecx))
+		    ((eq 0 offset)
+		     `(with-inline-assembly (:returns :multiple-values)
+			(:compile-two-forms (:eax :ecx) ,object ,index)
+			(:movl (:eax :ecx ,(offset-by 4)) :ecx)
+			,@fix-ecx))
+		    (t (let ((object-var (gensym "memref-object-")))
+			 `(let ((,object-var ,object))
+			    (with-inline-assembly (:returns :ecx :type (unsigned-byte 29))
+			      (:compile-two-forms (:ecx :ebx) ,offset ,index)
+			      (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
+			      (:load-lexical (:lexical-binding ,object-var) :eax)
+			      (:addl :ebx :ecx)
+			      (:movl (:eax :ecx ,(offset-by 4)) :ecx)
+			      ,@fix-ecx))))))
+		 #+ignore
 		 `(with-inline-assembly (:returns :multiple-values)
 		    (:compile-form (:result-mode :push) ,object)
 		    (:compile-two-forms (:ecx :ebx) ,offset ,index)
@@ -242,18 +269,18 @@
 		 (assert (= 4 movitz::+movitz-fixnum-factor+))
 		 (cond
 		  ((and (eq 0 offset) (eq 0 index))
-		   `(with-inline-assembly (:returns :ecx :type (unsigned-byte 29))
+		   `(with-inline-assembly (:returns :ecx :type (signed-byte 30))
 		      (:compile-form (:result-mode :eax) ,object)
 		      (:movl (:eax ,(offset-by 4)) :ecx)
 		      (:andl -4 :ecx)))
 		  ((eq 0 offset)
-		   `(with-inline-assembly (:returns :ecx :type (unsigned-byte 29))
+		   `(with-inline-assembly (:returns :ecx :type (signed-byte 30))
 		      (:compile-two-forms (:eax :ecx) ,object ,index)
 		      (:movl (:eax :ecx ,(offset-by 4)) :ecx)
 		      (:andl -4 :ecx)))
 		  (t (let ((object-var (gensym "memref-object-")))
 		       `(let ((,object-var ,object))
-			  (with-inline-assembly (:returns :ecx :type (unsigned-byte 29))
+			  (with-inline-assembly (:returns :ecx :type (signed-byte 30))
 			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
 			    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
 			    (:load-lexical (:lexical-binding ,object-var) :eax)
