@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.46 2004/10/21 20:30:07 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.47 2004/11/07 21:07:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -445,10 +445,12 @@
 ;;; simple-vector accessors
 
 (define-compiler-macro svref%unsafe (simple-vector index)
-  `(memref ,simple-vector 2 :index ,index))
+  `(memref ,simple-vector (movitz-type-slot-offset 'movitz-basic-vector 'data)
+	   :index ,index))
 
 (define-compiler-macro (setf svref%unsafe) (value simple-vector index)
-  `(setf (memref ,simple-vector 2 :index ,index) ,value))
+  `(setf (memref ,simple-vector (movitz-type-slot-offset 'movitz-basic-vector 'data)
+		 :index ,index) ,value))
 
 (defun svref%unsafe (simple-vector index)
 ;;  (compiler-macro-call svref%unsafe simple-vector index))
@@ -460,83 +462,90 @@
   (setf (svref%unsafe simple-vector index) value))
 
 (defun svref (simple-vector index)
-  (etypecase simple-vector
-    (simple-vector
-     (macrolet
-	 ((do-it ()
-	    `(with-inline-assembly (:returns :eax)
-	       (:compile-two-forms (:eax :ebx) simple-vector index)
-	       (:leal (:eax ,(- (movitz::tag :other))) :ecx)
-	       (:testb 7 :cl)
-	       (:jne '(:sub-program (not-basic-simple-vector)
-		       (:compile-form (:result-mode :ignore)
-			(error "Not a simple-vector: ~S." simple-vector))))
-	       (:movl (:eax ,movitz:+other-type-offset+) :ecx)
-	       (:testb ,movitz:+movitz-fixnum-zmask+ :bl)
-	       (:jnz '(:sub-program (illegal-index)
-		       (:compile-form (:result-mode :ignore)
-			(error "Illegal index: ~S." index))))
-	       (:cmpw ,(movitz:basic-vector-type-tag :any-t) :cx)
-	       (:jne 'not-basic-simple-vector)
-	       (:movl (:eax :ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))
-		      :eax)
-	       )))
-       (do-it)))))
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :eax)
+	    (:compile-two-forms (:eax :ebx) simple-vector index)
+	    (:leal (:eax ,(- (movitz::tag :other))) :ecx)
+	    (:testb 7 :cl)
+	    (:jne '(:sub-program (not-basic-simple-vector)
+		    (:compile-form (:result-mode :ignore)
+		     (error "Not a simple-vector: ~S." simple-vector))))
+	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
+	    (:testb ,movitz:+movitz-fixnum-zmask+ :bl)
+	    (:jnz '(:sub-program (illegal-index)
+		    (:compile-form (:result-mode :ignore)
+		     (error "Illegal index: ~S." index))))
+	    (:cmpw ,(movitz:basic-vector-type-tag :any-t) :cx)
+	    (:jne 'not-basic-simple-vector)
+	    (:cmpl :ebx (:eax (:offset movitz-basic-vector num-elements)))
+	    (:jbe 'illegal-index)
+	    (:movl (:eax :ebx (:offset movitz-basic-vector data)) :eax)
+	    )))
+    (do-it)))
     
 
 (defun (setf svref) (value simple-vector index)
-  (etypecase simple-vector
-    (simple-vector
-     (macrolet
-	 ((do-it ()
-	    `(with-inline-assembly (:returns :eax)
-	       (:compile-two-forms (:ebx :edx) simple-vector index)
-	       (:leal (:ebx ,(- (movitz::tag :other))) :ecx)
-	       (:testb 7 :cl)
-	       (:jne '(:sub-program (not-basic-simple-vector)
-		       (:compile-form (:result-mode :ignore)
-			(error "Not a simple-vector: ~S." simple-vector))))
-	       (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
-	       (:testb ,movitz:+movitz-fixnum-zmask+ :dl)
-	       (:jnz '(:sub-program (illegal-index)
-		       (:compile-form (:result-mode :ignore)
-			(error "Illegal index: ~S." index))))
-	       (:compile-form (:result-mode :eax) value)
-	       (:cmpw ,(movitz:basic-vector-type-tag :any-t) :cx)
-	       (:jne 'not-basic-simple-vector)
-	       (:movl :eax
-		      (:ebx :edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))))))
-       (do-it)))))
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :eax)
+	    (:compile-two-forms (:ebx :edx) simple-vector index)
+	    (:leal (:ebx ,(- (movitz::tag :other))) :ecx)
+	    (:testb 7 :cl)
+	    (:jne '(:sub-program (not-basic-simple-vector)
+		    (:compile-form (:result-mode :ignore)
+		     (error "Not a simple-vector: ~S." simple-vector))))
+	    (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
+	    (:testb ,movitz:+movitz-fixnum-zmask+ :dl)
+	    (:jnz '(:sub-program (illegal-index)
+		    (:compile-form (:result-mode :ignore)
+		     (error "Illegal index: ~S." index))))
+	    (:compile-form (:result-mode :eax) value)
+	    (:cmpw ,(movitz:basic-vector-type-tag :any-t) :cx)
+	    (:jne 'not-basic-simple-vector)
+	    (:cmpl :edx (:ebx (:offset movitz-basic-vector num-elements)))
+	    (:jbe 'illegal-index)
+	    (:movl :eax
+		   (:ebx :edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))))))
+    (do-it)))
 
 ;;; string accessors
 
 (defun char (string index)
   (check-type string string)
   (assert (below index (array-dimension string 0)))
-  (memref string 2 :index index :type :character))
+  (memref string (movitz-type-slot-offset 'movitz-basic-vector 'data)
+	  :index index :type :character))
 
 (defun (setf char) (value string index)
   (assert (below index (array-dimension string 0)))
-  (setf (memref string 2 :index index :type :character) value))
+  (setf (memref string (movitz-type-slot-offset 'movitz-basic-vector 'data)
+		:index index :type :character) value))
 
 (defun schar (string index)
   (check-type string string)
   (assert (below index (length string)))
-  (memref string 2 :index index :type :character))
+  (memref string (movitz-type-slot-offset 'movitz-basic-vector 'data)
+	  :index index
+	  :type :character))
 
 (defun (setf schar) (value string index)
   (check-type string string)
   (assert (below index (length string)))
-  (setf (aref string index) value))
+  (setf (memref string (movitz-type-slot-offset 'movitz-basic-vector 'data)
+		:index index :type :character)
+    value))
 
 (define-compiler-macro char%unsafe (string index)
-  `(memref ,string 2 :index ,index :type :character))
+  `(memref ,string (movitz-type-slot-offset 'movitz-basic-vector 'data)
+	   :index ,index :type :character))
 
 (defun char%unsafe (string index)
   (char%unsafe string index))
 
 (define-compiler-macro (setf char%unsafe) (value string index)
-  `(setf (memref ,string 2 :index ,index :type :character) ,value))
+  `(setf (memref ,string (movitz-type-slot-offset 'movitz-basic-vector 'data)
+		 :index ,index :type :character) ,value))
 
 (defun (setf char%unsafe) (value string index)
   (setf (char%unsafe string index) value))
@@ -544,13 +553,15 @@
 ;;; u8 accessors
 
 (define-compiler-macro u8ref%unsafe (vector index)
-  `(memref ,vector 2 :index ,index :type :unsigned-byte8))
+  `(memref ,vector (movitz-type-slot-offset 'movitz-basic-vector 'data)
+	   :index ,index :type :unsigned-byte8))
 
 (defun u8ref%unsafe (vector index)
   (u8ref%unsafe vector index))
 
 (define-compiler-macro (setf u8ref%unsafe) (value vector index)
-  `(setf (memref ,vector 2 :index ,index :type :unsigned-byte8) ,value))
+  `(setf (memref ,vector (movitz-type-slot-offset 'movitz-basic-vector 'data)
+		 :index ,index :type :unsigned-byte8) ,value))
 
 (defun (setf u8ref%unsafe) (value vector index)
   (setf (u8ref%unsafe vector index) value))
@@ -558,7 +569,8 @@
 ;;; u32 accessors
 
 (define-compiler-macro u32ref%unsafe (vector index)
-  `(memref ,vector 2 :index ,index :type :unsigned-byte32))
+  `(memref ,vector (movitz-type-slot-offset 'movitz-basic-vector 'data)
+	   :index ,index :type :unsigned-byte32))
 
 (defun u32ref%unsafe (vector index)
   (compiler-macro-call u32ref%unsafe vector index))
