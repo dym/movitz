@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.56 2004/07/14 12:03:58 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.57 2004/07/14 12:16:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -454,12 +454,10 @@
 		   (:compile-two-forms (:eax :ebx) minuend subtrahend)
 		   (:subl :ebx :eax)
 		   (:into)))
-		((bignum fixnum)
+		((positive-bignum fixnum)
 		 (+ (- subtrahend) minuend))
-		((fixnum bignum)
+		((fixnum positive-bignum)
 		 (- (+ (- minuend) subtrahend)))
-		(((integer 0 *) (integer * -1))
-		 (+ minuend (- subtrahend)))
 		((positive-bignum positive-bignum)
 		 (cond
 		  ((= minuend subtrahend)
@@ -485,7 +483,14 @@
 			       (:eax :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
 			(:jc '(:sub-program (should-not-happen)
 			       (:int 107)))
-			))))))))
+			)))))
+		(((integer 0 *) (integer * -1))
+		 (+ minuend (- subtrahend)))
+		(((integer * -1) (integer 0 *))
+		 (- (+ (- minuend) subtrahend)))
+		(((integer * -1) (integer * -1))
+		 (+ minuend (- subtrahend)))
+		)))
 	(do-it)))
    (t (minuend &rest subtrahends)
       (declare (dynamic-extent subtrahends))
