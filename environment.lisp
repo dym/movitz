@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.2 2004/01/16 19:45:36 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.3 2004/02/05 14:46:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -160,6 +160,7 @@ lexical environment that a closure funobj captures."))
     :initform nil
     :accessor key-vars)
    (need-normalized-ecx-p
+    :initarg :need-normalized-ecx-p
     :accessor need-normalized-ecx-p)
    (frame-map
     :accessor frame-map)

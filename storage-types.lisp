@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.4 2004/02/04 15:25:28 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.5 2004/02/05 14:46:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -835,7 +835,11 @@ integer (native lisp) value."
     :accessor movitz-funobj-usage)
    (sub-function-binding-usage		; a plist used during lexical analysis
     :initform nil
-    :accessor sub-function-binding-usage))
+    :accessor sub-function-binding-usage)
+   (entry-protocol
+    :initform :default
+    :initarg :entry-protocol
+    :reader funobj-entry-protocol))
   (:slot-align type -2))
 
 (defmethod write-binary-record ((obj movitz-funobj) stream)

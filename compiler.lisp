@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.16 2004/02/05 11:02:39 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.17 2004/02/05 14:46:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -119,13 +119,14 @@ compile, using the host compiler, the code rather than just using eval.")
     :accessor function-envs)
    (funobj-env
     :initarg :funobj-env
-    :accessor funobj-env))
+    :accessor funobj-env)
+   (entry-protocol
+    :initform :default
+    :initarg :entry-protocol
+    :reader funobj-entry-protocol))
   (:documentation "This class is used for funobjs during the first compiler pass.
 Before the second pass, such objects will be change-class-ed to proper movitz-funobjs.
 This way, we ensure that no undue side-effects on the funobj occur during pass 1."))
-
-(defclass movitz-funobj-pass1-numargs-case (movitz-funobj-pass1) ())
-(defclass movitz-funobj-pass1-1req1opt (movitz-funobj-pass1) ())
 
 (defmethod print-object ((object movitz-funobj-pass1) stream)
   (print-unreadable-object (object stream :type t :identity t)
@@ -165,8 +166,10 @@ If funobj is provided, its identity will be kept, but its type (and values) migh
   ;; mutually recursive (lexically bound) functions.
   (with-retries-until-true (retry-pass1 "Retry first-pass compilation of ~S." name)
     ;; First-pass is mostly functional, so it can safely be restarted.
-    (multiple-value-bind (required-vars optional-vars rest-var key-vars)
+    (multiple-value-bind (required-vars optional-vars rest-var key-vars
+			  aux-vars allow-p min max edx-var)
 	(decode-normal-lambda-list lambda-list)
+      (declare (ignore aux-vars allow-p min max))
       ;; There are several main branches through the function
       ;; compiler, and this is where we decide which one to take.
       (funcall (cond
@@ -176,8 +179,11 @@ If funobj is provided, its identity will be kept, but its type (and values) migh
 		 'make-compiled-function-pass1-numarg-case)
 		((and (= 1 (length required-vars)) ; (x &optional y)
 		      (= 1 (length optional-vars))
+		      (movitz-constantp (nth-value 1 (decode-optional-formal (first optional-vars)))
+					env)
 		      (null key-vars)
-		      (not rest-var))
+		      (not rest-var)
+		      (not edx-var))
 		 'make-compiled-function-pass1-1req1opt)
 		(t 'make-compiled-function-pass1))
 	       name lambda-list declarations form env top-level-p funobj))))
@@ -192,7 +198,8 @@ Otherwise coerce funobj to class."
 	 init-args))
 
 (defun make-compiled-function-pass1-numarg-case (name lambda-list declarations form env top-level-p funobj)
-  (let* ((funobj (ensure-pass1-funobj funobj 'movitz-funobj-pass1-numargs-case
+  (let* ((funobj (ensure-pass1-funobj funobj 'movitz-funobj-pass1
+				      :entry-protocol :numargs-case
 				      :name name
 				      :lambda-list (movitz-read (lambda-list-simplify lambda-list))))
 	 (funobj-env (make-local-movitz-environment env funobj :type 'funobj-env)))
@@ -230,6 +237,46 @@ Otherwise coerce funobj to class."
 		     (function-envs funobj)))))
     funobj))
 
+(defun make-compiled-function-pass1-1req1opt (name lambda-list declarations form env top-level-p funobj)
+  "Returns funobj."
+  (when (duplicatesp lambda-list)
+    (error "There are duplicates in lambda-list ~S." lambda-list))
+  (let* ((funobj (ensure-pass1-funobj funobj 'movitz-funobj-pass1
+				      :entry-protocol :1req1opt
+				      :name name
+				      :lambda-list (movitz-read (lambda-list-simplify lambda-list))))
+	 (funobj-env (make-local-movitz-environment env funobj :type 'funobj-env))
+	 (function-env (add-bindings-from-lambda-list
+			lambda-list
+			(make-local-movitz-environment funobj-env funobj
+						       :type 'function-env
+						       :need-normalized-ecx-p nil
+						       :declaration-context :funobj
+						       :declarations declarations)))
+	 (optional-env (make-local-movitz-environment function-env funobj
+						      :type 'function-env)))
+    (setf (funobj-env funobj) funobj-env)
+    ;; (print-code 'arg-init-code arg-init-code)
+    (setf (extended-code optional-env)
+      (compiler-call #'compile-form
+	:form (optional-function-argument-init-form
+	       (movitz-binding (first (optional-vars function-env)) function-env nil))
+	:funobj funobj
+	:env optional-env
+	:result-mode :ebx))
+    (setf (extended-code function-env)
+      (append #+ignore arg-init-code
+	      (compiler-call #'compile-form
+		:form (make-special-funarg-shadowing function-env form)
+		:funobj funobj
+		:env function-env
+		:top-level-p top-level-p
+		:result-mode :function)))
+    (setf (function-envs funobj)
+      (list (cons 'muerte.cl::t function-env)
+	    (cons :optional optional-env)))
+    funobj))
+
 (defun make-compiled-function-pass1 (name lambda-list declarations form env top-level-p funobj)
   "Returns funobj."
   (when (duplicatesp lambda-list)
@@ -261,7 +308,7 @@ Otherwise coerce funobj to class."
 
 
 (defun make-compiled-funobj-pass2 (toplevel-funobj-pass1)
-  "This is where second pass compilation for each top-level funobj begins."
+  "This is the entry-poing for second pass compilation for each top-level funobj."
   (check-type toplevel-funobj-pass1 movitz-funobj-pass1)
   (let ((toplevel-funobj (change-class toplevel-funobj-pass1 'movitz-funobj)))
     (multiple-value-bind (toplevel-funobj function-binding-usage)
@@ -476,6 +523,75 @@ a (lexical-extent) sub-function might care about its parent frame-map."
   funobj)
 
 (defun complete-funobj (funobj)
+  (case (funobj-entry-protocol funobj)
+    (:1req1opt 
+     (complete-funobj-1req1opt funobj))
+    (t (complete-funobj-default funobj)))
+  (loop for (sub-function-binding) on (sub-function-binding-usage funobj) by #'cddr
+      do (complete-funobj (function-binding-funobj sub-function-binding)))
+  funobj)
+
+(defun complete-funobj-1req1opt (funobj)
+  (assert (= 2 (length (function-envs funobj))))
+  (let* ((function-env (cdr (assoc 'muerte.cl::t (function-envs funobj))))
+	 (optional-env (cdr (assoc :optional (function-envs funobj))))
+	 (frame-map (frame-map function-env))
+	 (resolved-code (finalize-code (extended-code function-env) funobj frame-map))
+	 (resolved-optional-code (finalize-code (extended-code optional-env) funobj frame-map))
+	 (stack-frame-size (frame-map-size (frame-map function-env)))
+	 (use-stack-frame-p (or (plusp stack-frame-size)
+				(tree-search resolved-code
+					     '(:ebp :esp :call :leave))))
+	 (optional-stack-frame-p (tree-search resolved-optional-code
+					      '(:ebp :esp :call :leave))))
+    (assert (not optional-stack-frame-p))
+    (let* ((stack-setup-size stack-frame-size)
+	   (function-code
+	    (let* ((req-binding (movitz-binding (first (required-vars function-env))
+						function-env nil))
+		   (req-location (cdr (assoc req-binding frame-map)))
+		   (opt-binding (movitz-binding (first (optional-vars function-env))
+						function-env nil))
+		   (opt-location (cdr (assoc opt-binding frame-map))))
+	      (append `((:jmp (:edi ,(global-constant-offset 'trampoline-cl-dispatch-1or2))))
+		      '(entry%1op)
+		      (unless (eql nil opt-location)
+			resolved-optional-code)
+		      '(entry%2op)
+		      (when use-stack-frame-p
+			+enter-stack-frame-code+)
+		      '(start-stack-frame-setup)
+		      (cond
+		       ((and (eql 1 req-location)
+			     (eql 2 opt-location))
+			(decf stack-setup-size 2)
+			`((:pushl :eax)
+			  (:pushl :ebx)))
+		       ((and (eql 1 req-location)
+			     (eql nil opt-location))
+			(decf stack-setup-size 1)
+			`((:pushl :eax)))
+		       ((and (member req-location '(nil :eax))
+			     (eql 1 opt-location))
+			(decf stack-setup-size 1)
+			`((:pushl :ebx)))
+		       ((and (member req-location '(nil :eax))
+			     (member opt-location '(nil :ebx)))
+			nil)
+		       (t (error "Can't deal with req ~S opt ~S."
+				 req-location opt-location)))
+		      (make-stack-setup-code stack-setup-size)
+		      resolved-code
+		      (make-compiled-function-postlude funobj function-env
+						       use-stack-frame-p)))))
+      (let ((optimized-function-code
+	     (optimize-code function-code
+			    :keep-labels (nconc (subseq (movitz-funobj-const-list funobj)
+							0 (movitz-funobj-num-jumpers funobj))
+						'(entry%1op entry%2op)))))
+	(assemble-funobj funobj optimized-function-code)))))
+
+(defun complete-funobj-default (funobj)
   (let ((code-specs
 	 (loop for (numargs . function-env) in (function-envs funobj)
 	     collecting
@@ -506,7 +622,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	  (code2 (cdr (assoc 2 code-specs)))
 	  (code3 (cdr (assoc 3 code-specs)))
 	  (codet (cdr (assoc 'muerte.cl::t code-specs))))
-      (assert codet () "A default numargs-case is required.")
+      (assert codet () "A default numargs-case is required.") 
       ;; (format t "codet:~{~&~A~}" codet)
       (let ((combined-code
 	     (delete 'start-stack-frame-setup
@@ -539,8 +655,6 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 				 codet)))))
 	;; (warn "opt code: ~{~&~A~}" optimized-function-code)
 	(assemble-funobj funobj combined-code))))
-  (loop for (sub-function-binding) on (sub-function-binding-usage funobj) by #'cddr
-      do (complete-funobj (function-binding-funobj sub-function-binding)))
   funobj)
 
 
@@ -598,7 +712,8 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 			    :initial-contents code-vector
 			    :flags '(:code-vector-p)
 			    :alignment 16
-			    :alignment-offset 8)))))
+			    :alignment-offset 8))))
+  funobj)
 
 #+ignore
 (defun make-compiled-function-body-default (form funobj env top-level-p)
@@ -985,7 +1100,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 
 (defun print-code (x code)
   (let ((*print-level* 3))
-    (format t "~A code:~{~&  ~A~}" x code))
+    (format t "~&~A code:~{~&  ~A~}" x code))
   code)
 
 (defun layout-program (pc)
@@ -3128,6 +3243,14 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
      (t (error "Don't know how to compile checking for ~A to ~A arguments."
 	       min-args max-args)))))
 
+(defun make-stack-setup-code (stack-setup-size)
+  (case stack-setup-size
+    (0 nil)
+    (1 '((:pushl :edi)))
+    (2 '((:pushl :edi) (:pushl :edi)))
+    (3 '((:pushl :edi) (:pushl :edi) (:pushl :edi)))
+    (t `((:subl ,(* 4 stack-setup-size) :esp)))))
+
 (defun make-compiled-function-prelude (stack-frame-size env use-stack-frame-p
 				       need-normalized-ecx-p frame-map
 				       &key do-check-stack-p)
@@ -3258,7 +3381,7 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 	       (append (when (and do-check-stack-p
 				  *compiler-auto-stack-checks-p*
 				  (not (without-check-stack-limit-p env)))
-			 `(((:fs-override)
+			 `((,*compiler-global-segment-prefix*
 			    :bound (:edi ,(global-constant-offset 'stack-bottom)) :esp)))
 		       (when use-stack-frame-p
 			`((:pushl :ebp)
@@ -3286,12 +3409,7 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 			(make-compiled-function-prelude-numarg-check min-args max-args))))
 	    '(start-stack-frame-setup)
 	    eax-ebx-code
-	    (case stack-setup-size
-	      (0 nil)
-	      (1 '((:pushl :edi)))
-	      (2 '((:pushl :edi) (:pushl :edi)))
-	      (3 '((:pushl :edi) (:pushl :edi) (:pushl :edi)))
-	      (t `((:subl ,(* 4 stack-setup-size) :esp))))
+	    (make-stack-setup-code stack-setup-size)
 	    (when need-normalized-ecx-p
 	      (cond
 	       ;; normalize arg-count in ecx..
