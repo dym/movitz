@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.3 2004/03/26 13:58:27 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.4 2004/03/28 16:19:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -205,6 +205,18 @@
 	  (:sarl #.movitz::+movitz-fixnum-shift+ :ebx)
 	  (:popl :ecx)			; object
 	  (:movb :ah (:ebx :ecx))))
+      (:unsigned-byte32
+       (assert (= 4 movitz::+movitz-fixnum-factor+))
+       `(with-inline-assembly (:returns :untagged-fixnum-eax)
+	  (:compile-form (:result-mode :push) ,object)
+	  (:compile-form (:result-mode :push) ,offset)
+	  (:compile-two-forms (:ebx :eax) ,index ,value)
+	  (:popl :ecx)			; offset
+	  (:shrl #.movitz::+movitz-fixnum-shift+ :eax)
+	  (:sarl #.movitz::+movitz-fixnum-shift+ :ecx)
+	  (:addl :ebx :ecx)		; index += offset
+	  (:popl :ebx)			; object
+	  (:movl :eax (:ebx :ecx))))
       (:unsigned-byte16
        `(with-inline-assembly (:returns :untagged-fixnum-eax)
 	  (:compile-form (:result-mode :push) ,object)
@@ -214,8 +226,8 @@
 	  (:popl :ecx)			; offset
 	  (:shrl #.movitz::+movitz-fixnum-shift+ :eax)
 	  (:sarl #.movitz::+movitz-fixnum-shift+ :ecx)
-	  (:addl :ecx :ebx)		; index += offset
-	  (:popl :ecx)			; object
+	  (:addl :ebx :ecx)		; index += offset
+	  (:popl :ebx)			; object
 	  (:movw :ax (:ebx :ecx))))
       (:unsigned-byte8
        `(with-inline-assembly (:returns :untagged-fixnum-eax)
@@ -252,9 +264,7 @@
     (:unsigned-byte16
      (setf (memref object offset index :unsigned-byte16) value))
     (:unsigned-byte32
-     (setf (memref object offset (* index 2) :unsigned-byte16) (ldb (byte 16 0) value)
-	   (memref object offset (+ 1 (* index 2)) :unsigned-byte16) (ldb (byte 14 16) value))
-     value)
+     (setf (memref object offset index :unsigned-byte32) value))
     (:lisp
      (setf (memref object offset index :lisp) value))))
 
