@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.19 2004/07/07 23:39:50 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.20 2004/07/08 18:49:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -247,7 +247,7 @@ Preserve EAX and EBX."
 	    (:leal (:edx :ecx 8) :eax))))
     (do-it)))
 
-(defun install-los0-consing (&optional (space-kilobytes 2048))
+(defun install-los0-consing (&optional (space-kilobytes 1024))
   (let ((size (* space-kilobytes #x100)))
     (setf (%run-time-context-slot 'nursery-space)
       (allocate-duo-space size))
