@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 18 12:21:36 2002
 ;;;;                
-;;;; $Id: dp8390.lisp,v 1.5 2004/02/02 14:03:13 ffjeld Exp $
+;;;; $Id: dp8390.lisp,v 1.6 2004/02/26 11:19:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,7 +22,7 @@
 (in-package muerte.x86-pc.ne2k)
 
 (defconstant +page0-read-map+
-    #(cr clda0 clda1 bnry tsr ncr fifo isr crda0 crda1 rsr cntr0 cntr1 cntr2))
+    #(cr clda0 clda1 bnry tsr ncr fifo isr crda0 crda1 rbcr0 rbcr1 rsr cntr0 cntr1 cntr2))
 
 (defconstant +page0-write-map+
     #(cr pstart pstop bnry tpsr tbcr0 tbcr1 isr rsar0 rsar1 rbcr0 rbcr1 rcr tcr dcr imr))
@@ -109,9 +109,11 @@
 		 (dp8390 ($page0-read isr)))
 	(setf (dp8390 ($page0-write isr))
 	  (ash 1 ($interrupt-status dma-complete)))
-      (error "Incomplete dp8390~@[ ~A~] @ #x~X DMA: crda=#x~X."
+      (error "Incomplete dp8390~@[ ~A~] @ #x~X DMA: crda=#x~X~@[, rbcr=#x~X~]."
 	     command io-base
-	     (io-register8x2 dp8390 ($page0-read crda1) ($page0-read crda0)))))
+	     (io-register8x2 dp8390 ($page0-read crda1) ($page0-read crda0))
+	     (let ((x (io-register8x2 dp8390 ($page0-read rbcr1) ($page0-read rbcr0))))
+	       (unless (= x #xffff) x)))))
   nil)
 
 (defun initialize-dma (io-base command size &optional address)
@@ -170,14 +172,14 @@
   ((io-base
     :initarg :io-base
     :reader io-base)
-   (cached-curr
+   (write-pointer			; This is (* 256 CURR)
     :documentation "This register is written by the device and read by the driver when neccessary."
-    :initarg :cached-curr
-    :accessor cached-curr)
-   (cached-bnry
+    :initarg :write-pointer
+    :accessor write-pointer)
+   (read-pointer			; This is (* 256 BNRY)
     :documentation "This register is cached on a write-through basis. It's only read by the device."
-    :initarg :cached-bnry
-    :accessor cached-bnry)
+    :initarg :read-pointer
+    :accessor read-pointer)
    (transmit-buffer
     :initarg :transmit-buffer
     :reader transmit-buffer)
@@ -191,17 +193,21 @@
     :initform 0
     :accessor ring-overflow-count)))
 
-(defun ring-empty-p (device)
-  "Is the dp8390 receive buffer ring empty?"
-  (not (or (/= (cached-curr device)	; Can we tell from the cached values alone?
-	       (cached-bnry device))
-	   (with-dp8390 (dp8390 (io-base device))
-	     (setf (dp8390 ($page0-write cr)) ($command page-1))
-	     (let ((new-curr (dp8390 ($page1-read curr)))) ; must update CURR register cache.
-	       (setf (cached-curr device) new-curr)
-	       (setf (dp8390 ($page1-write cr)) ($command page-0)) ; restore page 0
-	       (/= new-curr (cached-bnry device)))))))
-  
+(defun next-packet (device)
+  "If there's a packet available in the ring, return its ring pointer address.
+   Otherwise, return nil."
+  (let ((read-pointer (read-pointer device)))
+    (if (/= (write-pointer device)	; Can we tell from the cached values alone?
+	    read-pointer)
+	read-pointer
+      (with-dp8390 (dp8390 (io-base device))
+	(setf (dp8390 ($page0-write cr)) ($command page-1))
+	(let ((new-write-pointer (* 256 (dp8390 ($page1-read curr))))) ; update CURR register cache.
+	  (setf (dp8390 ($page1-write cr)) ($command page-0)) ; restore page 0
+	  (unless (= new-write-pointer read-pointer)
+	    (setf (write-pointer device) new-write-pointer)
+	    read-pointer))))))
+
 (defmethod (setf mac-address) :after (mac-address (device dp8390-device))
   "Keep the dp8390 device registers in sync with mac-address."
   (check-type mac-address vector)
@@ -258,13 +264,13 @@
 	  (dp8390 ($page0-write rbcr0)) 0
 	  (dp8390 ($page0-write rbcr1))	0
 	  (dp8390 ($page0-write rcr)) rx-config
-	  (dp8390 ($page0-write tpsr)) (slot-value device 'transmit-buffer) ; address
+	  (dp8390 ($page0-write tpsr)) (truncate (slot-value device 'transmit-buffer) 256) ; address
 	  (dp8390 ($page0-write tcr)) ($tx-config loopback-mode-1) ; internal loopback
-	  (dp8390 ($page0-write pstart)) (slot-value device 'ring-start)
-	  (dp8390 ($page0-write bnry)) (slot-value device 'ring-start)
-	  (dp8390 ($page0-write pstop)) (slot-value device 'ring-stop)
+	  (dp8390 ($page0-write pstart)) (truncate (slot-value device 'ring-start) 256)
+	  (dp8390 ($page0-write bnry)) (truncate (slot-value device 'ring-start) 256)
+	  (dp8390 ($page0-write pstop)) (truncate (slot-value device 'ring-stop) 256)
 	  (dp8390 ($page0-write cr)) ($command page-1 stop)
-	  (dp8390 ($page1-write curr)) (slot-value device 'ring-start)
+	  (dp8390 ($page1-write curr)) (truncate (slot-value device 'ring-start) 256)
 	  (dp8390 ($page1-write cr)) ($command page-0 start)
 	  (dp8390 ($page0-write isr)) #xff
 	  (dp8390 ($page0-write imr)) interrupt-mask

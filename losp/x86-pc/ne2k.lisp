@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:16:00 2002
 ;;;;                
-;;;; $Id: ne2k.lisp,v 1.8 2004/02/22 15:19:12 ffjeld Exp $
+;;;; $Id: ne2k.lisp,v 1.9 2004/02/26 11:19:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -110,56 +110,55 @@
 
 ;;; Packet IO handling
 
-(defun pop-ringbuffer (device &optional packet (start 0))
+(defun read-from-ne2k-ring (io-base asic-io packet start length ring-start ring-pointer ring-stop)
+  "Read from a NE2000 ring buffer into packet, starting at start,
+   length number of bytes."
+  (check-type packet vector-u8)
+  (let* ((ring-space (- ring-stop ring-pointer)))
+    (if (<= length ring-space)
+	(with-dp8390 (dp8390 io-base)
+	  (with-dp8390-dma (dp8390 remote-read length ring-pointer)
+	    (%io-port-read-succession asic-io packet 2 start (+ start length) :16-bit)))
+      ;; If the read crosses the ring wrap-around boundary,
+      ;; that read is factored into two unwrapped reads.
+      (let ((split-point (+ start ring-space)))
+	(read-from-ne2k-ring io-base asic-io packet start split-point
+			     ring-start ring-pointer ring-stop)
+	(read-from-ne2k-ring io-base asic-io packet split-point (- length split-point)
+			     ring-start ring-start ring-stop)))))
+
+(defun pop-ringbuffer (device packet start)
   "When the ring-buffer isn't empty, fetch the next packet."
   (assert (evenp start))
-  (unless (ring-empty-p device)
-    (let ((io-start (truncate start 2))
-	  (asic-io (asic-io-base device))
-	  (bnry (cached-bnry device))
-	  (packet (or packet (make-array +max-ethernet-frame-size+ :element-type 'muerte::u8))))
-      (check-type packet vector-u8)
-      (with-dp8390 (dp8390 (io-base device))
-	(multiple-value-bind (packet-status next-bnry packet-length)
-	    (with-dp8390-dma (dp8390 remote-read 4 (* 256 bnry))
-	      (let ((b (io-port asic-io :unsigned-byte16)))
-		(values (ldb (byte 8 0) b)
-			(ldb (byte 8 8) b)
-			(+ -4 (io-port asic-io :unsigned-byte16)))))
-	  ;; (declare (ignore packet-status))
-	  (assert (logbitp 0 packet-status) ()
-	    "Packet error status #x~X at #x~X, length ~D, next #x~X."
-	    packet-status bnry packet-length next-bnry)
-	  (assert (and (<= (ring-start device) next-bnry)
-		       (< next-bnry (ring-stop device))) ()
-	    "Illegal next-bnry #x~X at #x~X, length ~D."
-	    next-bnry bnry packet-length)
-	  (let* ((rx-end (+ start packet-length))
-		 (io-end (truncate (1+ rx-end))))
-	    (declare (type (unsigned-byte 16) rx-end))
-	    (assert (evenp start))
-	    (setf (fill-pointer packet) rx-end)
-	    (cond
-	     ((< (+ bnry (ash (1- packet-length) -8))
-		 (ring-stop device))
-	      (with-dp8390-dma (dp8390 remote-read packet-length (+ (* 256 bnry) 4))
-		(%io-port-read-succession asic-io packet 2 io-start io-end :16-bit))
+  (let ((read-pointer (next-packet device)))
+    (when read-pointer
+      (let ((asic-io (asic-io-base device))
+	    (packet (or packet (make-array +max-ethernet-frame-size+ :element-type 'muerte::u8)))
+	    (ring-start (ring-start device))
+	    (ring-stop (ring-stop device)))
+	(with-dp8390 (dp8390 (io-base device))
+	  (multiple-value-bind (packet-status next-bnry packet-length)
+	      ;; Read the packet status-and-size header from the ring.
+	      (with-dp8390-dma (dp8390 remote-read 4 read-pointer)
+		(let ((b (io-port asic-io :unsigned-byte16)))
+		  (values (ldb (byte 8 0) b)
+			  (ldb (byte 8 8) b)
+			  (+ -4 (io-port asic-io :unsigned-byte16)))))
+	    (assert (logbitp 0 packet-status) ()
+	      "Packet error status #x~X at #x~X, length ~D, next #x~X."
+	      packet-status read-pointer packet-length next-bnry)
+	    (let ((next-read-pointer (* 256 next-bnry))
+		  (io-length (if (evenp packet-length) packet-length (1+ packet-length))))
+	      (assert (and (<= ring-start next-read-pointer)
+			   (< next-read-pointer ring-stop)) ()
+		"Illegal next-bnry #x~X at #x~X, length ~D."
+		next-read-pointer read-pointer packet-length)
+	      (setf (fill-pointer packet) (+ start packet-length))
+	      (read-from-ne2k-ring dp8390 asic-io packet start io-length
+				   ring-start (+ 4 read-pointer) ring-stop)
 	      (setf (dp8390 ($page0-write bnry)) next-bnry
-		    (cached-bnry device) next-bnry))
-	     (t (let* ((split-point (+ -4 (ash (- (ring-stop device) bnry) 8)))
-		       (io-split-point (truncate split-point 2)))
-		  (with-dp8390-dma (dp8390 remote-read split-point)
-		    (%io-port-read-succession asic-io packet 2
-					      io-start (+ io-start io-split-point) :16-bit))
-		  (with-dp8390-dma (dp8390 remote-read
-					   (- rx-end start split-point)
-					   (* 256 (ring-start device)))
-		    (%io-port-read-succession asic-io packet 2 (+ io-start io-split-point) io-end :16-bit))
-		  (setf (dp8390 ($page0-write bnry)) next-bnry
-			(cached-bnry device) next-bnry)
-		  #+ignore (warn "split-point: ~D/~D bnry: ~S"
-				 split-point packet-length bnry))))
-	    packet))))))
+		    (read-pointer device) next-read-pointer)
+	      packet)))))))
 
 (defun recover-from-ring-overflow (device packet start isr)
   (with-dp8390 (dp8390 (io-base device))
@@ -194,32 +193,31 @@
 	    (setf (dp8390 ($page0-write cr)) ($command transmit))))))))
 
 (defmethod reset-device ((device ne2000))
-  (setf (slot-value device 'transmit-buffer) #x40
-	(slot-value device 'ring-start) #x46
-	(slot-value device 'ring-stop) #x80
-	(slot-value device 'cached-bnry) #x46
-	(slot-value device 'cached-curr) #x46)
+  (setf (slot-value device 'transmit-buffer) #x4000
+	(slot-value device 'ring-start) #x4600
+	(slot-value device 'ring-stop) #x8000
+	(slot-value device 'write-pointer) #x4600
+	(slot-value device 'read-pointer) #x4600)
   (dp8390-initialize device)
   device)
 
 (defmethod packet-available-p ((device ne2000))
-  (not (ring-empty-p device)))
+  (when (next-packet device)
+    t))
 
 (defmethod transmit ((device ne2000) packet &key (start 0) (end (length packet)))
+  (check-type packet vector-u8)
+  (assert (and (evenp start)))
   (with-dp8390 (dp8390 (io-base device))
-    ;; (setf (r8 +page0-write-cr+) +command-page-0+)
+    (loop while (logbitp ($command-bit transmit)
+			 (dp8390 ($page0-read cr))))
     (let ((packet-length (- end start)))
-      (with-dp8390-dma (dp8390 remote-write packet-length
-			       (ash (transmit-buffer device) 8))
-	(%io-port-write-succession (asic-io-base device) packet 2
-				   (truncate start 2) (truncate (1+ end) 2) :16-bit))
-      (loop while (logbitp ($command-bit transmit) (dp8390 ($page0-read cr))))
+      (with-dp8390-dma (dp8390 remote-write packet-length (transmit-buffer device))
+	(%io-port-write-succession (asic-io-base device) packet 2 start end :16-bit))
       (setf (io-register8x2 dp8390 ($page0-write tbcr1) ($page0-write tbcr0)) packet-length
 	    (dp8390 ($page0-write cr)) ($command transmit start abort-complete))
       (loop while (= (dp8390 ($page0-read cr))
-		     ($command start transmit abort-complete)))
-      ;; (loop while (= command (command-value :start t :txp t :rdma :abort-complete)))
-      ))
+		     ($command start transmit abort-complete)))))
   nil)
 
 (defmethod receive ((device ne2000) &optional packet (start 0))
