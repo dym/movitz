@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.13 2004/06/01 13:38:35 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.14 2004/06/02 20:34:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -27,6 +27,13 @@
 
 (deftype positive-bignum ()
   `(integer ,(1+ movitz:+movitz-most-positive-fixnum+) *))
+
+(defmacro number-double-dispatch ((x y) &rest clauses)
+  `(let ((x ,x) (y ,y))
+     (cond ,@(loop for ((x-type y-type) . then-body) in clauses
+		 collect `((and (typep x ',x-type) (typep y ',y-type))
+			   ,@then-body))
+	   (t (error "Not numbers: ~S or ~S." x y)))))
 
 (defun fixnump (x)
   (typep x 'fixnum))
@@ -134,16 +141,32 @@
   (numargs-case
    (1 (x) x)
    (2 (x y)
-      (with-inline-assembly (:returns :eax)
-	(:compile-form (:result-mode :eax) x)
-	(:compile-form (:result-mode :ebx) y)
-	(:movl :eax :ecx)
-	(:orl :ebx :ecx)
-	(:testb #.movitz::+movitz-fixnum-zmask+ :cl)
-	(:jnz '(:sub-program (not-integer) ;
-		(:int 107)))
-	(:addl :ebx :eax)
-	(:into)))
+      (macrolet
+	  ((do-it ()
+	     `(number-double-dispatch (x y)
+		((fixnum fixnum)
+		 (with-inline-assembly (:returns :eax)
+		   (:compile-form (:result-mode :eax) x)
+		   (:compile-form (:result-mode :ebx) y)
+		   (:addl :ebx :eax)
+		   (:jo '(:sub-program (fix-fix-overflow)
+			  (:movl :eax :ecx)
+			  (:jns 'fix-fix-negative)
+			  (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+			  (:call-global-constant box-u32-ecx)
+			  (:jmp 'fix-fix-ok)
+			  fix-fix-negative
+			  (:negl :ecx)
+			  (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+			  (:call-global-constant box-u32-ecx)
+			  (:movl ,(dpb 1 (byte 16 16)
+				   (movitz:tag :bignum #xff))
+			   (:eax ,movitz:+other-type-offset+))
+			  (:jmp 'fix-fix-ok)
+			  ))
+		  fix-fix-ok
+		   )))))
+	(do-it)))
    (3 (x y z)
       (with-inline-assembly (:returns :eax)
 	(:compile-form (:result-mode :eax) x)
@@ -153,7 +176,8 @@
 	(:orl :ebx :ecx)
 	(:orl :edx :ecx)
 	(:testb #.movitz::+movitz-fixnum-zmask+ :cl)
-	(:jnz 'not-integer)
+	(:jnz '(:sub-program (not-integer)
+		(:int 107)))
 	(:addl :ebx :eax)
 	(:into)
 	(:addl :edx :eax)
@@ -171,62 +195,34 @@
 
 ;;; Subtraction
 
-(define-compiler-macro - (&whole form &rest operands)
+(define-compiler-macro - (&whole form &rest operands &environment env)
   (case (length operands)
     (0 0)
-    (1 `(-%2op 0 ,(first operands)))
-    (2 `(-%2op ,(first operands) ,(second operands)))
-    (t `(- (-%2op ,(first operands) ,(second operands)) 
-	   ,@(cddr operands)))))
-
-
-(define-compiler-macro -%2op (&whole form minuend subtrahend)
-  (cond
-   ((and (movitz:movitz-constantp minuend)	; first operand zero?
-	 (zerop (movitz:movitz-eval minuend)))
-    `(with-inline-assembly (:returns :register :side-effects nil)
-       (:compile-form (:result-mode :register) ,subtrahend)
-       (:negl (:result-register))	; (- 0 x) => -x
-       (:into)))
-   ((and (movitz:movitz-constantp subtrahend) ; second operand zero?
-	 (zerop (movitz:movitz-eval subtrahend)))
-    (movitz:movitz-eval minuend))		; (- x 0) => x
-   ((and (movitz:movitz-constantp minuend)
-	 (movitz:movitz-constantp subtrahend))
-    (- (movitz:movitz-eval minuend)
-       (movitz:movitz-eval subtrahend)))	; compile-time constant folding.
-   ((movitz:movitz-constantp minuend)
-    (let ((constant-minuend (movitz:movitz-eval minuend)))
-      (check-type constant-minuend (signed-byte 30))
-      `(with-inline-assembly (:returns :register :side-effects nil) ; inline
-	 (:compile-form (:result-mode :register) ,subtrahend)
-	 (:subl ,(* movitz::+movitz-fixnum-factor+ constant-minuend) (:result-register))
-	 ;;;;;;; NEED CHECKING HERE
-	 (:into)
-	 (:negl (:result-register)))))
-   ((movitz:movitz-constantp subtrahend)
-    (let ((constant-subtrahend (movitz:movitz-eval subtrahend)))
-      (check-type constant-subtrahend (signed-byte 30))
-      `(+ ,minuend ,(- constant-subtrahend))))
-   (t `(with-inline-assembly (:returns :eax :side-effects nil)
-	 (:compile-two-forms (:eax :ebx) ,minuend ,subtrahend)
-	 (:subl :ebx :eax)
-	 (:into)))))
-
-(defun -%2op (minuend subtrahend)
-  (check-type minuend fixnum)
-  (check-type subtrahend fixnum)
-  (-%2op minuend subtrahend))
+    (1 `(- 0 ,(first operands)))
+    (2 (let ((minuend (first operands))
+	     (subtrahend (second operands)))
+	 (cond
+	  ((movitz:movitz-constantp subtrahend env)
+	   `(+ ,minuend ,(- (movitz:movitz-eval subtrahend env))))
+	  (t form))))
+    (t `(- ,(first operands) (+ ,@(rest operands))))))
 
 (defun - (minuend &rest subtrahends)
   (declare (dynamic-extent subtrahends))
-  (if subtrahends
-      (reduce #'-%2op subtrahends :initial-value minuend)
-    (-%2op 0 minuend)))
+  (numargs-case
+   (2 (minuend subtrahend)
+      (check-type minuend fixnum)
+      (check-type subtrahend fixnum)
+      (with-inline-assembly (:returns :eax :side-effects nil)
+	(:compile-two-forms (:eax :ebx) minuend subtrahend)
+	(:subl :ebx :eax)
+	(:into)))
+   (t (minuend &rest subtrahends)
+      (declare (dynamic-extent subtrahends))
+      (if subtrahends
+	  (reduce #'- subtrahends :initial-value minuend)
+	(- 0 minuend)))))
     
-;;;(defmacro decf (place &optional (delta-form 1))
-;;;  `(setf ,place (- ,place ,delta-form)))
-
 (define-modify-macro decf (&optional (delta-form 1)) -)
 
 ;;; Comparison
@@ -775,13 +771,6 @@
 	      (:idivl :ebx :eax :edx)
 	      (:shll #.movitz::+movitz-fixnum-shift+ :eax))))))
    (t form)))
-
-(defmacro number-double-dispatch ((x y) &rest clauses)
-  `(let ((x ,x) (y ,y))
-     (cond ,@(loop for ((x-type y-type) . then-body) in clauses
-		 collect `((and (typep x ',x-type) (typep y ',y-type))
-			   ,@then-body))
-	   (t (error "Not numbers: ~S or ~S." x y)))))
 
 (defun truncate (number &optional (divisor 1))
   (numargs-case
