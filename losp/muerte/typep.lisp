@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.16 2004/06/09 23:05:34 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.17 2004/06/10 13:51:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -467,6 +467,9 @@
 
 (define-simple-typep (cons consp) (obj)
   (typep obj 'cons))
+
+(define-simple-typep (vector vectorp) (obj)
+  (typep obj 'vector))
 
 (define-simple-typep (pointer pointerp) (obj)
   (typep obj 'pointer))
