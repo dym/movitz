@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.3 2004/03/22 14:42:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -215,10 +215,3 @@ Cons cell is in EBX, which is preserved."
     (:compile-form (:result-mode :eax) car)
     (:compile-form (:result-mode :ebx) cdr)
     (:call-global-constant fast-cons)))
-
-#+ignore
-(defun cons (car cdr)
-  (let ((cell (inline-malloc 8 :tag :cons)))
-    (setf (car cell) car
-	  (cdr cell) cdr)
-    cell))
