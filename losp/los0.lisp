@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.8 2004/03/29 14:36:15 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.9 2004/03/31 16:37:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -680,25 +680,21 @@ s#+ignore
 (define-toplevel-command :decimal (&optional x-list)
   (flet ((do-print (x)
 	   (typecase x
-	     #+ignore
-	     (float
-	      (format t "~&~W ~~ ~,3F" x x))
 	     (number
 	      (case *print-base*
 		(16 (format t "~&~W = ~D" x x))
 		(10 (format t "~&~W = #x~X" x x))
 		(t (format t "~&~W = ~D. = #x~X" x x x)))
-	      #+ignore
 	      (when (typep x 'ratio)
 		(format t " ~~ ~,3F" x)))
-	     (t (fresh-line)
-		(write x :radix nil :base (case *print-base* (10 16) (t 10)))))
+	     (pointer
+	      (format t "~&~Z = ~W" x x))
+	     (t (write x :radix nil :base (case *print-base* (10 16) (t 10)))))
 	   x))
     (if x-list
 	(do-print (eval x-list))
       (dolist (x cl:/ (values-list cl:/))
-	(do-print x))))
-  (values))
+	(do-print x)))))
 
 (define-toplevel-command :pop ()
   (when *debugger-dynamic-context*
