@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.5 2004/02/02 13:27:26 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.6 2004/02/03 18:02:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -688,9 +688,8 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 			      (when init-file
 				(movitz-compile-file init-file))
 			      *image*)
-		    *i* (when (boundp '*image*) *image*))
-	     ;; #+acl (excl:gc)
-	     *image*))
+		    *i* (when (boundp '*image*) *image*)))
+  *image*)
 
 (defun dump-image (&key (path *default-image-file*) ((:image *image*) *image*)
 			(multiboot-p t) ignore-dump-count)
