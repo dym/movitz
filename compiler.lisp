@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.73 2004/07/11 22:58:56 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.74 2004/07/12 09:11:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2375,10 +2375,11 @@ of argument <argnum>."
 
 (defun new-binding-location (binding map &key (default nil default-p))
   (check-type binding (or binding (cons keyword binding)))
-  (cdr (or (assoc binding map)
-	   (if default-p
-	       default
-	     (error "No location for ~S." binding)))))
+  (let ((x (assoc binding map)))
+    (cond
+     (x (cdr x))
+     (default-p default)
+     (t (error "No location for ~S." binding)))))
 
 (defun make-binding-map () nil)
 
