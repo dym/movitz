@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.3 2004/02/26 13:46:36 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.4 2004/04/01 02:12:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -846,10 +846,14 @@
 (defun logbitp (index integer)
   (check-type integer fixnum)
   (with-inline-assembly (:returns :boolean-cf=1)
-    (:compile-form (:result-mode :eax) integer)
-    (:compile-form (:result-mode :untagged-fixnum-ecx) index)
+    (:compile-two-forms (:eax :ebx) index integer)
+    (:testl #x80000003 :eax)
+    (:jnz '(:sub-program ()
+	    (:int 66)))
+    (:movl :eax :ecx)
+    (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
     (:addl #.movitz::+movitz-fixnum-shift+ :ecx)
-    (:btl :ecx :eax)))
+    (:btl :ecx :ebx)))
 
 (define-compiler-macro logbitp (&whole form index integer &environment env)
   (if (not (movitz:movitz-constantp index env))
