@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.10 2004/06/09 23:04:26 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.11 2004/06/10 19:27:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -129,15 +129,11 @@
        ,@declarations-and-body)))
 
 (defmacro dolist ((var list-form &optional result-form) &body declarations-and-body)
-  (let ((cons-var (gensym (format nil "dolist-cons-var-~A-" var)))
-	(loop-tag (gensym "dolist-loop-tag-")))
-    `(prog ((,cons-var ,list-form))
-       ,loop-tag
-       (when ,cons-var
-	 (let ((,var (pop ,cons-var)))
-	   ,@declarations-and-body)
-	 (go ,loop-tag))
-       ,(when result-form `(return ,result-form)))))
+  (let ((cons-var (gensym "dolist-cons-")))
+    `(do ((,cons-var ,list-form))
+	 ((null ,cons-var) ,result-form)
+       (let ((,var (pop ,cons-var)))
+	 ,@declarations-and-body))))
 
 (defmacro letf* (bindings &body body &environment env)
   "Does what one might expect, saving the old values and setting the generalized
@@ -315,8 +311,7 @@ respect to multiple threads."
 (define-compiler-macro %bignum-bigits (x)
   `(with-inline-assembly (:returns :eax)
      (:compile-form (:result-mode :eax) ,x)
-     (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum
-				      'movitz::length))
+     (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
 	      :ecx)
      (:leal ((:ecx ,movitz:+movitz-fixnum-factor+))
 	    :eax)))
