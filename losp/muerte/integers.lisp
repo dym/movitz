@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.43 2004/07/11 23:05:24 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.44 2004/07/12 09:13:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -88,7 +88,7 @@
 		  finally (return (if (zerop constant-term)
 				      non-constant-operands
 				    (cons constant-term non-constant-operands))))))
-	 `(+ (+%2op ,(first operands) ,(second operands)) ,@(cddr operands))))))
+	 `(+ (+ ,(first operands) ,(second operands)) ,@(cddr operands))))))
 
 (defun + (&rest terms)
   (declare (without-check-stack-limit))
@@ -1553,15 +1553,44 @@ Preserve EAX and EBX."
 	(reduce #'logand integers)))))
 
 (defun logandc1 (integer1 integer2)
-  (number-double-dispatch (integer1 integer2)
-    ((t positive-fixnum)
-     (with-inline-assembly (:returns :eax)
-       (:compile-form (:result-mode :eax) integer1)
-       (:call-global-constant unbox-u32)
-       (:shll #.movitz:+movitz-fixnum-shift+ :ecx)
-       (:compile-form (:result-mode :eax) integer2)
-       (:notl :ecx)
-       (:andl :ecx :eax)))))
+  (macrolet
+      ((do-it ()
+	 `(number-double-dispatch (integer1 integer2)
+	    ((t positive-fixnum)
+	     (with-inline-assembly (:returns :eax :type fixnum)
+	       (:compile-form (:result-mode :eax) integer1)
+	       (:call-global-constant unbox-u32)
+	       (:shll ,movitz:+movitz-fixnum-shift+ :ecx)
+	       (:compile-form (:result-mode :eax) integer2)
+	       (:notl :ecx)
+	       (:andl :ecx :eax)))
+	    (((eql 0) t) integer2)
+	    (((eql -1) t) 0)
+	    ((positive-fixnum positive-bignum)
+	     (%bignum-canonicalize
+	      (with-inline-assembly (:returns :eax)
+		(:compile-two-forms (:eax :ecx) (copy-bignum integer2) integer1)
+		(:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		(:notl :ecx)
+		(:andl :ecx
+		       (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))))))
+	    ((positive-bignum positive-bignum)
+	     (%bignum-canonicalize
+	      (with-inline-assembly (:returns :eax)
+		(:compile-two-forms (:eax :ebx) (copy-bignum integer2) integer1)
+		(:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+			 :ecx)
+		(:leal ((:ecx 4) -4) :edx)
+	       pb-pb-andc1-loop
+		(:movl (:ebx :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
+		       :ecx)
+		(:notl :ecx)
+		(:andl :ecx
+		       (:eax :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		(:subl 4 :edx)
+		(:jnc 'pb-pb-andc1-loop)))))))
+    (do-it)))
+
 
 (defun logandc2 (integer1 integer2)
   (logandc1 integer2 integer1))
