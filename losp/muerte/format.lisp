@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Mar 23 01:18:36 2002
 ;;;;                
-;;;; $Id: format.lisp,v 1.9 2004/11/07 21:10:03 ffjeld Exp $
+;;;; $Id: format.lisp,v 1.10 2005/01/25 13:46:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -127,11 +127,12 @@ clause."
 	(i start))
     (tagbody
      loop
-      (unless (< i (length control-string))
+      (when (>= i (length control-string))
 	(go end-loop))
       (let ((c (schar control-string i)))
 	(if (char/= c #\~)
 	    (write-char c)
+	  ;; Process ~ directive
 	  (prog ((colon-p nil)
 		 (at-sign-p nil)
 		 (prefix-parameters nil))
@@ -289,6 +290,14 @@ clause."
 				  (third prefix-parameters))
 			  (go end-loop)))
 		     (t (error "format directive ~^ takes at most 3 parameters."))))
+	      #+ignore
+	      (#\( (multiple-value-setq (i args)
+		     (format-by-string control-string (1+ i) loop-limit args
+				       (cond
+					((and colon-p at-sign-p) :upcase)
+					(colon-p :capitalize)
+					(at-sign-p :capitalize-first)
+					(t :downcase)))))
 	      (#\? (format-by-string (pop args) 0 0 (pop args)))
 	      (#\: (setf colon-p t)
 		   (go proceed))
