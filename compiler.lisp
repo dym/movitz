@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.12 2004/02/04 15:25:15 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.13 2004/02/04 16:01:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -140,7 +140,7 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
 	       lambda-form)
     (coerce lambda-form 'function)))
 
-(defun make-compiled-funobj (name lambda-list declarations form env top-level-p funobj)
+(defun make-compiled-funobj (name lambda-list declarations form env top-level-p &key funobj)
   "Compiler entry-point for making a (lexically) top-level function."
   (handler-bind (((or warning error)
 		  (lambda (c)

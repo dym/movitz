@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.7 2004/02/03 19:18:43 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.8 2004/02/04 16:01:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1469,7 +1469,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 
 			     ,@toplevel-code
 			     (muerte::halt-cpu))
-			  nil t nil)))
+			  nil t)))
 
 (defun mkasm-write-word-eax-ebx ()
   (let ((loop-label (make-symbol "write-word-loop"))

@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.5 2004/02/03 19:17:34 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.6 2004/02/04 16:01:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -259,7 +259,7 @@ and the correspondig returns mode (secondary value)."
 					 (declare (ignore c))
 					 (format *error-output* "~&;; In function ~S:~&" name))))
       (let* ((*compiling-function-name* name)
-	     (funobj (make-compiled-funobj name formals declarations body env nil nil)))
+	     (funobj (make-compiled-funobj name formals declarations body env nil)))
 	(setf (movitz-funobj-symbolic-name funobj) name)
 	(setf (movitz-env-named-function name) funobj))))
   (compiler-values ()))
