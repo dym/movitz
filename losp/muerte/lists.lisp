@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.6 2004/07/21 13:17:22 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.7 2004/07/21 13:24:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -180,22 +180,25 @@
 	    (previous-copy nil)
 	    (x lists (cdr x))
 	    (x+ (cdr lists) (cdr x+)))
-	   ((endp x+) (cond
-		       (previous-copy
-			(setf (cdr (last previous-copy))
-			  (car x))
-			copied-result)
-		       (copied-result
-			(setf (cdr (last copied-result))
-			  (car x))
-			copied-result)
-		       (t (car x))))
+	   ((endp x+)
+	    (cond
+	     (previous-copy
+	      (setf (cdr (last previous-copy))
+		(car x))
+	      copied-result)
+	     (copied-result
+	      (setf (cdr (last copied-result))
+		(car x))
+	      copied-result)
+	     (t (car x))))
 	 (when (consp (car x))
 	   (let ((copy (copy-list (car x))))
 	     (if previous-copy
 		 (setf (cdr (last previous-copy)) copy)
 	       (setf copied-result copy))
-	     (setf previous-copy copy)))))))
+	     (setf previous-copy copy)
+	     (unless copied-result
+	       (setf copied-result copy))))))))
 
 (defun copy-list (list)
   (if (null list)
