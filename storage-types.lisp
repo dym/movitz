@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.49 2005/01/17 10:54:21 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.50 2005/02/27 02:31:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -514,9 +514,12 @@ integer (native lisp) value."
 		       (:any-t
 			(map 'vector #'movitz-read initial-contents))
 		       (t initial-contents))
-      :fill-pointer (if (integerp fill-pointer)
-			fill-pointer
-		      size))))
+      :fill-pointer (cond
+		     ((not (typep size '(unsigned-byte 14)))
+		      0)
+		     ((integerp fill-pointer)
+		      fill-pointer)
+		     (t size)))))
 
 (defun make-movitz-string (string)
   (make-movitz-vector (length string)
