@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.4 2004/02/18 14:40:58 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.5 2004/02/26 11:40:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -186,8 +186,12 @@ funcallable-instance will run the new function."
   (check-type funcallable-instance standard-gf-instance)
   (check-type function function)
   (setf-movitz-accessor (funcallable-instance movitz-funobj-standard-gf standard-gf-function)
-		     function)
+			function)
   (values))
+
+(defun funcallable-instance-function (funcallable-instance)
+  (check-type funcallable-instance standard-gf-instance)
+  (movitz-accessor funcallable-instance movitz-funobj-standard-gf standard-gf-function))
 
 (defun instance-slot-p (slot)
   (eq (slot-definition-allocation slot) :instance))
@@ -535,9 +539,9 @@ knowing there are EQL specialized methods."
       (push (cons (car active-specializers)
 		  emfun)
 	    (std-gf-classes-to-emf-table gf))
-      (when (< 5 (length (std-gf-classes-to-emf-table gf)))
-	(warn "method cache size for ~S: ~D"
-	      gf (length (std-gf-classes-to-emf-table gf))))
+;;;      (when (< 5 (length (std-gf-classes-to-emf-table gf)))
+;;;	(warn "method cache size for ~S: ~D"
+;;;	      gf (length (std-gf-classes-to-emf-table gf))))
       (apply emfun (car arg0-list) optional-args))))
 
 (defun cached-lookup-failed-map10 (gf &rest arg01-class01-optionals)
@@ -560,9 +564,9 @@ knowing there are EQL specialized methods."
       (push (cons (cadr active-specializers)
 		  emfun)
 	    (std-gf-classes-to-emf-table gf))
-      (when (< 4 (length (std-gf-classes-to-emf-table gf)))
-	(warn "method cache size for ~S: ~D"
-	      gf (length (std-gf-classes-to-emf-table gf))))
+;;;      (when (< 4 (length (std-gf-classes-to-emf-table gf)))
+;;;	(warn "method cache size for ~S: ~D"
+;;;	      gf (length (std-gf-classes-to-emf-table gf))))
       (apply emfun (car arg01-list) (cadr arg01-list) optional-args))))
 
 (defun cached-lookup-failed-map11 (gf &rest args)
@@ -573,9 +577,9 @@ knowing there are EQL specialized methods."
 		 (second active-specializers)
 		 emfun)
 	  (std-gf-classes-to-emf-table gf))
-    (when (< 4 (length (std-gf-classes-to-emf-table gf)))
-      (warn "method cache size for ~S: ~D"
-	    gf (length (std-gf-classes-to-emf-table gf))))
+;;;    (when (< 4 (length (std-gf-classes-to-emf-table gf)))
+;;;      (warn "method cache size for ~S: ~D"
+;;;	    gf (length (std-gf-classes-to-emf-table gf))))
     (apply emfun args)))
 
 (defun cached-lookup-failed-map101 (gf &rest args)
@@ -586,9 +590,9 @@ knowing there are EQL specialized methods."
 		 (third active-specializers)
 		 emfun)
 	  (std-gf-classes-to-emf-table gf))
-    (when (< 4 (length (std-gf-classes-to-emf-table gf)))
-      (warn "method cache size for ~S: ~D"
-	    gf (length (std-gf-classes-to-emf-table gf))))
+;;;    (when (< 4 (length (std-gf-classes-to-emf-table gf)))
+;;;      (warn "method cache size for ~S: ~D"
+;;;	    gf (length (std-gf-classes-to-emf-table gf))))
     (apply emfun args)))
 
 (defun cached-lookup-failed-map111 (gf &rest args)
@@ -600,9 +604,9 @@ knowing there are EQL specialized methods."
 		 (third active-specializers)
 		 emfun)
 	  (std-gf-classes-to-emf-table gf))
-    (when (< 4 (length (std-gf-classes-to-emf-table gf)))
-      (warn "method cache size for ~S: ~D"
-	    gf (length (std-gf-classes-to-emf-table gf))))
+;;;    (when (< 4 (length (std-gf-classes-to-emf-table gf)))
+;;;      (warn "method cache size for ~S: ~D"
+;;;	    gf (length (std-gf-classes-to-emf-table gf))))
     (apply emfun args)))
 
 (defun cached-lookup-failed-map1111 (gf &rest args)
@@ -615,9 +619,9 @@ knowing there are EQL specialized methods."
 		 (fourth active-specializers)
 		 emfun)
 	  (std-gf-classes-to-emf-table gf))
-    (when (< 4 (length (std-gf-classes-to-emf-table gf)))
-      (warn "method cache size for ~S: ~D"
-	    gf (length (std-gf-classes-to-emf-table gf))))
+;;;    (when (< 4 (length (std-gf-classes-to-emf-table gf)))
+;;;      (warn "method cache size for ~S: ~D"
+;;;	    gf (length (std-gf-classes-to-emf-table gf))))
     (apply emfun args)))
 
 (defun discriminating-function-map1-no-eqls (&edx gf arg0 &rest optional-args)
