@@ -1,5 +1,4 @@
-;;; -*- mode: emacs-lisp; mode: outline-minor; outline-regexp: ";;;;*";
-indent-tabs-mode: nil -*-
+;;; -*- mode: emacs-lisp; mode: outline-minor; outline-regexp: nil *indent-tabs-mode: nil -*-
 ;; movitz-slime.el -- Slime key bindings for Movitz, adapted from
 ;;                    movitz-mode.el by Frode Vatvedt Fjeld
 ;; Copyright (C) 2004 Aleksandar Bakic
