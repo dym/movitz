@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.24 2004/07/17 01:52:29 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.25 2004/07/17 19:32:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -258,74 +258,3 @@ after the point that called this stack-frame."
 	      #.(movitz::movitz-type-word-size :movitz-struct)
 	      (* 2 (truncate (+ (structure-object-length object) 1) 2))))))))
 
-(defun %bignum-bigits (x)
-  (%bignum-bigits x))
-
-(defun %bignum-canonicalize (x)
-  "Assuming x is a bignum, return the canonical integer value. That is,
-either return a fixnum, or destructively modify the bignum's length so
-that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
-  (check-type x bignum)
-  (macrolet
-      ((do-it ()
-	 `(with-inline-assembly (:returns :eax)
-	    (:load-lexical (:lexical-binding x) :eax)
-	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
-	    (:shrl 16 :ecx)
-	    (:jz '(:sub-program (should-never-happen)
-		   (:int 107)))
-	   shrink-loop
-	    (:cmpl 4 :ecx)
-	    (:je 'shrink-no-more)
-	    (:cmpl 0 (:eax :ecx ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
-	    (:jnz 'shrink-done)
-	    (:subl 4 :ecx)
-	    (:jmp 'shrink-loop)
-	   shrink-no-more
-	    (:cmpl ,(1+ movitz:+movitz-most-positive-fixnum+)
-		   (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
-	    (:jc '(:sub-program (fixnum-result)
-		   (:movl (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
-		    :ecx)
-		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
-		   (:jmp 'done)))
-	   shrink-done
-	    (:testb 3 :cl)
-	    (:jnz '(:sub-program () (:int 107)))
-	    (:testw :cx :cx)
-	    (:jz '(:sub-program () (:int 107)))
-	    (:movw :cx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length)))
-	   done
-	    )))
-    (do-it)))
-
-(defun copy-bignum (old)
-  (check-type old bignum)
-  (let* ((length (%bignum-bigits old))
-	 (new (malloc-non-pointer-words (1+ length))))
-    (with-inline-assembly (:returns :eax)
-      (:compile-two-forms (:eax :ebx) new old)
-      (:compile-form (:result-mode :edx) length)
-     copy-bignum-loop
-      (:movl (:ebx :edx #.movitz:+other-type-offset+) :ecx)
-      (:movl :ecx (:eax :edx #.movitz:+other-type-offset+))
-      (:subl 4 :edx)
-      (:jnc 'copy-bignum-loop))))
-
-(defun %make-bignum (bigits)
-  (assert (plusp bigits))
-  (macrolet
-      ((do-it ()
-	 `(with-inline-assembly (:returns :eax)
-	    (:compile-two-forms (:eax :ecx) (malloc-non-pointer-words (1+ bigits)) bigits)
-	    (:shll 16 :ecx)
-	    (:orl ,(movitz:tag :bignum 0) :ecx)
-	    (:movl :ecx (:eax ,movitz:+other-type-offset+)))))
-    (do-it)))
-
-(defun print-bignum (x)
-  (check-type x bignum)
-  (dotimes (i (1+ (%bignum-bigits x)))
-    (format t "~8,'0X " (memref x -6 i :unsigned-byte32)))
-  (terpri)
-  (values))
