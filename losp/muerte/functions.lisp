@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.9 2004/04/15 18:53:15 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.10 2004/04/18 23:18:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -76,18 +76,18 @@
 ;;; funobj object
 
 (defun funobj-type (funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (with-inline-assembly (:returns :untagged-fixnum-ecx)
     (:xorl :ecx :ecx)
     (:compile-form (:result-mode :eax) funobj)
     (:movb (:eax #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:funobj-type)) :cl)))
 
 (defun funobj-code-vector (funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::code-vector) 0 :code-vector))
 
 (defun (setf funobj-code-vector) (code-vector funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (check-type code-vector vector-u8)
   (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::code-vector) 0 :code-vector)
     code-vector))
@@ -97,7 +97,7 @@
 a pointer into the regular code-vector, or it points (with offset 2) to another vector entirely.
 The former is represented as a lisp integer that is the index into the code-vector, the latter is represented
 as that vector."
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (with-inline-assembly (:returns :eax)
     (:compile-form (:result-mode :eax) funobj)
     (:movl (:eax #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector)) :ebx) ; EBX = code-vector
@@ -119,7 +119,7 @@ as that vector."
     done))				; this cell stores word+2
 
 (defun (setf funobj-code-vector%1op) (code-vector funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (etypecase code-vector
     (vector-u8
      (with-inline-assembly (:returns :nothing)
@@ -142,7 +142,7 @@ as that vector."
 a pointer into the regular code-vector, or it points (with offset 2) to another vector entirely.
 The former is represented as a lisp integer that is the index into the code-vector, the latter is represented
 as that vector."
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (with-inline-assembly (:returns :eax)
     (:compile-form (:result-mode :eax) funobj)
     (:movl (:eax #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector)) :ebx) ; EBX = code-vector
@@ -164,7 +164,7 @@ as that vector."
     done))
 
 (defun (setf funobj-code-vector%2op) (code-vector funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (etypecase code-vector
     (vector-u8
      (with-inline-assembly (:returns :nothing)
@@ -187,7 +187,7 @@ as that vector."
 a pointer into the regular code-vector, or it points (with offset 2) to another vector entirely.
 The former is represented as a lisp integer that is the index into the code-vector, the latter is represented
 as that vector."
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (with-inline-assembly (:returns :eax)
     (:compile-form (:result-mode :eax) funobj)
     (:movl (:eax #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector)) :ebx) ; EBX = code-vector
@@ -209,7 +209,7 @@ as that vector."
     done))
 
 (defun (setf funobj-code-vector%3op) (code-vector funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (etypecase code-vector
     (vector-u8
      (with-inline-assembly (:returns :nothing)
@@ -228,47 +228,47 @@ as that vector."
   code-vector)
 
 (defun funobj-name (funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (movitz-accessor funobj movitz-funobj name))
 
 (defun (setf funobj-name) (name funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   ;; (check-type name (or symbol list)
   (setf-movitz-accessor (funobj movitz-funobj name) name))
 
 (defun funobj-lambda-list (funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (movitz-accessor funobj movitz-funobj lambda-list))
 
 (defun (setf funobj-lambda-list) (lambda-list funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (check-type lambda-list list)
   (setf-movitz-accessor (funobj movitz-funobj lambda-list) lambda-list))
 
 (defun funobj-num-constants (funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (movitz-accessor-u16 funobj movitz-funobj num-constants))
 
 (defun (setf funobj-num-constants) (num-constants funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (check-type num-constants (unsigned-byte 16))
   (set-movitz-accessor-u16 funobj movitz-funobj num-constants num-constants))
 
 (defun funobj-num-jumpers (funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (with-inline-assembly (:returns :eax)
     (:compile-form (:result-mode :eax) funobj)
     (:movzxw (:eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::num-jumpers)) :eax)))
 
 (defun (setf funobj-num-jumpers) (num-jumpers funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (check-type num-jumpers (unsigned-byte 14))
   (with-inline-assembly (:returns :eax)
     (:compile-two-forms (:eax :ebx) num-jumpers funobj)
     (:movw :ax (:ebx #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::num-jumpers)))))
 
 (defun funobj-constant-ref (funobj index)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (assert (below index (funobj-num-constants funobj)) (index)
     "Index ~D out of range, ~S has ~D constants." index funobj (funobj-num-constants funobj))
   (if (>= index (funobj-num-jumpers funobj))
@@ -287,7 +287,7 @@ as that vector."
       (:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :eax))))
 
 (defun (setf funobj-constant-ref) (value funobj index)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (assert (below index (funobj-num-constants funobj)) (index)
     "Index ~D out of range, ~S has ~D constants." index funobj (funobj-num-constants funobj))
   (if (>= index (funobj-num-jumpers funobj))
@@ -311,7 +311,7 @@ as that vector."
       value)))
 
 (defun funobj-debug-info (funobj)
-  (check-type funobj compiled-function)
+  (check-type funobj function)
   (movitz-accessor-u16 funobj movitz-funobj debug-info))
 
 (defun funobj-frame-num-unboxed (funobj)
