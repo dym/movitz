@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep 27 18:12:17 2001
 ;;;;                
-;;;; $Id: movitz-mode.el,v 1.7 2004/06/07 22:10:54 ffjeld Exp $
+;;;; $Id: movitz-mode.el,v 1.8 2004/11/30 14:16:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -101,15 +101,19 @@
   (fi:eval-in-lisp "(movitz::dump-image)")
 ;;;  (with-current-buffer "*common-lisp*"
 ;;;    (fi:inferior-lisp-newline))
-  (if dont-run-bochs-p
-      (message "Dumping Movitz image...done. Bootblock ID: %d."
-	       (fi:eval-in-lisp "movitz::*bootblock-build*"))
-    (message "Dumping Movitz image...done. Bootblock ID: %d. Running bochs on \"%s\"..."
-	     (fi:eval-in-lisp "movitz::*bootblock-build*")
-	     display-shortcut)
+  (cond
+   (dont-run-bochs-p
+    (message "Dumping Movitz image...done. Bootblock ID: %d. Running qemu.."
+	     (fi:eval-in-lisp "movitz::*bootblock-build*"))
     (call-process "/bin/sh" nil 0 nil "-c"
-		  (format "DISPLAY=\"%s\" cd ~/clnet/movitz && ~/tmp/bochs-cvs/bochs -nocp > bochs-parameters"
-			  display-shortcut))))
+		  (format "DISPLAY=\"%s\" cd ~/clnet/movitz && qemu -fda los0-image -boot a"
+			  display-shortcut)))
+   (t (message "Dumping Movitz image...done. Bootblock ID: %d. Running bochs on \"%s\"..."
+	       (fi:eval-in-lisp "movitz::*bootblock-build*")
+	       display-shortcut)
+      (call-process "/bin/sh" nil 0 nil "-c"
+		    (format "DISPLAY=\"%s\" cd ~/clnet/movitz && ~/tmp/bochs-cvs/bochs -nocp > bochs-parameters"
+			    display-shortcut)))))
 
 (defun movitz-compile-file ()
   (interactive)
