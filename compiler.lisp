@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.74 2004/07/12 09:11:07 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.75 2004/07/13 22:41:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1174,14 +1174,6 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 ;;;			  use-stack-frame-p)))
 ;;;	       (t (warn "1-req-1-opt failed"))))))
 ;;;	 (t nil))))))
-
-
-(defun make-compiled-stack-frame-init (stack-frame-init)
-  (case stack-frame-init
-    (0 nil)
-    (1 '((:pushl :edi)))
-    (2 '((:pushl :edi) (:pushl :edi)))
-    (t `((:subl ,(* 4 stack-frame-init) :esp)))))
 
 (defun movitz-compile-file (path &key ((:image *image*) *image*)
 				   load-priority
@@ -3895,6 +3887,9 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 	       min-args max-args)))))
 
 (defun make-stack-setup-code (stack-setup-size)
+  (loop repeat stack-setup-size
+      collect '(:pushl :edi))
+  #+ignore
   (case stack-setup-size
     (0 nil)
     (1 '((:pushl :edi)))
