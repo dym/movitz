@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.44 2005/02/25 07:58:26 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.45 2005/03/09 07:24:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1129,6 +1129,7 @@
 	   #:stack-frame-ref
 	   #:check-stack-limit
 	   #:dit-frame-ref
+	   #:dit-frame-casf
 	   #:interrupt-default-handler
 	   #:exception-handler
 

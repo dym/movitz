@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.36 2005/01/04 20:24:00 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.37 2005/03/09 07:24:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,6 +20,7 @@
 (require :x86-pc/io-space)
 (require :x86-pc/ne2k)
 (require :x86-pc/floppy)
+(require :x86-pc/serial)
 
 (require :lib/readline)
 (require :lib/toplevel)
@@ -40,7 +41,7 @@
 ;; 	#:muerte.ip6
 	#:muerte.ip4
 	#:muerte.mop
-	#+ignore muerte.x86-pc.serial))
+	#:muerte.x86-pc.serial))
 
 (require :los0-gc)			; Must come after defpackage.
 
@@ -1011,7 +1012,8 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
   (if (not (and (boundp '*debugger-condition*)
 		*debugger-condition*))
       (fresh-line)
-    (let ((condition *debugger-condition*))
+    (let ((condition *debugger-condition*)
+	  (*print-safely* t))
       (cond
        ((consp condition)
 	(fresh-line)
@@ -1141,7 +1143,7 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
 (defun random (limit)
   (etypecase limit
     (fixnum
-     (rem (read-time-stamp-counter) limit))
+     (mod (read-time-stamp-counter) limit))
     (muerte::positive-bignum
      (let ((x (muerte::copy-bignum limit)))
        (dotimes (i (1- (muerte::%bignum-bigits x)))
@@ -1210,8 +1212,9 @@ Can be used to measure the overhead of primitive function."
 	(assert (string= fasit x) ()
 	  "Failed tesT. Fasit: ~S, X: ~S" fasit x)))))
 
-(defun test-clc (&optional timeout)
-  (test-timer timeout)
+(defun test-clc (&optional timeout no-timer)
+  (unless no-timer
+    (test-timer timeout))
   (loop
     (funcall (find-symbol (string :test-clc) :clc))))
 
@@ -1231,7 +1234,7 @@ Can be used to measure the overhead of primitive function."
 ;;;		 (vector-push funobj ts)
 ;;;		 (vector-push offset ts)
 ;;;		 (vector-push code-vector ts))))
-      (muerte::cli)
+;;;      (muerte::cli)
       (pic8259-end-of-interrupt 0)
       (when (eql #\esc (muerte.x86-pc.keyboard:poll-char))
 	(break "Test-timer keyboard break."))
@@ -1246,12 +1249,11 @@ Can be used to measure the overhead of primitive function."
 	(when (eq (with-inline-assembly (:returns :eax) (:movl :esi :eax))
 		  (stack-frame-funobj nil frame))
 	  (error "Double interrupt.")))
-      #+ignore
-      (dolist (range muerte::%memory-map-roots%)
-	(map-header-vals (lambda (x type)
-			   (declare (ignore type))
-			   x)
-			 (car range) (cdr range)))
+;;;      (dolist (range muerte::%memory-map-roots%)
+;;;	(map-header-vals (lambda (x type)
+;;;			   (declare (ignore type))
+;;;			   x)
+;;;			 (car range) (cdr range)))
       (map-stack-vector (lambda (x foo)
 			  (declare (ignore foo))
 			  x)
@@ -1261,11 +1263,12 @@ Can be used to measure the overhead of primitive function."
 	(:compile-form (:result-mode :ecx) muerte.x86-pc::*screen*)
 	(:shrl 2 :ecx)
 	((:gs-override) :movb #x20 (:ecx 159)))
-      (setf *timer-prevstack* *timer-stack*
-	    *timer-stack* (muerte::copy-current-control-stack))
+      #+ignore (setf *timer-prevstack* *timer-stack*
+		     *timer-stack* (muerte::copy-current-control-stack))
       (setf (pit8253-timer-mode 0) +pit8253-mode-single-timeout+
 	    (pit8253-timer-count 0) (or timeout (+ base (random variation))))
-      (muerte::sti)))
+;;;      (muerte::sti)
+      ))
   (with-inline-assembly (:returns :nothing)
     (:compile-form (:result-mode :ecx) muerte.x86-pc::*screen*)
     (:shrl 2 :ecx)
@@ -1274,24 +1277,10 @@ Can be used to measure the overhead of primitive function."
 	(pit8253-timer-count 0) (or timeout (+ base (random variation))))
   (setf (pic8259-irq-mask) #xfffe)
   (pic8259-end-of-interrupt 0)
-  (with-inline-assembly (:returns :nothing) (:sti))
-  ;; (dotimes (i 100000))
-  #+ignore
-  (with-inline-assembly (:returns :nothing)
-    (:compile-two-forms (:ebx :edx)
-			(read-time-stamp-counter)
-			(read-time-stamp-counter))
-    (:movl :eax (#x1000000))
-    (:movl :ebx (#x1000004))
-    (:movl :ecx (#x1000008))
-    (:movl :edx (#x100000c))
-    (:movl :ebp (#x1000010))
-    (:movl :esp (#x1000014))
-    (:movl :esi (#x1000018))
-    (:halt)
-    (:cli)
-    (:halt)
-    ))
+  (with-inline-assembly (:returns :nothing) (:sti)))
+
+(defun wetweg (x)
+  (memref-int (memref x 2 :type :unsigned-byte32) :physicalp nil :type :unsigned-byte8))
 
 (defun test-throwing (&optional (x #xffff))
   (when x
@@ -1338,7 +1327,7 @@ Can be used to measure the overhead of primitive function."
     (:jno 'no-overflow)
     (:movl 4 :eax)
    no-overflow))
-    
+
 (defun genesis ()
   ;; (install-shallow-binding)
   (let ((extended-memsize 0))
@@ -1352,10 +1341,11 @@ Can be used to measure the overhead of primitive function."
     (idt-init)
     (install-los0-consing :kb-size 500)
     #+ignore
-    (install-los0-consing :kb-size (max 100 (truncate (- extended-memsize 2048) 2))))
+    (install-los0-consing :kb-size (max 50 (truncate (- extended-memsize 2048) 2))))
 
   (setf *debugger-function* #'los0-debugger)
   (clos-bootstrap)
+  (install-shallow-binding)
   (let ((*repl-readline-context* (make-readline-context :history-size 16))
 	#+ignore (*backtrace-stack-frame-barrier* (stack-frame-uplink (current-stack-frame)))
 	#+ignore (*error-no-condition-for-debugger* t)
@@ -1385,6 +1375,10 @@ Can be used to measure the overhead of primitive function."
 		       *standard-input* s
 		       *terminal-io* s
 		       *debug-io* s)))
+;;;    (ignore-errors
+;;;     (setf (symbol-function 'write-char)
+;;;       (muerte.x86-pc.serial::make-serial-write-char :baudrate 38400))
+;;;     (format t "~&Installed serial-port write-char."))
     (let ((* nil) (** nil) (*** nil)
 	  (/ nil) (// nil) (/// nil)
 	  (+ nil) (++ nil) (+++ nil)
@@ -1409,41 +1403,6 @@ Can be used to measure the overhead of primitive function."
   (let ((string (muerte.readline:contextual-readline *repl-readline-context*)))
     (simple-read-from-string string eof-error-p eof-value)))
 
-(defun handle-warning (condition)
-  (format t "Handle-warning: ~S" condition)
-  (throw :debugger nil))
-
-(defun zoo (x)
-  (cond
-   (x (warn "foo"))
-   (t nil))
-  nil)
-
-#+ignore
-(defun progntest ()
-  (prog ()
-    (unwind-protect
-	(progn
-	  (print 'x) 
-	  (go mumbo)
-	  (error "bar"))
-      (print 'y))
-   mumbo))
-
-#+ignore
-(defun test-restart (x)
-  (with-simple-restart (test "It's just a test, so ignore ~S." x)
-    (check-type x symbol)))
-
-#+ignore
-(defun condtest ()
-  (format t "You have two attempts..")
-  (handler-bind
-      ((error #'(lambda (c) (print 'x) (warn "An error occurred..")))
-       (warning #'handle-warning)
-       (t #'invoke-debugger))
-    (read-eval-print)
-    (read-eval-print)))
 
 #+ignore
 (defun ztstring (physical-address)
