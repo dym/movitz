@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.6 2004/07/22 01:02:15 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.7 2004/08/06 14:46:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,7 +19,7 @@
 (in-package muerte)
 
 (define-primitive-function fast-cdr-car (cell)
-  "Compute both the car and the cdr of a cell."
+  "Compute both the car (into EBX) and the cdr (into EAX) of a cell."
   (with-inline-assembly (:returns :eax)
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
