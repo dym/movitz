@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.8 2004/02/12 22:58:37 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.9 2004/02/13 15:25:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -585,11 +585,11 @@ integer (native lisp) value."
     :reader movitz-symbol-hash-key
     :initarg :hash-key)
    (flags
-    :binary-lisp-type (define-bitfield movitz-symbol-flags (lu16)
-			(((:bits)
-			  :special-variable 0
-			  :constant-variable 1
-			  :setf-placeholder 4)))
+    :binary-type (define-bitfield movitz-symbol-flags (lu16)
+		   (((:bits)
+		     :special-variable 0
+		     :constant-variable 1
+		     :setf-placeholder 4)))
     :accessor movitz-symbol-flags
     :initform nil)
    (lisp-symbol
@@ -695,7 +695,7 @@ integer (native lisp) value."
    (hash-key
     :binary-lisp-type lu16)
    (flags
-    :binary-lisp-type movitz-symbol-flags
+    :binary-type movitz-symbol-flags
     :initform '(:constant-variable)))
   (:slot-align value 7))
 
@@ -1029,7 +1029,7 @@ integer (native lisp) value."
     :reader movitz-struct-name
     :initarg :name)
    (type
-    :binary-lisp-type other-type-byte
+    :binary-type other-type-byte
     :initform :defstruct)
    (pad :binary-lisp-type 1)
    (length
@@ -1252,7 +1252,7 @@ integer (native lisp) value."
     :map-binary-write 'movitz-intern
     :map-binary-read-delayed 'movitz-word)
    (type
-    :binary-lisp-type other-type-byte
+    :binary-type other-type-byte
     :initform :std-instance)
    (pad :binary-lisp-type 3)
    (class
