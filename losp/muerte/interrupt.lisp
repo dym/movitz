@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.37 2005/01/28 08:49:07 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.38 2005/02/02 07:50:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -141,12 +141,12 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 	    
 	    ;; Do RET atomicification
-	    (:movl (:ebp ,(dit-frame-offset :eip)) :ecx)
-	    ((:cs-override) :cmpb ,(realpart (ia-x86:asm :ret)) (:ecx))
-	    (:jne 'not-at-ret-instruction)
-	    (:globally (:movl (:edi (:edi-offset ret-trampoline)) :ecx))
-	    (:movl :ecx (:ebp ,(dit-frame-offset :eip)))
-	   not-at-ret-instruction
+;;;	    (:movl (:ebp ,(dit-frame-offset :eip)) :ecx)
+;;;	    ((:cs-override) :cmpb ,(realpart (ia-x86:asm :ret)) (:ecx))
+;;;	    (:jne 'not-at-ret-instruction)
+;;;	    (:globally (:movl (:edi (:edi-offset ret-trampoline)) :ecx))
+;;;	    (:movl :ecx (:ebp ,(dit-frame-offset :eip)))
+;;;	   not-at-ret-instruction
 	    
 	    (:xorl :eax :eax)		; Ensure safe value
 	    (:xorl :edx :edx)		; Ensure safe value
@@ -251,14 +251,16 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:jnz 'restart-simple-pf)
 
 	    ;; ECX is a throw target aka. next continuation step.
-	    (:locally (:movl :esi (:edi (:edi-offset scratch1))))
+	    
+	    (:movl :edi :esi)		; before bumping ESP, remove reference to funobj..
+					; ..in case it's stack-allocated.
 	    (:movl (:ecx 12) :edx)
 	    (:locally (:movl :edx (:edi (:edi-offset dynamic-env)))) ; exit to target dynamic-env
-	    (:movl :ecx :esp)		; enter non-local jump stack mode.
 	    
+	    (:movl :edi :ebp)		; enter non-local jump stack mode.
+	    (:movl :ecx :esp)		; 
 	    (:movl (:esp) :ecx)		; target stack-frame EBP
 	    (:movl (:ecx -4) :esi)	; get target funobj into ESI
-	    
 	    (:movl (:esp 8) :ecx)	; target jumper number
 	    (:jmp (:esi :ecx (:offset movitz-funobj constant0)))
 	    
