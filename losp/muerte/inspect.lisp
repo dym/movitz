@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.15 2004/07/08 18:53:47 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.16 2004/07/08 21:48:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -245,7 +245,7 @@ The unit clump is 8 bytes, or two words."
 	   (+ -1 object-location
 	      #.(movitz::movitz-type-word-size :movitz-funobj)
 	      (funobj-num-constants object))))
-      ((or string code-vector (simple-array (unsigned-byte 8)))
+      ((or string code-vector (simple-array (unsigned-byte 8) 1))
        (<= object-location
 	   location
 	   (+ -1 object-location
@@ -272,6 +272,37 @@ The unit clump is 8 bytes, or two words."
 
 (defun %bignum-bigits (x)
   (%bignum-bigits x))
+
+(defun %bignum-canonicalize (x)
+  "Assuming x is a bignum, return the canonical integer value. That is,
+either return a fixnum, or destructively modify the bignum's length so
+that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :eax)
+	    (:load-lexical (:lexical-binding x) :eax)
+	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
+	    (:shrl 16 :ecx)
+	   shrink-loop
+	    (:cmpl 1 :ecx)
+	    (:je 'shrink-no-more)
+	    (:cmpl 0 (:eax (:ecx 4) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
+	    (:jnz 'shrink-done)
+	    (:subl 1 :ecx)
+	    (:jmp 'shrink-loop)
+	   shrink-no-more
+	    (:cmpl ,(1+ movitz:+movitz-most-positive-fixnum+)
+		   (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+	    (:jc '(:sub-program (fixnum-result)
+		   (:movl (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		    :ecx)
+		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
+		   (:jmp 'done)))
+	   shrink-done
+	    (:movw :cx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length)))
+	   done
+	    )))
+    (do-it)))
 
 (defun copy-bignum (old)
   (check-type old bignum)
