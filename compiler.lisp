@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.101 2004/10/11 13:44:04 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.102 2004/10/21 20:38:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -51,7 +51,7 @@ run-time context.")
   "Use this segment prefix when reading a lispval at (potentially)
 non-local locations.")
 
-(defparameter *compiler-nonlocal-lispval-write-segment-prefix* '(:fs-override)
+(defparameter *compiler-nonlocal-lispval-write-segment-prefix* '(:es-override)
   "Use this segment prefix when writing a lispval at (potentially)
 non-local locations.")
 
@@ -2607,7 +2607,10 @@ the sub-program options (&optional label) as secondary value."
 			     (cdr instruction)
 			   (assert (not (getf jumper-sets name)) ()
 			     "Duplicate jumper declaration for ~S." name)
-			   (setf (getf jumper-sets name) set))))
+			   (setf (getf jumper-sets name) set)))
+			(t (when (listp instruction)
+			     (dolist (binding (find-read-bindings instruction))
+			       (process-binding binding)))))
 		   do (let ((sub (instruction-sub-program instruction)))
 			(when sub (process sub))))))
       (process code)
@@ -4801,6 +4804,7 @@ Return arg-init-code, need-normalized-ecx-p."
 	    (values (append code
 			    `((:load-lexical ,returns-provided ,desired-result)))
 		    desired-result))))
+	#+ignore
 	(:untagged-fixnum-eax
 	 (case returns-provided
 	   (:untagged-fixnum-eax
@@ -4977,7 +4981,8 @@ Return arg-init-code, need-normalized-ecx-p."
 	    (values code returns-provided))
 	   (:multiple-values
 	    (values code :values))
-	   (t (values (make-result-and-returns-glue :eax returns-provided code)
+	   (t (values (make-result-and-returns-glue :eax returns-provided code
+						    :type type)
 		      '(:values 1)))))
 	((:multiple-values :function)
 	 (case (operator returns-provided)
@@ -4990,16 +4995,21 @@ Return arg-init-code, need-normalized-ecx-p."
 	      (1 (values (append code '((:clc)))
 			 :multiple-values))
 	      ((nil) (values code :multiple-values))
-	      (t (values (append code (make-immediate-move (first (operands returns-provided)) :ecx) '((:stc)))
+	      (t (values (append code
+				 (make-immediate-move (first (operands returns-provided)) :ecx)
+				 '((:stc)))
 			 :multiple-values))))
 	   (t (values (append (make-result-and-returns-glue :eax
 							    returns-provided
-							    code)
+							    code
+							    :type type
+							    :provider provider
+							    :really-desired desired-result)
 			      '((:clc)))
 		      :multiple-values)))))
     (unless new-returns-provided
       (multiple-value-setq (new-code new-returns-provided glue-side-effects-p)
-	(case (operator returns-provided)
+	(ecase (operator returns-provided)
 	  (#.+boolean-modes+
 	   (make-result-and-returns-glue desired-result :eax
 					 (make-result-and-returns-glue :eax returns-provided code
@@ -5009,16 +5019,28 @@ Return arg-init-code, need-normalized-ecx-p."
 					 :type type
 					 :provider provider))
 	  (:untagged-fixnum-ecx
-	   (case (result-mode-type desired-result)
-	     ((:eax :single-value)
-	      (values (append code
-			      `((:call (:edi ,(global-constant-offset 'box-u32-ecx)))))
-		      desired-result))
-	     (t (make-result-and-returns-glue desired-result :eax
-					      (make-result-and-returns-glue :eax :untagged-fixnum-ecx code
-									    :provider provider
-									    :really-desired desired-result)
-					      :provider provider))))
+	   (let ((fixnump (subtypep type `(integer 0 ,+movitz-most-positive-fixnum+))))
+	     (cond
+	      ((and fixnump
+		    (member (result-mode-type desired-result) '(:eax :ebx :ecx :edx)))
+	       (values (append code
+			       `((:leal ((:ecx ,+movitz-fixnum-factor+))
+					,(result-mode-type desired-result))))
+		       desired-result))
+	      ((and (not fixnump)
+		    (member (result-mode-type desired-result) '(:eax :single-value)))
+	       (values (append code
+			       `((:call (:edi ,(global-constant-offset 'box-u32-ecx)))))
+		       desired-result))
+	      (t (make-result-and-returns-glue
+		  desired-result :eax
+		  (make-result-and-returns-glue :eax :untagged-fixnum-ecx code
+						:provider provider
+						:really-desired desired-result
+						:type type)
+		  :provider provider
+		  :type type)))))
+	  #+ignore
 	  (:untagged-fixnum-eax
 	   (make-result-and-returns-glue desired-result :eax
 					 (make-result-and-returns-glue :eax :untagged-fixnum-eax code
@@ -5542,7 +5564,7 @@ fifth:  all compiler-values for form1, as a list."
 			  (:lexical-binding
 			   result-mode)
 			  ((:ebx :ecx :edx :esi :push
-			    :untagged-fixnum-eax
+			    ;; :untagged-fixnum-eax
 			    :untagged-fixnum-ecx
 			    :boolean-branch-on-true
 			    :boolean-branch-on-false)
