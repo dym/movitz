@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.45 2004/12/10 12:46:52 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.46 2004/12/13 11:24:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -151,9 +151,12 @@
 (defun movitz-read-and-intern (expr type)
   (ecase type
     (word
-     (if (typep expr 'movitz-object)
-	 (movitz-intern expr)
-       (movitz-intern (movitz-read expr))))
+     (cond
+       ((eq expr 'unbound)
+	(slot-value (image-run-time-context *image*) 'new-unbound-value))
+       ((typep expr 'movitz-object)
+	(movitz-intern expr))
+       (t (movitz-intern (movitz-read expr)))))
     (code-vector-word
      (movitz-intern-code-vector expr))))
 
@@ -335,13 +338,27 @@ integer (native lisp) value."
     :binary-type other-type-byte
     :reader movitz-vector-type
     :initform :code-vector)
-   (blurg)
+   (entry1
+    :binary-type u8
+    :initarg :entry1)
    (num-elements
-    :binary-type word
+    :binary-type lu16
     :initarg :num-elements
-    :reader movitz-vector-num-elements
-    :map-binary-write 'movitz-read-and-intern
-    :map-binary-read-delayed 'movitz-word-and-print)
+    :reader movitz-vector-num-elements)
+   (entry2
+    :binary-type lu16
+    :initarg :num-elements
+    :map-binary-write (lambda (x &optional type)
+			(declare (ignore type))
+			(check-type x (unsigned-byte 14))
+			(* x 4))
+    :map-binary-read (lambda (x &optional type)
+		       (declare (ignore type))
+		       (assert (zerop (mod x 4)))
+		       (truncate x 4)))
+   (entry3
+    :binary-type lu16
+    :initarg :num-elements)
    (data
     :binary-lisp-type :label)		; data follows physically here
    (symbolic-data
@@ -537,11 +554,23 @@ integer (native lisp) value."
 			fill-pointer
 		      size))))
 
+(defun make-movitz-code-vector (code entry1 entry2 entry3)
+  (make-instance 'movitz-code-vector
+		 :symbolic-data code
+		 :num-elements (1- (ceiling (length code) 8))
+		 :entry1 entry1
+		 :entry2 entry2
+		 :entry3 entry3))
+
+(defmethod write-binary-record ((obj movitz-code-vector) stream)
+  (+ (call-next-method)			; header
+     (loop for data across (movitz-vector-symbolic-data obj)
+	summing (write-binary 'u8 stream data))))
+
 (defun make-movitz-string (string)
   (make-movitz-vector (length string)
 		   :element-type 'character
 		   :initial-contents (map 'list #'identity string)))
-;; (map 'list #'make-movitz-character string)))
 
 (defun movitz-stringp (x)
   (and (typep x '(or movitz-basic-vector))
@@ -565,7 +594,7 @@ integer (native lisp) value."
     :binary-type word
     :map-binary-write 'movitz-read-and-intern
     :map-binary-read-delayed 'movitz-word
-    :initform 'muerte::unbound		;
+    :initform 'unbound
     :accessor movitz-symbol-value
     :initarg :value)
    (plist
@@ -883,7 +912,7 @@ integer (native lisp) value."
    (standard-gf-function		; a movitz-funobj which is called by dispatcher (in code-vector)
     :accessor standard-gf-function
     :initarg :function
-    :initform 'muerte::unbound
+    :initform 'muerte::unbound-function
     :binary-type word
     :map-binary-write 'movitz-read-and-intern-function-value)
    (num-required-arguments
@@ -922,7 +951,7 @@ integer (native lisp) value."
   nil)
 
 (defun make-standard-gf (class slots &key lambda-list (name "unnamed")
-					  (function 'muerte::unbound)
+					  (function 'muerte::unbound-function)
 					  num-required-arguments
 					  classes-to-emf-table)
   (make-instance 'movitz-funobj-standard-gf
