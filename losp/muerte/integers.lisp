@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.5 2004/04/15 13:08:50 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.6 2004/04/15 13:10:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -741,7 +741,7 @@
 (defun truncate (number &optional (divisor 1))
   (numargs-case
    (1 (number)
-      number)
+      (values number 0))
    (t (number divisor)
       (with-inline-assembly (:returns :multiple-values)
 	(:compile-form (:result-mode :eax) number)
