@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.54 2004/07/29 00:13:00 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.55 2004/07/29 01:37:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1111,14 +1111,9 @@ this image will not be Multiboot compatible."
 		    sum)))))
 
 (defun intern-movitz-symbol (name)
-  #+ignore (assert (or (not (symbol-package name))
-		       (eq (symbol-package name)
-			   (find-package :keyword))
-		       (string= (string :muerte.)
-				(package-name (symbol-package name))
-				:end2 (min 5 (length (package-name (symbol-package name))))))
-	       (name)
-	     "Trying to movitz-intern a symbol not in a Movitz package: ~S" name)
+  (assert (not (eq (symbol-package name) (find-package :common-lisp)))
+      (name)
+    "Trying to movitz-intern a symbol in the Common-Lisp package: ~S" name)
   (or (gethash name (image-oblist *image*))
       (let ((symbol (make-movitz-symbol name)))
 	(when (get name :setf-placeholder)
