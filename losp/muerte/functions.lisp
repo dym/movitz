@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.22 2004/10/11 13:52:34 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.23 2004/10/12 14:43:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -166,15 +166,14 @@ represented as that vector."
        (:compile-form (:result-mode :ebx) funobj)
        (:compile-form (:result-mode :eax) code-vector)
        (:addl 2 :eax)			; this cell stores word+2
-       (:movl :eax (:ebx #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector%1op)))))
+       (:movl :eax (:ebx (:offset movitz-funobj code-vector%1op)))))
     (integer
      (with-inline-assembly (:returns :nothing)
        (:compile-form (:result-mode :ebx) funobj)
-       (:movl (:ebx #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector)) :eax)
-       (:movl :eax (:ebx #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector%1op)))
-       (:compile-form (:result-mode :untagged-fixnum-eax) code-vector)
-       (:addl :eax (:ebx #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector%1op)))
-       (:xorl :eax :eax))))
+       (:movl (:ebx (:offset movitz-funobj code-vector)) :eax)
+       (:movl :eax (:ebx (:offset movitz-funobj code-vector%1op)))
+       (:compile-form (:result-mode :untagged-fixnum-ecx) code-vector)
+       (:addl :ecx (:ebx (:offset movitz-funobj code-vector%1op))))))
   code-vector)
 
 (defun funobj-code-vector%2op (funobj)
@@ -227,15 +226,14 @@ represented as that vector."
        (:compile-form (:result-mode :ebx) funobj)
        (:compile-form (:result-mode :eax) code-vector)
        (:addl 2 :eax)			; this cell stores word+2
-       (:movl :eax (:ebx #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector%2op)))))
+       (:movl :eax (:ebx (:offset movitz-funobj code-vector%2op)))))
     (integer
      (with-inline-assembly (:returns :nothing)
        (:compile-form (:result-mode :ebx) funobj)
-       (:movl (:ebx #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector)) :eax)
-       (:movl :eax (:ebx #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector%2op)))
-       (:compile-form (:result-mode :untagged-fixnum-eax) code-vector)
-       (:addl :eax (:ebx #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector%2op)))
-       (:xorl :eax :eax))))
+       (:movl (:ebx (:offset movitz-funobj code-vector)) :eax)
+       (:movl :eax (:ebx (:offset movitz-funobj code-vector%2op)))
+       (:compile-form (:result-mode :untagged-fixnum-ecx) code-vector)
+       (:addl :ecx (:ebx (:offset movitz-funobj code-vector%2op))))))
   code-vector)
 
 (defun funobj-code-vector%3op (funobj)
@@ -288,15 +286,14 @@ represented as that vector."
        (:compile-form (:result-mode :ebx) funobj)
        (:compile-form (:result-mode :eax) code-vector)
        (:addl 2 :eax)			; this cell stores word+2
-       (:movl :eax (:ebx #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector%3op)))))
+       (:movl :eax (:ebx (:offset movitz-funobj code-vector%3op)))))
     (integer
      (with-inline-assembly (:returns :nothing)
        (:compile-form (:result-mode :ebx) funobj)
-       (:movl (:ebx #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector)) :eax)
-       (:movl :eax (:ebx #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector%3op)))
-       (:compile-form (:result-mode :untagged-fixnum-eax) code-vector)
-       (:addl :eax (:ebx #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector%3op)))
-       (:xorl :eax :eax))))
+       (:movl (:ebx (:offset movitz-funobj code-vector)) :eax)
+       (:movl :eax (:ebx (:offset movitz-funobj code-vector%3op)))
+       (:compile-form (:result-mode :untagged-fixnum-ecx) code-vector)
+       (:addl :ecx (:ebx (:offset movitz-funobj code-vector%3op))))))
   code-vector)
 
 (defun funobj-name (funobj)
