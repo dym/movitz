@@ -23,7 +23,8 @@
 
 (defun compile-defun (source)
   "Compile the string SOURCE as Movitz source."
-  (with-open-file (s temp-source-file :direction :output :if-exists :overwrite)
+  (with-open-file (s temp-source-file :direction :output
+                     :if-exists :overwrite :if-does-not-exist :create)
     (princ source s))
   (compile-movitz-file temp-source-file))
 
