@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.4 2004/02/12 11:32:56 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.5 2004/02/12 17:51:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -531,6 +531,7 @@ with the single member of <type-specifier>."
 	     (type-specifier-encode (apply deriver (cdr type-specifier))))))))))
 
 (defun member-type-encode (&rest member-objects)
+  "Encode a member type-specifier holding member-objects."
   (declare (dynamic-extent members))
   (multiple-value-bind (code integer-range members include complement)
       (type-specifier-encode nil)
