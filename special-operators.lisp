@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.38 2004/09/15 10:22:52 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.39 2004/09/17 11:12:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1178,9 +1178,14 @@ on the current result."
   (destructuring-bind (tag context value-form)
       (cdr form)
     (let* ((local-env (make-local-movitz-environment env funobj :type 'let-env))
-	   (dynamic-slot-binding (movitz-env-add-binding local-env
-							 (make-instance 'located-binding
-							   :name (gensym "dynamic-slot-")))))
+	   (dynamic-slot-binding
+	    (movitz-env-add-binding local-env
+				    (make-instance 'located-binding
+				      :name (gensym "dynamic-slot-"))))
+	   (next-continuation-step-binding
+	    (movitz-env-add-binding local-env
+				    (make-instance 'located-binding
+				      :name (gensym "continuation-step-")))))
       (with-labels (throw (save-tag-var save-context-var))
 	(compiler-values ()
 	  :returns :non-local-exit
@@ -1196,7 +1201,9 @@ on the current result."
 				       (:globally (:call (:edi (:edi-offset dynamic-locate-catch-tag))))
 				       (:jnc '(:sub-program () (:int 108)))
 				       (:store-lexical ,dynamic-slot-binding :eax :type t)
-				       )))) ; save dynamic-slot in EBP
+				       (:globally (:call (:edi (:edi-offset dynamic-unwind-next))))
+				       (:store-lexical ,next-continuation-step-binding :eax :type t)
+				       ))))
 			;; now outside of m-v-prog1's cloak, with final dynamic-slot in ESP..
 			;; ..unwind it and transfer control.
 			;;
@@ -1207,11 +1214,14 @@ on the current result."
 ;;;			`((:load-lexical ,dynamic-slot-binding :edx)
 ;;;			  ())
 			`((:load-lexical ,dynamic-slot-binding :edx)
+			  (:locally (:movl :edx (:edi (:edi-offset raw-scratch0)))) ; final continuation
+			  (:load-lexical ,next-continuation-step-binding :edx) ; next continuation-step
 			  (:locally (:movl :esi (:edi (:edi-offset scratch1))))
+			  (:locally (:movl :edx (:edi (:edi-offset dynamic-env)))) ; exit dynamic-env
 			  (:movl :edx :esp) ; enter non-local jump stack mode.
 			  
 			  (:movl (:esp) :edx) ; target stack-frame EBP
-			  (:movl (:edx -4) :esi) ; get target funobj into EDX
+			  (:movl (:edx -4) :esi) ; get target funobj into ESI
 			  
 			  (:movl (:esp 8) :edx) ; target jumper number
 			  (:jmp (:esi :edx ,(slot-offset 'movitz-funobj 'constant0))))))))))
@@ -1293,7 +1303,8 @@ on the current result."
 			  :form body)
 			`((:leal (:esp ,(+ -12 -4 (* 4 entry-size))) :esp)
 			  ,exit-point
+			  (:movl (:esp 12) :edx)
+			  (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
 			  (:popl :ebp)
-			  (:leal (:esp 8) :esp)
-			  (:locally (:popl (:edi (:edi-offset dynamic-env))))
+			  (:leal (:esp 12) :esp)
 			  )))))))

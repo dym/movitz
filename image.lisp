@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.68 2004/09/16 08:50:54 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.69 2004/09/17 11:12:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -470,7 +470,12 @@
     :initform '(:inactive))
    (atomically-esp
     :binary-type lu32
-    :initform 0))
+    :initform 0)
+   (dynamic-unwind-next
+    :map-binary-write 'movitz-intern-code-vector
+    :binary-tag :primitive-function
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-type code-vector-word))
   (:slot-align null-symbol -5))
 
 (defun atomically-status-simple-pf (pf-name reset-status-p &rest registers)

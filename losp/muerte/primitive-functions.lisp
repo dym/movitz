@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.42 2004/09/15 10:22:59 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.43 2004/09/17 11:12:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -110,6 +110,34 @@
 ;;;  -28: cdr
 ;;;  -32: car ...
 
+(define-primitive-function dynamic-unwind-next (dynamic-env)
+  "Locate the next unwind-protect entry between here and dynamic-env.
+If no such entry is found, return (same) dynamic-env in EAX and CF=0.
+Otherwise return the unwind-protect entry in EAX and CF=1."
+  (with-inline-assembly (:returns :nothing)
+    (:locally (:bound (:edi (:edi-offset stack-bottom)) :eax))
+
+    (:globally (:movl (:edi (:edi-offset unwind-protect-tag)) :edx))
+    (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
+    
+   search-loop
+    (:jecxz '(:sub-program () (:halt) (:int 63))) ; XXX don't halt
+    (:locally (:bound (:edi (:edi-offset stack-bottom)) :ecx))
+
+    (:cmpl :ecx :eax)
+    (:je 'found-dynamic-env)
+    
+    (:cmpl :edx (:ecx 4))		; unwind-protect entry?
+    (:je 'found-unwind-protect)
+    
+    (:movl (:ecx 12) :ecx)		; proceed search
+    (:jmp 'search-loop)
+   found-unwind-protect
+    (:movl :ecx :eax)
+    (:stc)
+   found-dynamic-env
+    (:ret)))
+  
 
 (define-primitive-function dynamic-locate-catch-tag (tag)
   "Search the dynamic environment for a catch slot matching <tag> in EAX.
@@ -119,10 +147,10 @@ Iff a tag is found, any intervening unwind-protect cleanup-forms are executed, a
 this functions returns with EAX pointing to the dynamic-slot for tag, and with carry set.
 When the tag is not found, no cleanup-forms are executed, and carry is cleared upon return,
 with EAX still holding the tag."
-  (with-inline-assembly (:returns :push)
-    (:pushl :ebp)
-    (:movl :esp :ebp)			; set up a pseudo stack-frame
-    (:pushl :edi)
+  (with-inline-assembly (:returns :multiple-values)
+;;;    (:pushl :ebp)
+;;;    (:movl :esp :ebp)			; set up a pseudo stack-frame
+;;;    (:pushl :edi)
     
     (:globally (:movl (:edi (:edi-offset unwind-protect-tag)) :edx))
     (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
@@ -139,50 +167,52 @@ with EAX still holding the tag."
     (:jz 'success)
 
    mismatch
-    (:cmpl :edx (:ecx 4))		; is env-slot in ECX == unwind-protect?
-    (:jne 'not-unwind-protect)
-    (:pushl :ecx)			; ..then save env-slot (in pseudo stack-frame)
+;;;    (:cmpl :edx (:ecx 4))		; is env-slot in ECX == unwind-protect?
+;;;    (:jne 'not-unwind-protect)
+;;;    (:pushl :ecx)			; ..then save env-slot (in pseudo stack-frame)
 
    not-unwind-protect
     (:movl (:ecx 12) :ecx)		; get parent
     (:jmp 'search-loop)
     
    success
-    (:pushl 0)				; mark, meaning next slot is ``the'' target slot.
-    (:pushl :ecx)			; save the found env-slot
 
-    ;; Now execute any unwind-protect cleanup-forms we encountered.
-    ;; We are still inside the pseudo stack-frame.
-    (:leal (:ebp -8) :edx)		; EDX points to the current dynamic-slot-slot
-
-   unwind-loop
-    (:movl (:edx) :eax)			; next dynamic-slot to unwind
-    (:testl :eax :eax)			; is this the last entry?
-    (:jz 'unwind-done)
-    (:pushl :ebp)			; save EBP
-    (:pushl :edx)			; and EDX
-    (:movl (:eax 12) :ebx)		; unwind dynamic-env..
-    (:locally (:movl :ebx (:edi (:edi-offset dynamic-env))))
-    (:movl (:eax 0) :ebp)		; install clean-up's stack-frame (but keep our ESP)
-    (:movl (:ebp -4) :esi)		; ..and install clean-up's funobj in ESI
-    (:movl (:eax 8) :edx)
-    (:call (:esi :edx #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
-    (:popl :edx)			; restoure our EDX
-    (:popl :ebp)			; restore our EBP
-    (:subl 4 :edx)			; ..slide EDX to next position inside stack-frame.
-    (:jmp 'unwind-loop)
-
-   unwind-done
-    (:movl (:edx -4) :eax)		; the final dyamic-slot target.
-    (:leave)				; exit pseudo stack-frame
-    (:movl (:ebp -4) :esi)
+;;;    (:pushl 0)				; mark, meaning next slot is ``the'' target slot.
+;;;    (:pushl :ecx)			; save the found env-slot
+;;;
+;;;    ;; Now execute any unwind-protect cleanup-forms we encountered.
+;;;    ;; We are still inside the pseudo stack-frame.
+;;;    (:leal (:ebp -8) :edx)		; EDX points to the current dynamic-slot-slot
+;;;
+;;;   unwind-loop
+;;;    (:movl (:edx) :eax)			; next dynamic-slot to unwind
+;;;    (:testl :eax :eax)			; is this the last entry?
+;;;    (:jz 'unwind-done)
+;;;    (:pushl :ebp)			; save EBP
+;;;    (:pushl :edx)			; and EDX
+;;;    (:movl (:eax 12) :ebx)		; unwind dynamic-env..
+;;;    (:locally (:movl :ebx (:edi (:edi-offset dynamic-env))))
+;;;    (:movl (:eax 0) :ebp)		; install clean-up's stack-frame (but keep our ESP)
+;;;    (:movl (:ebp -4) :esi)		; ..and install clean-up's funobj in ESI
+;;;    (:movl (:eax 8) :edx)
+;;;    (:call (:esi :edx (:offset movitz-funobj constant0)))
+;;;    (:popl :edx)			; restoure our EDX
+;;;    (:popl :ebp)			; restore our EBP
+;;;    (:subl 4 :edx)			; ..slide EDX to next position inside stack-frame.
+;;;    (:jmp 'unwind-loop)
+;;;
+;;;   unwind-done
+;;;    (:movl (:edx -4) :eax)		; the final dyamic-slot target.
+;;;    (:leave)				; exit pseudo stack-frame
+;;;    (:movl (:ebp -4) :esi)
+    (:movl :ecx :eax)
     (:stc)				; signal success
     (:ret)				; return
     
    search-failed
     (:clc)				; signal failure
-    (:leave)				; exit pseudo stack-frame
-    (:movl (:ebp -4) :esi)
+;;;    (:leave)				; exit pseudo stack-frame
+;;;    (:movl (:ebp -4) :esi)
     (:ret)))				; return.
     
 (define-primitive-function dynamic-unwind ()

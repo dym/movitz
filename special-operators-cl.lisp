@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.23 2004/09/15 10:22:52 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.24 2004/09/17 11:12:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -291,6 +291,10 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				   (progn #+ignore (warn "recompile..")
 					  (compile-body)))
 				 (when (plusp (num-specials local-env))
+				   `((:movl (:esp ,(+ -4 (* 16 (num-specials local-env)))) :edx)
+				     (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
+				     (:leal (:esp ,(* 16 (num-specials local-env))) :esp))
+				   #+ignore
 				   `((:leal (:esp ,(+ -4 (* 16 (num-specials local-env)))) :esp)
 				     (:locally (:popl (:edi (:edi-offset dynamic-env)))))))))
 		      (compiler-values (body-values)
@@ -1183,48 +1187,90 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		      (:locally (:movl :esp (:edi (:edi-offset dynamic-env))))) ; install catch
 		    body-code
 		    `(,exit-point
+		      (:movl (:esp 12) :edx)
+		      (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
 		      (:popl :ebp)
-		      (:leal (:esp 8) :esp) ; Skip catch-tag and jumper
-		      (:locally (:popl (:edi (:edi-offset dynamic-env)))))))))
+		      (:leal (:esp 12) :esp)
+		      )))))
 
 (define-special-operator unwind-protect (&all all &form form &env env)
   (destructuring-bind (protected-form &body cleanup-forms)
       (cdr form)
-    (let ((up-env (make-instance 'unwind-protect-env
-		    :uplink env
-		    :funobj (movitz-environment-funobj env))))
-      (with-labels (unwind-protect (cleanup-label cleanup-entry))
-	(compiler-call #'compile-form
-	  :result-mode :multiple-values
-	  :forward all
-	  :form `(muerte.cl::multiple-value-prog1
-		     (muerte::with-progn-results (:ignore :multiple-values)
-		       (muerte::with-inline-assembly-case ()
-			 (do-case (t :multiple-values)
-			   ;; install up dynamic-env..
-			   (:locally (:pushl (:edi (:edi-offset dynamic-env))))
-			   (:declare-label-set ,cleanup-label (,cleanup-entry))
-			   (:pushl ',cleanup-label) ; jumper index
-			   (:globally (:pushl (:edi (:edi-offset unwind-protect-tag)))) ; tag
-			   (:pushl :ebp) ; stack-frame
-			   (:locally (:movl :esp (:edi (:edi-offset dynamic-env)))))) ; install up-env
-		       (muerte::with-local-env (,up-env)
-			 ,protected-form)
-		       (muerte::with-inline-assembly-case ()
-			 (do-case (t :multiple-values)
-			   ;; uninstall dynamic-env..
-			   (:leal (:esp ,(- 16 4)) :esp)
-			   (:locally (:popl (:edi (:edi-offset dynamic-env)))))))
-		   (muerte::with-inline-assembly-case ()
-		     (do-case (t :nothing)
-		       ;; execute cleanup-forms
-		       (:call '(:sub-program (,cleanup-entry) ; label
-				,@(compiler-call #'compile-form
-				    :with-stack-used t ; stack distance is _really_ unknown!
-				    :defaults all
-				    :result-mode :ignore
-				    :form `(muerte.cl::progn ,@cleanup-forms))
-				(:ret)))))))))))
+    (let* ((continuation-env (make-instance 'let-env
+			       :uplink env
+			       :funobj (movitz-environment-funobj env)))
+	   (next-continuation-step-binding
+	    (movitz-env-add-binding continuation-env
+				    (make-instance 'located-binding
+				      :name (gensym "up-next-continuation-step-"))))
+	   (unwind-protect-env (make-instance 'unwind-protect-env
+				 :uplink continuation-env
+				 :funobj (movitz-environment-funobj env))))
+      (with-labels (unwind-protect (cleanup-label cleanup-entry continue continue-label))
+	(compiler-values ()
+	  :returns :multiple-values
+	  :code (append
+		 ;; install default continuation dynamic-env..
+		 `((:locally (:pushl (:edi (:edi-offset dynamic-env)))) ; uplink
+		   (:declare-label-set ,continue-label (,continue))
+		   (:pushl ',continue-label)
+		   (:locally (:pushl (:edi (:edi-offset unbound-value))))
+		   (:pushl :ebp)
+		   (:locally (:movl :esp (:edi (:edi-offset dynamic-env)))))
+		 ;; install unwind-protect dynamic-env..
+		 `((:locally (:pushl (:edi (:edi-offset dynamic-env))))
+		   (:declare-label-set ,cleanup-label (,cleanup-entry))
+		   (:pushl ',cleanup-label) ; jumper index
+		   (:globally (:pushl (:edi (:edi-offset unwind-protect-tag)))) ; tag
+		   (:pushl :ebp)	; stack-frame
+		   (:locally (:movl :esp (:edi (:edi-offset dynamic-env))))) ; install up-env
+		 ;; Execute protected form..
+		 (compiler-call #'compile-form
+		   :env unwind-protect-env
+		   :with-stack-used t
+		   :forward all
+		   :result-mode :multiple-values
+		   :form protected-form)
+		 ;; From now on, take care not to touch current-values from protected-form.
+		 `((:leal (:esp 16) :edx) ; default final continuation
+		   (:locally (:movl :edx (:edi (:edi-offset raw-scratch0))))
+		   ,cleanup-entry
+		   (:movl (:esp 12) :edx) ; pop out of unwind-protect
+		   (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
+		   (:popl :ebp)
+		   (:leal (:esp 12) :esp)
+		   (:locally (:pushl (:edi (:edi-offset raw-scratch0))))) ; push final-continuation
+		 ;; Execute cleanup-forms.
+		 (compiler-call #'compile-form-unprotected
+		   :forward all
+		   :env continuation-env
+		   :with-stack-used t
+		   :result-mode :multiple-values
+		   :form `(muerte::with-cloak (:multiple-values)
+			    ;; Inside here we don't have to mind current-values.
+			    (muerte::with-inline-assembly (:returns :nothing)
+			      ;; First, find next-continuation-step..
+			      (:locally (:movl (:edi (:edi-offset raw-scratch0)) :eax)) ; final-cont..
+			      (:locally (:call (:edi (:edi-offset dynamic-unwind-next))))
+			      (:locally (:bound (:edi (:edi-offset stack-bottom)) :eax))
+			      (:store-lexical ,next-continuation-step-binding :eax :type t))
+			    ,@cleanup-forms))
+		 `((:load-lexical ,next-continuation-step-binding :edx)
+		   (:locally (:popl (:edi (:edi-offset raw-scratch0)))) ; pop final continuation
+		   (:locally (:movl :esi (:edi (:edi-offset scratch1))))
+		   (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
+		   (:movl :edx :esp)	; enter non-local jump stack mode (possibly).
+			  
+		   (:movl (:esp) :edx)	; target stack-frame EBP
+		   (:movl (:edx -4) :esi) ; get target funobj into EDX
+			  
+		   (:movl (:esp 8) :edx) ; target jumper number
+		   (:jmp (:esi :edx ,(slot-offset 'movitz-funobj 'constant0))))
+		 `(,continue
+		   (:movl (:esp 12) :edx)
+		   (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
+		   (:popl :ebp)
+		   (:leal (:esp 12) :esp))))))))
 
 
 (define-special-operator if (&all all &form form &env env &result-mode result-mode)

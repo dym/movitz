@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.29 2004/09/15 10:22:59 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.30 2004/09/17 11:13:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -130,6 +130,7 @@ start-location and end-location."
 	   ((scavenge-typep x :old-vector)
 	    (error "Scanned old-vector ~Z at address #x~X." x scan))
 	   ((eq x 3)
+	    (setf *scan-last* scan)
 	    (incf scan)
 	    (let ((delta (memref scan 0 0 :lisp)))
 	      (check-type delta positive-fixnum)
@@ -206,16 +207,14 @@ at the start-stack-frame location."
 			(cond
 			 ((location-in-object-p casf-code-vector
 						(dit-frame-ref stack dit-frame :eip :location))
-			  #+ignore
-			  (break "DIT at throw situation, in target EIP=~S"
-				 (dit-frame-ref stack dit-frame :eip :unsigned-byte32))
+			  (warn "DIT at throw situation, in target EIP=~S"
+				(dit-frame-ref stack dit-frame :eip :unsigned-byte32))
 			  (map-heap-words function interrupted-esp frame))
 			 ((location-in-object-p (funobj-code-vector (dit-frame-ref stack dit-frame
 										   :scratch1))
 						(dit-frame-ref stack dit-frame :eip :location))
-			  #+ignore
-			  (break "DIT at throw situation, in thrower EIP=~S"
-				 (dit-frame-ref stack dit-frame :eip :unsigned-byte32))
+			  (warn "DIT at throw situation, in thrower EIP=~S"
+				(dit-frame-ref stack dit-frame :eip :unsigned-byte32))
 			  (map-heap-words function interrupted-esp frame))
 			 (t (error "DIT with EBP<ESP, EBP=~S, ESP=~S"
 				   interrupted-ebp
