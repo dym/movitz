@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.34 2005/02/28 16:44:37 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.35 2005/02/28 23:34:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -606,3 +606,20 @@ be provided for those cases."
 			   c)))))))
   (values))
 
+(defun find-function-name (instruction-location)
+  "Try to find a name bound to a function whose code-vector matches instruction-location."
+  (check-type instruction-location fixnum)
+  (or (loop for (slot-name type) in (slot-value (class-of (current-run-time-context)) 'slot-map)
+	  do (when (and (eq type 'code-vector-word)
+			(location-in-object-p (%run-time-context-slot slot-name)
+					      instruction-location))
+	       (return (values slot-name :run-time-context))))
+      (do-all-symbols (symbol)
+	(when (and (fboundp symbol)
+		   (location-in-code-vector-p%unsafe (funobj-code-vector (symbol-function symbol))
+						     instruction-location))
+	  (return symbol))
+	(when (and (boundp symbol)
+		   (typep (symbol-value symbol) 'code-vector)
+		   (location-in-code-vector-p%unsafe (symbol-value symbol) instruction-location))
+	  (return (values symbol :symbol-value))))))
