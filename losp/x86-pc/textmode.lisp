@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  9 15:38:56 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: textmode.lisp,v 1.4 2004/04/01 02:15:21 ffjeld Exp $
+;;;; $Id: textmode.lisp,v 1.5 2004/04/16 19:17:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -23,16 +23,24 @@
 
 (in-package muerte.x86-pc)
 
-(defconstant *screen* #xb8000)
-(defconstant *screen-width* 80)
-(defconstant *screen-height* 24)
-(defconstant *screen-stride* 80)
+(define-global-variable *screen* 
+    (vga-memory-map))
 
-(defparameter *cursor-x* (rem (vga-cursor-location) 80))
-(defparameter *cursor-y* (truncate (vga-cursor-location) 80))
-(defparameter *color* #x0700)
+(define-global-variable *cursor-x*
+    (rem (vga-cursor-location) 80))
 
-(defparameter *simple-console-state* 'initialized)
+(define-global-variable *cursor-y*
+    (truncate (vga-cursor-location) 80))
+
+(define-global-variable *screen-width*
+    (vga-horizontal-display-end))
+
+(define-global-variable *screen-height*
+    (truncate (vga-vertical-display-end)
+	      (vga-character-height)))
+
+(define-global-variable *screen-stride*
+    (vga-horizontal-display-end))
 
 (defun move-vga-cursor (x y)
   (let ((dest (+ x (* y *screen-stride*))))
@@ -59,91 +67,75 @@
   value)
 
 (defun textmode-write-char (c)
-  (cond
-   #+ignore
-   ((and (not (eq 'initialized *simple-console-state*))
-	 (/= #xabba (memref-int #xb8000 0 0 :unsigned-byte16)))
-    (setf (memref-int #xb8000 0 0 :unsigned-byte16) #xabba
-	  (memref-int #xb8000 0 1 :unsigned-byte16) 4
-	  (memref-int #xb8000 0 8 :unsigned-byte8) #x46 ; (char-code c)
-	  (memref-int #xb8000 1 8 :unsigned-byte8) #xe0))
-   #+ignore
-   ((not (eq 'initialized *simple-console-state*))
-    (let ((pos (memref-int #xb8000 0 1 :unsigned-byte16)))
-      (when (< pos (* 80 25 2))
-	(setf (memref-int #xb8000 0 (* 2 pos) :unsigned-byte8) (char-code c)
-	      (memref-int #xb8000 1 (* 2 pos) :unsigned-byte8) #xe0
-	      (memref-int #xb8000 0 1 :unsigned-byte16) (1+ pos)))))
-   (t (case c
-	(#\newline
-	 (setf *cursor-x* 0)
-	 (cond
-	  ((= *screen-height* *cursor-y*)
-	   (textmode-scroll-down)
-	   (move-vga-cursor 0 *cursor-y*))
-	  (t (incf *cursor-y*)
-	     (move-vga-cursor 0 *cursor-y*))))
-	(#\backspace
-	 (if (/= 0 *cursor-x*)
-	     (decf *cursor-x*)
-	   (progn
-	     (decf *cursor-y*)
-	     (setf *cursor-x* (1- *screen-width*))))
-	 (move-vga-cursor *cursor-x* *cursor-y*))
-	(#\return
-	  (setf *cursor-x* 0)
-	  (move-vga-cursor 0 *cursor-y*))
-	(#\tab
-	 (textmode-write-char #\space)
-	 (do () ((zerop (rem *cursor-x* 8)))
-	   (textmode-write-char #\space)))
-	(t (let ((x *cursor-x*)
-		 (y *cursor-y*))
-	     (when (>= x *screen-width*)
-	       (textmode-write-char #\newline)
-	       (setf x *cursor-x* y *cursor-y*))
-	     (let ((index (+ x (* y *screen-stride*))))
-	       (setf (memref-int *screen* 0 index :unsigned-byte16 t)
-		 (logior #x0700 (char-code c)))
-	       (move-vga-cursor (setf *cursor-x* (1+ x)) y)))))))
+  (case c
+    (#\newline
+     (setf *cursor-x* 0)
+     (cond
+      ((>= (1+ *cursor-y*) *screen-height*)
+       (textmode-scroll-down)
+       (setf *cursor-y* (1- *screen-height*)))
+      (t (incf *cursor-y*)))
+     (move-vga-cursor 0 *cursor-y*))
+    (#\backspace
+     (if (/= 0 *cursor-x*)
+	 (decf *cursor-x*)
+       (progn
+	 (decf *cursor-y*)
+	 (setf *cursor-x* (1- *screen-width*))))
+     (move-vga-cursor *cursor-x* *cursor-y*))
+    (#\return
+      (setf *cursor-x* 0)
+      (move-vga-cursor 0 *cursor-y*))
+    (#\tab
+     (textmode-write-char #\space)
+     (do () ((zerop (rem *cursor-x* 8)))
+       (textmode-write-char #\space)))
+    (t (let ((x *cursor-x*)
+	     (y *cursor-y*))
+	 (when (>= x *screen-width*)
+	   (textmode-write-char #\newline)
+	   (setf x *cursor-x* y *cursor-y*))
+	 (let ((index (+ x (* y *screen-stride*))))
+	   (setf (memref-int *screen* 0 index :unsigned-byte16 t)
+	     (logior #x0700 (char-code c)))
+	   (move-vga-cursor (setf *cursor-x* (1+ x)) y)))))
   nil)
 
+(defun textmode-copy-line (destination source count)
+  (check-type count (integer 0 511))
+  (check-type source (unsigned-byte 20))
+  (check-type destination (unsigned-byte 20))
+  (with-inline-assembly (:returns :nothing)
+    (:compile-form (:result-mode :eax) source)
+    (:compile-form (:result-mode :ebx) destination)
+    (:compile-form (:result-mode :edx) count)
+    (:andl #x-16 :eax)
+    (:andl #x-16 :ebx)
+    (:andl #x-8 :edx)
+    (:shrl 2 :eax)
+    (:shrl 2 :ebx)
+    (:shrl 1 :edx)
+    (:jz 'end-copy-loop)
+   copy-loop
+    ((:gs-override) :movl (:eax :edx -4) :ecx)
+    ((:gs-override) :movl :ecx (:ebx :edx -4))
+    (:subl 4 :edx)
+    (:ja 'copy-loop)
+   end-copy-loop))
+
 (defun textmode-scroll-down ()
-  "Scroll the console down one line."
   (declare (special muerte.lib::*scroll-offset*))
   (incf muerte.lib::*scroll-offset*)
-  (with-inline-assembly (:returns :nothing)
-    (:movl #xb8000 :eax)
-    (:movl #.(cl:+ #xb8000 160) :ebx)
-    (:movl #.(cl:* 80 24 1) :ecx)
-   copy-loop
-    ((:gs-override) :movw (:ebx) :dx)
-    ((:gs-override) :movw :dx (:eax))
-    (:addl 2 :ebx)
-    (:addl 2 :eax)
-    (:subl 1 :ecx)
-    (:jnz 'copy-loop)
-    (:movl #.(cl:* 80 1) :ecx)
-   clear-loop
-    ((:gs-override) :movw #x0720 (:eax))
-    (:addl 2 :eax)
-    (:subl 1 :ecx)
-    (:jnz 'clear-loop)))
+  (loop with stride = (* 2 *screen-stride*)
+      for y below *screen-height*
+      as src from (+ *screen* stride) by stride
+      as dst from *screen* by stride
+      do (textmode-copy-line dst src *screen-width*)))
 
 (defun textmode-clear-line (from-column line)
   (let ((dest (+ *screen* (* line 80 2) (* from-column 2))))
     (dotimes (i (- 80 from-column))
-      (setf (memref-int dest 0 i :unsigned-byte16 t) #x0720))
-    #+ignore
-    (with-inline-assembly (:returns :nothing)
-      (:pushl :edi)
-      (:compile-form (:result-mode :eax) dest)
-      (:movl :eax :edi)
-      (:shrl #.movitz:+movitz-fixnum-shift+ :edi)
-      (:movl #.(cl:* 80 1) :ecx)
-      (:movw #x0720 :ax)
-      ((:repz) :stosw)
-      (:popl :edi))))
+      (setf (memref-int dest 0 i :unsigned-byte16 t) #x0720))))
       
 (defun write-word (word)
   (let ((dest (+ *screen* (* *cursor-x* 2) (* *cursor-y* 160))))
@@ -220,12 +212,12 @@
   "This function can act as *terminal-io* without/before CLOS support."
   (declare (dynamic-extent args))
   (case op
+    (muerte::stream-write-char
+     (textmode-write-char (car args)))
     (muerte::stream-fresh-line
      (when (plusp (cursor-column))
        (textmode-write-char #\Newline)
        t))
-    (muerte::stream-write-char
-     (textmode-write-char (car args)))
     (muerte::stream-read-char
      (loop when (muerte.x86-pc.keyboard:poll-char) return it))
     (muerte::stream-read-char-no-hang
