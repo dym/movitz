@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.40 2004/09/21 13:06:27 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.41 2004/09/22 16:26:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1122,6 +1122,12 @@ busy-waiting loop on P4."
 	 (:call-local-pf cons-commit)
 	 (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 	 (:leal (:esp 16) :esp)))))
+
+(define-compiler-macro cli ()
+  `(with-inline-assembly (:returns :nothing) (:cli)))
+
+(define-compiler-macro sti ()
+  `(with-inline-assembly (:returns :nothing) (:sti)))
 
 (require :muerte/setf)
 
