@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.25 2004/07/23 15:27:43 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.26 2004/08/12 17:11:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -127,7 +127,7 @@ start-location and end-location."
 					 #.(bt:enum-value 'movitz:movitz-vector-element-type :any-t))))
 	  (error "Scanned unknown basic-vector #x~Z at address #x~X." x scan))
 	 ((scavenge-typep x :old-vector)
-	  (error "Scanned old-vector #x~Z at address #x~X." x scan))
+	  (error "Scanned old-vector ~Z at address #x~X." x scan))
 	 ((eq x (%lispval-object 3))
 	  (incf scan)
 	  (let ((delta (memref scan 0 0 :lisp)))
@@ -153,50 +153,50 @@ at the start-stack-frame location."
 	     (function
 	      (assert (= 0 (funobj-frame-num-unboxed funobj)))
 	      (map-heap-words function (+ nether-frame 2) frame))
-	     ((eql 0)			; An interrupt-frame?
-	      ;; 1. Scavenge the interrupt-frame
-	      (map-heap-words function
-			      (+ nether-frame 2)
-			      (+ frame (interrupt-frame-index :ecx)))
-	      (let* ((interrupt-frame frame)
-		     (interrupted-eip-loc
-		      (interrupt-frame-ref :eip :signed-byte30+2 0 interrupt-frame)))
-		;; 2. Pop to interrupted frame
+	     ((eql 0)			; An dit interrupt-frame?
+	      (let* ((dit-frame frame)
+		     (casf-frame (dit-frame-casf dit-frame)))
+		;; 1. Scavenge the dit-frame
+		(cond
+		 ((logbitp 10 (dit-frame-ref :eflags :unsigned-byte32 0 dit-frame))
+		  ;; DF flag was 1, so EAX and EDX are not GC roots.
+		  (warn "Interrupt in uncommon mode at ~S"
+			(dit-frame-ref :eip :unsigned-byte32 0 dit-frame))
+		  (map-heap-words function ; Assume nothing in the dit-frame above the location ..
+				  (+ nether-frame 2) ; ..of EBX holds pointers.
+				  (+ frame (dit-frame-index :ebx))))
+		 (t (warn "Interrupt in COMMON mode!")
+		    (map-heap-words function ; Assume nothing in the dit-frame above the location ..
+				    (+ nether-frame 2) ; ..of ECX holds pointers.
+				    (+ frame (dit-frame-index :ecx)))))
+		;; 2. Pop to (dit-)frame's CASF
 		(setf nether-frame frame
-		      frame (stack-frame-uplink frame))
-		(let ((interrupted-funobj (funcall function (stack-frame-funobj frame t) nil))
-		      (interrupted-esp (+ interrupt-frame 6)))
-		  (assert (typep interrupted-funobj 'function) ()
-		    "Interrupted frame was not a normal function: ~S"
-		    interrupted-funobj)
-		  ;; 3. Scavenge the interrupted frame, skipping EFLAGS etc.
-		  (if (location-in-object-p (funobj-code-vector interrupted-funobj)
-					    interrupted-eip-loc)
-		      ;; The simple case: The interruptee matches interrupted EIP
-		      (map-heap-words function interrupted-esp frame)
-		    (let ((primitive-function
-			   (stack-frame-primitive-funcall interrupted-funobj
-							  interrupted-esp
-							  interrupted-eip-loc)))
-		      (if (not primitive-function)
-			  (error "Don't know how to scavenge across PF interrupt frame at ~S."
-				 interrupt-frame)
-			(let ((forwarded-pf (funcall function primitive-function nil)))
-			  ;; Next simplest case: The interruptee was in a primitive-function,
-			  ;; with the return-address at top of stack.
-			  (unless (eq primitive-function forwarded-pf)
-			    ;; The PF's vector has migrated.
-			    (let* ((interrupted-eip
-				    (interrupt-frame-ref :eip :unsigned-byte32 0 :unsigned-byte32))
-				   (offset (- interrupted-eip (%object-lispval primitive-function))))
-			      (break "Active PF moved. PF: ~Z, fwPF: ~Z, offset: ~D, PFlen ~D."
-				     primitive-function
-				     forwarded-pf
-				     offset
-				     (+ 8 (length forwarded-pf)))
-			      (setf (memref interrupted-esp 0 0 :unsigned-byte32)
-				(+ offset (%object-lispval forwarded-pf)))))
-			  (map-heap-words function (1+ interrupted-esp) frame))))))))
+		      frame (dit-frame-casf frame))
+		(let ((casf-funobj (funcall function (stack-frame-funobj frame t) nil))
+		      (interrupted-esp (dit-frame-esp dit-frame)))
+		  (assert (typep casf-funobj 'function) ()
+		    "Interrupted CASF frame was not a normal function: ~S"
+		    casf-funobj)
+		  (let ((casf-code-vector (funobj-code-vector casf-funobj)))
+		  ;; 3. Scavenge the interrupted frame, according to one of i. ii. or iii.
+		    (cond
+		     ((location-in-object-p casf-code-vector
+					    (dit-frame-ref :eip :location 0 dit-frame))
+		      ;; Situation i. Nothing special on stack, scavenge frame normally.
+		      (map-heap-words function interrupted-esp frame))
+		     ((eq casf-frame (memref interrupted-esp 0 0 :location))
+		      ;; Situation ii. esp(0)=CASF, esp(1)=code-vector
+		      (assert (location-in-object-p casf-code-vector
+						    (memref interrupted-esp 0 1 :location))
+			  () "Stack discipline situation ii. invariant broken. CASF=#x~X"
+			  casf-frame)
+		      (map-heap-words function (+ interrupted-esp 2) frame))
+		     (t ;; Situation iii. esp(0)=code-vector.
+		      (assert (location-in-object-p casf-code-vector
+						    (memref interrupted-esp 0 0 :location))
+			  () "Stack discipline situation iii. invariant broken. CASF=#x~X"
+			  casf-frame)
+		      (map-heap-words function (+ interrupted-esp 1) frame)))))))
 	     (t (error "Don't know how to scavenge across frame ~S of kind ~S." frame funobj)))))
   (values))
 
