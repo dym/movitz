@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.19 2004/06/11 21:34:02 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.20 2004/07/21 12:19:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -864,26 +864,24 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 (define-special-operator eval-when (&all forward &form form &top-level-p top-level-p)
   (destructuring-bind (situations &body body)
       (cdr form)
-    (when (member :compile-toplevel situations)
-;;;      (warn "EVAL-WHEN: ~S" `(progn ,@(movitz::translate-program body :muerte.cl :cl
-;;;								 :when :eval
-;;;								 :remove-double-quotes-p t)))
-      (with-compilation-unit ()
-	(dolist (toplevel-form (translate-program body :muerte.cl :cl
-						  :when :eval
-						  :remove-double-quotes-p t))
-	  (with-host-environment ()
-	    (if *compiler-compile-eval-whens*
-		(funcall (compile () `(lambda () ,toplevel-form)))
-	      (eval toplevel-form))))))
-    (if (or (member :execute situations)
-	    (and (member :load-toplevel situations)
-		 top-level-p))
-	(compiler-call #'compile-implicit-progn
-	  :defaults forward
-	  :top-level-p top-level-p
-	  :form body)
-      (compiler-values ()))))
+    (multiple-value-prog1
+	(if (or (member :execute situations)
+		(and (member :load-toplevel situations)
+		     top-level-p))
+	    (compiler-call #'compile-implicit-progn
+	      :defaults forward
+	      :top-level-p top-level-p
+	      :form body)
+	  (compiler-values ()))
+      (when (member :compile-toplevel situations)
+	(with-compilation-unit ()
+	  (dolist (toplevel-form (translate-program body :muerte.cl :cl
+						    :when :eval
+						    :remove-double-quotes-p t))
+	    (with-host-environment ()
+	      (if *compiler-compile-eval-whens*
+		  (funcall (compile () `(lambda () ,toplevel-form)))
+		(eval toplevel-form)))))))))
 
 (define-special-operator function (&funobj funobj &form form &result-mode result-mode &env env)
   (destructuring-bind (name)
