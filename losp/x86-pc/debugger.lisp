@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.19 2004/07/24 01:29:06 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.20 2004/08/06 14:47:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -450,7 +450,8 @@ be provided for those cases."
     (loop with conflate-count = 0 with count = 0
 	for stack-frame = initial-stack-frame
 	then (let ((uplink (stack-frame-uplink stack-frame)))
-	       (assert (> uplink stack-frame))
+	       (assert (> uplink stack-frame) ()
+		 "Backtracing uplink ~S from frame ~S." uplink stack-frame)
 	       uplink)
 	as funobj = (stack-frame-funobj stack-frame t)
 	do (flet ((print-leadin (stack-frame count conflate-count)
