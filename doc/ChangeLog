@@ -1,3 +1,17 @@
+2004-04-18  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* The bootloader no longer initializes the VGA subssystem, since
+	the textmode driver in los0 should be able to adapt to most
+	standard VGA textmodes now.
+
+	* Apropos should work again, I think it didn't before due to a
+	compiler bug.
+
+	* There is now a fairly complete GC in los0, meaning in principle
+	there us no reason it should not keep running forever. I've had an
+	uptime of about a week. The new-space buffer is limited to 256 KB,
+	however.
+
 2004-03-29  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
 
 	* Added basic GC functionality. The Movitz platform is now I
