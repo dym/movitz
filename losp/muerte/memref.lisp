@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.4 2004/03/28 16:19:20 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.5 2004/03/30 09:36:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -151,32 +151,26 @@
 			(:popl :ecx)	; pop object
 			(:sarl #.movitz::+movitz-fixnum-shift+ :ebx) ; scale offset+index
 			(:movb (:ebx :ecx ,(offset-by 1)) :ah)))))
-		((:lisp :lisp-code-vector)
-		 (let ((fix-when-code-vector
-			(when (eq type :lisp-code-vector)
-			  `((:subl ,movitz::+code-vector-word-offset+ :eax)))))
-		   (cond
-		    ((and (eq 0 index) (eq 0 offset))
-		     `(with-inline-assembly (:returns :eax)
-			(:compile-form (:result-mode :eax) ,object)
-			(:movl (:eax ,(offset-by 4)) :eax)
-			,@fix-when-code-vector))
-		    ((eq 0 offset)
-		     `(with-inline-assembly (:returns :eax)
-			(:compile-two-forms (:eax :ecx) ,object ,index)
+		(:lisp
+		 (cond
+		  ((and (eq 0 index) (eq 0 offset))
+		   `(with-inline-assembly (:returns :register)
+		      (:compile-form (:result-mode :register) ,object)
+		      (:movl ((:result-register) ,(offset-by 4)) (:result-register))))
+		  ((eq 0 offset)
+		   `(with-inline-assembly (:returns :eax)
+		      (:compile-two-forms (:eax :ecx) ,object ,index)
+		      ,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
+			  `((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ecx))
+		      (:movl (:eax :ecx ,(offset-by 4)) :eax)))
+		  (t `(with-inline-assembly (:returns :eax)
+			(:compile-form (:result-mode :push) ,object)
+			(:compile-two-forms (:untagged-fixnum-eax :ecx) ,offset ,index)
 			,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
 			    `((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ecx))
-			(:movl (:eax :ecx ,(offset-by 4)) :eax)
-			,@fix-when-code-vector))
-		    (t `(with-inline-assembly (:returns :eax)
-			  (:compile-form (:result-mode :push) ,object)
-			  (:compile-two-forms (:untagged-fixnum-eax :ecx) ,offset ,index)
-			  ,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
-			      `((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ecx))
-			  (:addl :ecx :eax)
-			  (:popl :ebx)	; pop object
-			  (:movl (:eax :ebx ,(offset-by 4)) :eax)
-			  ,@fix-when-code-vector)))))
+			(:addl :ecx :eax)
+			(:popl :ebx)	; pop object
+			(:movl (:eax :ebx ,(offset-by 4)) :eax)))))
 		(t (error "Unknown memref type: ~S" (movitz::eval-form type nil nil))
 		   form)))))))))
 
@@ -187,7 +181,6 @@
     (:unsigned-byte32   (memref object offset index :unsigned-byte32))
     (:character         (memref object offset index :character))
     (:lisp              (memref object offset index :lisp))
-    (:lisp-code-vector  (memref object offset index :lisp-code-vector))
     (:signed-byte30+2   (memref object offset index :signed-byte30+2))
     (:unsigned-byte29+3 (memref object offset index :unsigned-byte29+3))))
 
