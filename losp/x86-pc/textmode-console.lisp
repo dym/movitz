@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001, 2003, 
+;;;;    Copyright (C) 2001, 2003-2004, 
 ;;;;    Department of Computer Science, University of Tromsø, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul  8 15:13:24 2003
 ;;;;                
-;;;; $Id: textmode-console.lisp,v 1.1 2004/01/13 11:05:06 ffjeld Exp $
+;;;; $Id: textmode-console.lisp,v 1.2 2004/01/15 17:13:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,12 +18,7 @@
 (require :x86-pc/textmode)
 (provide :x86-pc/textmode-console)
 
-(defpackage muerte.x86-pc
-  (:export vga-text-console
-	   ))
-
 (in-package muerte.x86-pc)
-
 
 (defclass vga-text-console (console stream)
   ((base

@@ -10,20 +10,13 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jan 15 11:30:55 2002
 ;;;;                
-;;;; $Id: pit8253.lisp,v 1.1 2004/01/13 11:05:06 ffjeld Exp $
+;;;; $Id: pit8253.lisp,v 1.2 2004/01/15 17:13:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
+(require :x86-pc/package)
 (require :lib/named-integers)
 (provide :x86-pc/pit8253)
-
-(defpackage muerte.x86-pc
-  (:use muerte.cl muerte.lib)
-  (:export pit8253-timer-mode
-	   pit8253-timer-count
-	   
-	   +pit8253-frequency+
-	   +pit8253-nanosecond-period+))
 
 (in-package muerte.x86-pc)
 

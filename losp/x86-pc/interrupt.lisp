@@ -10,19 +10,12 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri May  4 18:08:50 2001
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.1 2004/01/13 11:05:06 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.2 2004/01/15 17:13:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (require :x86-pc/pic8259)
 (provide :x86-pc/interrupt)
-
-(defpackage muerte.x86-pc
-  (:export idt-init
-	   interrupt-handler
-	   int-frame-ref
-	   software-interrupt
-	   *last-interrupt-frame*))
 
 (in-package muerte.x86-pc)
 

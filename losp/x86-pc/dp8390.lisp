@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 18 12:21:36 2002
 ;;;;                
-;;;; $Id: dp8390.lisp,v 1.1 2004/01/13 11:05:06 ffjeld Exp $
+;;;; $Id: dp8390.lisp,v 1.2 2004/01/15 17:13:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,19 +18,6 @@
 (require :x86-pc/io-space)
 (require :lib/net/ethernet)
 (provide :x86-pc/dp8390)
-
-(defpackage muerte.x86-pc.ne2k
-  (:use muerte.cl muerte muerte.lib muerte.x86-pc muerte.ethernet)
-  (:export #:with-dp8390
-	   #:with-dp8390-dma
-	   #:dp8390-initialize
-	   #:dp8390-device
-	   #:ring-start
-	   #:ring-stop
-	   #:io-base
-	   #:ring-overflow-count
-	   #:transmit-buffer
-	   ))
 
 (in-package muerte.x86-pc.ne2k)
 

@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  9 15:38:56 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: textmode.lisp,v 1.1 2004/01/13 11:05:06 ffjeld Exp $
+;;;; $Id: textmode.lisp,v 1.2 2004/01/15 17:13:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,11 +19,7 @@
 (require :x86-pc/package)
 (require :x86-pc/keyboard)
 (require :lib/package)
-
 (provide :x86-pc/textmode)
-
-(defpackage muerte.x86-pc
-  (:export textmode-console))
 
 (in-package muerte.x86-pc)
 

@@ -10,20 +10,33 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:16:00 2002
 ;;;;                
-;;;; $Id: ne2k.lisp,v 1.1 2004/01/13 11:05:06 ffjeld Exp $
+;;;; $Id: ne2k.lisp,v 1.2 2004/01/15 17:13:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (require :x86-pc/package)
+
+(defpackage muerte.x86-pc.ne2k
+  (:use muerte.cl muerte muerte.lib muerte.x86-pc muerte.ethernet)
+  (:export #:ne2k-probe
+	   #:+ne2k-probe-addresses+
+	   
+	   #:with-dp8390
+	   #:with-dp8390-dma
+	   #:dp8390-initialize
+	   #:dp8390-device
+	   #:ring-start
+	   #:ring-stop
+	   #:io-base
+	   #:ring-overflow-count
+	   #:transmit-buffer
+	   ))
+
 (require :lib/net/ethernet)
 (require :x86-pc/dp8390)
 
 (provide :x86-pc/ne2k)
 
-(defpackage muerte.x86-pc.ne2k
-  (:use muerte.cl muerte muerte.lib muerte.x86-pc muerte.ethernet)
-  (:export #:ne2k-probe
-	   #:+ne2k-probe-addresses+))
 
 (in-package muerte.x86-pc.ne2k)
 

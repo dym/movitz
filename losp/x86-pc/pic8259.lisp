@@ -10,16 +10,11 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue May 22 15:23:01 2001
 ;;;;                
-;;;; $Id: pic8259.lisp,v 1.1 2004/01/13 11:05:06 ffjeld Exp $
+;;;; $Id: pic8259.lisp,v 1.2 2004/01/15 17:13:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (provide :x86-pc/pic8259)
-
-(defpackage muerte.x86-pc
-  (:export pic8259-irq-mask
-	   pic8259-end-of-interrupt
-	   init-pic8259))
 
 (in-package muerte.x86-pc)
 

@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2003, 
+;;;;    Copyright (C) 2001-2004, 
 ;;;;    Department of Computer Science, University of Tromsø, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,13 +10,11 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep 27 21:14:56 2001
 ;;;;                
-;;;; $Id: all.lisp,v 1.1 2004/01/13 11:05:06 ffjeld Exp $
+;;;; $Id: all.lisp,v 1.2 2004/01/15 17:13:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
-(defpackage muerte.x86-pc)
-(in-package muerte.x86-pc)
-
+(require :x86-pc/package)
 (require :x86-pc/memory)
 (require :x86-pc/keyboard)
 (require :x86-pc/vga)

@@ -10,18 +10,14 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep 30 12:23:02 2002
 ;;;;                
-;;;; $Id: cmos.lisp,v 1.1 2004/01/13 11:05:06 ffjeld Exp $
+;;;; $Id: cmos.lisp,v 1.2 2004/01/15 17:13:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
+(require :x86-pc/package)
 (require :lib/named-integers)
 (require :lib/bcd)
 (provide :x86-pc/cmos)
-
-(defpackage muerte.x86-pc
-  (:use muerte.lib)
-  (:export rtc-register
-	   cmos-register))
 
 (in-package muerte.x86-pc)
 
