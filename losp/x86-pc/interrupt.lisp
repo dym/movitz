@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri May  4 18:08:50 2001
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.9 2004/04/07 00:12:28 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.10 2004/08/10 12:59:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,11 +18,6 @@
 (provide :x86-pc/interrupt)
 
 (in-package muerte.x86-pc)
-
-(defmacro end-of-interrupt ()
-  '(with-inline-assembly (:returns :nothing)
-    (:movb #x20 :al)
-    (:outb :al #x20)))
 
 (defun idt-init ()
   (init-pic8259 32 40)
