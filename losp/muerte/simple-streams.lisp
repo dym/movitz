@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 29 13:39:43 2003
 ;;;;                
-;;;; $Id: simple-streams.lisp,v 1.3 2004/02/02 14:55:32 ffjeld Exp $
+;;;; $Id: simple-streams.lisp,v 1.4 2004/02/18 14:39:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -684,6 +684,7 @@
   stream)
 
 (defun install-string-output-character-strategy (stream)
+  (declare (ignore stream))
   #| implement me |#)
 
 (defun string-read-char-e-crlf (stream eof-error-p eof-value blocking)

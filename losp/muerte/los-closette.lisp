@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.3 2004/02/15 13:16:56 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.4 2004/02/18 14:40:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1810,7 +1810,7 @@ in an instance whose metaclass is standard-class."))
 	 (generic-function-methods
 	  (lambda (gf) (std-gf-slot-value gf 'methods)))
 	 (generic-function-method-combination
-	  (lambda (gf) nil))
+	  (lambda (gf) (declare (ignore gf)) nil))
 	 (accessor-method-slot-definition
 	  (lambda (method)
 	    (std-slot-value method 'slot-definition)))
