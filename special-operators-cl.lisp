@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.24 2004/09/17 11:12:47 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.25 2004/10/07 12:52:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -624,10 +624,13 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	:returns last-returns
 	:functional-p nil))))
 		  
-(define-special-operator tagbody (&all forward &funobj funobj &form form &env env &result-mode result-mode)
+(define-special-operator tagbody
+    (&all forward &funobj funobj &form form &env env)
   (let* ((save-esp-variable (gensym "tagbody-save-esp"))
 	 (lexical-catch-tag-variable (gensym "tagbody-lexical-catch-tag-"))
-	 (tagbody-env (make-instance 'lexical-exit-point-env
+	 (label-set-name (gensym "label-set-"))
+	 (tagbody-env (make-instance 'tagbody-env
+			:label-set-name label-set-name
 			:uplink env
 			:funobj funobj
 			:save-esp-variable save-esp-variable
@@ -642,8 +645,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
     (movitz-env-load-declarations `((muerte.cl::ignorable ,save-esp-variable ,lexical-catch-tag-variable))
 			       tagbody-env nil)
     ;; First generate an assembly-level label for each tag.
-    (let* ((label-set-name (gensym "label-set-"))
-	   (label-set (loop with label-id = 0
+    (let* ((label-set (loop with label-id = 0
 			  for tag-or-statement in (cdr form)
 			  as label = (when (or (symbolp tag-or-statement)
 					       (integerp tag-or-statement))
@@ -654,59 +656,60 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			     (setf (movitz-env-get tag-or-statement 'go-tag-label-id nil tagbody-env)
 			       (post-incf label-id))
 			  and collect label))
-	   (tagbody-functional-p t)
-	   (tagbody-code
+	   (tagbody-codes
 	    (loop for tag-or-statement in (cdr form)
-;;;		when (and (symbolp tag-or-statement)
-;;;			  (movitz-env-get tag-or-statement 'muerte::loop-tag nil tagbody-env))
-;;;		collect '(:align :code :loop)
 		if (or (symbolp tag-or-statement) ; Tagbody tags are "compiled" into..
 		       (integerp tag-or-statement)) ; ..their assembly-level labels.
 		collect (movitz-env-get tag-or-statement 'go-tag nil tagbody-env)
-		else append
-		     (compiler-values-bind (&code code &functional-p functional-p)
-			 (compiler-call #'compile-form
-			   :defaults forward
-			   :form tag-or-statement
-			   :env tagbody-env
-			   :result-mode :ignore)
-		       (unless functional-p
-			 (setf tagbody-functional-p nil))
-		       code))))
-      (let ((maybe-store-esp-code
-	     (when (and (not (eq result-mode :function))
-			(operators-present-in-code-p tagbody-code '(:lexical-control-transfer) nil
-						     :test (lambda (x) (eq tagbody-env (fifth x)))))
-	       `((:init-lexvar ,save-esp-binding
-			       :init-with-register :esp
-			       :init-with-type t)))))
-	(if (not (code-uses-binding-p tagbody-code lexical-catch-tag-binding))
+		else collect
+		     (compiler-call #'compile-form
+		       :defaults forward
+		       :form tag-or-statement
+		       :env tagbody-env
+		       :result-mode :ignore))))
+      (let* ((unlexical-target-p (some (lambda (code)
+					 (when (listp code)
+					   (code-uses-binding-p code save-esp-binding)))
+				       tagbody-codes))
+	     (maybe-store-esp-code
+	      (when (or unlexical-target-p
+			(some (lambda (code)
+				(when (listp code)
+				  (operators-present-in-code-p code '(:lexical-control-transfer) nil
+							       :test (lambda (x)
+								       (eq tagbody-env (fifth x))))))
+			      tagbody-codes))
+		`((:init-lexvar ,save-esp-binding
+				:init-with-register :esp
+				:init-with-type t)))))
+	(if (not unlexical-target-p)
 	    (compiler-values ()
-	      :code (append maybe-store-esp-code tagbody-code)
-	      :functional-p tagbody-functional-p
+	      :code (append maybe-store-esp-code
+			    (loop for code in tagbody-codes
+				if (listp code)
+				append code
+				else append (list code)))
 	      :returns :nothing)
-	  (let ((code (append maybe-store-esp-code
-			      `((:declare-label-set ,label-set-name ,label-set)
-				(:leal ((:esi 8) :esp) :eax) ; generate some semi-unique value
-				(:leal ((:eax 2) :edi) :eax) ; with tag5.
-				(:init-lexvar ,lexical-catch-tag-binding
-					      :init-with-register :eax
-					      :init-with-type t))
-			      ;; catcher
-			      `((:locally (:pushl (:edi (:edi-offset dynamic-env))))
+	  (let ((code (append `((:declare-label-set ,label-set-name ,label-set)
+				;; catcher
+				(:locally (:pushl (:edi (:edi-offset dynamic-env))))
 				(:pushl ',label-set-name)
 				(:pushl :eax)
 				(:pushl :ebp)
 				(:locally (:movl :esp (:edi (:edi-offset dynamic-env)))))
-			      tagbody-code
-			      `((:leal (:esp ,(+ -4 16)) :esp)
-				(:locally (:popl (:edi (:edi-offset dynamic-env)))))
+			      maybe-store-esp-code
+			      (loop for code in tagbody-codes
+				  if (listp code)
+				  append code
+				  else append (list code '(:movl (:esp) :ebp)))
+			      `((:movl (:esp 12) :edx)
+				(:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
+				(:leal (:esp 16) :esp))
 			      )))
 	    (setf (num-specials tagbody-env) 1
 		  (stack-used tagbody-env) 4)
 	    (compiler-values ()
 	      :code code
-	      :functional-p tagbody-functional-p
 	      :returns :nothing)))))))
 			
 				
@@ -724,8 +727,31 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	    :code `((:lexical-control-transfer nil :nothing ,env ,tagbody-env ,label)))
 	;; Perform a lexical "throw" to the tag. Much like a regular throw, except
 	;; no values are transferred, and we step _into_ that dynamic env, not outside it.
-	(let ((label-id (movitz-env-get tag 'go-tag-label-id nil tagbody-env nil)))
+	(let ((save-esp-binding (movitz-binding (save-esp-variable tagbody-env) env))
+	      (label-id (movitz-env-get tag 'go-tag-label-id nil tagbody-env nil)))
 	  (assert label-id)
+	  #+ignore
+	  (compiler-call #'compile-form-unprotected
+	    :forward all
+	    :form `(muerte::exact-throw ,(movitz-env-lexical-catch-tag-variable tagbody-env)
+					0 nil))
+	  (compiler-values ()
+	    :returns :non-local-exit
+	    :code `((:load-lexical ,save-esp-binding :edx)
+		    (:movl :edx :eax)
+		    (:globally (:call (:edi (:edi-offset dynamic-unwind-next))))
+		    (:jnc '(:sub-program () (:int 63)))
+		    ;; have next-continuation in EAX, final-continuation in EDX
+		    (:locally (:movl :edx (:edi (:edi-offset raw-scratch0)))) ; final continuation
+		    (:locally (:movl :esi (:edi (:edi-offset scratch1))))
+		    (:locally (:movl :eax (:edi (:edi-offset dynamic-env)))) ; exit to next-env
+		    (:movl :eax :esp)	; enter non-local jump stack mode.
+		    (:movl (:esp) :eax)	; target stack-frame EBP
+		    (:movl (:eax -4) :esi) ; get target funobj into ESI
+		    (:movl (:esp 8) :eax) ; target jumper number
+		    (:jmp (:esi :eax
+				,(* 4 label-id) ,(slot-offset 'movitz-funobj 'constant0)))))
+	  #+ignore
 	  (compiler-values ()
 	    :returns :non-local-exit
 	    :code (append (compiler-call #'compile-form
