@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.14 2004/02/04 16:14:42 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.15 2004/02/05 10:45:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -168,13 +168,13 @@ If funobj is provided, its identity will be kept, but its type (and values) migh
     (multiple-value-bind (required-vars optional-vars rest-var key-vars)
 	(decode-normal-lambda-list lambda-list)
       ;; There are several main branches through the function
-      ;; compiler, and this is where we decide which to take.
+      ;; compiler, and this is where we decide which one to take.
       (funcall (cond
 		((let ((sub-form (cddr form)))
 		   (and (consp (car sub-form))
 			(eq 'muerte::numargs-case (caar sub-form))))
 		 'make-compiled-function-pass1-numarg-case)
-		((and (= 1 (length required-vars))
+		((and (= 1 (length required-vars)) ; (x &optional y)
 		      (= 1 (length optional-vars))
 		      (null key-vars)
 		      (not rest-var))
@@ -201,21 +201,29 @@ Otherwise coerce funobj to class."
 	     (error "There are duplicates in lambda-list ~S." lambda-list))
 	   (multiple-value-bind (clause-body clause-declarations)
 	       (parse-declarations-and-body clause-body)
-	     (let ((function-env
-		    (add-bindings-from-lambda-list lambda-list
-						   (make-local-movitz-environment
-						    funobj-env funobj
-						    :type 'function-env
-						    :declaration-context :funobj
-						    :declarations 
-						    (append clause-declarations
-							    declarations)))))
-	       (make-compiled-function-body-pass1 funobj
-						  function-env
-						  (list* 'muerte.cl::block
-							 (compute-function-block-name name)
-							 clause-body)
-						  top-level-p)
+	     (let* ((function-env
+		     (add-bindings-from-lambda-list lambda-list
+						    (make-local-movitz-environment
+						     funobj-env funobj
+						     :type 'function-env
+						     :declaration-context :funobj
+						     :declarations 
+						     (append clause-declarations
+							     declarations))))
+		    (function-form (list* 'muerte.cl::block
+					  (compute-function-block-name name)
+					  clause-body)))
+	       (multiple-value-bind (arg-init-code need-normalized-ecx-p)
+		   (make-function-arguments-init funobj function-env)
+		 (setf (extended-code function-env)
+		   (append arg-init-code
+			   (compiler-call #'compile-form
+			     :form (make-special-funarg-shadowing function-env function-form)
+			     :funobj funobj
+			     :env function-env
+			     :top-level-p top-level-p
+			     :result-mode :function)))
+		 (setf (need-normalized-ecx-p function-env) need-normalized-ecx-p))
 	       (push (cons numargs function-env)
 		     (function-envs funobj)))))
     funobj))
@@ -236,22 +244,19 @@ Otherwise coerce funobj to class."
 	  (movitz-funobj-lambda-list funobj) (movitz-read (lambda-list-simplify lambda-list))
 	  (funobj-env funobj) funobj-env
 	  (function-envs funobj) (list (cons 'muerte.cl::t function-env)))
-    (make-compiled-function-body-pass1 funobj function-env form top-level-p)))
-
-(defun make-compiled-function-body-pass1 (funobj function-env form top-level-p)
-  "Returns the funobj with its extended-code."
-  (compiler-values-bind (&code body-code)
-      (compiler-call #'compile-form
-	:form (make-special-funarg-shadowing function-env form)
-	:funobj funobj
-	:env function-env
-	:top-level-p top-level-p
-	:result-mode :function)
     (multiple-value-bind (arg-init-code need-normalized-ecx-p)
 	(make-function-arguments-init funobj function-env)
-      (setf (extended-code function-env) (append arg-init-code body-code)
-	    (need-normalized-ecx-p function-env) need-normalized-ecx-p)
-      funobj)))
+      (setf (need-normalized-ecx-p function-env) need-normalized-ecx-p)
+      (setf (extended-code function-env)
+	(append arg-init-code
+		(compiler-call #'compile-form
+		  :form (make-special-funarg-shadowing function-env form)
+		  :funobj funobj
+		  :env function-env
+		  :top-level-p top-level-p
+		  :result-mode :function))))
+    funobj))
+
 
 (defun make-compiled-funobj-pass2 (toplevel-funobj-pass1)
   "This is where second pass compilation for each top-level funobj begins."
