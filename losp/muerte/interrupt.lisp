@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.6 2004/04/15 15:23:36 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.7 2004/04/18 23:17:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -166,6 +166,12 @@
 		     $eip
 		     (interrupt-frame-ref interrupt-frame :error-code :unsigned-byte32)
 		     $eax $ebx $ecx))
+	  ((61)
+	   ;; EAX failed type in EDX. May be restarted by returning with a new value in EAX.
+	   (with-simple-restart (continue "Retry with a different value.")
+	     (error 'type-error :datum (@ $eax) :expected-type (@ $edx)))
+	   (format *query-io* "Enter a new value: ")
+	   (setf (@ $eax) (read *query-io*)))
 	  (68 (warn "EIP: ~@Z EAX: ~@Z EBX: ~@Z  ECX: ~@Z EDX: ~@Z"
 		    $eip $eax $ebx $ecx $edx)
 	      (dotimes (i 100000)
