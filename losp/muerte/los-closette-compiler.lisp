@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.12 2004/04/19 22:38:22 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.13 2004/05/19 15:02:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -674,8 +674,9 @@
       (apply #'initialize-class-object class all-keys)))
   
   (defun make-instance-standard-class (metaclass &key name direct-superclasses direct-slots
-						      default-initargs-function)
-    (declare (ignore metaclass))
+						      default-initargs-function
+						      documentation)
+    (declare (ignore metaclass documentation))
     (let ((class (std-allocate-instance *the-class-standard-class*)))
       (setf (movitz-class-name class) name)
       (setf (class-direct-subclasses class) ())
