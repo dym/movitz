@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.32 2005/02/02 10:23:07 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.33 2005/02/28 16:15:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -507,115 +507,102 @@ be provided for those cases."
 		      (format t "{< ~D}" (stack-frame-call-site stack frame)))
 		    (when *backtrace-print-frames*
 		      (format t "#x~X " frame))))
-	     (typecase funobj
-	       ((eql 0)
-		(let ((eip (dit-frame-ref stack frame :eip :unsigned-byte32))
-		      (casf (dit-frame-casf stack frame)))
-		  (multiple-value-bind (function-name code-vector-offset)
-		      (let ((casf-funobj (stack-frame-funobj stack casf)))
-			(cond
-			 ((eq 0 casf-funobj)
-			  (values 'default-interrupt-trampoline
-				  (code-vector-offset (symbol-value 'default-interrupt-trampoline)
-						      eip)))
-			 ((not (typep casf-funobj 'function))
-			  ;; Hm.. very suspicius
-			  (warn "Weird frame ~S" frame)
-			  (values nil))
-			 (t (let ((x (code-vector-offset (funobj-code-vector casf-funobj) eip)))
-			      (cond
-			       ((not (eq nil x))
-				(values (funobj-name casf-funobj) x))
-			       ((not (logbitp 10 (dit-frame-ref stack frame :eflags :unsigned-byte16)))
-				(let ((funobj2 (dit-frame-ref stack frame :esi :lisp)))
-				  (or (when (typep funobj2 'function)
-					(let ((x (code-vector-offset (funobj-code-vector funobj2) eip)))
-					  (when x
-					    (values (funobj-name funobj2) x))))
-				      (find-primitive-code-vector-by-eip eip)))))))))
-		    (setf next-frame (dit-frame-casf stack frame))
-		    (if (and conflate-interrupts conflate
-			     ;; When the interrupted function has a stack-frame, conflate it.
-			     (typep funobj 'function)
-			     (= 1 (ldb (byte 1 5) (funobj-debug-info funobj))))
-			(incf conflate-count)
-		      (progn
-			(incf count)
-			(print-leadin stack frame count conflate-count)
-			(setf conflate-count 0)
-			(let ((exception (dit-frame-ref stack frame :exception-vector :unsigned-byte32)))
-			  (if function-name
-			      (format t "DIT exception ~D in ~W at PC offset ~D."
-				      exception
-				      function-name
-				      code-vector-offset)
-			    (format t "DIT exception ~D at EIP=~S with ESI=~S."
-				    exception
-				    eip
-				    (dit-frame-ref stack frame :esi :unsigned-byte32)))
-			  #+ignore
-			  (typecase funobj
-			    (function
-			     (let ((delta (code-vector-offset (funobj-code-vector funobj) eip)))
-			       (if delta
-				   (format t "DIT Exception ~D in ~W at PC offset ~D."
-					   exception (funobj-name funobj) delta)
-				 (multiple-value-bind (primitive-name primitive-vector)
-				     (find-primitive-code-vector-by-location (truncate eip 4))
-				   (if (not primitive-name)
-				       (format t "DIT Exception ~D in ~W at EIP=#x~X."
-					       exception (funobj-name funobj) eip)
-				     (format t "DIT Exception ~D in primitive-function ~A at PC offset ~D."
-					     exception
-					     primitive-name
-					     (code-vector-offset primitive-vector eip)))))))
-			    (t ;; This should in principle never happen, but since this
-			     ;; is a debugger, making this an error or break would probably
-			     ;; just be a nuisance.
-			     (format t "DIT Exception ~D. Unable to determine current function (!) with ESI=~Z and EIP=#x~X."
-				       exception funobj eip)))))))))
-	       (function
-		(let ((name (funobj-name funobj)))
-		  (cond
-		   ((and conflate (member name *backtrace-conflate-names* :test #'equal))
-		    (incf conflate-count))
-		   (t (incf count)
-		      #+ignore (when (and *backtrace-stack-frame-barrier*
-					  (<= *backtrace-stack-frame-barrier* stack-frame))
-				 (write-string " --|")
-				 (return))
-		      (unless (or (not (integerp length))
-				  (< count length))
-			(write-string " ...")
-			(return))
-		      (print-leadin stack frame count conflate-count)
-		      (setf conflate-count 0)
-		      (write-char #\()
-		      (let* ((numargs (stack-frame-numargs stack frame))
-			     (map (and funobj (funobj-stack-frame-map funobj numargs))))
-			(cond
-			 ((and (car map) (eq name 'unbound-function))
-			  (let ((real-name (stack-frame-ref stack frame (car map))))
-			    (format t "{unbound ~S}" real-name)))
-			 ((and (car map)
-			       (member name +backtrace-gf-discriminatior-functions+))
-			  (let ((gf (stack-frame-ref stack frame (car map))))
+	     (handler-case
+		 (typecase funobj
+		   ((eql 0)
+		    (let ((eip (dit-frame-ref stack frame :eip :unsigned-byte32))
+			  (casf (dit-frame-casf stack frame)))
+		      (multiple-value-bind (function-name code-vector-offset)
+			  (let ((casf-funobj (stack-frame-funobj stack casf)))
 			    (cond
-			     ((typep gf 'muerte::standard-gf-instance)
-			      (format t "{gf ~S}" (funobj-name gf)))
-			     (t (write-string "[not a gf??]")))
-			    (safe-print-stack-frame-arglist stack frame map :numargs numargs)))
-			 (t (write name)
-			    (safe-print-stack-frame-arglist stack frame map
-							    :numargs numargs
-							    :edx-p (eq 'muerte::&edx
-								       (car (funobj-lambda-list funobj)))))))
-		      (write-char #\))
-		      (when (and (symbolp name)
-				 (string= name 'toplevel-function))
-			(write-char #\.)
-			(return))))))
-	       (t (print-leadin stack frame count conflate-count)
-		  (format t "?: ~Z" funobj))))))		  
+			     ((eq 0 casf-funobj)
+			      (values 'default-interrupt-trampoline
+				      (code-vector-offset (symbol-value 'default-interrupt-trampoline)
+							  eip)))
+			     ((not (typep casf-funobj 'function))
+			      ;; Hm.. very suspicius
+			      (warn "Weird frame ~S" frame)
+			      (values nil))
+			     (t (let ((x (code-vector-offset (funobj-code-vector casf-funobj) eip)))
+				  (cond
+				   ((not (eq nil x))
+				    (values (funobj-name casf-funobj) x))
+				   ((not (logbitp 10 (dit-frame-ref stack frame :eflags :unsigned-byte16)))
+				    (let ((funobj2 (dit-frame-ref stack frame :esi :lisp)))
+				      (or (when (typep funobj2 'function)
+					    (let ((x (code-vector-offset (funobj-code-vector funobj2) eip)))
+					      (when x
+						(values (funobj-name funobj2) x))))
+					  (find-primitive-code-vector-by-eip eip)))))))))
+			;; (setf next-frame (dit-frame-casf stack frame))
+			(if (and conflate-interrupts conflate
+				 ;; When the interrupted function has a stack-frame, conflate it.
+				 (typep funobj 'function)
+				 (= 1 (ldb (byte 1 5) (funobj-debug-info funobj))))
+			    (incf conflate-count)
+			  (progn
+			    (incf count)
+			    (print-leadin stack frame count conflate-count)
+			    (setf conflate-count 0)
+			    (let ((exception (dit-frame-ref stack frame :exception-vector :unsigned-byte32)))
+			      (if function-name
+				  (format t "DIT exception ~D in ~W at PC offset ~D."
+					  exception
+					  function-name
+					  code-vector-offset)
+				(format t "DIT exception ~D at EIP=~S with ESI=~S."
+					exception
+					eip
+					(dit-frame-ref stack frame :esi :unsigned-byte32)))))))))
+		   (function
+		    (let ((name (funobj-name funobj)))
+		      (cond
+		       ((and conflate (member name *backtrace-conflate-names* :test #'equal))
+			(incf conflate-count))
+		       (t (incf count)
+			  #+ignore (when (and *backtrace-stack-frame-barrier*
+					      (<= *backtrace-stack-frame-barrier* stack-frame))
+				     (write-string " --|")
+				     (return))
+			  (unless (or (not (integerp length))
+				      (< count length))
+			    (write-string " ...")
+			    (return))
+			  (print-leadin stack frame count conflate-count)
+			  (setf conflate-count 0)
+			  (write-char #\()
+			  (let* ((numargs (stack-frame-numargs stack frame))
+				 (map (and funobj (funobj-stack-frame-map funobj numargs))))
+			    (cond
+			     ((and (car map) (eq name 'unbound-function))
+			      (let ((real-name (stack-frame-ref stack frame (car map))))
+				(format t "{unbound ~S}" real-name)))
+			     ((and (car map)
+				   (member name +backtrace-gf-discriminatior-functions+))
+			      (let ((gf (stack-frame-ref stack frame (car map))))
+				(cond
+				 ((typep gf 'muerte::standard-gf-instance)
+				  (format t "{gf ~S}" (funobj-name gf)))
+				 (t (write-string "[not a gf??]")))
+				(safe-print-stack-frame-arglist stack frame map :numargs numargs)))
+			     (t (write name)
+				(safe-print-stack-frame-arglist stack frame map
+								:numargs numargs
+								:edx-p (eq 'muerte::&edx
+									   (car (funobj-lambda-list funobj)))))))
+			  (write-char #\))
+			  (when (and (symbolp name)
+				     (string= name 'toplevel-function))
+			    (write-char #\.)
+			    (return))
+			  (write-char #\newline)))))
+		   (t (print-leadin stack frame count conflate-count)
+		      (format t "?: ~Z" funobj)))
+	       (serious-condition (c)
+		 (let ((*print-safely* t))
+		   (format t " - Error at ~S funobj ~S: ~A"
+			   frame
+			   (stack-frame-funobj nil frame)
+			   c)))))))
   (values))
 
