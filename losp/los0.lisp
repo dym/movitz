@@ -9,14 +9,13 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.10 2004/04/06 13:36:42 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.11 2004/04/07 00:35:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (provide :los0 :load-priority 0)
 
 (require :common-lisp)
-(require :x86-pc/interrupt)
 (require :x86-pc/all)
 (require :x86-pc/io-space)
 (require :x86-pc/ne2k)
@@ -37,7 +36,6 @@
 	muerte.ip6
 	muerte.ip4
 	muerte.mop
-	muerte.debug
 	#+ignore muerte.x86-pc.serial))
 
 (require :los0-gc)
