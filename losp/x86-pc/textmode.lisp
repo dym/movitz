@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  9 15:38:56 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: textmode.lisp,v 1.11 2004/08/12 16:54:51 ffjeld Exp $
+;;;; $Id: textmode.lisp,v 1.12 2004/09/23 11:05:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -244,6 +244,9 @@
 
   
 (defun set-textmode (mode-state)
+  (unless (= #xb8000 (vga-memory-map))
+    (break "This is only likely to work on VGA based at #xb8000, yours is at ~S."
+	   (vga-memory-map)))
   (setf (vga-state) mode-state)
   (ecase (vga-character-height)
     (8 (write-font +vga-font-8x8+ 8))
