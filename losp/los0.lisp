@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.28 2004/11/17 13:33:11 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.29 2004/11/17 14:02:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1605,31 +1605,52 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
     (:ret)))
 
 (defun install-shallow-binding (&key quiet)
+  (unless quiet
+    (warn "Installing shallow-binding strategy.."))
   (without-interrupts
-    (unless quiet
-      (warn "Installing shallow-binding strategy.."))
     (macrolet ((install (slot function)
 		 `(prog1 (cons ',slot (%run-time-context-slot ',slot))
 		    (setf (%run-time-context-slot ',slot) (symbol-value ',function)))))
-      (list (install muerte:dynamic-variable-install dynamic-variable-install-shallow)
-	    (install muerte:dynamic-variable-uninstall dynamic-variable-uninstall-shallow)
-	    (install muerte::dynamic-unwind-next dynamic-unwind-next-shallow)
-	    (install muerte::dynamic-variable-store dynamic-variable-store-shallow)
-	    (install muerte::dynamic-variable-lookup-unbound dynamic-variable-lookup-unbound-shallow)
-	    (prog1 (install muerte::dynamic-variable-lookup dynamic-variable-lookup-shallow)
-	      (labels ((install-shallow-env (env)
-			 "We use this local function in order to install dynamic-env slots
-                          in reverse order, by depth-first recursion."
-			 (unless (eq 0 env)
-			   (install-shallow-env (memref env 12))
-			   (let ((name (memref env 0)))
-			     (when (symbolp name)
-			       (setf (memref env 4)
-				 (%symbol-global-value name))
-			       (setf (%symbol-global-value name)
-				 (memref env 8)))))))
-		(install-shallow-env (load-global-constant dynamic-env
-							   :thread-local t))))))))
+      (prog1
+	  (list (install muerte:dynamic-variable-install dynamic-variable-install-shallow)
+		(install muerte:dynamic-variable-uninstall dynamic-variable-uninstall-shallow)
+		(install muerte::dynamic-unwind-next dynamic-unwind-next-shallow)
+		(install muerte::dynamic-variable-store dynamic-variable-store-shallow)
+		(install muerte::dynamic-variable-lookup-unbound dynamic-variable-lookup-unbound-shallow)
+		(install muerte::dynamic-variable-lookup dynamic-variable-lookup-shallow))
+	(labels ((install-shallow-env (env)
+		   "We use this local function in order to install dynamic-env slots
+                    in reverse order, by depth-first recursion."
+		   (unless (eq 0 env)
+		     (install-shallow-env (memref env 12))
+		     (let ((name (memref env 0)))
+		       (when (symbolp name)
+			 (setf (memref env 4)
+			   (%symbol-global-value name))
+			 (setf (%symbol-global-value name)
+			   (memref env 8)))))))
+	  (install-shallow-env (load-global-constant dynamic-env :thread-local t)))))))
+
+(defun deinstall-shallow-binding (&key quiet)
+  (unless quiet
+    (warn "Deinstalling shallow-binding strategy.."))
+  (without-interrupts
+    (macrolet ((install (slot)
+		 `(setf (%run-time-context-slot ',slot) (symbol-value ',slot))))
+      (install muerte:dynamic-variable-install)
+      (install muerte:dynamic-variable-uninstall)
+      (install muerte::dynamic-unwind-next)
+      (install muerte::dynamic-variable-store)
+      (install muerte::dynamic-variable-lookup-unbound)
+      (install muerte::dynamic-variable-lookup)
+      (loop for env = (load-global-constant dynamic-env :thread-local t)
+	  then (memref env 12)
+	  while (plusp env)
+	  do (let ((name (memref env 0)))
+	       (when (symbolp name)
+		 (setf (%symbol-global-value name)
+		   (memref env 4)))))
+      (values))))
 
 (genesis)
 
