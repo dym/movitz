@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri May  4 18:08:50 2001
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.7 2004/04/06 10:37:52 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.8 2004/04/06 14:42:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -34,14 +34,17 @@
 		   (movitz:movitz-eval name env))))
     (if (not name)
 	form
-      (position name '(:edi :esi :ebp :esp :ebx :edx :ecx :eax
-		       :exception :error-code
-		       :eip :cs :eflags)))))
+      (- 5 (position name
+		      '(:eip :eflags nil :error-code :exception :ebp nil
+			:ecx :eax :edx :ebx :esi :edi)
+		      #+ignore '(:edi :esi :ebp :esp :ebx :edx :ecx :eax
+				 :exception :error-code
+				 :eip :cs :eflags))))))
 
 (defun int-frame-index (name)
-  (position name '(:edi :esi :ebp :esp :ebx :edx :ecx :eax
-		   :exception :error-code
-		   :eip :cs :eflags)))
+  (- 5 (position name
+		  '(:eip :eflags nil :error-code :exception :ebp nil
+		    :ecx :eax :edx :ebx :esi :edi))))
 
 (define-compiler-macro int-frame-ref (&whole form frame reg type &optional (offset 0) &environment env)
   `(memref ,frame (+ (* 4 (int-frame-index ,reg)) ,offset) 0 ,type))
@@ -66,22 +69,34 @@
   (with-inline-assembly (:returns :multiple-values)
    ok
     ;; Stack:
-    ;; 48: Calling EFLAGS
-    ;; 44: Calling CS
-    ;; 40: Calling EIP
-    ;; 36: error code
-    ;; 32: exception number
-    (:pushal)				; push interruptee's registers
-    ;; 28: eax
-    ;; 24: ecx
-    ;; 20: edx
-    ;; 16: ebx
-    ;; 12: esp
-    ;;  8: ebp
-    ;;  4: esi
-    ;;  0: edi
+    ;; 20: Interruptee EFLAGS (later EIP)
+    ;; 16: Interruptee CS     (later EFLAGS)
+    ;; 12: Interruptee EIP
+    ;;  8: Error code
+    ;;  4: Exception number
+    ;;  0: EBP
+    (:pushl :ebp)
+    (:movl :esp :ebp)
+    (:pushl 0)				; 0 means default-interrupt-trampoline frame
+    (:pushl :ecx)			; -8
+    (:pushl :eax)			; -12
+    (:pushl :edx)			; -16
+    (:pushl :ebx)			; -20
+    (:pushl :esi)			; -24
+    (:pushl :edi)			; -28
+
+    ;; rearrange stack for return
+    (:movl (:ebp 12) :eax)		; load return address
+    (:movl (:ebp 20) :ebx)		; load EFLAGS
+    (:movl :ebx (:ebp 16))		; EFLAGS at next-to-bottom of stack
+    (:movl :eax (:ebp 20))		; return address at bottom of stack
+
+    (:xorl :eax :eax)			; Ensure safe value
+    (:xorl :edx :edx)			; Ensure safe value
+
+    (:movl ':nil-value :edi)		; We want NIL!
     
-    (:pushl (:esp 48))			; EFLAGS
+    (:pushl (:ebp 16))			; EFLAGS
     (:pushl :cs)			; push CS
     (:call (:pc+ 0))			; push EIP.
     ;; Now add a few bytes to the on-stack EIP so the iret goes to
@@ -91,21 +106,12 @@
     
     ;; *DEST* iret branches to here.
     ;; we're now in the context of the interruptee.
-    ;; rearrange stack for return
-    (:movl (:esp 40) :eax)		; load return address
-    (:movl (:esp 48) :ebx)		; load EFLAGS
-    (:movl :ebx (:esp 44))		; EFLAGS at next-to-bottom of stack
-	   
-    (:movl :eax (:esp 48))		; return address at bottom of stack
 
-
-    (:movl ':nil-value :edi)		; We want NIL!
-
-    (:pushl :eax)			; fake stack-frame return address
-    (:pushl :ebp)			; set up fake stack-frame
-    (:movl :esp :ebp)			; (GIVES EBP OFFSET 8 RELATIVE TO NUMBERS ABOVE!!)
-    (:pushl :edi)			; A fake "funobj" for the fake stack-frame..
-					; ..the int-frame will be put here shortly.
+;;;    (:pushl :eax)			; fake stack-frame return address
+;;;    (:pushl :ebp)			; set up fake stack-frame
+;;;    (:movl :esp :ebp)			; (GIVES EBP OFFSET 8 RELATIVE TO NUMBERS ABOVE!!)
+;;;    (:pushl :edi)			; A fake "funobj" for the fake stack-frame..
+;;;					; ..the int-frame will be put here shortly.
     
     ;; Save/push thread-local values
     (:locally (:movl (:edi (:edi-offset num-values)) :ecx))
@@ -120,7 +126,7 @@
     (:locally (:pushl (:edi (:edi-offset num-values))))
     
     ;; call handler
-    (:movl (32 8 :ebp) :ebx)		; interrupt number into EBX
+    (:movl (:ebp 4) :ebx)		; interrupt number into EBX
     (:locally (:movl (:edi (:edi-offset interrupt-handlers)) :eax))
     (:movl (:eax 2 (:ebx 4)) :eax)	; symbol at (aref EBX interrupt-handlers) into :esi
     (:leal (:eax -7) :ecx)
@@ -128,9 +134,9 @@
     (:jnz 'skip-interrupt-handler)	; if it's not a symbol, never mind.
     (:movl (:eax #.(movitz::slot-offset 'movitz::movitz-symbol 'movitz::function-value))
 	   :esi)			; load new funobj from symbol into ESI
-    (:leal (8 :ebp) :ebx)		; pass INT-frame as arg1
-    (:movl :ebx (:ebp -4))		; put INT-frame as our fake stack-frame's funobj.
-    (:movl (32 8 :ebp) :eax)		; pass interrupt number as arg 0.
+    (:movl :ebp :ebx)			; pass INT-frame as arg1
+    ;; (:movl :ebx (:ebp -4))		; put INT-frame as our fake stack-frame's funobj.
+    (:movl (:ebp 4) :eax)		; pass interrupt number as arg 0.
     (:shll #.movitz::+movitz-fixnum-shift+ :eax)
     (:call (:esi #.(movitz::slot-offset 'movitz::movitz-funobj 'movitz::code-vector%2op)))
 
@@ -145,11 +151,20 @@
     (:subl 1 :ecx)
     (:jnz 'pop-values-loop)
    pop-values-done
-    
-    
-    (:leal (:ebp 8) :esp)
-    (:popal)				; pop interruptee's registers
-    (:addl 12 :esp)			; skip stack-hole
+
+    (:movl (:ebp -28) :edi)
+    (:movl (:ebp -24) :esi)
+    (:movl (:ebp -20) :ebx)
+    (:movl (:ebp -16) :edx)
+    (:movl (:ebp -12) :eax)
+    (:movl (:ebp -8)  :ecx)
+
+    (:leave)
+    (:addl 12 :esp)
+     
+;;;    (:leal (:ebp 8) :esp)
+;;;    (:popal)				; pop interruptee's registers
+;;;    (:addl 12 :esp)			; skip stack-hole
     (:popfl)				; pop EFLAGS
     (:ret)))				; pop EIP
 
@@ -209,7 +224,7 @@
 			   new-bottom)
 		   (break "Stack overload exception ~D at ESP=~@Z with bottom #x~X."
 			  number
-			  (+ int-frame (int-frame-index :esp))
+			  (+ int-frame (int-frame-index :ebp))
 			  old-bottom))
 	       (format *debug-io* "~&Stack-warning: Resetting stack-bottom to #x~X.~%"
 		       old-bottom)
