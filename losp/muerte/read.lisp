@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct 17 21:50:42 2001
 ;;;;                
-;;;; $Id: read.lisp,v 1.8 2004/07/27 14:43:30 ffjeld Exp $
+;;;; $Id: read.lisp,v 1.9 2004/08/11 09:34:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -278,52 +278,62 @@ of string delimited by start and end."
 		       string end))))
       (#\# (assert (< (incf i) end) (string)
 	     "End of string after #: ~S." (substring string start end))
-	  (return-from simple-read-from-string
-	    (ecase (char-downcase (char string i))
-	      (#\b (simple-read-integer string (1+ i) end 2))
-	      (#\o (simple-read-integer string (1+ i) end 8))
-	      (#\x (simple-read-integer string (1+ i) end 16))
-	      (#\' (multiple-value-bind (quoted-form form-end)
-		       (simple-read-from-string string eof-error-p eof-value :start (1+ i) :end end)
-		     (values (list 'function quoted-form) form-end string end)))
-	      (#\( (multiple-value-bind (contents-list form-end)
-		       (simple-read-delimited-list #\) string (1+ i) end)
-		     (values (make-array (length contents-list)
-					 :initial-contents contents-list)
-			     form-end
-			     string end)))
-	      (#\* (let* ((token-end (find-token-end string :start (incf i) :end end))
-			  (bit-vector (make-array (- token-end i) :element-type 'bit)))
-		     (do ((p i (1+ p))
-			  (q 0 (1+ q)))
-			 ((>= p token-end))
-		       (case (schar string p)
-			 (#\0 (setf (aref bit-vector q) 0))
-			 (#\1 (setf (aref bit-vector q) 1))
-			 (t (error "Illegal bit-vector element: ~S" (schar string p)))))
-		     (values bit-vector
-			     token-end
-			     string end)))
-	      (#\s (multiple-value-bind (struct-form form-end)
-		       (simple-read-from-string string eof-error-p eof-value :start (1+ i) :end end)
-		     (check-type struct-form list)
-		     (let* ((struct-name (car struct-form))
-			    (struct-args (cdr struct-form)))
-		       (check-type struct-name symbol "A structure name.")
-		       (values (apply #'make-structure struct-name struct-args)
-			       form-end string end))))
-	      (#\: (let* ((token-end (find-token-end string :start (incf i) :end end))
-			  (symbol-name (string-upcase string :start i :end token-end)))
-		     (values (make-symbol symbol-name)
-			     token-end string end)))
-	      (#\\ (let* ((token-end (find-token-end string :start (incf i) :end end))
-			  (char (name-char string i token-end)))
-		     (cond
-		      (char (values char token-end))
-		      ((>= 1 (- token-end i))
-		       (values (char string i) (1+ i) string end))
-		      (t (error "Don't know this character: ~S"
-				(substring string i token-end)))))))))
+	  (multiple-value-bind (parameter parameter-end)
+	      (parse-integer string :start i :end end :radix 10 :junk-allowed t)
+	    (setf i parameter-end)
+	    (return-from simple-read-from-string
+	      (ecase (char-downcase (char string i))
+		(#\b (simple-read-integer string (1+ i) end 2))
+		(#\o (simple-read-integer string (1+ i) end 8))
+		(#\x (simple-read-integer string (1+ i) end 16))
+		(#\r (check-type parameter (integer 2 36))
+		     (simple-read-integer string (1+ i) end parameter))
+		(#\' (multiple-value-bind (quoted-form form-end)
+			 (simple-read-from-string string eof-error-p eof-value :start (1+ i) :end end)
+		       (values (list 'function quoted-form) form-end string end)))
+		(#\( (multiple-value-bind (contents-list form-end)
+			 (simple-read-delimited-list #\) string (1+ i) end)
+		       (values (replace (make-array (or parameter (length contents-list))
+						    :initial-element (car (last contents-list)))
+					contents-list)
+			       form-end
+			       string end)))
+		(#\* (let* ((token-end (find-token-end string :start (incf i) :end end))
+			    (bit-vector (make-array (or parameter (- token-end i))
+						    :element-type 'bit)))
+		       (do ((p i (1+ p))
+			    (q 0 (1+ q))
+			    (bit nil))
+			   ((>= q (length bit-vector)))
+			 (when (< p token-end)
+			   (setf bit (schar string p)))
+			 (case bit
+			   (#\0 (setf (aref bit-vector q) 0))
+			   (#\1 (setf (aref bit-vector q) 1))
+			   (t (error "Illegal bit-vector element: ~S" bit))))
+		       (values bit-vector
+			       token-end
+			       string end)))
+		(#\s (multiple-value-bind (struct-form form-end)
+			 (simple-read-from-string string eof-error-p eof-value :start (1+ i) :end end)
+		       (check-type struct-form list)
+		       (let* ((struct-name (car struct-form))
+			      (struct-args (cdr struct-form)))
+			 (check-type struct-name symbol "A structure name.")
+			 (values (apply #'make-structure struct-name struct-args)
+				 form-end string end))))
+		(#\: (let* ((token-end (find-token-end string :start (incf i) :end end))
+			    (symbol-name (string-upcase string :start i :end token-end)))
+		       (values (make-symbol symbol-name)
+			       token-end string end)))
+		(#\\ (let* ((token-end (find-token-end string :start (incf i) :end end))
+			    (char (name-char string i token-end)))
+		       (cond
+			(char (values char token-end))
+			((>= 1 (- token-end i))
+			 (values (char string i) (1+ i) string end))
+			(t (error "Don't know this character: ~S"
+				  (substring string i token-end))))))))))
       (t (return-from simple-read-from-string
 	   (simple-read-token string :start i :end end))))))
 
