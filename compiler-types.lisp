@@ -6,11 +6,11 @@
 ;;;;    For distribution policy, see the accompanying file COPYING.
 ;;;; 
 ;;;; Filename:      compiler-types.lisp
-;;;; Description:   
+;;;; Description:   Compile-time type computation and manipulation.
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.3 2004/02/11 18:01:40 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.4 2004/02/12 11:32:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -475,15 +475,9 @@ with the single member of <type-specifier>."
 	(satisfies
 	 (type-values () :include (list type-specifier)))
 	(member
-	 (type-values () :members (cdr type-specifier)))
+	 (apply #'member-type-encode (cdr type-specifier)))
 	(eql
-	 (let ((x (second type-specifier)))
-	   (etypecase x
-	     (movitz-fixnum
-	      (type-values () :integer-range (make-numscope (movitz-fixnum-value x)
-							    (movitz-fixnum-value x))))
-	     (movitz-object
-	      (type-values () :members (list x))))))
+	 (member-type-encode (second type-specifier)))
 	(and
 	 (if (not (cdr type-specifier))
 	     (type-values t)
@@ -535,6 +529,22 @@ with the single member of <type-specifier>."
 	     (assert deriver (type-specifier)
 	       "Unknown type ~S." type-specifier)
 	     (type-specifier-encode (apply deriver (cdr type-specifier))))))))))
+
+(defun member-type-encode (&rest member-objects)
+  (declare (dynamic-extent members))
+  (multiple-value-bind (code integer-range members include complement)
+      (type-specifier-encode nil)
+    (dolist (x member-objects)
+      (multiple-value-setq (code integer-range members include complement)
+	(multiple-value-call #'encoded-types-or
+	  code integer-range members include complement
+	  (etypecase x
+	    (movitz-fixnum
+	     (type-values () :integer-range (make-numscope (movitz-fixnum-value x)
+							   (movitz-fixnum-value x))))
+	    (movitz-object
+	     (type-values () :members (list x)))))))
+    (values code integer-range members include complement)))
 
 (defun encoded-emptyp (code integer-range members include complement)
   "Return wether we know the encoded type is the empty set.
