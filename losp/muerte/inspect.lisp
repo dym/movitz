@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.47 2005/02/02 09:12:54 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.48 2005/02/25 07:59:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -403,6 +403,16 @@ Obviously, this correspondence is not guaranteed to hold e.g. across GC."
 	   (+ -1 object-location
 	      #.(movitz::movitz-type-word-size :movitz-struct)
 	      (* 2 (truncate (+ (structure-object-length object) 1) 2))))))))
+
+(defun location-in-code-vector-p%unsafe (code-vector location)
+  (and (<= (object-location code-vector) location)
+       (<= location
+	   (+ -1 (object-location code-vector)
+	      #.(movitz::movitz-type-word-size 'movitz-basic-vector)
+	      (* 2 (truncate (+ (memref code-vector
+					(movitz-type-slot-offset 'movitz-basic-vector 'num-elements))
+				7)
+			     8))))))
 
 (defun current-control-stack-depth (&optional (start-frame (current-stack-frame)))
   "How deep is the stack currently?"
