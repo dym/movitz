@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.100 2004/10/12 14:43:55 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.101 2004/11/21 00:10:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2192,18 +2192,18 @@
 
 (defun isqrt (natural)
   "=> natural-root"
-  (etypecase natural
-    ((eql 0) 0)
-    ((integer 1 *)
-     (let ((r 1))
-       (do ((next-r (truncate (+ r (truncate natural r)) 2)
-		    (truncate (+ r (truncate natural r)) 2)))
-	   ((typep (- next-r r) '(integer 0 1))
-	    (let ((r+1 (1+ r)))
-	      (if (<= (* r+1 r+1) natural)
-		  r+1
-		r)))
-	 (setf r next-r))))))
+  (check-type natural (integer 0 *))
+  (if (= 0 natural)
+      0
+    (let ((r 1))
+      (do ((next-r (truncate (+ r (truncate natural r)) 2)
+		   (truncate (+ r (truncate natural r)) 2)))
+	  ((typep (- next-r r) '(integer 0 1))
+	   (let ((r+1 (1+ r)))
+	     (if (<= (* r+1 r+1) natural)
+		 r+1
+	       r)))
+	(setf r next-r)))))
 
 (defun expt (base-number power-number)
   "Take base-number to the power-number."
