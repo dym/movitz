@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.26 2004/08/12 17:00:29 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.27 2004/08/16 23:15:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -187,11 +187,11 @@
 		 (cond
 		  ((eq 0 offset)
 		   `(with-inline-assembly (:returns :eax)
-		      (:compile-two-forms (:ecx :ebx) ,object ,index)
+		      (:compile-two-forms (:ebx :ecx) ,object ,index)
 		      (:xorl :eax :eax)
 		      (:movb ,(movitz:tag :character) :al)
-		      (:sarl ,movitz::+movitz-fixnum-shift+ :ebx) ; scale index
-		      (:movb (:ecx :ebx ,(offset-by 1)) :ah)))
+		      (:sarl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale index
+		      (:movb (:ebx :ecx ,(offset-by 1)) :ah)))
 		  (t (let ((object-var (gensym "memref-object-")))
 		       `(let ((,object-var ,object))
 			  (with-inline-assembly (:returns :eax)
