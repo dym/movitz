@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct  6 12:42:51 2004
 ;;;;                
-;;;; $Id: tftp.lisp,v 1.2 2004/11/24 16:22:21 ffjeld Exp $
+;;;; $Id: tftp.lisp,v 1.3 2004/11/25 02:09:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -64,7 +64,7 @@
 				 (data-length (length data-vector))
 				 (breaker (lambda ()
 					    (eql #\esc (muerte.x86-pc.keyboard:poll-char)))))
-  "Low-level TFTP write data-vector to file-name on host ip using *ip4-nic*.
+  "TFTP write data-vector to file-name on host ip using *ip4-nic*.
 The host's MAC is looked up by ARP unless provided."
   (let ((speak (if quiet nil *query-io*))
 	(ip (ip4-address ip)))
