@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.77 2004/07/19 12:50:20 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.78 2004/07/19 13:59:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1427,10 +1427,11 @@ Preserve EAX and EBX."
 ;;; bytes
 
 (defun byte (size position)
+  (check-type position (integer 0 #x3ff))
   (+ (* size #x400) position))
 
 (defun byte-size (bytespec)
-  (truncate bytespec #x400))
+  (values (truncate bytespec #x400)))
 
 (defun byte-position (bytespec)
   (rem bytespec #x400))
@@ -1692,10 +1693,10 @@ Preserve EAX and EBX."
 	       (:declare-label-set retry-jumper-ones-expanded-bignum (retry-ones-expanded-bignum))
 	       ;; Calculate word-size from bytespec-size.
 	       (:compile-form (:result-mode :ecx) size)
-	       (:subl ,movitz:+movitz-fixnum-factor+ :ecx) ; Subtract 1
-	       (:shrl ,(+ 5 movitz:+movitz-fixnum-shift+) :ecx) ; Divide by 32
-	       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ; Add 1 for index->size..
-		       ,(* 2 movitz:+movitz-fixnum-factor+)) ; ..and 1 for header.
+	       (:addl ,(* 31 movitz:+movitz-fixnum-factor+) :ecx) ; Add 31
+	       (:shrl 5 :ecx)		; Divide by 32
+	       (:andl ,(- movitz:+movitz-fixnum-factor+) :ecx)
+	       (:leal (:ecx ,movitz:+movitz-fixnum-factor+) ; Add 1 for header.
 		      :eax)
 	       (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
 	       (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
@@ -1703,7 +1704,7 @@ Preserve EAX and EBX."
 				(:edi (:edi-offset atomically-status))))
 	       (:call-local-pf get-cons-pointer)
 	       (:shll 16 :ecx)
-	       (:addl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0)) :ecx) ; add 1 for index->size
+	       (:orl ,(movitz:tag :bignum 0) :ecx)
 	       (:movl :ecx (:eax ,movitz:+other-type-offset+))
 	       (:shrl 16 :ecx)
 	       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
