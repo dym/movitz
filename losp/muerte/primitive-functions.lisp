@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.29 2004/07/15 21:07:22 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.30 2004/07/17 01:54:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -534,6 +534,10 @@ BUFFER-SIZE is the number of words in the buffer."
   
 (defun malloc-cons-pointer ()
   "Return current cons-pointer in 8-byte units since buffer-start."
+  (let ((x (%run-time-context-slot 'nursery-space)))
+    (when (typep x 'vector)
+      (truncate (aref x 0) 8)))
+  #+ignore
   (with-inline-assembly (:returns :eax)
     (:locally (:movl (:edi (:edi-offset nursery-space)) :eax))
     (:movl (:eax 4) :eax)
