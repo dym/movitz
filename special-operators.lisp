@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.34 2004/08/06 14:45:30 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.35 2004/08/10 13:28:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -272,12 +272,19 @@ and the correspondig returns mode (secondary value)."
 (define-special-operator make-primitive-function (&form form &env env)
   (destructuring-bind (name docstring body)
       (cdr form)
-    (handler-bind (((or warning error) (lambda (c)
-					 (declare (ignore c))
-					 (format *error-output* "~&;; In primitive function ~S:" name))))
-      (let ((code-vector (make-compiled-primitive body env nil docstring)))
-	(setf (movitz-symbol-value (movitz-read name)) code-vector)
-	(compiler-values ())))))
+    (destructuring-bind (name &key symtab-property)
+	(if (consp name) name (list name))
+      (handler-bind (((or warning error)
+		      (lambda (c)
+			(declare (ignore c))
+			(format *error-output* "~&;; In primitive function ~S:" name))))
+	(multiple-value-bind (code-vector symtab)
+	    (make-compiled-primitive body env nil docstring)
+	  (setf (movitz-symbol-value (movitz-read name)) code-vector)
+	  (when symtab-property
+	    (setf (movitz-env-get name :symtab)
+	      (translate-program symtab :movitz :muerte)))
+	  (compiler-values ()))))))
 
 (define-special-operator define-prototyped-function (&form form)
   (destructuring-bind (function-name proto-name &rest parameters)
