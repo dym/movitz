@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 19 14:58:12 2003
 ;;;;                
-;;;; $Id: repl.lisp,v 1.7 2004/03/26 13:54:45 ffjeld Exp $
+;;;; $Id: repl.lisp,v 1.8 2004/03/29 19:16:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -52,34 +52,36 @@
 		      (invoke-restart 'muerte::next-line
 				      (muerte.readline:contextual-readline *repl-readline-context*)))))
 		(simple-read-from-string buffer-string t t))
-	    (multiple-value-call
-		(lambda (form previous-package &rest results)
-		  (declare (dynamic-extent results))
-		  (unless (packagep *package*)
-		    (warn "Resetting *package*")
-		    (setf *package* previous-package))
-		  (unless (boundp '*)
-		    (warn "* was unbound!")
-		    (setf * nil))
-		  (apply #'format t *repl-print-format* results)
-		  (psetq +++ ++ ++ + + form)
-		  (psetq *** ** ** * * (car results))
-		  (psetq /// // // / / (if *repl-consless*
-					   nil
-					 (copy-list results)))
-		  (values-list results))
-	      form previous-package
+	    (flet ((process-expresion (form previous-package printp &rest results)
+		     (declare (dynamic-extent results))
+		     (unless (packagep *package*)
+		       (warn "Resetting *package*")
+		       (setf *package* previous-package))
+		     (unless (boundp '*)
+		       (warn "* was unbound!")
+		       (setf * nil))
+		     (when printp
+		       (apply #'format t *repl-print-format* results))
+		     (psetq +++ ++ ++ + + form)
+		     (psetq *** ** ** * * (car results))
+		     (psetq /// // // / / (if *repl-consless*
+					      nil
+					    (copy-list results)))
+		     (values-list results)))
 	      (if (not (keywordp form))
-		  (eval form)
-		(apply 'muerte.toplevel:invoke-toplevel-command
-		       form
-		       (loop for arg = (multiple-value-bind (arg x)
-					   (simple-read-from-string buffer-string nil '#0=#:eof
-								    :start buffer-pointer)
-					 (setq buffer-pointer x)
-					 arg)
-			   until (eq arg '#0#)
-			   collect arg)))))))
+		  (multiple-value-call #'process-expresion
+		    form previous-package t (eval form))
+		(multiple-value-call #'process-expresion
+		  form previous-package nil
+		  (apply 'muerte.toplevel:invoke-toplevel-command
+			 form
+			 (loop for arg = (multiple-value-bind (arg x)
+					     (simple-read-from-string buffer-string nil '#0=#:eof
+								      :start buffer-pointer)
+					   (setq buffer-pointer x)
+					   arg)
+			     until (eq arg '#0#)
+			     collect arg))))))))
     (muerte.readline::readline-break (c)
       (declare (ignore c))
       (values))))
