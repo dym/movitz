@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.6 2004/04/07 13:55:10 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.7 2004/04/11 18:57:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -73,7 +73,7 @@
     (:ret)))
 
 (defun new-malloc-clumps (clumps)
-  (check-type clumps (integer 0 200))
+  (check-type clumps (integer 0 1000))
   (with-inline-assembly (:returns :ebx)
    retry
     (:compile-form (:result-mode :eax) clumps)
