@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001, 2003-2004, 
+;;;;    Copyright (C) 2001, 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 19 14:58:12 2003
 ;;;;                
-;;;; $Id: repl.lisp,v 1.13 2004/09/25 15:25:53 ffjeld Exp $
+;;;; $Id: repl.lisp,v 1.14 2005/02/24 12:21:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -82,20 +82,26 @@
 					      nil
 					    (copy-list results)))
 		     (values-list results)))
-	      (if (not (keywordp form))
+	      (let ((restart (and (integerp form)
+				  (muerte:find-restart-by-index form
+								muerte:*debugger-dynamic-context*))))
+		(cond
+		 (restart
+		  (invoke-restart-interactively restart))
+		 ((not (keywordp form))
 		  (multiple-value-call #'process-expresion
-		    form previous-package t (eval form))
-		(multiple-value-call #'process-expresion
-		  form previous-package nil
-		  (apply 'muerte.toplevel:invoke-toplevel-command
-			 form
-			 (loop for arg = (multiple-value-bind (arg x)
-					     (simple-read-from-string buffer-string nil '#0=#:eof
-								      :start buffer-pointer)
-					   (setq buffer-pointer x)
-					   arg)
-			     until (eq arg '#0#)
-			     collect arg))))))))
+		    form previous-package t (eval form)))
+		 (t (multiple-value-call #'process-expresion
+		      form previous-package nil
+		      (apply 'muerte.toplevel:invoke-toplevel-command
+			     form
+			     (loop for arg = (multiple-value-bind (arg x)
+						 (simple-read-from-string buffer-string nil '#0=#:eof
+									  :start buffer-pointer)
+					       (setq buffer-pointer x)
+					       arg)
+				 until (eq arg '#0#)
+				 collect arg))))))))))
     (muerte.readline::readline-break (c)
       (declare (ignore c))
       (values))))
