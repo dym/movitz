@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.8 2004/04/15 13:17:50 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.9 2004/04/15 15:23:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -50,6 +50,7 @@
       muerte::eval-cons
       muerte::eval-funcall
       muerte::eval-form
+      muerte::eval-progn
       muerte::slow-method-lookup
       muerte::do-slow-method-lookup
       muerte::initial-discriminating-function
@@ -499,8 +500,8 @@ be provided for those cases."
 			  (function
 			   (let ((delta (code-vector-offset (funobj-code-vector funobj) eip)))
 			     (if delta
-				 (format t "{Interrupt ~D in ~W at offset ~D. [#x~X]}"
-					 exception (funobj-name funobj) delta interrupt-frame)
+				 (format t "{Interrupt ~D in ~W at PC offset ~D."
+					 exception (funobj-name funobj) delta)
 			       (format t "{Interrupt ~D in ~W at EIP=#x~X. [#x~X]}"
 				       exception (funobj-name funobj) eip interrupt-frame))))
 			  (t (format t "{Interrupt ~D with ESI=#x~Z and EIP=#x~X. [#x~X]}"
