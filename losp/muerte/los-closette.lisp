@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.6 2004/03/22 16:38:10 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.7 2004/04/14 22:01:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -912,14 +912,14 @@ is no unspecialized method was called."))
        done)))
 
 (defparameter *standard-effective-slot-readers*
-    (vector 'standard-effective-slot-reader%0
-	    'standard-effective-slot-reader%1
-	    'standard-effective-slot-reader%2
-	    'standard-effective-slot-reader%3
-	    'standard-effective-slot-reader%4
-	    'standard-effective-slot-reader%5
-	    'standard-effective-slot-reader%6
-	    'standard-effective-slot-reader%7)
+    #(standard-effective-slot-reader%0
+      standard-effective-slot-reader%1
+      standard-effective-slot-reader%2
+      standard-effective-slot-reader%3
+      standard-effective-slot-reader%4
+      standard-effective-slot-reader%5
+      standard-effective-slot-reader%6
+      standard-effective-slot-reader%7)
   "The element at position i is a standard-reader
 for a slot at position i.")
 
