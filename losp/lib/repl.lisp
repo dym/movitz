@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 19 14:58:12 2003
 ;;;;                
-;;;; $Id: repl.lisp,v 1.14 2005/02/24 12:21:30 ffjeld Exp $
+;;;; $Id: repl.lisp,v 1.15 2005/03/09 07:16:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -83,6 +83,7 @@
 					    (copy-list results)))
 		     (values-list results)))
 	      (let ((restart (and (integerp form)
+				  muerte:*debugger-dynamic-context*
 				  (muerte:find-restart-by-index form
 								muerte:*debugger-dynamic-context*))))
 		(cond
