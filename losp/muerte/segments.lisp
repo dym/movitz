@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu May  8 14:25:06 2003
 ;;;;                
-;;;; $Id: segments.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
+;;;; $Id: segments.lisp,v 1.3 2004/04/06 14:32:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -51,20 +51,43 @@ which is a great way to crash the machine. So know what you're doing."
   value)
 
 (defun sgdt ()
-  (without-gc
-   (with-inline-assembly (:returns :multiple-values)
-     (:pushl 0)
-     (:pushl 0)
-     (:leal (:esp 2) :ecx)
-     (:sgdt (:ecx))
-     (:popl :ecx)
-     ;; (:andl #xffff :ecx)
-     (:shrl 16 :ecx)
-     (:leal ((:ecx #.movitz::+movitz-fixnum-factor+)) :ebx)
-     (:popl :ecx)
-     (:leal ((:ecx #.movitz::+movitz-fixnum-factor+)) :eax)
-     (:movl 2 :ecx)
-     (:stc))))
+  "Return the location of the GDT, and the limit.
+Error if the GDT location is not zero modulo 4."
+  (eval-when (:compile-toplevel)
+    (assert (= 4 movitz:+movitz-fixnum-factor+)))
+  (with-inline-assembly (:returns :multiple-values)
+    (:pushl #.movitz:+scan-skip-word+)
+    (:pushl 2)
+    (:pushl 0)
+    (:pushl 0)
+    (:leal (:esp 2) :ecx)
+    (:sgdt (:ecx))
+    (:popl :ecx)
+    (:shrl 16 :ecx)
+    (:leal ((:ecx #.movitz::+movitz-fixnum-factor+)) :ebx)
+    (:popl :ecx)
+    (:testb 3 :cl)
+    (:jnz '(:sub-program ()
+	    (:compile-form (:result-mode :ignore)
+	     (error "The GDT base is not 4-aligned."))))
+    (:movl :ecx :eax)
+    (:movl 2 :ecx)
+    (:stc)))
+
+(defun lgdt (base-location limit)
+  "Set the GDT according to base-location and limit.
+This is the setter corresponding to the sgdt getter."
+  (eval-when (:compile-toplevel)
+    (assert (= 4 movitz:+movitz-fixnum-factor+)))
+  (with-inline-assembly (:returns :nothing)
+    (:compile-two-forms (:eax :ebx) base-location limit)
+    (:pushl #.movitz:+scan-skip-word+)
+    (:pushl 2)
+    (:shll #.(cl:- 16 movitz:+movitz-fixnum-shift+) :ebx)
+    (:pushl :eax)
+    (:pushl :ebx)
+    (:leal (:esp 2) :ecx)
+    (:lgdt (:ecx))))
 
 ;;;
 
