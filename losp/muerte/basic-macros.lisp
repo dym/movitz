@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.7 2004/04/13 16:40:53 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.8 2004/04/14 12:21:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -885,14 +885,6 @@
      (:andl #x7 :ecx)
      (:call (:edi (:ecx 4) ,(movitz::global-constant-offset 'fast-class-of)))))
 
-(define-compiler-macro without-gc (&body body)
-  `(multiple-value-prog1
-       (progn (with-inline-assembly (:returns :nothing) (:std))
-	      ,@body)
-     (with-inline-assembly (:returns :nothing) (:cld))))
-
-;;;
-
 (defmacro std-instance-reader (slot instance-form)
   (let ((slot (intern (symbol-name slot) :movitz)))
     `(with-inline-assembly-case ()
@@ -1010,7 +1002,6 @@ busy-waiting loop on P4."
   (let ((infinite-loop-label (make-symbol "infinite-loop")))
     `(with-inline-assembly (:returns :nothing)
        ,infinite-loop-label
-       (:movl #xabbabeef :eax)
        (:halt)
        (:jmp ',infinite-loop-label))))
 
