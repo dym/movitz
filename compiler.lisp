@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.35 2004/03/25 00:54:07 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.36 2004/03/26 01:34:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -4079,7 +4079,9 @@ Return arg-init-code, need-normalized-ecx-p."
 		 (cond
 		  ((and (movitz-constantp (optional-function-argument-init-form binding))
 			(< 1 position))
-		   `(
+		   `((:init-lexvar ,binding)
+		     ,@(when supplied-p-var
+			 `((:init-lexvar ,supplied-p-binding)))
 		     ,@(compiler-call #'compile-self-evaluating
 			 :form (eval-form (optional-function-argument-init-form binding) env nil)
 			 :funobj funobj
@@ -4105,7 +4107,10 @@ Return arg-init-code, need-normalized-ecx-p."
 		     (:movl (:ebp (:ecx 4) ,(* -4 (1- (1+ position)))) :ebx)
 		     default-done
 		     (:store-lexical ,binding :ebx :type t)))
-		  (t `((:arg-cmp ,(+ 2 position))
+		  (t `((:init-lexvar ,binding)
+		       ,@(when supplied-p-var
+			   `((:init-lexvar ,supplied-p-binding)))
+		       (:arg-cmp ,(+ 2 position))
 		       (:jb '(:sub-program (default)
 			      ,@(append
 				 (when supplied-p-var
