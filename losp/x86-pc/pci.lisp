@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Dec 14 22:33:42 2003
 ;;;;                
-;;;; $Id: pci.lisp,v 1.7 2004/11/26 00:02:39 ffjeld Exp $
+;;;; $Id: pci.lisp,v 1.8 2004/11/30 14:16:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -55,7 +55,7 @@
 
 (defun pci-far-call (address &key (cs 8) (eax 0) (ebx 0) (ecx 0) (edx 0) (esi 0) (edi 0))
   "Make a 'far call' to cs:address with the provided values for eax and ebx.
-Returns the values of registers EAX, EBX, ECX, and EDX, and status of CF.
+Returns the boolean status of CF, and the values of registers EAX, EBX, ECX, and EDX.
 The stack discipline is broken during this call, so we disable interrupts
 in a somewhat feeble attempt to avoid trouble."
   (check-type address (unsigned-byte 32))
@@ -94,26 +94,27 @@ in a somewhat feeble attempt to avoid trouble."
       (:call-segment (:esp))
       (:leal (:esp 8) :esp)		; Skip cs:address
       (:popl :edi)			; First of all, restore EDI!
-      (:locally (:movl :edi (:edi (:edi-offset values) 8)))
+      (:locally (:movl :edi (:edi (:edi-offset scratch2))))
       (:jnc 'cf=0)
       (:locally (:pushl (:edi (:edi-offset t-symbol))))
-      (:locally (:popl (:edi (:edi-offset values) 8)))
+      (:locally (:popl (:edi (:edi-offset scratch2))))
      cf=0
       (:pushl :eax)
       (:pushl :ebx)
       (:pushl :edx)
       (:locally (:movl 3 (:edi (:edi-offset num-values))))
       (:call-local-pf box-u32-ecx)	; ECX
-      (:locally (:movl :eax (:edi (:edi-offset values) 0)))
+      (:locally (:movl :eax (:edi (:edi-offset values) 4)))
       (:popl :ecx)			; EDX
       (:call-local-pf box-u32-ecx)
-      (:locally (:movl :eax (:edi (:edi-offset values) 4)))
+      (:locally (:movl :eax (:edi (:edi-offset values) 8)))
       (:popl :ecx)			; EBX
       (:call-local-pf box-u32-ecx)
-      (:locally (:movl :eax (:edi (:edi-offset scratch1))))
+      (:locally (:movl :eax (:edi (:edi-offset values) 0)))
       (:popl :ecx)			; EAX
       (:call-local-pf box-u32-ecx)
-      (:locally (:movl (:edi (:edi-offset scratch1)) :ebx))
+      (:movl :eax :ebx)
+      (:locally (:movl (:edi (:edi-offset scratch2)) :eax))
       (:movl 5 :ecx)
       (:movl (:ebp -4) :esi)
       (:stc)
@@ -124,27 +125,28 @@ in a somewhat feeble attempt to avoid trouble."
 (defun find-bios32-pci ()
   (let ((bios32-base (find-bios32-base)))
     (assert bios32-base "No bios32 found.")
-    (multiple-value-bind (eax ebx ecx edx)
+    (multiple-value-bind (cf eax ebx ecx edx)
 	(pci-far-call (memref-int bios32-base :offset 4)
 		      :eax (pci-word "$PCI"))
-      (declare (ignore ecx))
+      (declare (ignore cf ecx))
       (ecase (ldb (byte 8 0) eax)
 	(#x80 (error "The PCI bios32 service isn't present."))
 	(#x81 (error "The PCI bios32 service doesn't exist."))
 	(#x00 (+ ebx edx))))))
 
 (defun pci-bios-present ()
-  (multiple-value-bind (eax ebx ecx edx cf)
+  (multiple-value-bind (cf eax ebx ecx edx)
       (pci-far-call (find-bios32-pci) :eax #xb101)
-    (values (pci-string edx)
-	    (ldb (byte 8 8) eax)	; AH: Present status
-	    (ldb (byte 8 0) eax)	; AL: Hardware mechanism
-	    (ldb (byte 8 8) ebx)	; BH: Interface Level Major Version
-	    (ldb (byte 8 0) ebx)	; BL: Interface Level Minor Version
-	    (ldb (byte 8 0) ecx))))	; CL: Number of last PCI bus in the system
+    (unless cf
+      (values (pci-string edx)
+	      (ldb (byte 8 8) eax)	; AH: Present status
+	      (ldb (byte 8 0) eax)	; AL: Hardware mechanism
+	      (ldb (byte 8 8) ebx)	; BH: Interface Level Major Version
+	      (ldb (byte 8 0) ebx)	; BL: Interface Level Minor Version
+	      (ldb (byte 8 0) ecx)))))	; CL: Number of last PCI bus in the system
 		
 (defun find-pci-device (vendor device &optional (index 0))
-  (multiple-value-bind (eax ebx ecx edx cf)
+  (multiple-value-bind (cf eax ebx)
       (pci-far-call (find-bios32-pci)
 		    :eax #xb102
 		    :ecx device
@@ -160,12 +162,11 @@ in a somewhat feeble attempt to avoid trouble."
 		(#x83 :bad-vendor-id))))))
 
 (defun find-pci-class-code (class-code &optional (index 0))
-  (multiple-value-bind (eax ebx ecx edx cf)
+  (multiple-value-bind (cf eax ebx)
       (pci-far-call (find-bios32-pci)
 		    :eax #xb103
 		    :ecx class-code
 		    :esi index)
-    (declare (ignore ecx edx))
     (unless cf
       (values (ldb (byte 8 8) ebx)	; Bus
 	      (ldb (byte 5 3) ebx)	; Device
@@ -231,36 +232,59 @@ in a somewhat feeble attempt to avoid trouble."
 			 (nth (ldb (byte 8 0) code) sub-class-table))))
     (values (car class-table) sub-class sub-class-if)))
 
-(defun pci-bios-read-configuration-word (bus device function register)
-  (multiple-value-bind (eax ebx ecx edx cf)
+(defun pci-bios-config-space (bus device function register command size)
+  (multiple-value-bind (cf eax ebx ecx)
       (pci-far-call (find-bios32-pci)
-		    :eax #xb109
+		    :eax command
 		    :ebx (pci-location bus device function)
 		    :edi register)
-    (declare (ignore ebx edx))
+    (declare (ignore ebx))
     (unless cf
-      (values (ldb (byte 16 0) ecx) (pci-return-code eax)))))
+      (values (ldb (byte size 0) ecx)
+	      (pci-return-code eax)))))
 
-(defun pci-bios-read-configuration-dword (bus device function register)
-  (multiple-value-bind (eax ebx ecx edx cf)
+(defun (setf pci-bios-config-space) (value bus device function register command size)
+  (declare (ignore size))
+  (multiple-value-bind (cf eax)
       (pci-far-call (find-bios32-pci)
-		    :eax #xb10a
+		    :eax command
 		    :ebx (pci-location bus device function)
+		    :ecx value
 		    :edi register)
-    (declare (ignore ebx edx))
     (unless cf
-      (values ecx (pci-return-code eax)))))
+      (pci-return-code eax))))
+
+(defun pci-bios-config-space-dword (bus device function register)
+  (pci-bios-config-space bus device function register #xb10a 32))
+
+(defun pci-bios-config-space-word (bus device function register)
+  (pci-bios-config-space bus device function register #xb109 16))
+
+(defun pci-bios-config-space-byte (bus device function register)
+  (pci-bios-config-space bus device function register #xb108 8))
+
+(defun (setf pci-bios-config-space-dword) (value bus device function register)
+  (setf (pci-bios-config-space bus device function register #xb10d 32)
+    value))
+
+(defun (setf pci-bios-config-space-word) (value bus device function register)
+  (setf (pci-bios-config-space bus device function register #xb10c 16)
+    value))
+
+(defun (setf pci-bios-config-space-byte) (value bus device function register)
+  (setf (pci-bios-config-space bus device function register #xb10b 8)
+    value))
 
 (defun scan-pci-bus (bus)
   (loop for device from 0 to 31
       do (multiple-value-bind (vendor-id return-code)
-	     (pci-bios-read-configuration-word bus device 0 0)
+	     (pci-bios-config-space-word bus device 0 0)
 	   (when (and vendor-id
 		      (not (= vendor-id #xffff))
 		      (eq :successful return-code))
-	     (let ((device-id (pci-bios-read-configuration-word bus device 0 2))
-		   (status (pci-bios-read-configuration-word bus device 0 6))
-		   (class-rev (pci-bios-read-configuration-dword bus device 0 8)))
+	     (let ((device-id (pci-bios-config-space-word bus device 0 2))
+		   (status (pci-bios-config-space-word bus device 0 6))
+		   (class-rev (pci-bios-config-space-dword bus device 0 8)))
 	       (format *query-io*
 		       "~&~D: Vendor #x~X, ID #x~X, Class #x~X, Rev. ~D, Status #x~X.~%"
 		       device vendor-id device-id
