@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.36 2004/11/17 13:33:03 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.37 2004/11/19 20:12:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -278,7 +278,25 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 								     :init-with-register ,final-form
 								     ;; :init-with-type ,final-form
 								     ))))
-					    (t (append init-code
+					    ((typep final-form 'constant-object-binding)
+					     #+ignore
+					     (warn "type: ~S or ~S" final-form 
+						   (type-specifier-primary type))
+					     (append (if functional-p
+							 nil
+						       (compiler-call #'compile-form-unprotected
+							 :env init-env
+							 :defaults all
+							 :form init-form
+							 :result-mode :ignore
+							 :modify-accumulate let-modifies))
+						     `((:init-lexvar
+							,binding
+							:init-with-register ,final-form
+							:init-with-type ,(type-specifier-primary type)
+							))))
+					    (t ;; (warn "for ~S ~S ~S" binding init-register final-form)
+					       (append init-code
 						       `((:init-lexvar
 							  ,binding
 							  :init-with-register ,init-register

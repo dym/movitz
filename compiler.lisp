@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.109 2004/11/18 23:49:53 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.110 2004/11/19 20:12:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -430,19 +430,24 @@ Side-effects each binding's binding-store-type."
 	(analyze-funobj toplevel-funobj))
     (let ((binding-usage (make-hash-table :test 'eq)))
       (labels ((binding-resolved-p (binding)
-		 (let ((analysis (gethash binding binding-usage)))
-		   (and analysis
-			(null (type-analysis-thunks analysis)))))
+		 (or (typep binding 'constant-object-binding)
+		     (let ((analysis (gethash binding binding-usage)))
+		       (and analysis
+			    (null (type-analysis-thunks analysis))))))
 	       (binding-resolve (binding)
-		 (if (not (bindingp binding))
-		     binding
-		   (let ((analysis (gethash binding binding-usage)))
-		     (assert (and (and analysis
-				       (null (type-analysis-thunks analysis))))
-			 (binding)
-		       "Can't resolve unresolved binding ~S." binding)
-		     (apply #'encoded-type-decode
-			    (type-analysis-encoded-type analysis)))))
+		 (cond
+		  ((not (bindingp binding))
+		   binding)
+		  ((typep binding 'constant-object-binding)
+		   (apply #'encoded-type-decode
+			  (binding-store-type binding)))
+		  (t (let ((analysis (gethash binding binding-usage)))
+		       (assert (and (and analysis
+					 (null (type-analysis-thunks analysis))))
+			   (binding)
+			 "Can't resolve unresolved binding ~S." binding)
+		       (apply #'encoded-type-decode
+			      (type-analysis-encoded-type analysis))))))
 	       (type-is-t (type-specifier)
 		 (or (eq type-specifier t)
 		     (and (listp type-specifier)
@@ -1501,6 +1506,9 @@ initially."
 	       (explain t "4: ~S for ~S [regx ~S, regy ~S]" p (subseq pc 0 5) regx regy)))
 	nconc p)))
 
+(defun xsubseq (sequence start end)
+  (subseq sequence start (min (length sequence) end)))
+
 (defun optimize-code-internal (unoptimized-code recursive-count &rest key-args
 			       &key keep-labels stack-frame-size)
   "Peephole optimizer. Based on a lot of rather random techniques."
@@ -1808,7 +1816,7 @@ falling below the label."
 						 (mapcar (lambda (lpc)
 							   (if (eq 'unknown-label-usage lpc)
 							       nil
-							     (rcode-map (nreverse (subseq lpc 0 9)))))
+							     (rcode-map (nreverse (xsubseq lpc 0 9)))))
 							 (find-branches-to-label unoptimized-code label 9))))
 			     (full-map (let ((rcode (nreverse (let* ((pos (loop for x on unoptimized-code
 									      as pos upfrom 0
@@ -2773,7 +2781,7 @@ the sub-program options (&optional label) as secondary value."
 		(find-if (lambda (i)
 			   (and (not (instruction-is i :init-lexvar))
 				(member binding (find-read-bindings i)
-					:test #'eq #+ignore #'binding-eql)))
+					:test #'binding-eql)))
 			 (cdr init-pc)
 			 #-sbcl :end #-sbcl 15))
 	       (binding-destination (third load-instruction))
@@ -3501,11 +3509,11 @@ loading borrowed bindings."
 		    (cond
 		     ((not dest-location) ; unknown, e.g. a borrowed-binding.
 		      (append (install-for-single-value binding binding-location :ecx nil)
-			      (make-store-lexical result-mode :ecx nil frame-map)))
+			      (make-store-lexical result-mode :ecx nil funobj frame-map)))
 		     ((equal binding-location dest-location)
 		      nil)
 		     ((member binding-location '(:eax :ebx :ecx :edx))
-		      (make-store-lexical destination binding-location nil frame-map))
+		      (make-store-lexical destination binding-location nil funobj frame-map))
 		     ((member dest-location '(:eax :ebx :ecx :edx))
 		      (install-for-single-value binding binding-location dest-location nil))
 		     (t #+ignore (warn "binding => binding: ~A => ~A~% => ~A ~A"
@@ -3514,75 +3522,84 @@ loading borrowed bindings."
 				       binding
 				       destination)
 			(append (install-for-single-value binding binding-location :eax nil)
-				(make-store-lexical result-mode :eax nil frame-map))))))
+				(make-store-lexical result-mode :eax nil funobj frame-map))))))
 		 (t (make-result-and-returns-glue
 		     result-mode :eax
 		     (install-for-single-value binding binding-location :eax nil)))
 		 )))))))))
 
-(defun make-store-lexical (binding source shared-reference-p frame-map
+(defun make-store-lexical (binding source shared-reference-p funobj frame-map
 			   &key protect-registers)
   (assert (not (and shared-reference-p
 		    (not (binding-lended-p binding))))
       (binding)
     "funny binding: ~W" binding)
-  (let ((protect-registers (cons source protect-registers)))
-    (cond
-     ((eq :untagged-fixnum-ecx source)
-      (if (eq :untagged-fixnum-ecx
-	      (new-binding-location binding frame-map))
-	  nil
-	(append (make-result-and-returns-glue :ecx :untagged-fixnum-ecx)
-		(make-store-lexical binding :ecx shared-reference-p frame-map
-				    :protect-registers protect-registers))))
-     ((typep binding 'borrowed-binding)
-      (let ((slot (borrowed-binding-reference-slot binding)))
-	(if (not shared-reference-p)
-	    (let ((tmp-reg (chose-free-register protect-registers)
-			   #+ignore(if (eq source :eax) :ebx :eax)))
-	      `((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
-		       ,tmp-reg)
-		(:movl ,source (-1 ,tmp-reg))))
-	  `((:movl ,source (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot))))))))
-     ((typep binding 'forwarding-binding)
-      (assert (not (binding-lended-p binding)) (binding))
-      (make-store-lexical (forwarding-binding-target binding)
-			  source shared-reference-p frame-map))
-     ((not (new-binding-located-p binding frame-map))
-      ;; (warn "Can't store to unlocated binding ~S." binding)
-      nil)
-     ((and (binding-lended-p binding)
-	   (not shared-reference-p))
-      (let ((tmp-reg (chose-free-register protect-registers)
-		     #+ignore (if (eq source :eax) :ebx :eax))
-	    (location (new-binding-location binding frame-map)))
-	(if (integerp location)
-	    `((:movl (:ebp ,(stack-frame-offset location)) ,tmp-reg)
-	      (:movl ,source (,tmp-reg -1)))
-	  (ecase (operator location)
-	    (:argument-stack
-	     (assert (<= 2 (function-argument-argnum binding)) ()
-	       "store-lexical argnum can't be ~A." (function-argument-argnum binding))
-	     `((:movl (:ebp ,(argument-stack-offset binding)) ,tmp-reg)
-	       (:movl ,source (,tmp-reg -1))))))))
-     (t (let ((location (new-binding-location binding frame-map)))
+  (if (typep source 'constant-object-binding)
+      (make-load-constant (constant-object source) binding funobj frame-map)
+    (let ((protect-registers (cons source protect-registers))
+	  #+ignore (source (if (not (typep source 'constant-object-binding))
+			       source
+			     (etypecase (constant-object source)
+			       (movitz-null
+				:edi)
+			       (movitz-immediate-object
+				(movitz-immediate-value (constant-object source)))))))
+      (cond
+       ((eq :untagged-fixnum-ecx source)
+	(if (eq :untagged-fixnum-ecx
+		(new-binding-location binding frame-map))
+	    nil
+	  (append (make-result-and-returns-glue :ecx :untagged-fixnum-ecx)
+		  (make-store-lexical binding :ecx shared-reference-p funobj frame-map
+				      :protect-registers protect-registers))))
+       ((typep binding 'borrowed-binding)
+	(let ((slot (borrowed-binding-reference-slot binding)))
+	  (if (not shared-reference-p)
+	      (let ((tmp-reg (chose-free-register protect-registers)
+			     #+ignore(if (eq source :eax) :ebx :eax)))
+		`((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
+			 ,tmp-reg)
+		  (:movl ,source (-1 ,tmp-reg))))
+	    `((:movl ,source (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot))))))))
+       ((typep binding 'forwarding-binding)
+	(assert (not (binding-lended-p binding)) (binding))
+	(make-store-lexical (forwarding-binding-target binding)
+			    source shared-reference-p funobj frame-map))
+       ((not (new-binding-located-p binding frame-map))
+	;; (warn "Can't store to unlocated binding ~S." binding)
+	nil)
+       ((and (binding-lended-p binding)
+	     (not shared-reference-p))
+	(let ((tmp-reg (chose-free-register protect-registers)
+		       #+ignore (if (eq source :eax) :ebx :eax))
+	      (location (new-binding-location binding frame-map)))
 	  (if (integerp location)
-	      `((:movl ,source (:ebp ,(stack-frame-offset location))))
+	      `((:movl (:ebp ,(stack-frame-offset location)) ,tmp-reg)
+		(:movl ,source (,tmp-reg -1)))
 	    (ecase (operator location)
-	      ((:push)
-	       `((:pushl ,source)))
-	      ((:eax :ebx :ecx :edx)
-	       (unless (eq source location)
-		 `((:movl ,source ,location))))
 	      (:argument-stack
 	       (assert (<= 2 (function-argument-argnum binding)) ()
 		 "store-lexical argnum can't be ~A." (function-argument-argnum binding))
-	       `((:movl ,source (:ebp ,(argument-stack-offset binding)))))
-	      (:untagged-fixnum-ecx
-	       (append (unless (member source '(:ecx :untagged-fixnum-ecx))
-			 `((:movl ,source :ecx)))
-		       (unless (eq source :untagged-fixnum-ecx)
-			 `((:sarl ,+movitz-fixnum-shift+ :ecx))))))))))))
+	       `((:movl (:ebp ,(argument-stack-offset binding)) ,tmp-reg)
+		 (:movl ,source (,tmp-reg -1))))))))
+       (t (let ((location (new-binding-location binding frame-map)))
+	    (if (integerp location)
+		`((:movl ,source (:ebp ,(stack-frame-offset location))))
+	      (ecase (operator location)
+		((:push)
+		 `((:pushl ,source)))
+		((:eax :ebx :ecx :edx)
+		 (unless (eq source location)
+		   `((:movl ,source ,location))))
+		(:argument-stack
+		 (assert (<= 2 (function-argument-argnum binding)) ()
+		   "store-lexical argnum can't be ~A." (function-argument-argnum binding))
+		 `((:movl ,source (:ebp ,(argument-stack-offset binding)))))
+		(:untagged-fixnum-ecx
+		 (append (unless (member source '(:ecx :untagged-fixnum-ecx))
+			   `((:movl ,source :ecx)))
+			 (unless (eq source :untagged-fixnum-ecx)
+			   `((:sarl ,+movitz-fixnum-shift+ :ecx)))))))))))))
 
 (defun finalize-code (code funobj frame-map)
   ;; (print-code 'to-be-finalized code)
@@ -3613,7 +3630,7 @@ loading borrowed bindings."
 			 (append `((:pushl :edx)
 				   (:globally (:call (:edi (:edi-offset ensure-heap-cons-variable))))
 				   (:popl :edx))
-				 (make-store-lexical lended-binding :eax t frame-map)))
+				 (make-store-lexical lended-binding :eax t funobj frame-map)))
 		       `((:movl :eax
 				(,funobj-register
 				 ,(+ (slot-offset 'movitz-funobj 'constant0)
@@ -3696,7 +3713,7 @@ loading borrowed bindings."
 				  `((:movl (:edi ,(global-constant-offset 'copy-funobj)) :esi)
 				    (:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%1op)))
 				    (:movl :eax :edx))
-				  (make-store-lexical function-binding :eax nil frame-map)
+				  (make-store-lexical function-binding :eax nil funobj frame-map)
 				  (loop for bb in (borrowed-bindings sub-funobj)
 				      append (make-lend-lexical bb :edx nil))))))
 		    funobj frame-map)))
@@ -3762,7 +3779,7 @@ loading borrowed bindings."
 	 (movitz-null
 	  (ecase (result-mode-type result-mode)
 	    (:lexical-binding
-	     (make-store-lexical result-mode :edi nil frame-map))
+	     (make-store-lexical result-mode :edi nil funobj frame-map))
 	    (:push
 	     '((:pushl :edi)))
 	    ((:eax :ebx :ecx :edx)
@@ -3800,7 +3817,7 @@ loading borrowed bindings."
 	    (:lexical-binding
 	     (append `((:movl (:edi ,(global-constant-offset 't-symbol))
 			      :eax))
-		     (make-store-lexical result-mode :eax nil frame-map)))
+		     (make-store-lexical result-mode :eax nil funobj frame-map)))
 	    #+ignore
 	    (t (when (eq :boolean result-mode)
 		 (warn "Compiling ~S for mode ~S." object result-mode))
@@ -3812,7 +3829,7 @@ loading borrowed bindings."
 	    (ecase (result-mode-type result-mode)
 	      (:lexical-binding
 	       (append (make-immediate-move x :eax)
-		       (make-store-lexical result-mode :eax nil frame-map)))
+		       (make-store-lexical result-mode :eax nil funobj frame-map)))
 	      (:untagged-fixnum-eax
 	       (let ((value (movitz-fixnum-value object)))
 		 (check-type value (unsigned-byte 16))
@@ -3833,7 +3850,7 @@ loading borrowed bindings."
 	    (:lexical-binding
 	     (append `((:movl ,(new-make-compiled-constant-reference movitz-obj funobj)
 			      :eax))
-		     (make-store-lexical result-mode :eax nil frame-map)))
+		     (make-store-lexical result-mode :eax nil funobj frame-map)))
 	    (:push
 	     `((:pushl ,(new-make-compiled-constant-reference movitz-obj funobj))))
 	    ((:eax :ebx :ecx :edx :esi)
@@ -6049,7 +6066,7 @@ and a list of any intervening unwind-protect environment-slots."
     (declare (ignore type))
     (make-store-lexical (ensure-local-binding destination funobj)
 			(ensure-local-binding source funobj)
-			shared-reference-p frame-map
+			shared-reference-p funobj frame-map
 			:protect-registers protect-registers)))
 
 ;;;;;;;;;;;;;;;;;; Init-lexvar
@@ -6161,7 +6178,7 @@ and a list of any intervening unwind-protect environment-slots."
 	   (let* ((cons-position (getf (binding-lending binding)
 				       :stack-cons-location))
 		  (init-register (etypecase init-with-register
-				   (lexical-binding
+				   ((or lexical-binding constant-object-binding)
 				    (or (find-if (lambda (r)
 						   (not (member r protect-registers)))
 						 '(:edx :ebx :eax))
@@ -6189,7 +6206,7 @@ and a list of any intervening unwind-protect environment-slots."
 	  ((typep init-with-register 'lexical-binding)
 	   (make-load-lexical init-with-register binding funobj nil frame-map))
 	  (init-with-register
-	   (make-store-lexical binding init-with-register nil frame-map))))))))
+	   (make-store-lexical binding init-with-register nil funobj frame-map))))))))
 
 ;;;;;;;;;;;;;;;;;; car
 
@@ -6308,6 +6325,7 @@ and a list of any intervening unwind-protect environment-slots."
   nil)
 
 (define-extended-code-expander :incf-lexvar (instruction funobj frame-map)
+  (break "incf-lexvar??")
   (destructuring-bind (binding delta &key protect-registers)
       (cdr instruction)
     (check-type binding binding)
@@ -6334,7 +6352,7 @@ and a list of any intervening unwind-protect environment-slots."
 	      (:addl ,(* delta +movitz-fixnum-factor+) :eax)
 	      (:into)
 	      ,@(make-store-lexical (ensure-local-binding binding funobj)
-				    register nil frame-map
+				    register nil funobj frame-map
 				    :protect-registers protect-registers))))
        (t (let ((register (chose-free-register protect-registers)))
 	    `(,@(make-load-lexical (ensure-local-binding binding funobj)
@@ -6347,7 +6365,7 @@ and a list of any intervening unwind-protect environment-slots."
 		(:addl ,(* delta +movitz-fixnum-factor+) ,register)
 		(:into)
 		,@(make-store-lexical (ensure-local-binding binding funobj)
-				      register nil frame-map
+				      register nil funobj frame-map
 				      :protect-registers protect-registers))))))))
 
 ;;;;; Load-constant
@@ -6384,7 +6402,16 @@ and a list of any intervening unwind-protect environment-slots."
 
 (define-find-read-bindings :add (term0 term1 destination)
   (declare (ignore destination))
-  (list term0 term1))
+  (let* ((type0 (and (binding-store-type term0)
+		     (apply #'encoded-type-decode (binding-store-type term0))))
+	 (type1 (and (binding-store-type term1)
+		     (apply #'encoded-type-decode (binding-store-type term1))))
+	 (singleton0 (and type0 (type-specifier-singleton type0)))
+	 (singleton1 (and type1 (type-specifier-singleton type1))))
+    (append (unless (and singleton0 (typep (car singleton0) 'movitz-fixnum))
+	      (list term0))
+	    (unless (and singleton1 (typep (car singleton1) 'movitz-fixnum))
+	      (list term1)))))
 
 (define-extended-code-expander :add (instruction funobj frame-map)
   (destructuring-bind (term0 term1 destination)
@@ -6415,18 +6442,47 @@ and a list of any intervening unwind-protect environment-slots."
       (let ((loc0 (new-binding-location (binding-target term0) frame-map :default nil))
 	    (loc1 (new-binding-location (binding-target term1) frame-map :default nil)))
 ;;;	(warn "add: ~A" instruction)
-;;;	(warn "add for: ~S is ~A, from ~A/~A and ~A/~A."
-;;;	      destination result-type
-;;;	      term0 loc0
-;;;	      term1 loc1)
+	#+ignore
+	(warn "add for: ~S is ~A, from ~A/~A and ~A/~A."
+	      destination result-type
+	      term0 loc0
+	      term1 loc1)
 	(cond
 	 ((type-specifier-singleton result-type)
 	  ;; (break "constant add: ~S" instruction)
 	  (make-load-constant (car (type-specifier-singleton result-type))
 			      destination funobj frame-map))
+	 ((movitz-subtypep type0 '(integer 0 0))
+	  (cond
+	   ((eql destination loc1)
+	    (break "NOP add: ~S" instruction))
+	   ((and (member destination-location '(:eax :ebx :ecx :edx))
+		 (member loc1 '(:eax :ebx :ecx :edx)))
+	    `((:movl ,loc1 ,destination-location)))
+	   ((integerp loc1)
+	    (make-load-lexical term1 destination-location funobj nil frame-map))
+	   #+ignore
+	   ((integerp destination-location)
+	    (make-store-lexical destination-location loc1 nil funobj frame-map))
+	   (t (break "Unknown X zero-add: ~S" instruction))))
+	 ((movitz-subtypep type1 '(integer 0 0))
+	  ;; (warn "zero-add ~S => ~S [~S]" loc0 destination-location result-type)
+	  (cond
+	   ((eql destination loc0)
+	    (break "NOP add: ~S" instruction))
+	   ((and (member destination-location '(:eax :ebx :ecx :edx))
+		 (member loc0 '(:eax :ebx :ecx :edx)))
+	    `((:movl ,loc0 ,destination-location)))
+	   ((integerp loc0)
+	    (make-load-lexical term0 destination-location funobj nil frame-map))
+	   #+ignore
+	   ((integerp destination-location)
+	    (make-store-lexical destination-location loc0 nil funobj frame-map))
+	   (t (break "Unknown Y zero-add: ~S" instruction))))
 	 ((and (movitz-subtypep type0 'fixnum)
 	       (movitz-subtypep type1 'fixnum)
 	       (movitz-subtypep result-type 'fixnum))
+	  ;; (warn "ADDX: ~S" instruction)
 	  (cond
 	   ((and (type-specifier-singleton type0)
 		 (eq loc1 destination-location))
@@ -6449,17 +6505,24 @@ and a list of any intervening unwind-protect environment-slots."
 		 (integerp destination-location))
 	    (append `((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
 			     ,loc1))
-		    (make-store-lexical destination loc1 nil frame-map)))
-	   (t
-;;;	    (warn "ADD: ~A/~S = ~A/~S + ~A/~S,~%~A ~A"
-;;;		  destination-location
-;;;		  destination
-;;;		  loc0 term0
-;;;		  loc1 term1
-;;;		  (type-specifier-singleton type0)
-;;;		  (eq loc1 destination))
-;;;	    (warn "ADDI: ~S" instruction)
+		    (make-store-lexical destination loc1 nil funobj frame-map)))
+	   (t #+ignore (warn "ADD: ~A/~S = ~A/~S + ~A/~S,~%~A ~A"
+			     destination-location
+			     destination
+			     loc0 term0
+			     loc1 term1
+			     (type-specifier-singleton type0)
+			     (eq loc1 destination))
+;;; 	    (warn "ADDI: ~S" instruction)
 	    (append (cond
+		     ((type-specifier-singleton type0)
+		      (append (make-load-lexical term1 :eax funobj nil frame-map)
+			      (make-load-constant (car (type-specifier-singleton type0))
+						  :ebx funobj frame-map)))
+		     ((type-specifier-singleton type1)
+		      (append (make-load-lexical term0 :eax funobj nil frame-map)
+			      (make-load-constant (car (type-specifier-singleton type1))
+						  :ebx funobj frame-map)))
 		     ((and (eq :eax loc0) (eq :ebx loc1))
 		      nil)
 		     ((and (eq :ebx loc0) (eq :eax loc1))
@@ -6477,8 +6540,16 @@ and a list of any intervening unwind-protect environment-slots."
 		       (unless (eq destination :eax)
 			 `((:movl :eax ,destination))))
 		      (binding
-		       (make-store-lexical destination :eax nil frame-map)))))))
+		       (make-store-lexical destination :eax nil funobj frame-map)))))))
 	 (t (append (cond
+		     ((type-specifier-singleton type0)
+		      (append (make-load-lexical term1 :eax funobj nil frame-map)
+			      (make-load-constant (car (type-specifier-singleton type0))
+						  :ebx funobj frame-map)))
+		     ((type-specifier-singleton type1)
+		      (append (make-load-lexical term0 :eax funobj nil frame-map)
+			      (make-load-constant (car (type-specifier-singleton type1))
+						  :ebx funobj frame-map)))
 		     ((and (eq :eax loc0) (eq :ebx loc1))
 		      nil)
 		     ((and (eq :ebx loc0) (eq :eax loc1))
@@ -6496,7 +6567,7 @@ and a list of any intervening unwind-protect environment-slots."
 		       (unless (eq destination :eax)
 			 `((:movl :eax ,destination))))
 		      (binding
-		       (make-store-lexical destination :eax nil frame-map))))))))))
+		       (make-store-lexical destination :eax nil funobj frame-map))))))))))
 
 ;;;;;;;
 
