@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.3 2004/01/16 19:06:40 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.4 2004/01/19 19:21:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -867,7 +867,8 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 				   load-priority
 				   (delete-file-p nil))
   (handler-bind
-      (#+ignore ((or error warning) (lambda (c)
+      (#+sbcl (sb-ext:defconstant-uneql #'continue)
+       #+ignore ((or error warning) (lambda (c)
 			     (declare (ignore c))
 			     (format *error-output* "~&;; In file ~S:" path))))
     (unwind-protect

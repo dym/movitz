@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Jan 15 18:40:58 2004
 ;;;;                
-;;;; $Id: load.lisp,v 1.6 2004/01/19 11:23:41 ffjeld Exp $
+;;;; $Id: load.lisp,v 1.7 2004/01/19 19:21:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -63,8 +63,10 @@
 			    (do () (nil)
 			      (with-simple-restart (retry "Retry loading ~S" path)
 				(return
-				  (load (or (compile-file path :print nil)
-					    (error "Compile-file of ~S failed?" path)))))))
+				  (handler-bind 
+				      (#+sbcl (sb-ext:defconstant-uneql #'continue))
+				    (load (or (compile-file path :print nil)
+					      (error "Compile-file of ~S failed?" path))))))))
 			  '("packages"
 			    "movitz"
 			    "parse"
