@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.34 2004/07/29 12:51:40 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.35 2004/08/23 13:58:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -38,33 +38,8 @@ This variable should be initialized during bootup initialization.")
   (declare (without-check-stack-limit))	; we do it explicitly..
   (check-stack-limit))
 
-(defun stack-top ()
-  (declare (without-check-stack-limit))
-  (load-global-constant stack-top :thread-local t))
-
-(defun stack-bottom ()
-  (declare (without-check-stack-limit))
-  (load-global-constant stack-bottom :thread-local t))
-
-(defun (setf stack-top) (value)
-  (declare (without-check-stack-limit))
-  (check-type value fixnum)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) value)
-    ((:fs-override) :movl :eax (:edi #.(movitz::global-constant-offset 'stack-top)))))
-
-
-(defun (setf stack-bottom) (value)
-  (declare (without-check-stack-limit))
-  (check-type value fixnum)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) value)
-    ((:fs-override) :movl :eax (:edi #.(movitz::global-constant-offset 'stack-bottom)))))
-
-
-(defun stack-frame-uplink (stack-frame)
-  (values (truncate (stack-ref (* 4 stack-frame) 0 0 :unsigned-byte32)
-		    4)))
+(defun stack-frame-uplink (stack frame)
+  (stack-frame-ref stack frame 0))
 
 (define-compiler-macro current-stack-frame ()
   `(with-inline-assembly (:returns :eax)
@@ -72,42 +47,41 @@ This variable should be initialized during bootup initialization.")
 	    :eax)))
 
 (defun current-stack-frame ()
-  (stack-frame-uplink (current-stack-frame)))
+  (stack-frame-uplink nil (current-stack-frame)))
 
-(defun stack-frame-funobj (stack-frame &optional accept-non-funobjs)
+(defun stack-frame-funobj (stack frame)
+  (stack-frame-ref stack frame -1)
+  #+ignore
   (when stack-frame
-    (let ((x (stack-frame-ref stack-frame -1)))
+    (let ((x (stack-frame-ref stack-frame -1 stack)))
       (and (or accept-non-funobjs
 	       (typep x 'function))
 	   x))))
 
-(defun stack-frame-call-site (stack-frame)
+(defun stack-frame-call-site (stack frame)
   "Return the code-vector and offset into this vector that is immediately
 after the point that called this stack-frame."
-  (let ((funobj (stack-frame-funobj (stack-frame-uplink stack-frame))))
-    (when funobj
-      (let* ((code-vector (funobj-code-vector funobj))
-	     (x (stack-ref (* 4 stack-frame) 0 1 :unsigned-byte32))
-	     (delta (- x 8 (* #.movitz::+movitz-fixnum-factor+ (object-location code-vector)))))
-	(when (below delta (length code-vector))
-	  (values delta code-vector funobj))))))
+  (let ((uplink (stack-frame-uplink stack frame)))
+    (when (and uplink (not (= 0 uplink)))
+      (let ((funobj (stack-frame-funobj stack uplink)))
+	(when (typep funobj 'function)
+	  (let* ((code-vector (funobj-code-vector funobj))
+		 (eip (stack-frame-ref stack frame 1 :unsigned-byte32))
+		 (delta (- eip 8 (* #.movitz::+movitz-fixnum-factor+ (object-location code-vector)))))
+	    (when (below delta (length code-vector))
+	      (values delta code-vector funobj))))))))
 
-(defun stack-frame-ref (stack-frame index)
-  (if (= 0 index)
-      (stack-frame-uplink stack-frame)
-    (stack-ref (* 4 stack-frame) 0 index :lisp)))
-
-(defun stack-ref-p (pointer)
-  (let ((top (load-global-constant-u32 stack-top))
-	(bottom (with-inline-assembly (:returns :eax)
-		  (:movl :esp :eax)
-		  (:shll #.movitz:+movitz-fixnum-shift+ :eax))))
-    (<= bottom pointer top)))
-
-(defun stack-ref (pointer offset index type)
-  #+ignore (assert (stack-ref-p pointer) (pointer)
-	     "Stack pointer not in range: #x~X" pointer)
-  (memref-int pointer offset index type))
+(defun stack-frame-ref (stack frame index &optional (type ':lisp))
+  "If stack is provided, stack-frame is an index into that stack vector.
+Otherwise, stack-frame is an absolute location."
+  (cond
+   ((not (null stack))
+    (check-type stack (simple-array (unsigned-byte 32) 1))
+    (let ((pos (+ frame index)))
+      (assert (< -1 pos (length stack))
+	  () "Index ~S, pos ~S, len ~S" index pos (length stack))
+      (memref stack 2 pos type)))
+   (t (memref frame 0 index type))))
 
 (defun current-dynamic-context ()
   (with-inline-assembly (:returns :untagged-fixnum-ecx)
@@ -340,7 +314,7 @@ Obviously, this correspondence is not guaranteed to hold e.g. across GC."
 	      (* 2 (truncate (+ (structure-object-length object) 1) 2))))))))
 
 
-(defun copy-control-stack (&key (absolutep)
+(defun copy-control-stack (&key (relative-uplinks t)
 				(stack (%run-time-context-slot 'stack-vector))
 				(frame (current-stack-frame)))
   (assert (location-in-object-p stack frame))
@@ -359,9 +333,13 @@ Obviously, this correspondence is not guaranteed to hold e.g. across GC."
 	      (assert (< -1 uplink-index (length copy)) ()
 		"Uplink-index outside copy: ~S, i: ~S" uplink-index i)
 	      (setf (svref%unsafe copy i)
-		(if absolutep
+		(if relative-uplinks
 		    uplink-index
 		  (let ((x (+ uplink-index copy-start-location)))
-		    (assert (location-in-object-p copy x))
-		    (setf (svref%unsafe copy i) x))))
+		    (assert (= copy-start-location (+ 2 (object-location copy))) ()
+		      "Destination stack re-located!")
+		    (assert (location-in-object-p copy x) ()
+		      "Bad uplink ~S computed from index ~S and copy ~Z, csl: ~S"
+		      x uplink-index copy copy-start-location)
+		    x)))
 	      (setf i uplink-index))))))))

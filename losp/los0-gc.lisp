@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.33 2004/07/27 13:53:33 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.34 2004/08/23 13:58:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -368,7 +368,7 @@ duo-space where each space is KB-SIZE kilobytes."
 		 nil
 	       x)))
       (map-heap-words #'zap-oldspace 0 (malloc-end))
-      (map-stack-words #'zap-oldspace (current-stack-frame))
+      (map-stack-words #'zap-oldspace nil (current-stack-frame))
       (initialize-space oldspace)
       (values))))
 
@@ -377,92 +377,95 @@ duo-space where each space is KB-SIZE kilobytes."
 
 (defun stop-and-copy (&optional evacuator)
   (setf (fill-pointer *x*) 0)
-  (let* ((space0 (%run-time-context-slot 'nursery-space))
-	 (space1 (space-other space0)))
-    (check-type space0 vector-u32)
-    (check-type space1 vector-u32)
-    (assert (eq space0 (space-other space1)))
-    (multiple-value-bind (newspace oldspace)
-	(if (< (space-fresh-pointer space0) ; Chose the emptiest space as newspace.
-	       (space-fresh-pointer space1))
-	    (values space0 space1)
-	  (values space1 space0))
-      ;; Ensure newspace is activated.
-      (setf (%run-time-context-slot 'nursery-space) newspace)
-      ;; Evacuate-oldspace is to be mapped over every potential pointer.
-      (let ((evacuator
-	     (or evacuator
-		 (lambda (x location)
-		   "If x is in oldspace, migrate it to newspace."
-		   (declare (ignore location))
-		   (cond
-		    ((not (object-in-space-p oldspace x))
-		     x)
-		    (t (let ((forwarded-x (memref (object-location x) 0 0 :lisp)))
-			 (if (object-in-space-p newspace forwarded-x)
-			     (progn
-			       (assert (eq (object-tag forwarded-x)
-					   (object-tag x)))
-			       forwarded-x)
-			   (let ((forward-x (shallow-copy x)))
-			     (when (and (typep x 'muerte::pointer)
-					*gc-consitency-check*)
-			       (let ((a *x*))
-				 (vector-push (%object-lispval x) a)
-				 (vector-push (memref (object-location x) 0 0 :unsigned-byte32) a)
-				 (assert (vector-push (%object-lispval forward-x) a))))
-			     (setf (memref (object-location x) 0 0 :lisp) forward-x)
-			     forward-x)))))))))
-	(setf *gc-stack* (muerte::copy-control-stack))
-	;; Scavenge roots
-	(dolist (range muerte::%memory-map-roots%)
-	  (map-heap-words evacuator (car range) (cdr range)))
-	(map-stack-words evacuator (current-stack-frame))
-	;; Scan newspace, Cheney style.
-	(loop with newspace-location = (+ 2 (object-location newspace))
-	    with scan-pointer = 2
-	    as fresh-pointer = (space-fresh-pointer newspace)
-	    while (< scan-pointer fresh-pointer)
-	    do (map-heap-words evacuator
-			       (+ newspace-location scan-pointer)
-			       (+ newspace-location (space-fresh-pointer newspace)))
-	       (setf scan-pointer fresh-pointer))
+  (multiple-value-bind (newspace oldspace)
+      (without-interrupts
+	(let* ((space0 (%run-time-context-slot 'nursery-space))
+	       (space1 (space-other space0)))
+	  (check-type space0 vector-u32)
+	  (check-type space1 vector-u32)
+	  (assert (eq space0 (space-other space1)))
+	  (multiple-value-bind (newspace oldspace)
+	      (if (< (space-fresh-pointer space0) ; Chose the emptiest space as newspace.
+		     (space-fresh-pointer space1))
+		  (values space0 space1)
+		(values space1 space0))
+	    ;; Ensure newspace is activated.
+	    (setf (%run-time-context-slot 'nursery-space) newspace)
+	    (values newspace oldspace))))
+    ;; Evacuate-oldspace is to be mapped over every potential pointer.
+    (let ((evacuator
+	   (or evacuator
+	       (lambda (x location)
+		 "If x is in oldspace, migrate it to newspace."
+		 (declare (ignore location))
+		 (cond
+		  ((not (object-in-space-p oldspace x))
+		   x)
+		  (t (let ((forwarded-x (memref (object-location x) 0 0 :lisp)))
+		       (if (object-in-space-p newspace forwarded-x)
+			   (progn
+			     (assert (eq (object-tag forwarded-x)
+					 (object-tag x)))
+			     forwarded-x)
+			 (let ((forward-x (shallow-copy x)))
+			   (when (and (typep x 'muerte::pointer)
+				      *gc-consitency-check*)
+			     (let ((a *x*))
+			       (vector-push (%object-lispval x) a)
+			       (vector-push (memref (object-location x) 0 0 :unsigned-byte32) a)
+			       (assert (vector-push (%object-lispval forward-x) a))))
+			   (setf (memref (object-location x) 0 0 :lisp) forward-x)
+			   forward-x)))))))))
+      (setf *gc-stack* (muerte::copy-control-stack))
+      ;; Scavenge roots
+      (dolist (range muerte::%memory-map-roots%)
+	(map-heap-words evacuator (car range) (cdr range)))
+      (map-stack-words evacuator nil (current-stack-frame))
+      ;; Scan newspace, Cheney style.
+      (loop with newspace-location = (+ 2 (object-location newspace))
+	  with scan-pointer = 2
+	  as fresh-pointer = (space-fresh-pointer newspace)
+	  while (< scan-pointer fresh-pointer)
+	  do (map-heap-words evacuator
+			     (+ newspace-location scan-pointer)
+			     (+ newspace-location (space-fresh-pointer newspace)))
+	     (setf scan-pointer fresh-pointer))
 
-	;; Consistency check..
-	(when *gc-consitency-check*
-	  (let ((a *x*))
-	    ;; First, restore the state of old-space
-	    (do ((i 0 (+ i 3)))
-		((>= i (length a)))
-	      (let ((old (%lispval-object (aref a i)))
-		    (old-class (aref a (+ i 1))))
-		(setf (memref (object-location old) 0 0 :unsigned-byte32) old-class)))
-	    ;; Then, check that each migrated object is equalp to its new self.
-	    (do ((i 0 (+ i 3)))
-		((>= i (length a)))
-	      (let ((old (%lispval-object (aref a i)))
-		    (new (%lispval-object (aref a (+ i 2)))))
-		(unless (and (object-in-space-p newspace new)
-			     (object-in-space-p oldspace old)
-			     (objects-equalp old new))
-		  (let ((*old* old)
-			(*new* new)
-			(*old-class* (aref a (+ i 1))))
-		    (declare (special *old* *new* *old-class*))
-		    (with-simple-restart (continue "Ignore failed GC consistency check.")
-		      (error "GC consistency check failed:
+      ;; Consistency check..
+      (when *gc-consitency-check*
+	(let ((a *x*))
+	  ;; First, restore the state of old-space
+	  (do ((i 0 (+ i 3)))
+	      ((>= i (length a)))
+	    (let ((old (%lispval-object (aref a i)))
+		  (old-class (aref a (+ i 1))))
+	      (setf (memref (object-location old) 0 0 :unsigned-byte32) old-class)))
+	  ;; Then, check that each migrated object is equalp to its new self.
+	  (do ((i 0 (+ i 3)))
+	      ((>= i (length a)))
+	    (let ((old (%lispval-object (aref a i)))
+		  (new (%lispval-object (aref a (+ i 2)))))
+	      (unless (and (object-in-space-p newspace new)
+			   (object-in-space-p oldspace old)
+			   (objects-equalp old new))
+		(let ((*old* old)
+		      (*new* new)
+		      (*old-class* (aref a (+ i 1))))
+		  (declare (special *old* *new* *old-class*))
+		  (with-simple-restart (continue "Ignore failed GC consistency check.")
+		    (error "GC consistency check failed:
 old object: ~Z: ~S
 new object: ~Z: ~S
 oldspace: ~Z, newspace: ~Z, i: ~D"
-			     old old new new oldspace newspace i))))))))
+			   old old new new oldspace newspace i))))))))
 
-	;; GC completed, oldspace is evacuated.
-	(unless *gc-quiet*
-	  (let ((old-size (truncate (- (space-fresh-pointer oldspace) 2) 2))
-		(new-size (truncate (- (space-fresh-pointer newspace) 2) 2)))
-	    (format t "Old space: ~/muerte:pprint-clumps/, new space: ~
+      ;; GC completed, oldspace is evacuated.
+      (unless *gc-quiet*
+	(let ((old-size (truncate (- (space-fresh-pointer oldspace) 2) 2))
+	      (new-size (truncate (- (space-fresh-pointer newspace) 2) 2)))
+	  (format t "Old space: ~/muerte:pprint-clumps/, new space: ~
 ~/muerte:pprint-clumps/, freed: ~/muerte:pprint-clumps/.~%"
-		    old-size new-size (- old-size new-size))))
-	(initialize-space oldspace)
-	(fill oldspace #x13 :start 2))))
+		  old-size new-size (- old-size new-size))))
+      (initialize-space oldspace)
+      #+ignore (fill oldspace #x13 :start 2)))
   (values))

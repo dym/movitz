@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.21 2004/08/12 17:45:39 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.22 2004/08/23 13:58:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -121,18 +121,19 @@
       (:ecx . (#xff #x56 #.(cl:ldb (cl:byte 8 0)
 			    (bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector))))))
 
-(defun stack-frame-numargs (stack-frame)
+(defun stack-frame-numargs (stack frame)
   "Try to determine how many arguments was presented to the stack-frame."
-  (if (eq (stack-frame-funobj stack-frame)
+  (if (eq (stack-frame-funobj stack frame)
 	  (load-global-constant complicated-class-of))
       1
-    (multiple-value-bind (call-site code)
-	(stack-frame-call-site stack-frame)
+    (multiple-value-bind (call-site code funobj)
+	(stack-frame-call-site stack frame)
       (when (and call-site code)
 	(dolist (map +call-site-numargs-maps+
-		  (warn "no match at ~D for ~S."
+		  (warn "no match at ~D for ~S frame ~S [~S]."
 			call-site
-			(stack-frame-funobj (stack-frame-uplink stack-frame))))
+			(stack-frame-funobj stack (stack-frame-uplink stack frame))
+			frame funobj))
 	  (when (not (mismatch code (cdr map)
 			       :start1 (- call-site (length (cdr map)))
 			       :end1 call-site))
@@ -262,17 +263,17 @@ It is quite possible to return success without having found the result-{register
 		 #xff #x56 (:code-vector)))) ; #<asm CALL [#x6+%ESI]>
       ))
 
-(defun call-site-find (stack-frame register)
+(defun call-site-find (stack frame register)
   "Based on call-site's code, figure out where eax and ebx might be
 located in the caller's stack-frame or funobj-constants."
   (macrolet ((success (result)
 	       `(return-from call-site-find (values ,result t))))
     (multiple-value-bind (call-site-ip code-vector funobj)
-	(stack-frame-call-site stack-frame)
+	(stack-frame-call-site stack frame)
       (when (eq funobj #'apply)
-	(let ((apply-frame (stack-frame-uplink stack-frame)))
-	  (when (eq 2 (stack-frame-numargs apply-frame))
-	    (let ((applied (call-site-find apply-frame :ebx)))
+	(let ((apply-frame (stack-frame-uplink stack frame)))
+	  (when (eq 2 (stack-frame-numargs stack apply-frame))
+	    (let ((applied (call-site-find stack apply-frame :ebx)))
 	      ;; (warn "reg: ~S, applied: ~S" register applied)
 	      (case register
 		(:eax (success (first applied)))
@@ -287,7 +288,8 @@ located in the caller's stack-frame or funobj-constants."
 			    (:constant
 			     (success result-position))
 			    (:ebp
-			     (success (stack-frame-ref (stack-frame-uplink stack-frame)
+			     (success (stack-frame-ref stack
+						       (stack-frame-uplink stack frame)
 						       (signed8-index result-position))))
 			    (:esi
 			     (when funobj
@@ -297,7 +299,7 @@ located in the caller's stack-frame or funobj-constants."
 							   #.(bt:slot-offset 'movitz::movitz-funobj
 									     'movitz::constant0)))))))
 			    (:esp
-			     (success (stack-frame-ref stack-frame
+			     (success (stack-frame-ref stack frame
 						       (+ 2 (signed8-index result-position))))))))))))))
 
 (defparameter *stack-frame-setup-patterns*
@@ -357,17 +359,17 @@ be provided for those cases."
 	   (when (match-code-pattern (car pattern-map) code-vector setup-start)
 	     (return pattern-map))))))
 
-(defun print-stack-frame-arglist (stack-frame stack-frame-map
-				  &key (numargs (stack-frame-numargs stack-frame))
+(defun print-stack-frame-arglist (stack frame stack-frame-map
+				  &key (numargs (stack-frame-numargs stack frame))
 				       (edx-p nil))
-  (flet ((stack-frame-register-value (register stack-frame stack-map-pos)
+  (flet ((stack-frame-register-value (stack frame register stack-map-pos)
 	   (multiple-value-bind (val success-p)
-	       (call-site-find stack-frame register)
+	       (call-site-find stack frame register)
 	     (cond
 	      (success-p
 	       (values val t))
 	      (stack-map-pos
-	       (values (stack-frame-ref stack-frame stack-map-pos)
+	       (values (stack-frame-ref stack frame stack-map-pos)
 		       t))
 	      (t (values nil nil)))))
 	 (debug-write (x)
@@ -389,7 +391,7 @@ be provided for those cases."
 	(write-string " ...")
       (prog () ;; (numargs (min numargs *backtrace-max-args*)))
 	(multiple-value-bind (edx foundp)
-	    (stack-frame-register-value :edx stack-frame (pop stack-frame-map))
+	    (stack-frame-register-value stack frame :edx (pop stack-frame-map))
 	  (when edx-p
 	    (write-string " {edx: ")
 	    (if foundp
@@ -400,9 +402,9 @@ be provided for those cases."
 	  (return))
 	(write-char #\space)
 	(if (first stack-frame-map)
-	    (debug-write (stack-frame-ref stack-frame (first stack-frame-map)))
+	    (debug-write (stack-frame-ref stack frame (first stack-frame-map)))
 	  (multiple-value-bind (eax eax-p)
-	      (call-site-find stack-frame :eax)
+	      (call-site-find stack frame :eax)
 	    (if eax-p
 		(debug-write eax)
 	      (write-string "{eax unknown}"))))
@@ -410,9 +412,9 @@ be provided for those cases."
 	  (return))
 	(write-char #\space)
 	(if (second stack-frame-map)
-	    (debug-write (stack-frame-ref stack-frame (second stack-frame-map)))
+	    (debug-write (stack-frame-ref stack frame (second stack-frame-map)))
 	  (multiple-value-bind (ebx ebx-p)
-	      (call-site-find stack-frame :ebx)
+	      (call-site-find stack frame :ebx)
 	    (if ebx-p
 		(debug-write ebx)
 	      (write-string "{ebx unknown}"))))
@@ -422,7 +424,7 @@ be provided for those cases."
 		 (write-string " ...")
 		 (return))
 	       (write-char #\space)
-	       (debug-write (stack-frame-ref stack-frame i))))))
+	       (debug-write (stack-frame-ref stack frame i))))))
   (values))
 
 (defun safe-print-stack-frame-arglist (&rest args)
@@ -432,11 +434,17 @@ be provided for those cases."
       (declare (ignore conditon))
       (write-string "#<error printing frame>"))))
 
-(defun backtrace (&key stack
-		       ((:frame initial-stack-frame)
-			(or (and stack (svref%unsafe stack 0))
-			    *debugger-invoked-stack-frame*
-			    (current-stack-frame)))
+(defun location-index (vector location)
+  (assert (location-in-object-p vector location))
+  (- location (object-location vector) 2))
+
+(defun backtrace (&key (stack nil)
+		       ((:frame initial-stack-frame-index)
+			(if stack
+			    (stack-frame-ref stack 0 0)
+			  (or *debugger-invoked-stack-frame*
+			      (current-stack-frame))))
+		       ;; (relative-uplinks (not (eq stack (%run-time-context-slot 'stack-vector))))
 		       ((:spartan *backtrace-be-spartan-p*))
 		       ((:fresh-lines *backtrace-do-fresh-lines*) *backtrace-do-fresh-lines*)
 		       (conflate *backtrace-do-conflate*)
@@ -448,13 +456,14 @@ be provided for those cases."
 	(*print-length* *backtrace-print-length*)
 	(*print-level* *backtrace-print-level*))
     (loop with conflate-count = 0 with count = 0
-	for stack-frame = initial-stack-frame
-	then (let ((uplink (stack-frame-uplink stack-frame)))
-	       (assert (> uplink stack-frame) ()
-		 "Backtracing uplink ~S from frame ~S." uplink stack-frame)
+	for frame = initial-stack-frame-index
+	then (let ((uplink (stack-frame-uplink stack frame)))
+	       (assert (> uplink frame) ()
+		 "Backtracing uplink ~S from frame index ~S." uplink frame)
 	       uplink)
-	as funobj = (stack-frame-funobj stack-frame t)
-	do (flet ((print-leadin (stack-frame count conflate-count)
+	     ;; as xxx = (warn "frame: ~S" frame)
+	as funobj = (stack-frame-funobj stack frame)
+	do (flet ((print-leadin (stack frame count conflate-count)
 		    (when *backtrace-do-fresh-lines*
 		      (fresh-line))
 		    (cond
@@ -466,13 +475,13 @@ be provided for those cases."
 		      (write-char #\space))
 		     (t (format t "~& |= ")))
 		    (when print-returns
-		      (format t "{< ~D}" (stack-frame-call-site stack-frame)))
+		      (format t "{< ~D}" (stack-frame-call-site stack frame)))
 		    (when *backtrace-print-frames*
-		      (format t "#x~X " stack-frame))))
+		      (format t "#x~X " frame))))
 	     (typecase funobj
-	       (integer
-		(let* ((interrupt-frame stack-frame)
-		       (funobj (dit-frame-ref :esi :lisp 0 interrupt-frame)))
+	       ((eql 0)
+		(let* ((dit-frame (if (null stack) frame (+ frame 2 (object-location stack))))
+		       (funobj (dit-frame-ref :esi :lisp 0 dit-frame)))
 		  (if (and conflate-interrupts conflate
 			   ;; When the interrupted function has a stack-frame, conflate it.
 			   (typep funobj 'function)
@@ -480,55 +489,55 @@ be provided for those cases."
 		      (incf conflate-count)
 		    (progn
 		      (incf count)
-		      (print-leadin stack-frame count conflate-count)
+		      (print-leadin stack frame count conflate-count)
 		      (setf conflate-count 0)
 		      (let ((exception (dit-frame-ref :exception-vector :unsigned-byte32
-							    0 interrupt-frame))
+						      0 dit-frame))
 			    (eip (dit-frame-ref :eip :unsigned-byte32
-						      0  interrupt-frame)))
+						      0 dit-frame)))
 			(typecase funobj
 			  (function
 			   (let ((delta (code-vector-offset (funobj-code-vector funobj) eip)))
 			     (if delta
 				 (format t "{Exception ~D in ~W at PC offset ~D."
 					 exception (funobj-name funobj) delta)
-			       (format t "{Exception ~D in ~W at EIP=#x~X. [#x~X]}"
-				       exception (funobj-name funobj) eip interrupt-frame))))
-			  (t (format t "{Exception ~D with ESI=#x~Z and EIP=#x~X. [#x~X]}"
-				     exception funobj eip interrupt-frame))))))))
+			       (format t "{Exception ~D in ~W at EIP=#x~X.}"
+				       exception (funobj-name funobj) eip))))
+			  (t (format t "{Exception ~D with ESI=~Z and EIP=#x~X.}"
+				     exception funobj eip))))))))
 	       (function
 		(let ((name (funobj-name funobj)))
 		  (cond
 		   ((and conflate (member name *backtrace-conflate-names* :test #'equal))
 		    (incf conflate-count))
 		   (t (incf count)
-		      (when (and *backtrace-stack-frame-barrier*
-				 (<= *backtrace-stack-frame-barrier* stack-frame))
-			(write-string " --|")
-			(return))
+		      #+ignore (when (and *backtrace-stack-frame-barrier*
+					  (<= *backtrace-stack-frame-barrier* stack-frame))
+				 (write-string " --|")
+				 (return))
 		      (unless (or (not (integerp length))
 				  (< count length))
 			(write-string " ...")
 			(return))
-		      (print-leadin stack-frame count conflate-count)
+		      (print-leadin stack frame count conflate-count)
 		      (setf conflate-count 0)
 		      (write-char #\()
-		      (let* ((numargs (stack-frame-numargs stack-frame))
+		      (let* ((numargs (stack-frame-numargs stack frame))
 			     (map (and funobj (funobj-stack-frame-map funobj numargs))))
 			(cond
 			 ((and (car map) (eq name 'unbound-function))
-			  (let ((real-name (stack-frame-ref stack-frame (car map))))
+			  (let ((real-name (stack-frame-ref stack frame (car map))))
 			    (format t "{unbound ~S}" real-name)))
 			 ((and (car map)
 			       (member name +backtrace-gf-discriminatior-functions+))
-			  (let ((gf (stack-frame-ref stack-frame (car map))))
+			  (let ((gf (stack-frame-ref stack frame (car map))))
 			    (cond
 			     ((typep gf 'muerte::standard-gf-instance)
 			      (format t "{gf ~S}" (funobj-name gf)))
 			     (t (write-string "[not a gf??]")))
-			    (safe-print-stack-frame-arglist stack-frame map :numargs numargs)))
+			    (safe-print-stack-frame-arglist stack frame map :numargs numargs)))
 			 (t (write name)
-			    (safe-print-stack-frame-arglist stack-frame map
+			    (safe-print-stack-frame-arglist stack frame map
 							    :numargs numargs
 							    :edx-p (eq 'muerte::&edx
 								       (car (funobj-lambda-list funobj)))))))

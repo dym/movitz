@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.11 2004/07/23 15:35:45 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.12 2004/08/23 13:58:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -285,7 +285,7 @@ Return the condition object, if there was one."
 			(format t "~%Condition for debugger: ~Z" condition)
 			(format t "~%No abort restart is active. Halting CPU.")
 			(halt-cpu))))
-   (t (let ((*debugger-invoked-stack-frame* (stack-frame-uplink (current-stack-frame))))
+   (t (let ((*debugger-invoked-stack-frame* (stack-frame-uplink nil (current-stack-frame))))
 	(funcall *debugger-function* condition))))
   (format *debug-io* "~&Debugger ~@[on ~S ]returned!~%Trying to abort...~%" condition)
   (let ((r (find-restart 'abort)))
