@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.1 2004/01/13 11:04:59 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.2 2004/01/15 16:38:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -107,6 +107,16 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
     (when (slot-boundp object 'name)
       (write (movitz-funobj-name object) :stream stream)))
   object)
+
+(defun movitz-macro-expander-make-function (lambda-form
+				       &key (name (gensym "macro-expander-"))
+					    (type :unknown))
+  "Make a lambda-form that is a macro-expander into a proper function."
+  (declare (ignore type))
+  (check-type name symbol)
+  (if *compiler-compile-macro-expanders*
+      (compile name lambda-form)
+    (coerce lambda-form 'function)))
 
 (defun make-compiled-funobj (&rest args)
   (handler-bind (((or warning error)
