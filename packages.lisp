@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.34 2004/07/20 12:39:16 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.35 2004/08/09 14:39:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1366,6 +1366,7 @@
 	   #:*compiler-auto-stack-checks-p*
 	   #:*compiler-local-segment-prefix*
 	   #:*compiler-global-segment-prefix*
+	   #:*compiler-physical-segment-prefix*
 	   #:*compiler-compile-eval-whens*
 	   #:*compiler-compile-macro-expanders*
 	   #:*compiler-allow-untagged-word-bits*

@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.90 2004/08/09 13:38:20 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.91 2004/08/09 14:39:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -43,6 +43,10 @@ run-time context.")
 (defvar *compiler-global-segment-prefix* nil
   "Use these assembly-instruction prefixes when accessing the global
 run-time context.")
+
+(defvar *compiler-physical-segment-prefix* '(:gs-override)
+  "Use this instruction prefix when accessing a physical memory location
+(i.e. typically some memory-mapped hardware device).")
 
 (defvar *compiler-allow-untagged-word-bits* 0
   "Allow (temporary) untagged values of this bit-size to exist, because

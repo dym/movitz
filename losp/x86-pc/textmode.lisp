@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  9 15:38:56 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: textmode.lisp,v 1.9 2004/07/29 12:48:35 ffjeld Exp $
+;;;; $Id: textmode.lisp,v 1.10 2004/08/09 14:39:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -116,8 +116,8 @@
     (:shrl 1 :ebx)
     (:jz 'end-copy-loop)
    copy-loop
-    ((:gs-override) :movl (:eax :ebx -4) :ecx)
-    ((:gs-override) :movl :ecx (:edx :ebx -4))
+    (#.movitz:*compiler-physical-segment-prefix* :movl (:eax :ebx -4) :ecx)
+    (#.movitz:*compiler-physical-segment-prefix* :movl :ecx (:edx :ebx -4))
     (:subl 4 :ebx)
     (:ja 'copy-loop)
    end-copy-loop
@@ -180,26 +180,27 @@
        (:shrl #.movitz:+movitz-fixnum-shift+ :ebx)
        (:movb 2 :cl)
 
-       ((:gs-override) :movl #x07000700 (:ebx 0))
-       ((:gs-override) :movl #x07000700 (:ebx 4))
-       ((:gs-override) :movl #x07000700 (:ebx 8))
-       ((:gs-override) :movl #x07000700 (:ebx 12))
+       (,movitz:*compiler-physical-segment-prefix*
+	:movl #x07000700 (:ebx 0))
+       (,movitz:*compiler-physical-segment-prefix* :movl #x07000700 (:ebx 4))
+       (,movitz:*compiler-physical-segment-prefix* :movl #x07000700 (:ebx 8))
+       (,movitz:*compiler-physical-segment-prefix* :movl #x07000700 (:ebx 12))
        ,loop-label
 
        (:andl #x0f0f0f0f :eax)
        (:addl #x30303030 :eax)
 
        (:cmpb #x39 :al) (:jle ',l1) (:addb 7 :al)
-       ,l1 ((:gs-override) :movb :al (14 :ebx)) ; 8
+       ,l1 (,movitz:*compiler-physical-segment-prefix* :movb :al (14 :ebx)) ; 8
        (:cmpb #x39 :ah) (:jle ',l2) (:addb 7 :ah)
-       ,l2 ((:gs-override) :movb :ah (10 :ebx))	; 6
+       ,l2 (,movitz:*compiler-physical-segment-prefix* :movb :ah (10 :ebx)) ; 6
 
        (:shrl 16 :eax)
       
        (:cmpb #x39 :al) (:jle ',l3) (:addb 7 :al)
-       ,l3 ((:gs-override) :movb :al (6 :ebx))		; 4
+       ,l3 (,movitz:*compiler-physical-segment-prefix* :movb :al (6 :ebx))		; 4
        (:cmpb #x39 :ah) (:jle ',l4) (:addb 7 :ah)
-       ,l4 ((:gs-override) :movb :ah (2 :ebx))		; 2
+       ,l4 (,movitz:*compiler-physical-segment-prefix* :movb :ah (2 :ebx))		; 2
 
        (:movl :edx :eax)
        (:shrl 4 :eax)

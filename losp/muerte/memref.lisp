@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.23 2004/08/06 14:46:45 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.24 2004/08/09 14:39:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -628,7 +628,9 @@
 	  (not (movitz:movitz-constantp physicalp env)))
       form
     (let* ((physicalp (movitz::eval-form physicalp env))
-	   (prefixes (if physicalp '(:gs-override) ())))
+	   (prefixes (if (not physicalp)
+			 ()
+		       movitz:*compiler-physical-segment-prefix*)))
       (ecase (movitz::eval-form type)
 	(:lisp
 	 `(with-inline-assembly (:returns :eax)
@@ -720,7 +722,9 @@
 	(warn "setf memref-int form: ~S, ~S ~S" form type physicalp)
 	form)
     (let* ((physicalp (movitz::eval-form physicalp env))
-	   (prefixes (if physicalp '(:gs-override) ())))
+	   (prefixes (if (not physicalp)
+			 ()
+		       movitz:*compiler-physical-segment-prefix*)))
       (ecase type
 	(:unsigned-byte32
 	 (assert (= 4 movitz:+movitz-fixnum-factor+))
