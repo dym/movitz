@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.2 2004/01/19 11:23:43 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.3 2004/02/10 23:38:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,7 +19,7 @@
 (require :x86-pc/all)
 (require :x86-pc/io-space)
 (require :x86-pc/ne2k)
-(require :x86-pc/floppy)
+;; (require :x86-pc/floppy)
 
 (require :lib/readline)
 (require :lib/toplevel)
@@ -428,14 +428,13 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
 
 
 
-
-#+ignore
+s#+ignore
 (defun test-ncase (x y z)
   (numargs-case
    (1 (x) (values x 'one))
    (2 (x y) (values (+ x y) 'one 'two))
    (3 (x y z) (values (+ x y z) 'one 'two 'three))
-   (t (&rest args) (declare (ignore args)) 27)))
+   (t (args) (declare (ignore args)) 27)))
 
 #+ignore
 (defun xbar ()
@@ -488,8 +487,8 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
   (declare (ignore f))
   (print "Cooking some food."))
 
-(defun foo (x)
-  (funcall (cdr x) 'abba))
+(defun foo (x &optional (y nil yp))
+  (format t "~@{ ~A~}" yp))
 
 (defun test-pie (n pie)
   (dotimes (i n)
