@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.65 2004/06/09 20:24:29 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.66 2004/06/09 22:55:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -470,9 +470,6 @@ Side-effects each binding's binding-store-type."
 			     (type-specifier-encode 'list)))))
 		 binding-usage))))
   toplevel-funobj)
-
-(defmethod (setf borrowed-bindings) :before (x y)
-  (break "About to set borroweds for ~S to ~S." y x))
 
 (defun resolve-borrowed-bindings (toplevel-funobj)
   "For <funobj>'s code, for every non-local binding used we create
