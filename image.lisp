@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.43 2004/07/09 11:16:24 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.44 2004/07/09 16:12:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -284,6 +284,12 @@
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
+   (+
+    :initform 'muerte.cl:+
+    :binary-type word
+    :binary-tag :global-function
+    :map-binary-write 'movitz-intern
+    :map-binary-read-delayed 'movitz-word)
    (complicated-class-of
     :binary-type word
     :binary-tag :global-function
@@ -734,6 +740,13 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
      (check-type (cdr object) movitz-funobj)
      (+ (car object) (movitz-intern-code-vector (cdr object) type)))))
 
+(defun movitz-intern-global-function (object &optional (type 'word))
+  (assert (eq type 'word))
+  (check-type object symbol)
+  (let ((x (movitz-env-named-function object)))
+    (check-type x movitz-funobj)
+    (movitz-intern x 'word)))
+
 (defun movitz-word-code-vector (word &optional (type 'code-vector-word))
   (assert (eq type 'code-vector-word))
   (movitz-word (- word +code-vector-word-offset+)))
@@ -853,7 +866,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	  ;; pull in functions in constant-block
 	  (dolist (gcf-name (binary-record-slot-names 'movitz-constant-block :match-tags :global-function))
 	    (let* ((gcf-movitz-name (movitz-read (intern (symbol-name gcf-name)
-						  ':muerte)))
+							 ':muerte)))
 		   (gcf-funobj (movitz-symbol-function-value gcf-movitz-name)))
 	      (setf (slot-value constant-block gcf-name) 0)
 	      (cond
