@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.13 2004/05/19 15:02:50 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.14 2004/06/07 22:14:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -468,28 +468,37 @@
   
 
 ;;;
+  (defvar *slot-location-nesting* 0)
   (defun slot-location (class slot-name)
-    (cond
-     ((and (eq slot-name 'effective-slots)
-	   (eq class *the-class-standard-class*))
-      (position 'effective-slots *the-slots-of-standard-class*
-		:key #'slot-definition-name))
-     ((eq class (movitz-find-class 'standard-effective-slot-definition nil))
-      (or (position slot-name '(name type initform initfunction initargs allocation location))
-	  (error "No slot ~S in ~S." slot-name (movitz-class-name class))))
-     (t (let ((slot (find slot-name
-			  (std-slot-value class 'effective-slots)
-			  :key #'slot-definition-name)))
-	  (if (null slot)
-	      (error "Closette compiler: The slot ~S is missing from the class ~S."
-		     slot-name class)
-	    (let ((pos (position slot
-				 (remove-if-not #'instance-slot-p
-						(std-slot-value class 'effective-slots)))))
-	      (if (null pos)
-		  (error "Closette compiler: The slot ~S is not an instance slot in the class ~S."
-			 slot-name class)
-		pos)))))))
+    (when (< 10 *slot-location-nesting*)
+      (break "Unbounded slot-location?"))
+    (let ((*slot-location-nesting* (1+ *slot-location-nesting*)))
+      (cond
+       ((and (eq slot-name 'effective-slots)
+	     (eq class *the-class-standard-class*))
+	(position 'effective-slots *the-slots-of-standard-class*
+		  :key #'slot-definition-name))
+       ((eq class (movitz-find-class 'standard-effective-slot-definition nil))
+	(or (position slot-name '(name type initform initfunction initargs allocation location))
+	    (error "No slot ~S in ~S." slot-name (movitz-class-name class))))
+       (t #+ignore
+	  (when (and (eq slot-name 'effective-slots)
+		     (subclassp class *the-class-standard-class*))
+	    (break "Looking for slot ~S in class ~S, while std-class is ~S."
+		   slot-name class *the-class-standard-class*))
+	(let ((slot (find slot-name
+			    (std-slot-value class 'effective-slots)
+			    :key #'slot-definition-name)))
+	    (if (null slot)
+		(error "Closette compiler: The slot ~S is missing from the class ~S."
+		       slot-name class)
+	      (let ((pos (position slot
+				   (remove-if-not #'instance-slot-p
+						  (std-slot-value class 'effective-slots)))))
+		(if (null pos)
+		    (error "Closette compiler: The slot ~S is not an instance slot in the class ~S."
+			   slot-name class)
+		  pos))))))))
   
   (defun movitz-class-of (instance)
     (std-instance-class instance))
