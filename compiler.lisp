@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.38 2004/03/30 19:23:40 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.39 2004/03/31 15:55:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -43,6 +43,12 @@ run-time context.")
 (defvar *compiler-global-segment-prefix* nil
   "Use these assembly-instruction prefixes when accessing the global
 run-time context.")
+
+(defvar *compiler-allow-untagged-word-bits* 0
+  "Allow (temporary) untagged values of this bit-size to exist, because
+the system ensures one way or another that there can be no pointers below
+this size.")
+
 
 (defvar *compiler-compile-eval-whens* t
   "When encountering (eval-when (:compile-toplevel) <code>),
