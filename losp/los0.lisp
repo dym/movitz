@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.5 2004/03/24 13:25:13 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.6 2004/03/25 09:24:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -595,9 +595,6 @@ s#+ignore
 	(memref-int #x1000004 0 0 :unsigned-byte8)))
 
 
-
-
-
 ;;;;;
 
 ;;;;;;;;;;;;;;; CL
@@ -863,6 +860,7 @@ s#+ignore
     (let ((* nil) (** nil) (*** nil)
 	  (/ nil) (// nil) (/// nil)
 	  (+ nil) (++ nil) (+++ nil))
+      (format t "~&Movitz image Los0 build ~D." *build-number*)
       (loop
 	(catch :top-level-repl		; If restarts don't work, you can throw this..
 	  (with-simple-restart (abort "Abort to the top command level.")
