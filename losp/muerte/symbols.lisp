@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.13 2004/06/09 17:21:01 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.14 2004/06/14 19:40:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -141,10 +141,10 @@
 	      (load-global-constant movitz::unbound-function))))))
 
 (defun %create-symbol (name &optional (package nil)
-				     (plist nil)
-				     (value (load-global-constant unbound-value))
-				     (function (load-global-constant movitz::unbound-function))
-				     (flags 0))
+				      (plist nil)
+				      (value (load-global-constant unbound-value))
+				      (function (load-global-constant movitz::unbound-function))
+				      (flags 0))
   (eval-when (:compile-toplevel)
     (assert (= 1 (- (movitz:tag :symbol) (movitz:tag :other)))))
   (let ((symbol (%word-offset (malloc-clumps 3) 1)))
@@ -170,12 +170,11 @@
   (if (or (eq nil symbol)
 	  (not copy-properties))
       (%create-symbol (symbol-name symbol))
-    (%create-symbol (symbol-name symbol)
-		    nil
-		    (symbol-plist symbol)
-		    (%unbounded-symbol-value symbol)
-		    (%unbounded-symbol-function symbol)
-		    (symbol-flags symbol))))
+    (let ((x (%word-offset (malloc-clumps 3) 1)))
+      (dotimes (i 6)
+	(setf (memref x #.movitz:+other-type-offset+ i :lisp)
+	  (memref symbol #.movitz:+other-type-offset+ i :lisp)))
+      x)))
 
 (defun symbol-flags (symbol)
   (etypecase symbol
