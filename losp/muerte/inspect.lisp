@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.25 2004/07/17 19:32:16 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.26 2004/07/20 12:37:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -204,6 +204,84 @@ after the point that called this stack-frame."
      (copy-funobj old))
     (structure-object
      (copy-structure old))))
+
+(defvar *objects-equalp-last-x*)
+(defvar *objects-equalp-last-y*)
+
+(defun objects-equalp (x y)
+  (setf *objects-equalp-last-x* x
+	*objects-equalp-last-y* y)
+  (or (eql x y)
+      (if (not (and (typep x 'pointer)
+		    (typep y 'pointer)))
+	  nil
+	(macrolet ((test (accessor &rest args)
+		     `(objects-equalp (,accessor x ,@args)
+				      (,accessor y ,@args))))
+	  (typecase x
+	    (bignum
+	     (= x y))
+	    (function
+	     (and (test funobj-code-vector)
+		  (test funobj-code-vector%1op)
+		  (test funobj-code-vector%2op)
+		  (test funobj-code-vector%3op)
+		  (test funobj-lambda-list)
+		  (test funobj-name)
+		  (test funobj-num-constants)
+		  (test funobj-num-jumpers)
+		  (dotimes (i (funobj-num-constants x) t)
+		    (unless (test funobj-constant-ref i)))))
+	    (vector
+	     (and (typep y 'vector)
+		  (test array-element-type)
+		  (every #'objects-equalp x y)))
+	    (cons
+	     (and (typep y 'cons)
+		  (test car)
+		  (test cdr)))
+	    (structure-object
+	     (and (typep y 'structure-object)
+		  (test structure-object-name)
+		  (test structure-object-length)
+		  (dotimes (i (structure-object-length x) t)
+		    (unless (test structure-ref i)
+		      (return nil)))))
+	    (std-instance
+	     (and (typep y 'std-instance)
+		  (test std-instance-class)
+		  (test std-instance-slots))))))))
+
+(define-compiler-macro %lispval-object (integer &environment env)
+  "Return the object that is wrapped in the 32-bit integer lispval."
+  (if (movitz:movitz-constantp integer env)
+      (let ((word (movitz:movitz-eval integer env)))
+	(check-type word (unsigned-byte 32))
+	`(with-inline-assembly (:returns :register)
+	   (:movl ,word (:result-register))))
+    `(with-inline-assembly (:returns :register)
+       (:compile-form (:result-mode :eax) ,integer)
+       (:call-global-pf unbox-u32)
+       (:movl :ecx (:result-register)))))
+
+(defun %lispval-object (integer)
+  "Return the object that is wrapped in the 32-bit integer lispval."
+  (compiler-macro-call %lispval-object integer))
+
+(define-compiler-macro %object-lispval (object &environment env)
+  "Return the integer lispval that corresponds to object.
+Obviously, this correspondence is not guaranteed to hold e.g. across GC."
+  (if (movitz:movitz-constantp object env)
+      (movitz:movitz-intern (movitz:movitz-read (movitz:movitz-eval object env)) 'word)
+    `(with-inline-assembly (:returns :eax)
+       (:compile-form (:result-mode :eax) ,object)
+       (:movl :eax :ecx)
+       (:call-local-pf box-u32-ecx))))
+
+(defun %object-lispval (object)
+  "Return the integer lispval that corresponds to object.
+Obviously, this correspondence is not guaranteed to hold e.g. across GC."
+  (compiler-macro-call %object-lispval object))
 
 (defun location-in-object-p (object location)
   "Is location inside object?"
