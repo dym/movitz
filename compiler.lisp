@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.64 2004/06/09 17:26:00 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.65 2004/06/09 20:24:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5825,9 +5825,12 @@ and a list of any intervening unwind-protect environment-slots."
 				    protect-registers protect-carry)
       (cdr instruction)
     (declare (ignore protect-registers protect-carry))
-    (when init-with-register
+    (cond
+     (init-with-register
       (assert init-with-type)
-      (values binding init-with-type))))
+      (values binding init-with-type))
+     ((not (typep binding 'temporary-name))
+      (values binding t)))))
 
 (define-find-read-bindings :init-lexvar (binding &key init-with-register &allow-other-keys)
   (declare (ignore binding))
