@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.58 2004/04/21 15:06:16 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.59 2004/04/23 14:58:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -989,166 +989,163 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	      1))
      (t (error "make-2req confused by loc0: ~W, loc1: ~W" location-0 location-1)))))
 
-#+ignore
-(defun make-compiled-function-body-1rest (form funobj env top-level-p)
-  (when (and (null (required-vars env))
-	     (null (optional-vars env))
-	     (null (key-vars env))
-	     (rest-var env))
-    (multiple-value-bind (code stack-frame-size use-stack-frame-p frame-map)
-	(make-compiled-body form funobj env top-level-p)
-      (let* ((rest-binding (movitz-binding (rest-var env) env nil))
-	     (edx-location (and (edx-var env)
-				(new-binding-location (edx-var env) frame-map
-						      :default nil)))
-	     (edx-code (when edx-location
-			 `((:movl :edx (:ebp ,(stack-frame-offset edx-location)))))))
-	(cond
-	 ((not (new-binding-located-p rest-binding frame-map))
-	  (append '(entry%1op
-		    entry%2op
-		    entry%3op)
-		  (when use-stack-frame-p
-		    +enter-stack-frame-code+)
-		  '(start-stack-frame-setup)
-		  (make-compiled-stack-frame-init stack-frame-size)
-		  edx-code
-		  code
-		  (make-compiled-function-postlude funobj env use-stack-frame-p)))
-	 (t ;; (new-binding-located-p rest-binding frame-map)
-	  (let ((rest-location (new-binding-location rest-binding frame-map)))
-	    (values (append +enter-stack-frame-code+
-			    '(start-stack-frame-setup)
-			    (make-compiled-stack-frame-init stack-frame-size)
-			    `((:movl :edi (:ebp ,(stack-frame-offset rest-location))))
-			    edx-code
-			    `((:testb :cl :cl)
-			      (:jz 'end-stack-frame-setup)
-			      (:js '(:sub-program (normalize-ecx)
-				     (:shrl 8 :ecx)
-				     (:jmp 'ecx-ok)))
-			      (:andl #x7f :ecx)
-			      ecx-ok
-			      (:xorl :edx :edx)
-			      (:call (:edi ,(global-constant-offset 'restify-dynamic-extent)))
-			      (:movl :eax (:ebp ,(stack-frame-offset rest-location)))
-			      (:jmp 'end-stack-frame-setup))
-			    `(entry%1op
-			      ,@+enter-stack-frame-code+
-			      ,@(make-compiled-stack-frame-init stack-frame-size)
-			      ,@edx-code
-			      (:andl -8 :esp)
-			      (:pushl :edi)
-			      (:pushl :eax)
-			      (:leal (:esp 1) :ecx)
-			      (:movl :ecx (:ebp ,(stack-frame-offset rest-location)))
-			      (:jmp 'end-stack-frame-setup))
-			    `(entry%2op
-			      ,@+enter-stack-frame-code+
-			      ,@(make-compiled-stack-frame-init stack-frame-size)
-			      ,@edx-code
-			      (:andl -8 :esp)
-			      (:pushl :edi)
-			      (:pushl :ebx)
-			      (:leal (:esp 1) :ecx)
-			      (:pushl :ecx)
-			      (:pushl :eax)
-			      (:leal (:esp 1) :ecx)
-			      (:movl :ecx (:ebp ,(stack-frame-offset rest-location)))
-			      (:jmp 'end-stack-frame-setup))
-			    '(end-stack-frame-setup)
-			    code
-			    (make-compiled-function-postlude funobj env t))
-		    use-stack-frame-p))))))))
+;;;(defun make-compiled-function-body-1rest (form funobj env top-level-p)
+;;;  (when (and (null (required-vars env))
+;;;	     (null (optional-vars env))
+;;;	     (null (key-vars env))
+;;;	     (rest-var env))
+;;;    (multiple-value-bind (code stack-frame-size use-stack-frame-p frame-map)
+;;;	(make-compiled-body form funobj env top-level-p)
+;;;      (let* ((rest-binding (movitz-binding (rest-var env) env nil))
+;;;	     (edx-location (and (edx-var env)
+;;;				(new-binding-location (edx-var env) frame-map
+;;;						      :default nil)))
+;;;	     (edx-code (when edx-location
+;;;			 `((:movl :edx (:ebp ,(stack-frame-offset edx-location)))))))
+;;;	(cond
+;;;	 ((not (new-binding-located-p rest-binding frame-map))
+;;;	  (append '(entry%1op
+;;;		    entry%2op
+;;;		    entry%3op)
+;;;		  (when use-stack-frame-p
+;;;		    +enter-stack-frame-code+)
+;;;		  '(start-stack-frame-setup)
+;;;		  (make-compiled-stack-frame-init stack-frame-size)
+;;;		  edx-code
+;;;		  code
+;;;		  (make-compiled-function-postlude funobj env use-stack-frame-p)))
+;;;	 (t ;; (new-binding-located-p rest-binding frame-map)
+;;;	  (let ((rest-location (new-binding-location rest-binding frame-map)))
+;;;	    (values (append +enter-stack-frame-code+
+;;;			    '(start-stack-frame-setup)
+;;;			    (make-compiled-stack-frame-init stack-frame-size)
+;;;			    `((:movl :edi (:ebp ,(stack-frame-offset rest-location))))
+;;;			    edx-code
+;;;			    `((:testb :cl :cl)
+;;;			      (:jz 'end-stack-frame-setup)
+;;;			      (:js '(:sub-program (normalize-ecx)
+;;;				     (:shrl 8 :ecx)
+;;;				     (:jmp 'ecx-ok)))
+;;;			      (:andl #x7f :ecx)
+;;;			      ecx-ok
+;;;			      (:xorl :edx :edx)
+;;;			      (:call (:edi ,(global-constant-offset 'restify-dynamic-extent)))
+;;;			      (:movl :eax (:ebp ,(stack-frame-offset rest-location)))
+;;;			      (:jmp 'end-stack-frame-setup))
+;;;			    `(entry%1op
+;;;			      ,@+enter-stack-frame-code+
+;;;			      ,@(make-compiled-stack-frame-init stack-frame-size)
+;;;			      ,@edx-code
+;;;			      (:andl -8 :esp)
+;;;			      (:pushl :edi)
+;;;			      (:pushl :eax)
+;;;			      (:leal (:esp 1) :ecx)
+;;;			      (:movl :ecx (:ebp ,(stack-frame-offset rest-location)))
+;;;			      (:jmp 'end-stack-frame-setup))
+;;;			    `(entry%2op
+;;;			      ,@+enter-stack-frame-code+
+;;;			      ,@(make-compiled-stack-frame-init stack-frame-size)
+;;;			      ,@edx-code
+;;;			      (:andl -8 :esp)
+;;;			      (:pushl :edi)
+;;;			      (:pushl :ebx)
+;;;			      (:leal (:esp 1) :ecx)
+;;;			      (:pushl :ecx)
+;;;			      (:pushl :eax)
+;;;			      (:leal (:esp 1) :ecx)
+;;;			      (:movl :ecx (:ebp ,(stack-frame-offset rest-location)))
+;;;			      (:jmp 'end-stack-frame-setup))
+;;;			    '(end-stack-frame-setup)
+;;;			    code
+;;;			    (make-compiled-function-postlude funobj env t))
+;;;		    use-stack-frame-p))))))))
 		      
-
-#+ignore
-(defun make-compiled-function-body-1req-1opt (form funobj env top-level-p)
-  (when (and (= 1 (length (required-vars env)))
-	     (= 1 (length (optional-vars env)))
-	     (= 0 (length (key-vars env)))
-	     (null (rest-var env)))
-    (let* ((opt-var (first (optional-vars env)))
-	   (opt-binding (movitz-binding opt-var env nil))
-	   (req-binding (movitz-binding (first (required-vars env)) env nil))
-	   (default-form (optional-function-argument-init-form opt-binding)))
-      (compiler-values-bind (&code opt-default-code &producer opt-default-producer)
-	  (compiler-call #'compile-form
-	    :form default-form
-	    :result-mode :push
-	    :env env
-	    :funobj funobj)
-	(cond
-	 ((eq 'compile-self-evaluating opt-default-producer)
-	  (multiple-value-bind (code stack-frame-size use-stack-frame-p frame-map)
-	      (make-compiled-body form funobj env top-level-p nil (list opt-default-code))
-	    (declare (ignore use-stack-frame-p))
-	    (let ((use-stack-frame-p t))
-	      (cond
-	       ((and (new-binding-located-p req-binding frame-map)
-		     (new-binding-located-p opt-binding frame-map))
-		(multiple-value-bind (eax-ebx-code eax-ebx-stack-offset)
-		    (ecase (new-binding-location req-binding frame-map)
-		      ;; might well be more cases here, but let's wait till they show up..
-		      (:eax (values nil 0))
-		      (1 (values '((:pushl :eax)) 1)))
-		  ;; (warn "defc: ~S" opt-default-code)
-		  (let ((stack-init-size (- stack-frame-size eax-ebx-stack-offset))
-			(installed-default-code (finalize-code opt-default-code funobj env frame-map)))
-		    (values (append `((:call (:edi ,(global-constant-offset 'decode-args-1or2)))
-				      entry%2op
-				      (:pushl :ebp)
-				      (:movl :esp :ebp)
-				      (:pushl :esi)
-				      start-stack-frame-setup
-				      ,@eax-ebx-code
-				      ,@(if (eql (1+ eax-ebx-stack-offset)
-						 (new-binding-location opt-binding frame-map))
-					    (append `((:pushl :ebx))
-						    (make-compiled-stack-frame-init (1- stack-init-size)))
-					  (append (make-compiled-stack-frame-init stack-init-size)
-						  `((:movl :ebx (:ebp ,(stack-frame-offset
-									(new-binding-location opt-binding
-											      frame-map)))))))
-				      (:jmp 'arg-init-done)
-				      entry%1op
-				      (:pushl :ebp)
-				      (:movl :esp :ebp)
-				      (:pushl :esi)
-				      ,@eax-ebx-code
-				      ,@(if (eql (1+ eax-ebx-stack-offset)
-						 (new-binding-location opt-binding frame-map))
-					    (append installed-default-code
-						    (make-compiled-stack-frame-init (1- stack-init-size)))
-					  (append (make-compiled-stack-frame-init stack-init-size)
-						  installed-default-code
-						  `((:popl (:ebp ,(stack-frame-offset
-								   (new-binding-location opt-binding
-											 frame-map)))))))
-				      arg-init-done)
-				    code
-				    (make-compiled-function-postlude funobj env t))
-			    use-stack-frame-p))))
-	       ((and (new-binding-located-p req-binding frame-map)
-		     (not (new-binding-located-p opt-binding frame-map)))
-		(multiple-value-bind (eax-code eax-stack-offset)
-		    (ecase (new-binding-location req-binding frame-map)
-		      (:eax (values nil 0))
-		      (1 (values '((:pushl :eax)) 1)))
-		  (values (append `((:call (:edi ,(global-constant-offset 'decode-args-1or2)))
-				    ;; (:jmp 'decode-numargs)
-				    entry%1op
-				    entry%2op
-				    (:pushl :ebp)
-				    (:movl :esp :ebp)
-				    (:pushl :esi))
-				  eax-code
-				  (make-compiled-stack-frame-init (- stack-frame-size eax-stack-offset))
-				  code
-				  (make-compiled-function-postlude funobj env t))
-			  use-stack-frame-p)))
-	       (t (warn "1-req-1-opt failed"))))))
-	 (t nil))))))
+;;;(defun make-compiled-function-body-1req-1opt (form funobj env top-level-p)
+;;;  (when (and (= 1 (length (required-vars env)))
+;;;	     (= 1 (length (optional-vars env)))
+;;;	     (= 0 (length (key-vars env)))
+;;;	     (null (rest-var env)))
+;;;    (let* ((opt-var (first (optional-vars env)))
+;;;	   (opt-binding (movitz-binding opt-var env nil))
+;;;	   (req-binding (movitz-binding (first (required-vars env)) env nil))
+;;;	   (default-form (optional-function-argument-init-form opt-binding)))
+;;;      (compiler-values-bind (&code opt-default-code &producer opt-default-producer)
+;;;	  (compiler-call #'compile-form
+;;;	    :form default-form
+;;;	    :result-mode :push
+;;;	    :env env
+;;;	    :funobj funobj)
+;;;	(cond
+;;;	 ((eq 'compile-self-evaluating opt-default-producer)
+;;;	  (multiple-value-bind (code stack-frame-size use-stack-frame-p frame-map)
+;;;	      (make-compiled-body form funobj env top-level-p nil (list opt-default-code))
+;;;	    (declare (ignore use-stack-frame-p))
+;;;	    (let ((use-stack-frame-p t))
+;;;	      (cond
+;;;	       ((and (new-binding-located-p req-binding frame-map)
+;;;		     (new-binding-located-p opt-binding frame-map))
+;;;		(multiple-value-bind (eax-ebx-code eax-ebx-stack-offset)
+;;;		    (ecase (new-binding-location req-binding frame-map)
+;;;		      ;; might well be more cases here, but let's wait till they show up..
+;;;		      (:eax (values nil 0))
+;;;		      (1 (values '((:pushl :eax)) 1)))
+;;;		  ;; (warn "defc: ~S" opt-default-code)
+;;;		  (let ((stack-init-size (- stack-frame-size eax-ebx-stack-offset))
+;;;			(installed-default-code (finalize-code opt-default-code funobj env frame-map)))
+;;;		    (values (append `((:call (:edi ,(global-constant-offset 'decode-args-1or2)))
+;;;				      entry%2op
+;;;				      (:pushl :ebp)
+;;;				      (:movl :esp :ebp)
+;;;				      (:pushl :esi)
+;;;				      start-stack-frame-setup
+;;;				      ,@eax-ebx-code
+;;;				      ,@(if (eql (1+ eax-ebx-stack-offset)
+;;;						 (new-binding-location opt-binding frame-map))
+;;;					    (append `((:pushl :ebx))
+;;;						    (make-compiled-stack-frame-init (1- stack-init-size)))
+;;;					  (append (make-compiled-stack-frame-init stack-init-size)
+;;;						  `((:movl :ebx (:ebp ,(stack-frame-offset
+;;;									(new-binding-location opt-binding
+;;;											      frame-map)))))))
+;;;				      (:jmp 'arg-init-done)
+;;;				      entry%1op
+;;;				      (:pushl :ebp)
+;;;				      (:movl :esp :ebp)
+;;;				      (:pushl :esi)
+;;;				      ,@eax-ebx-code
+;;;				      ,@(if (eql (1+ eax-ebx-stack-offset)
+;;;						 (new-binding-location opt-binding frame-map))
+;;;					    (append installed-default-code
+;;;						    (make-compiled-stack-frame-init (1- stack-init-size)))
+;;;					  (append (make-compiled-stack-frame-init stack-init-size)
+;;;						  installed-default-code
+;;;						  `((:popl (:ebp ,(stack-frame-offset
+;;;								   (new-binding-location opt-binding
+;;;											 frame-map)))))))
+;;;				      arg-init-done)
+;;;				    code
+;;;				    (make-compiled-function-postlude funobj env t))
+;;;			    use-stack-frame-p))))
+;;;	       ((and (new-binding-located-p req-binding frame-map)
+;;;		     (not (new-binding-located-p opt-binding frame-map)))
+;;;		(multiple-value-bind (eax-code eax-stack-offset)
+;;;		    (ecase (new-binding-location req-binding frame-map)
+;;;		      (:eax (values nil 0))
+;;;		      (1 (values '((:pushl :eax)) 1)))
+;;;		  (values (append `((:call (:edi ,(global-constant-offset 'decode-args-1or2)))
+;;;				    ;; (:jmp 'decode-numargs)
+;;;				    entry%1op
+;;;				    entry%2op
+;;;				    (:pushl :ebp)
+;;;				    (:movl :esp :ebp)
+;;;				    (:pushl :esi))
+;;;				  eax-code
+;;;				  (make-compiled-stack-frame-init (- stack-frame-size eax-stack-offset))
+;;;				  code
+;;;				  (make-compiled-function-postlude funobj env t))
+;;;			  use-stack-frame-p)))
+;;;	       (t (warn "1-req-1-opt failed"))))))
+;;;	 (t nil))))))
 
 
 (defun make-compiled-stack-frame-init (stack-frame-init)
@@ -4218,14 +4215,15 @@ Return arg-init-code, need-normalized-ecx-p."
 	     (when rest-var
 	       (let* ((rest-binding (movitz-binding rest-var env))
 		      (rest-position (function-argument-argnum rest-binding)))
+		 #+ignore
 		 (assert (or (typep rest-binding 'hidden-rest-function-argument)
-			     (movitz-env-get rest-var 'dynamic-extent nil env)
-			     (movitz-env-get rest-var 'ignore nil env))
+			     (movitz-env-get rest-var 'dynamic-extent nil env))
 		     ()
 		   "&REST variable ~S must be dynamic-extent." rest-var)
-		 (setq need-normalized-ecx-p t)
-		 (append (make-immediate-move rest-position :edx)
-			 `((:call (:edi ,(global-constant-offset 'restify-dynamic-extent)))
+		 ;; (setq need-normalized-ecx-p t)
+		 (append #+ignore (make-immediate-move rest-position :edx)
+			 `(#+ignore
+			   (:call (:edi ,(global-constant-offset 'restify-dynamic-extent)))
 			   (:init-lexvar ,rest-binding
 					 :init-with-register :eax
 					 :init-with-type list)))))
@@ -5755,27 +5753,53 @@ and a list of any intervening unwind-protect environment-slots."
     (declare (ignore protect-carry))	; nothing modifies carry anyway.
     (assert (eq binding (ensure-local-binding binding funobj)))
     (cond
-     ((binding-lended-p binding)
-      (let ((cons-position (getf (binding-lended-p binding)
-				 :stack-cons-location))
-	    (tmp-register (find-if (lambda (r)
-				     (and (not (member r protect-registers))
-					  (not (eq r init-with-register))))
-				   '(:edx :ecx  :ebx :eax)))
-	    (init-register (or init-with-register :edi)))
-	(when init-with-register
-	  (assert (not (null init-with-type))))
-	(assert tmp-register ()		; solve this with push eax .. pop eax if ever needed.
-	  "Unable to find a tmp-register for ~S." instruction)
-	`((:leal (:ebp ,(1+ (stack-frame-offset (1+ cons-position))))
-		 ,tmp-register)
-	  (:movl :edi (,tmp-register 3)) ; cdr
-	  (:movl ,init-register (,tmp-register -1)) ; car
-	  (:movl ,tmp-register
-		 (:ebp ,(stack-frame-offset
-			 (new-binding-location binding frame-map)))))))
-     (init-with-register
-      (make-store-lexical binding init-with-register nil frame-map)))))
+     ((not (new-binding-located-p binding frame-map))
+      (unless (or (movitz-env-get (binding-name binding) 'ignore nil (binding-env binding))
+		  (movitz-env-get (binding-name binding) 'ignorable nil (binding-env binding)))
+	(warn "Unused variable: ~S." (binding-name binding))))
+     (t (when (movitz-env-get (binding-name binding) 'ignore nil (binding-env binding))
+	  (warn "Variable ~S used while declared ignored." (binding-name binding)))
+	(append
+	 (cond
+	  ((typep binding 'rest-function-argument)
+	   (assert (eq :eax init-with-register))
+	   (assert (or (typep binding 'hidden-rest-function-argument)
+		       (movitz-env-get (binding-name binding)
+				       'dynamic-extent nil (binding-env binding)))
+	       ()
+	     "&REST variable ~S must be dynamic-extent." (binding-name binding))
+	   (setf (need-normalized-ecx-p (find-function-env (binding-env binding)
+							   funobj))
+	     t)
+	   (append (make-immediate-move (function-argument-argnum binding) :edx)
+		   `((:call (:edi ,(global-constant-offset 'restify-dynamic-extent))))
+		   #+ignore
+		   (unless (or (typep binding 'hidden-rest-function-argument)
+			       (movitz-env-get (binding-name binding)
+					       'dynamic-extent nil (binding-env binding)))
+		     (make-compiled-funcall-by-symbol 'muerte.cl:copy-list 1 funobj)))))
+	 (cond
+	  ((binding-lended-p binding)
+	   (let ((cons-position (getf (binding-lended-p binding)
+				      :stack-cons-location))
+		 (tmp-register (find-if (lambda (r)
+					  (and (not (member r protect-registers))
+					       (not (eq r init-with-register))))
+					'(:edx :ecx  :ebx :eax)))
+		 (init-register (or init-with-register :edi)))
+	     (when init-with-register
+	       (assert (not (null init-with-type))))
+	     (assert tmp-register ()	; solve this with push eax .. pop eax if ever needed.
+	       "Unable to find a tmp-register for ~S." instruction)
+	     `((:leal (:ebp ,(1+ (stack-frame-offset (1+ cons-position))))
+		      ,tmp-register)
+	       (:movl :edi (,tmp-register 3)) ; cdr
+	       (:movl ,init-register (,tmp-register -1)) ; car
+	       (:movl ,tmp-register
+		      (:ebp ,(stack-frame-offset
+			      (new-binding-location binding frame-map)))))))
+	  (init-with-register
+	   (make-store-lexical binding init-with-register nil frame-map))))))))
 
 ;;;;;;;;;;;;;;;;;; car
 
