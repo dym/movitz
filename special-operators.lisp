@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.48 2005/01/04 16:54:10 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.49 2005/02/03 09:18:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1210,6 +1210,7 @@ is zero (i.e. not found)."
 		      `((:load-lexical ,dynamic-slot-binding :edx)
 			(:locally (:movl :edx (:edi (:edi-offset raw-scratch0)))) ; final continuation
 			(:load-lexical ,next-continuation-step-binding :edx) ; next continuation-step
+			(:locally (:movl :edx (:edi (:edi-offset dynamic-env)))) ; goto target dynamic-env
 			(:locally (:call (:edi (:edi-offset dynamic-jump-next))))))))))
 
 ;;;			(:locally (:movl :esi (:edi (:edi-offset scratch1))))

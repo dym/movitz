@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.62 2005/02/01 16:20:08 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.63 2005/02/03 09:19:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -685,7 +685,7 @@ Final target is in raw-scratch0. Doesn't modify current-values."
   (with-inline-assembly (:returns :non-local-exit)
     (:movl :edi :esi)			; before bumping ESP, remove reference to funobj..
 					; ..in case it's stack-allocated.
-    (:locally (:movl :edx (:edi (:edi-offset dynamic-env)))) ; exit to next-env
+    (:locally (:movl :edx (:edi (:edi-offset scratch1)))) ; non-local stack-mode target entry.
     (:movl :edi :ebp)			; enter non-local jump stack mode.
     (:movl :edx :esp)			; 
     (:movl (:esp) :edx)			; target stack-frame EBP

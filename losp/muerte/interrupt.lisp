@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.39 2005/02/02 10:48:49 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.40 2005/02/03 09:18:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -84,7 +84,7 @@
 	   (= 0 (ldb (byte 2 0) (dit-frame-ref stack dit-frame :atomically-continuation :unsigned-byte8))))
       (stack-frame-ref stack atomically-location 0))
      ((null ebp)			; special dynamic control-transfer mode
-      (stack-frame-ref stack (dit-frame-ref stack dit-frame :dynamic-env) 0))
+      (stack-frame-ref stack (dit-frame-ref stack dit-frame :scratch1) 0))
      ((< esp ebp)
       ebp)
      ((eq esp ebp)
@@ -255,15 +255,12 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    
 	    (:movl :edi :esi)		; before bumping ESP, remove reference to funobj..
 					; ..in case it's stack-allocated.
+
 	    (:movl (:ecx 12) :edx)
-	    (:locally (:movl :edx (:edi (:edi-offset dynamic-env)))) ; exit to target dynamic-env
-	    
-	    (:movl :edi :ebp)		; enter non-local jump stack mode.
-	    (:movl :ecx :esp)		; 
-	    (:movl (:esp) :ecx)		; target stack-frame EBP
-	    (:movl (:ecx -4) :esi)	; get target funobj into ESI
-	    (:movl (:esp 8) :ecx)	; target jumper number
-	    (:jmp (:esi :ecx (:offset movitz-funobj constant0)))
+	    (:locally (:movl :edx (:edi (:edi-offset dynamic-env)))) ; interruptee's dynamic-env
+	    (:movl :ecx :edx)
+	    (:locally (:call (:edi (:edi-offset dynamic-jump-next))))
+	    (:int 63)
 	    
 	   restart-simple-pf
 	    ;; ECX holds the run-time-context offset for us to load.
