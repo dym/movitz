@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.17 2004/07/20 12:58:34 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.18 2004/08/16 15:28:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -115,24 +115,31 @@ The former is represented as a lisp integer that is the index into the code-vect
 as that vector."
   (check-type funobj function)
   (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) funobj)
-    (:movl (:eax #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector)) :ebx) ; EBX = code-vector
-    (:movl (:eax #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector%1op)) :eax) ; EAX = code-vector%1op
-    ;; determine if EAX is a pointer into EBX
-    (:cmpl :ebx :eax)
+   retry
+    (:declare-label-set retry-jumper (retry))
+    (:locally (:movl '(:funcall #.(movitz::atomically-status-jumper-fn t)
+		       'retry-jumper)
+		     (:edi (:edi-offset atomically-status))))
+    (:compile-form (:result-mode :ebx) funobj)
+    (:movl (:ebx (:offset movitz-funobj code-vector)) :eax) ; EAX = code-vector
+    (:movl (:ebx (:offset movitz-funobj code-vector%1op)) :ecx)
+    ;; determine if ECX is a pointer into EBX
+    (:subl :eax :ecx)
     (:jl 'return-vector)
-    (:andb #xf8 :bl)
-    (:addl #x100 :ebx)
-    (:cmpl :ebx :eax)
+    (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :ecx)
+    (:cmpl (:ebx (:offset movitz-basic-vector num-elements)) :ecx)
     (:jg 'return-vector)
     ;; return the integer offset EAX-EBX
-    (:subl #x100 :ebx)
-    (:subl :ebx :eax)
-    (:shll #.movitz:+movitz-fixnum-shift+ :eax)
+    (:movl :ecx :eax)
     (:jmp 'done)
-    return-vector
-    (:subl 2 :eax)
-    done))				; this cell stores word+2
+   return-vector
+    (:testl 7 (:ebx (:offset movitz-funobj code-vector%1op)))
+    (:jnz '(:sub-program () (:int 63)))
+    (:movl #xfffffffe :eax)
+    (:addl (:ebx (:offset movitz-funobj code-vector%1op)) :eax)
+   done
+    (:locally (:movl #.(bt:enum-value 'movitz::atomically-status :inactive)
+		     (:edi (:edi-offset atomically-status))))))				; this cell stores word+2
 
 (defun (setf funobj-code-vector%1op) (code-vector funobj)
   (check-type funobj function)
@@ -160,24 +167,31 @@ The former is represented as a lisp integer that is the index into the code-vect
 as that vector."
   (check-type funobj function)
   (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) funobj)
-    (:movl (:eax #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector)) :ebx) ; EBX = code-vector
-    (:movl (:eax #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector%2op)) :eax) ; EAX = code-vector%1op
-    ;; determine if EAX is a pointer into EBX
-    (:cmpl :ebx :eax)
+   retry
+    (:declare-label-set retry-jumper (retry))
+    (:locally (:movl '(:funcall #.(movitz::atomically-status-jumper-fn t)
+		       'retry-jumper)
+		     (:edi (:edi-offset atomically-status))))
+    (:compile-form (:result-mode :ebx) funobj)
+    (:movl (:ebx (:offset movitz-funobj code-vector)) :eax) ; EAX = code-vector
+    (:movl (:ebx (:offset movitz-funobj code-vector%2op)) :ecx)
+    ;; determine if ECX is a pointer into EBX
+    (:subl :eax :ecx)
     (:jl 'return-vector)
-    (:andb #xf8 :bl)
-    (:addl #x100 :ebx)
-    (:cmpl :ebx :eax)
+    (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :ecx)
+    (:cmpl (:ebx (:offset movitz-basic-vector num-elements)) :ecx)
     (:jg 'return-vector)
     ;; return the integer offset EAX-EBX
-    (:subl #x100 :ebx)
-    (:subl :ebx :eax)
-    (:shll #.movitz:+movitz-fixnum-shift+ :eax)
+    (:movl :ecx :eax)
     (:jmp 'done)
-    return-vector
-    (:subl 2 :eax)
-    done))
+   return-vector
+    (:testl 7 (:ebx (:offset movitz-funobj code-vector%2op)))
+    (:jnz '(:sub-program () (:int 63)))
+    (:movl #xfffffffe :eax)
+    (:addl (:ebx (:offset movitz-funobj code-vector%2op)) :eax)
+   done
+    (:locally (:movl #.(bt:enum-value 'movitz::atomically-status :inactive)
+		     (:edi (:edi-offset atomically-status))))))
 
 (defun (setf funobj-code-vector%2op) (code-vector funobj)
   (check-type funobj function)
@@ -205,24 +219,31 @@ The former is represented as a lisp integer that is the index into the code-vect
 as that vector."
   (check-type funobj function)
   (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) funobj)
-    (:movl (:eax #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector)) :ebx) ; EBX = code-vector
-    (:movl (:eax #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector%3op)) :eax) ; EAX = code-vector%1op
-    ;; determine if EAX is a pointer into EBX
-    (:cmpl :ebx :eax)
+   retry
+    (:declare-label-set retry-jumper (retry))
+    (:locally (:movl '(:funcall #.(movitz::atomically-status-jumper-fn t)
+		       'retry-jumper)
+		     (:edi (:edi-offset atomically-status))))
+    (:compile-form (:result-mode :ebx) funobj)
+    (:movl (:ebx (:offset movitz-funobj code-vector)) :eax) ; EAX = code-vector
+    (:movl (:ebx (:offset movitz-funobj code-vector%3op)) :ecx)
+    ;; determine if ECX is a pointer into EBX
+    (:subl :eax :ecx)
     (:jl 'return-vector)
-    (:andb #xf8 :bl)
-    (:addl #x100 :ebx)
-    (:cmpl :ebx :eax)
+    (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :ecx)
+    (:cmpl (:ebx (:offset movitz-basic-vector num-elements)) :ecx)
     (:jg 'return-vector)
     ;; return the integer offset EAX-EBX
-    (:subl #x100 :ebx)
-    (:subl :ebx :eax)
-    (:shll #.movitz:+movitz-fixnum-shift+ :eax)
+    (:movl :ecx :eax)
     (:jmp 'done)
-    return-vector
-    (:subl 2 :eax)
-    done))
+   return-vector
+    (:testl 7 (:ebx (:offset movitz-funobj code-vector%3op)))
+    (:jnz '(:sub-program () (:int 63)))
+    (:movl #xfffffffe :eax)
+    (:addl (:ebx (:offset movitz-funobj code-vector%3op)) :eax)
+   done
+    (:locally (:movl #.(bt:enum-value 'movitz::atomically-status :inactive)
+		     (:edi (:edi-offset atomically-status))))))
 
 (defun (setf funobj-code-vector%3op) (code-vector funobj)
   (check-type funobj function)
