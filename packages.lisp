@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.25 2004/06/08 20:07:02 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.26 2004/06/16 07:38:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1144,6 +1144,7 @@
 	   #:malloc-data-clumps
 	   #:malloc-cons-pointer
 	   #:malloc-buffer-start
+	   #:malloc-end
 
 	   #:%word-offset
 	   #:%run-time-context-slot
