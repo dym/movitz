@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.25 2004/02/13 22:05:04 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.26 2004/02/14 15:44:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -357,7 +357,11 @@ Side-effects each binding's binding-store-type."
 		   (cond
 		    ((typep binding 'function-argument)
 		     (setf (type-analysis-encoded-type analysis)
-		       (multiple-value-list (type-specifier-encode t))))
+		       (multiple-value-list
+			(type-specifier-encode (etypecase binding
+						 (rest-function-argument 'list)
+						 (supplied-p-function-argument 'boolean)
+						 (function-argument t))))))
 		    ((and (consp type) (eq 'binding-type (car type)))
 		     (let ((target-binding (binding-target (cadr type))))
 		       (cond
@@ -437,11 +441,17 @@ Side-effects each binding's binding-store-type."
 		     (type-analysis-binding-types analysis))
 		   (setf (binding-store-type binding)
 		     (type-analysis-encoded-type analysis))
-		   #+ignore
-		   (unless (apply #'encoded-allp (type-analysis-encoded-type analysis))
-		     (warn "Type: ~A => ~A"
-			   (binding-name binding)
-			   (apply #'encoded-type-decode (type-analysis-encoded-type analysis)))))
+		   (when (or #+ignore (not (apply #'encoded-allp (type-analysis-encoded-type analysis)))
+			     (multiple-value-call #'encoded-subtypep
+			       (values-list (type-analysis-encoded-type analysis))
+			       (type-specifier-encode 'list)))
+		     #+ignore
+		     (warn "Type: ~S => ~A (~A)"
+			   binding
+			   (apply #'encoded-type-decode (type-analysis-encoded-type analysis))
+			   (multiple-value-call #'encoded-subtypep
+			     (values-list (type-analysis-encoded-type analysis))
+			     (type-specifier-encode 'list)))))
 		 binding-usage))))
   toplevel-funobj)
 
@@ -494,9 +504,8 @@ of all function-bindings seen."
 		   (let ((store-binding (find-written-binding-and-type instruction)))
 		     (when store-binding
 		       (process-binding funobj store-binding '(:read))))
-		   (let ((load-binding (find-read-bindings instruction)))
-		     (when load-binding
-		       (process-binding funobj load-binding '(:read))))
+		   (dolist (load-binding (find-read-bindings instruction))
+		     (process-binding funobj load-binding '(:read)))
 		   (case (car instruction)
 		     (:call-lexical
 		      (process-binding funobj (second instruction) '(:call)))
@@ -1167,7 +1176,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
   (declare (special *default-load-priority*))
   (with-simple-restart (continue "Skip Movitz compilation of ~S." path)
     (with-retries-until-true (retry "Restart Movitz compilation of ~S." path)
-      (warn "Compiling ~A.." path)
+      ;; (warn "Compiling ~A.." path)
       (let* ((muerte.cl::*compile-file-pathname* path)
 	     (*package* (find-package :muerte))
 	     (funobj (make-instance 'movitz-funobj-pass1
@@ -2423,9 +2432,8 @@ the sub-program options (&optional label) as secondary value."
 				   (incf (getf p :lended-count 0))
 				   (setf (getf p :dynamic-extent-p) (and (getf p :dynamic-extent-p t)
 									 dynamic-extent-p))))))
-			(let ((load-binding (find-read-bindings instruction)))
-			  (when load-binding
-			    (take-note-of-binding load-binding)))
+			(mapcar #'take-note-of-binding 
+				(find-read-bindings instruction))
 			(let ((store-binding (find-written-binding-and-type instruction)))
 			  (when store-binding
 			    (take-note-of-binding store-binding t)))
@@ -2579,9 +2587,9 @@ the sub-program options (&optional label) as secondary value."
 	     (dolist (instruction code)
 	       (when (consp instruction)
 		 (let ((x (or (when load
-				(let ((load-binding (find-read-bindings instruction)))
-				  (when load-binding
-				    (binding-eql binding load-binding))))
+				(some (lambda (read-binding)
+					(binding-eql read-binding binding))
+				      (find-read-bindings instruction)))
 			      (when store
 				(let ((store-binding (find-written-binding-and-type instruction)))
 				  (when store-binding
@@ -5174,7 +5182,9 @@ and a list of any intervening unwind-protect environment-slots."
     (let* ((operator (car extended-instruction))
 	   (finder (gethash operator *extended-code-find-read-binding*)))
       (when finder
-	(funcall finder extended-instruction)))))
+	(let ((result (funcall finder extended-instruction)))
+	  (check-type result list "a list of read bindings")
+	  result)))))
 
 (defvar *extended-code-find-write-binding-and-type*
     (make-hash-table :test #'eq))
@@ -5235,6 +5245,15 @@ and a list of any intervening unwind-protect environment-slots."
     (binding
      `(binding-type ,binding))))
 
+(defun binding-store-subtypep (binding type-specifier)
+  "Is type-specifier a subtype of all values ever stored to binding?
+   (Assuming analyze-bindings has put this information into binding-store-type.)"
+  (if (not (binding-store-type binding))
+      nil
+    (multiple-value-call #'encoded-subtypep
+      (values-list (binding-store-type binding))
+      (type-specifier-encode type-specifier))))
+
 ;;;;;;;
 ;;;;;;; Extended-code handlers
 ;;;;;;;
@@ -5251,7 +5270,7 @@ and a list of any intervening unwind-protect environment-slots."
 (define-find-read-bindings :load-lexical (source destination &key &allow-other-keys)
   (declare (ignore destination))
   (check-type source binding)
-  source)
+  (list source))
 
 (define-extended-code-expander :load-lexical (instruction funobj frame-map)
   (destructuring-bind (source destination &key shared-reference-p tmp-register protect-registers)
@@ -5272,7 +5291,7 @@ and a list of any intervening unwind-protect environment-slots."
 
 (define-find-read-bindings :lmove (source destination)
   (declare (ignore destination))
-  (values source))
+  (list source))
 
 ;;;;;;;;;;;;;;;;;; Store-lexical
 
@@ -5286,7 +5305,7 @@ and a list of any intervening unwind-protect environment-slots."
 (define-find-read-bindings :store-lexical (destination source &key &allow-other-keys)
   (declare (ignore destination))
   (when (typep source 'binding)
-    source))
+    (list source)))
 
 (define-extended-code-expander :store-lexical (instruction funobj frame-map)
   (destructuring-bind (destination source &key shared-reference-p type)
@@ -5338,18 +5357,27 @@ and a list of any intervening unwind-protect environment-slots."
 
 ;;;;;;;;;;;;;;;;;; car
 
+(define-find-read-bindings :car (x dst &key protect-registers)
+  (declare (ignore dst protect-registers))
+  (when (typep x 'binding)
+    (list x)))
 
 (define-extended-code-expander :car (instruction funobj frame-map)
-  (declare (ignore funobj frame-map))
+  (warn "CAR: ~S" instruction)
   (destructuring-bind (x dst)
       (cdr instruction)
     (assert (member dst '(:eax :ebx :ecx :edx)))
     (etypecase x
       (binding
-       `((:load-lexical ,x :eax)
-	 (:call (:edi ,(global-constant-offset 'fast-car)))
-	 ,@(when (not (eq dst :eax))
-	     `((:movl :eax ,dst)))))
+       (let* ((binding (ensure-local-binding (binding-target x) funobj)))
+	 (cond
+	  ((binding-store-subtypep binding 'list)
+	   `(,@(make-load-lexical binding dst funobj nil frame-map)
+	       (:movl (,dst -1) ,dst)))
+	  (t `(,@(make-load-lexical binding dst funobj nil frame-map)
+		 (:call (:edi ,(global-constant-offset 'fast-car)))
+		 ,@(when (not (eq dst :eax))
+		     `((:movl :eax ,dst))))))))
       (symbol
        (append (case x
 		 (:eax
@@ -5370,8 +5398,8 @@ and a list of any intervening unwind-protect environment-slots."
     (values binding 'integer)))
 
 (define-find-read-bindings :incf-lexvar (binding delta &key protect-registers)
-  (declare (ignore delta protect-registers))
-  nil #+ignore binding)
+  (declare (ignore delta protect-registers binding))
+  nil)
 
 (define-extended-code-expander :incf-lexvar (instruction funobj frame-map)
   (destructuring-bind (binding delta &key protect-registers)
@@ -5385,18 +5413,13 @@ and a list of any intervening unwind-protect environment-slots."
        ((and binding-type
 	     location
 	     (not (binding-lended-p binding))
-	     (multiple-value-call #'encoded-subtypep
-	       (values-list (binding-store-type binding))
-	       (type-specifier-encode 'integer)))
+	     (binding-store-subtypep binding 'integer))
 	;; This is an optimized incf that doesn't have to do type-checking.
 	(check-type location (integer 1 *))
 	`((:addl ,(* delta +movitz-fixnum-factor+)
 		 (:ebp ,(stack-frame-offset location)))
 	  (:into)))
-       ((and binding-type
-	     (multiple-value-call #'encoded-subtypep 
-	       (values-list (binding-store-type binding))
-	       (type-specifier-encode 'integer)))
+       ((binding-store-subtypep binding 'integer)
 	(let ((register (chose-free-register protect-registers)))
 	  `(,@(make-load-lexical (ensure-local-binding binding funobj) 
 				 register funobj nil frame-map
