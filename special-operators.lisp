@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.26 2004/07/13 02:26:14 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.27 2004/07/15 00:29:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1012,120 +1012,6 @@ on the current result."
       (compiler-values ()
 	:returns returns
 	:code `((:add ,(movitz-binding term1 env) ,(movitz-binding term2 env) ,returns))))))
-    
-
-(define-special-operator muerte::+%2op (&all all &form form &env env &result-mode result-mode)
-  (assert (not (eq :boolean result-mode)) ()
-    "Boolean result-mode for +%2op makes no sense.")
-  (destructuring-bind (term1 term2)
-      (cdr form)
-    (flet ((compile-constant-add (constant-term term-form)
-	     (compiler-values-bind (&code term2-code &returns term2-returns &type term2-type
-				    &functional-p term2-functional-p &modifies term2-modifies)
-		 (compiler-call #'compile-form-unprotected
-		   :result-mode (case result-mode
-				  ((:eax :ebx :ecx :edx)
-				   result-mode)
-				  (t :eax))
-		   :defaults all
-		   :form term-form)
-	       (assert term2-type)
-	       (let ((term2-type (type-specifier-primary term2-type)))
-;;;		 (declare (ignore term2-type))
-;;;		 (warn "t2-type: ~S, t2-ret: ~S, rm: ~S"
-;;;		       term2-type term2-returns result-mode)
-		 (cond
-		  ((and (eq 'binding-type (operator term2-type))
-			(eq (second term2-type) result-mode))
-		   (let ((binding result-mode))
-		     (check-type binding lexical-binding)
-		     (compiler-values ()
-		       :returns binding
-		       :type (binding-type-specifier binding)
-		       :code (append
-			      (compiler-call #'compile-form-unprotected
-				:result-mode :ignore
-				:defaults all
-				:form term-form)
-			      `((:incf-lexvar ,binding ,constant-term))))))
-		  ((eq :untagged-fixnum-eax term2-returns)
-		   (case result-mode
-		     (:untagged-fixnum-eax
-		      (compiler-values ()
-			:returns :untagged-fixnum-eax
-			:type 'integer
-			:functional-p term2-functional-p
-			:modifies term2-modifies
-			:code (append term2-code
-				      `((:addl ,constant-term :eax))
-				      (unless (< #x-10000 constant-term #x10000)
-					'((:into))))))
-		     (t (let ((result-register (accept-register-mode result-mode)))
-			  ;; (warn "XX")
-			  (compiler-values ()
-			    :returns result-register
-			    :modifies term2-modifies
-			    :functional-p term2-functional-p
-			    :code (append term2-code
-					  `((:leal ((:eax ,+movitz-fixnum-factor+)
-						    ,(* +movitz-fixnum-factor+ constant-term))
-						   ,result-register))))))))
-		  (t (multiple-value-bind (new-load-term-code add-result-mode)
-			 (make-result-and-returns-glue (accept-register-mode term2-returns)
-						       term2-returns
-						       term2-code)
-		       (let ((add-register (single-value-register add-result-mode))
-			     (label (gensym "not-integer-")))
-			 (compiler-values ()
-			   :returns add-register
-			   :functional-p term2-functional-p
-			   :modifies term2-modifies
-			   :type 'integer
-			   :code (append
-				  new-load-term-code
-				  (unless nil
-				    #+ignore (subtypep (translate-program term2-type :muerte.cl :cl)
-						       `(integer ,+movitz-most-negative-fixnum+
-								 ,+movitz-most-positive-fixnum+))
-				    `((:testb ,+movitz-fixnum-zmask+
-					      ,(register32-to-low8 add-register))
-				      (:jnz '(:sub-program (,label) (:int 107) (:jmp (:pc+ -4))))))
-				  `((:addl ,(* constant-term +movitz-fixnum-factor+) ,add-register))
-				  (unless nil
-				    #+ignore (subtypep (translate-program term2-type :muerte.cl :cl)
-						       `(integer ,(+ +movitz-most-negative-fixnum+
-								     constant-term)
-								 ,(+ +movitz-most-positive-fixnum+
-								     constant-term)))
-				    '((:into)))))))))))))
-      (cond
-       ((and (movitz-constantp term1 env)
-	     (movitz-constantp term2 env))
-	(compiler-call #'compile-self-evaluating
-	  :forward all
-	  :form (+ (eval-form term1 env)
-		   (eval-form term2 env))))
-       ((and (movitz-constantp term1 env) ; first operand zero?
-	     (zerop (eval-form term1 env)))
-	(compiler-call #'compile-form-unprotected
-	  :forward all
-	  :form term2))			; (+ 0 x) => x
-       ((and (movitz-constantp term2 env)	; second operand zero?
-	     (zerop (eval-form term2 env)))
-	(compiler-call #'compile-form-unprotected
-	  :forward all
-	  :form term1))			; (+ x 0) => x
-       ((movitz-constantp term1 env)
-	(let ((constant-term1 (eval-form term1 env)))
-	  (check-type constant-term1 (signed-byte 30))
-	  (compile-constant-add constant-term1 term2)))
-       ((movitz-constantp term2 env)
-	(let ((constant-term2 (eval-form term2 env)))
-	  (check-type constant-term2 (signed-byte 30))
-	  (compile-constant-add constant-term2 term1)))
-       (t (compiler-call #'compile-apply-symbol
-	    :forward all
-	    :form `(muerte.cl:+ ,term1 ,term2)))))))
 
 (define-special-operator muerte::include (&form form)
   (let ((*require-dependency-chain*
