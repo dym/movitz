@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.13 2004/04/16 23:35:29 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.14 2004/04/19 15:06:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -519,20 +519,31 @@ Returns list in EAX and preserves numargs in ECX."
 (define-primitive-function fast-class-of-even-fixnum ()
   "Return the class of a fixnum object."
   (with-inline-assembly (:returns :multiple-values)
-    (:globally (:movl (:edi (:edi-offset the-class-fixnum)) :eax))
+    (:globally (:movl (:edi (:edi-offset classes)) :eax))
+    (:movl (:eax #.(movitz::class-object-offset 'fixnum)) :eax)
     (:ret)))
 
 (define-primitive-function fast-class-of-odd-fixnum ()
   "Return the class of a fixnum object."
   (with-inline-assembly (:returns :multiple-values)
-    (:globally (:movl (:edi (:edi-offset the-class-fixnum)) :eax))
+    (:globally (:movl (:edi (:edi-offset classes)) :eax))
+    (:movl (:eax #.(movitz::class-object-offset 'fixnum)) :eax)
     (:ret)))
 
 (define-primitive-function fast-class-of-cons ()
   "Return the class of a cons object."
   (with-inline-assembly (:returns :multiple-values)
-    (:globally (:movl (:edi (:edi-offset the-class-cons)) :eax))
+    (:globally (:movl (:edi (:edi-offset classes)) :eax))
+    (:movl (:eax #.(movitz::class-object-offset 'cons)) :eax)
     (:ret)))
+
+(define-primitive-function fast-class-of-symbol ()
+  "Return the class of a symbol object."
+  (with-inline-assembly (:returns :multiple-values)
+    (:globally (:movl (:edi (:edi-offset classes)) :eax))
+    (:movl (:eax #.(movitz::class-object-offset 'symbol)) :eax)
+    (:ret)))
+
 
 (define-primitive-function fast-class-of-std-instance ()
   "Return the class of a std-instance object."
@@ -550,19 +561,23 @@ Returns list in EAX and preserves numargs in ECX."
 (define-primitive-function fast-class-of-character ()
   "Return the class of a character object."
   (with-inline-assembly (:returns :multiple-values)
-    (:globally (:movl (:edi (:edi-offset complicated-class-of)) :esi))
-    (:jmp (:esi #.(bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector%1op)))))
+    (:globally (:movl (:edi (:edi-offset classes)) :eax))
+    (:movl (:eax #.(movitz::class-object-offset 'character)) :eax)
+    (:ret)))
 
 (define-primitive-function fast-class-of-null ()
   "Return the class of a nil object."
   (with-inline-assembly (:returns :multiple-values)
-    (:globally (:movl (:edi (:edi-offset the-class-null)) :eax))
+    (:cmpl :edi :eax)
+    (:jne '(:sub-program () (:int 64)))
+    (:globally (:movl (:edi (:edi-offset classes)) :eax))
+    (:movl (:eax #.(movitz::class-object-offset 'null)) :eax)
     (:ret)))
 
 (define-primitive-function fast-class-of-other ()
   "Return the class of an other object."
   (with-inline-assembly (:returns :multiple-values)
-    (:movw (:eax -2) :cx)
+    (:movl (:eax -2) :ecx)
     (:cmpb #.(movitz::tag :std-instance) :cl)
     (:jne 'not-std-instance)
     (:movl (:eax #.(bt:slot-offset 'movitz::movitz-std-instance 'movitz::class)) :eax)
@@ -579,12 +594,6 @@ Returns list in EAX and preserves numargs in ECX."
     (:globally (:movl (:edi (:edi-offset complicated-class-of)) :esi))
     (:jmp (:esi #.(bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector%1op)))))
 
-(define-primitive-function fast-class-of-symbol ()
-  "Return the class of a symbol object."
-  (with-inline-assembly (:returns :multiple-values)
-    (:globally (:movl (:edi (:edi-offset the-class-symbol)) :eax))
-    (:ret)))
-
 (defun complicated-class-of (object)
   (typecase object
     (std-instance
@@ -595,7 +604,7 @@ Returns list in EAX and preserves numargs in ECX."
      (find-class 'string))
     (vector
      (find-class 'vector))
-    (compiled-function
+    (function
      (find-class 'function))
     (structure-object
      (find-class (structure-object-name object)))

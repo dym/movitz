@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.16 2004/04/18 23:15:53 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.17 2004/04/19 15:06:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -860,13 +860,26 @@
   (declare (ignore errorp))
   (if (not (movitz:movitz-constantp symbol env))
       form
-    (case (movitz::translate-program (movitz::eval-form symbol env) :muerte.cl :cl)
-      ((t) `(load-global-constant the-class-t))
-      (fixnum '(load-global-constant the-class-fixnum))
-      (null `(load-global-constant the-class-null))
-      (symbol '(load-global-constant the-class-symbol))
-      (cons '(load-global-constant the-class-cons))
-      (t form))))
+    (let* ((type (movitz:movitz-eval symbol env))
+	   (cl-type (movitz::translate-program type :muerte.cl :cl)))
+      (cond
+       ((eq t cl-type)
+	`(load-global-constant the-class-t))
+       ((member type (movitz::image-classes-map movitz:*image*))
+	`(with-inline-assembly (:returns :register)
+	   (:globally (:movl (:edi (:edi-offset classes)) (:result-register)))
+	   (:movl ((:result-register) ,(movitz::class-object-offset type))
+		  (:result-register))))
+       (t (warn "unknown find-class: ~A" cl-type)
+	  form))
+      #+ignore
+      (case cl-type
+	((t) `(load-global-constant the-class-t))
+	(fixnum '(load-global-constant the-class-fixnum))
+	(null `(load-global-constant the-class-null))
+	(symbol '(load-global-constant the-class-symbol))
+	(cons '(load-global-constant the-class-cons))
+	(t form)))))
 
 (define-compiler-macro class-of (object)
   `(with-inline-assembly (:returns :eax)
@@ -886,7 +899,7 @@
 	 (:leal ((:result-register) ,(- (movitz::tag :other)))
 		:ecx)
 	 (:testb 7 :cl)
-	 (:jnz '(:sub-program () (:int 68)))
+	 (:jnz '(:sub-program () (:int 66)))
 	 (:movl ((:result-register) ,(bt:slot-offset 'movitz::movitz-std-instance slot))
 		(:result-register))))))
 
@@ -898,7 +911,7 @@
 	 (:leal (:ebx ,(- (movitz::tag :other)))
 		:ecx)
 	 (:testb 7 :cl)
-	 (:jnz '(:sub-program () (:int 68)))
+	 (:jnz '(:sub-program () (:int 66)))
 	 (:movl :eax
 		(:ebx ,(bt:slot-offset 'movitz::movitz-std-instance slot)))))))
 
@@ -982,11 +995,6 @@ busy-waiting loop on P4."
 	 (:locally (:movl (:edi (:edi-offset ,name)) :ecx)))
     `(with-inline-assembly (:returns :untagged-fixnum-ecx)
        (:globally (:movl (:edi (:edi-offset ,name)) :ecx)))))
-
-;;;(define-compiler-macro (setf %runtime-context-slot) (value slot-name)
-;;;  `(with-inline-assembly (:returns :eax)
-;;;     (:compile-form (:result-mode :eax) ,value)
-;;;     (:movl :eax (:edi ,(movitz::global-constant-offset (movitz::eval-form slot-name))))))
 
 (define-compiler-macro halt-cpu ()
   (let ((infinite-loop-label (make-symbol "infinite-loop")))

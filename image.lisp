@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.25 2004/04/17 15:33:51 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.26 2004/04/19 15:06:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -276,22 +276,35 @@
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
-   (num-values
-    :binary-type lu32
-    :initform 0)
-   (values
-    :binary-type #.(* 4 +movitz-multiple-values-limit+))
-
-   (default-interrupt-trampoline
-       :map-binary-write 'movitz-intern-code-vector
-     :binary-tag :primitive-function
-     :map-binary-read-delayed 'movitz-word-code-vector
-     :binary-type code-vector-word)
    (complicated-class-of
     :binary-type word
     :binary-tag :global-function
     :map-binary-read-delayed 'movitz-word
     :map-binary-write 'movitz-intern)   
+   (num-values
+    :binary-type lu32
+    :initform 0)
+   (values
+    :binary-type #.(* 4 +movitz-multiple-values-limit+))
+   (default-interrupt-trampoline
+       :map-binary-write 'movitz-intern-code-vector
+     :binary-tag :primitive-function
+     :map-binary-read-delayed 'movitz-word-code-vector
+     :binary-type code-vector-word)
+   (classes				; A vector of class meta-objects.
+    :initform nil			; The first element is the map of corresponding names
+    :binary-type word
+    :map-binary-write (lambda (x type)
+			(declare (ignore x type))
+			(let ((map (image-classes-map *image*)))
+			  (movitz-read-and-intern
+			   (apply #'vector
+				  map
+				  (mapcar (lambda (x)
+					    (funcall 'muerte::movitz-find-class x))
+					  map))
+			   'word)))
+    :map-binary-read-delayed 'movitz-word)
    ;; Some well-known classes
    (the-class-t
     :binary-type word
@@ -301,38 +314,38 @@
 			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
 						'word))
     :map-binary-read-delayed 'movitz-word)
-   (the-class-fixnum
-    :binary-type word
-    :initform 'fixnum
-    :map-binary-write (lambda (x type)
-			(declare (ignore type))
-			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
-					     'word))
-    :map-binary-read-delayed 'movitz-word)
-   (the-class-cons
-    :binary-type word
-    :initform 'cons
-    :map-binary-write (lambda (x type)
-			(declare (ignore type))
-			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
-					     'word))
-    :map-binary-read-delayed 'movitz-word)
-   (the-class-null
-    :binary-type word
-    :initform 'null
-    :map-binary-write (lambda (x type)
-			(declare (ignore type))
-			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
-					     'word))
-    :map-binary-read-delayed 'movitz-word)
-   (the-class-symbol
-    :binary-type word
-    :initform 'symbol
-    :map-binary-write (lambda (x type)
-			(declare (ignore type))
-			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
-					     'word))
-    :map-binary-read-delayed 'movitz-word)
+;;;   (the-class-fixnum
+;;;    :binary-type word
+;;;    :initform 'fixnum
+;;;    :map-binary-write (lambda (x type)
+;;;			(declare (ignore type))
+;;;			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
+;;;					     'word))
+;;;    :map-binary-read-delayed 'movitz-word)
+;;;   (the-class-cons
+;;;    :binary-type word
+;;;    :initform 'cons
+;;;    :map-binary-write (lambda (x type)
+;;;			(declare (ignore type))
+;;;			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
+;;;					     'word))
+;;;    :map-binary-read-delayed 'movitz-word)
+;;;   (the-class-null
+;;;    :binary-type word
+;;;    :initform 'null
+;;;    :map-binary-write (lambda (x type)
+;;;			(declare (ignore type))
+;;;			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
+;;;					     'word))
+;;;    :map-binary-read-delayed 'movitz-word)
+;;;   (the-class-symbol
+;;;    :binary-type word
+;;;    :initform 'symbol
+;;;    :map-binary-write (lambda (x type)
+;;;			(declare (ignore type))
+;;;			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
+;;;					     'word))
+;;;    :map-binary-read-delayed 'movitz-word)
    (interrupt-handlers
     :binary-type word
     :map-binary-write 'movitz-intern
@@ -526,6 +539,22 @@
     :initform (make-hash-table :test #'equal)
     :initarg :function-code-sizes
     :reader function-code-sizes)))
+
+(defmethod image-classes-map ((image symbolic-image))
+  '(muerte.cl:null muerte.cl:cons muerte.cl:fixnum muerte.cl:symbol
+    muerte.cl:character muerte.cl:function muerte.cl:condition
+    muerte.cl:vector muerte.cl:string muerte.cl:array
+    muerte.cl:class muerte.cl:standard-class
+    muerte.cl:standard-generic-function
+    muerte:run-time-context
+    muerte.mop:standard-effective-slot-definition
+    muerte.mop:funcallable-standard-class
+    muerte:basic-restart))
+
+(defun class-object-offset (name)
+  (+ (bt:slot-offset 'movitz-vector 'data)
+     (* 4 (1+ (or (position name (image-classes-map *image*))
+		  (error "No class named ~S in class-map." name))))))
 
 (defun unbound-value ()
   (declare (special *image*))

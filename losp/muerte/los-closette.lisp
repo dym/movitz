@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.7 2004/04/14 22:01:30 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.8 2004/04/19 15:06:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -208,12 +208,17 @@ funcallable-instance will run the new function."
 
 (defun (setf find-class) (class class-name)
   (check-type class (or null class))
+  #+ignore
   (case class-name
     ((t) (setf (%run-time-context-slot 'the-class-t) class))
     (null (setf (%run-time-context-slot 'the-class-null) class))
     (symbol (setf (%run-time-context-slot 'the-class-symbol) class))
     (fixnum (setf (%run-time-context-slot 'the-class-fixnum) class))
     (cons (setf (%run-time-context-slot 'the-class-cons) class)))
+  (let ((map (load-global-constant classes)))
+    (when (member class-name (svref map 0))
+      (setf (svref map (1+ (position class-name (svref map 0))))
+	class)))
   (if class
       (setf (gethash class-name *class-table*) class)
     (remhash class-name *class-table*))
@@ -896,9 +901,6 @@ is no unspecialized method was called."))
   `(defun ,name (instance)
      (with-inline-assembly (:returns :multiple-values)
        (:compile-form (:result-mode :eax) instance)
-;;;       (:leal (:eax -2) :ecx)
-;;;       (:testb 7 :cl)
-;;;       (:jnz '(:sub-program () (:int 68)))
        (:movl (:eax ,(bt:slot-offset 'movitz::movitz-std-instance 'movitz::slots))
 	      :eax)
        (:movl (:eax ,(+ (bt:slot-offset 'movitz::movitz-vector 'movitz::data)
@@ -1776,11 +1778,6 @@ in an instance whose metaclass is standard-class."))
     (warn "CLOS was already bootstrapped: ~S"
 	  (get 'clos-bootstrap 'have-bootstrapped)))
   (setf (get 'clos-bootstrap 'have-bootstrapped) :in-progress)
-  #+ignore
-  (setf (runtime-context-slot 'the-class-t) (gethash 't *class-table*)
-	(runtime-context-slot 'the-class-null) (gethash 'null *class-table*)
-	(runtime-context-slot 'the-class-symbol) (gethash 'symbol *class-table*)
-	(runtime-context-slot 'the-class-cons) (gethash 'cons *class-table*))
   (let ((real-camuc #'compute-applicable-methods-using-classes)
 	(real-class-slots #'class-slots)
 	(real-class-precedence-list #'class-precedence-list)
