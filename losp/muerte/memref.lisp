@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.16 2004/07/15 21:07:18 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.17 2004/07/16 10:06:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -352,7 +352,7 @@
 		  (:compile-two-forms (:eax :edx) ,index-var ,offset-var)
 		  (:load-lexical (:lexical-binding ,object-var) :ebx)
 		  (:std)
-		  (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+		  (:sarl ,movitz::+movitz-fixnum-shift+ :edx)
 		  (:addl :eax :edx) ; EDX = offset+index
 		  (:movl :ecx (:ebx :edx))
 		  (:movl :edi :edx)
