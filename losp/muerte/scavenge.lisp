@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.4 2004/04/06 14:33:10 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.5 2004/04/07 00:16:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -96,11 +96,80 @@ at the start-stack-frame location."
       and frame = (stack-frame-uplink start-stack-frame) then (stack-frame-uplink frame)
       while (plusp frame)
       do (let ((funobj (stack-frame-funobj frame t)))
-	   (etypecase funobj
-	     (integer
-	      (error "Don't know how to scavenge across an interrupt frame."))
+	   #+ignore
+	   (format t "~&fill ~S frame for ~S"
+		   (aref (%run-time-context-slot 'nursery-space) 0)
+		   funobj)
+	   (typecase funobj
 	     (function
 	      (assert (= 0 (funobj-frame-num-unboxed funobj)))
-	      (map-heap-words function (+ nether-frame 2) frame)))))
+	      (map-heap-words function (+ nether-frame 2) frame))
+	     ((eql 0)
+	      ;; 1. Scavenge the interrupt-frame
+	      (map-heap-words function
+			      (+ nether-frame 2)
+			      (+ frame (int-frame-index :ecx)))
+	      (let* ((interrupt-frame frame)
+		     (interrupted-eip-loc
+		      (int-frame-ref interrupt-frame :eip :signed-byte30+2)))
+		;; 2. Pop to interrupted frame
+		(setf nether-frame frame
+		      frame (stack-frame-uplink frame))
+		(let ((interrupted-funobj (stack-frame-funobj frame))
+		      (interrupted-esp (+ interrupt-frame 6)))
+		  (assert (typep interrupted-funobj 'function) ()
+		    "Interrupted frame was not a normal function: ~S"
+		    interrupted-funobj)
+		  ;; 3. Scavenge the interrupted frame, skipping EFLAGS etc.
+		  (if (location-in-object-p (funobj-code-vector interrupted-funobj)
+					    interrupted-eip-loc)
+		      ;; The simple case: The interruptee matches interrupted EIP
+		      (map-heap-words function interrupted-esp frame)
+		    (let ((primitive-function-vector
+			   (stack-frame-primitive-funcall interrupted-funobj
+							  interrupted-esp
+							  interrupted-eip-loc)))
+		      (if primitive-function-vector
+			  ;; Next simplest case: The interruptee was in a primitive-function,
+			  ;; with the return-address at top of stack.
+			  (map-heap-words function (1+ interrupted-esp) frame)
+			(error "Don't know how to scavenge across interrupt frame at ~S."
+			       interrupt-frame)))))))
+	     (t (error "Don't know how to scavenge across a frame of kind ~S." funobj)))))
   (values))
 
+(defparameter *primitive-funcall-patterns*
+    '(#xff #x57 (:function-offset :signed8)))
+
+(defun stack-frame-primitive-funcall (funobj stack-location eip-location)
+  (let ((return-address (memref stack-location 0 0 :unsigned-byte32))
+	(code-vector (funobj-code-vector funobj)))
+    (multiple-value-bind (return-location return-delta)
+	(truncate return-address #.movitz:+movitz-fixnum-factor+)
+      (if (not (location-in-object-p code-vector return-location))
+	  nil
+	(multiple-value-bind (success-p type code)
+	    (match-code-pattern *primitive-funcall-patterns*
+				code-vector (+ (* (- return-location
+						     (object-location code-vector))
+						  #.movitz:+movitz-fixnum-factor+)
+					       return-delta
+					       -3 -8)
+				:function-offset)
+	  (if (not success-p)
+	      (warn "mismatch in ~S at ~D from #x~X in ~Z."
+		    funobj
+		    (+ (* (- return-location
+			     (object-location code-vector))
+			  #.movitz:+movitz-fixnum-factor+)
+		       return-delta
+		       -3 -8)
+		    return-address code-vector)
+	    (let* ((offset (ecase type
+			     (:signed8
+			      (if (not (logbitp 7 code)) code (- code 256)))))
+		   (primitive-function (%word-offset (%run-time-context-ref offset) -2)))
+	      (check-type primitive-function vector-u8)
+	      (if (not (location-in-object-p primitive-function eip-location))
+		  nil
+		primitive-function))))))))
