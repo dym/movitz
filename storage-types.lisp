@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.42 2004/09/21 13:04:02 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.43 2004/10/21 20:42:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -73,11 +73,11 @@
   
   :old-vector #x1a
   :basic-vector #x22
+  :defstruct #x2a
   :funobj #x3a
   :bignum #x4a
   :ratio #x52
   :complex #x5a
-  :defstruct #x2a
   :std-instance #x40
   :run-time-context #x50
   :illegal #x13
@@ -1237,6 +1237,7 @@ integer (native lisp) value."
   (assert (= (movitz-bignum-value object) lisp-object))
   object)
 
+
 (defmethod read-binary-record ((type-name (eql 'movitz-bignum)) stream &key)
   (let* ((header (call-next-method))
 	 (x (loop for i from 0 below (movitz-bignum-length header)
@@ -1280,3 +1281,14 @@ integer (native lisp) value."
     (setf (slot-value obj 'numerator) (numerator value)
 	  (slot-value obj 'denominator) (denominator value))
     (call-next-method)))
+
+
+(defmethod update-movitz-object ((object movitz-ratio) lisp-object)
+  (assert (= (movitz-ratio-value object) lisp-object))
+  object)
+
+(defmethod print-object ((x movitz-ratio) stream)
+  (print-unreadable-object (x stream :type t)
+    (format stream "~D" (slot-value x 'value)))
+  x)
+
