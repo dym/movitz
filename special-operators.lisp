@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.41 2004/10/07 12:48:39 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.42 2004/10/21 20:41:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -598,7 +598,7 @@ The valid parameters are~{ ~S~}."
 			 (compiler-values ()
 			   :code code
 			   :returns returns
-			   :type type
+			   :type (translate-program type :muerte.cl :cl)
 			   :modifies modifies
 			   :functional-p (not side-effects))))))))))))
 
