@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.27 2004/11/14 22:57:39 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.28 2004/11/17 13:33:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -52,6 +52,10 @@
 
 (defun test1 ()
   (unwind-protect 0 (the integer 1)))
+
+(defun x (bios32)
+  (warn "X: ~S" (memref-int bios32))
+  (warn "X: ~S" (= (memref-int bios32) #x5f32335f)))
 
 (defun test2 ()
   (funcall
@@ -1579,7 +1583,7 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
     (:movl :ecx :eax)
     (:ret)))
 
-(define-primitive-function dynamic-load-shallow (symbol)
+(define-primitive-function dynamic-variable-lookup-shallow (symbol)
   "Load the dynamic value of SYMBOL into EAX."
   (with-inline-assembly (:returns :multiple-values)
     (:movl (:eax (:offset movitz-symbol value)) :eax)
@@ -1587,13 +1591,13 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
     (:je '(:sub-program (unbound) (:int 99)))
     (:ret)))
 
-(define-primitive-function dynamic-load-unprotected-shallow (symbol)
+(define-primitive-function dynamic-variable-lookup-unbound-shallow (symbol)
   "Load the dynamic value of SYMBOL into EAX."
   (with-inline-assembly (:returns :multiple-values)
     (:movl (:eax (:offset movitz-symbol value)) :eax)
     (:ret)))
 
-(define-primitive-function dynamic-store-shallow (symbol value)
+(define-primitive-function dynamic-variable-store-shallow (symbol value)
   "Store VALUE (ebx) in the dynamic binding of SYMBOL (eax).
    Preserves EBX and EAX."
   (with-inline-assembly (:returns :multiple-values)
@@ -1610,9 +1614,9 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
       (list (install muerte:dynamic-variable-install dynamic-variable-install-shallow)
 	    (install muerte:dynamic-variable-uninstall dynamic-variable-uninstall-shallow)
 	    (install muerte::dynamic-unwind-next dynamic-unwind-next-shallow)
-	    (install muerte::dynamic-store dynamic-store-shallow)
-	    (install muerte::dynamic-load-unprotected dynamic-load-unprotected-shallow)
-	    (prog1 (install muerte::dynamic-load dynamic-load-shallow)
+	    (install muerte::dynamic-variable-store dynamic-variable-store-shallow)
+	    (install muerte::dynamic-variable-lookup-unbound dynamic-variable-lookup-unbound-shallow)
+	    (prog1 (install muerte::dynamic-variable-lookup dynamic-variable-lookup-shallow)
 	      (labels ((install-shallow-env (env)
 			 "We use this local function in order to install dynamic-env slots
                           in reverse order, by depth-first recursion."

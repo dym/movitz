@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.45 2004/11/12 14:52:05 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.46 2004/11/17 13:33:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1078,7 +1078,7 @@ busy-waiting loop on P4."
        (:leal (:eax ,(- (movitz:tag :symbol))) :ecx)
        (:testb 7 :cl)
        (:jne '(:sub-program () (:int 66)))
-       (:call-local-pf dynamic-load-unprotected)
+       (:call-local-pf dynamic-variable-lookup-unbound)
        (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax)))))
 
 (defmacro define-global-variable (name init-form &optional docstring)

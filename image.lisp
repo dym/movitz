@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.78 2004/11/13 16:10:09 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.79 2004/11/17 13:32:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -161,17 +161,17 @@
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
-   (dynamic-load-unprotected
+   (dynamic-variable-lookup-unbound
     :map-binary-write 'movitz-intern-code-vector
     :binary-tag :primitive-function
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-type code-vector-word)
-   (dynamic-load
+   (dynamic-variable-lookup
     :map-binary-write 'movitz-intern-code-vector
     :binary-tag :primitive-function
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-type code-vector-word)
-   (dynamic-store
+   (dynamic-variable-store
     :map-binary-write 'movitz-intern-code-vector
     :binary-tag :primitive-function
     :map-binary-read-delayed 'movitz-word-code-vector

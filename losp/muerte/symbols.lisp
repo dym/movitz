@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.23 2004/11/11 19:25:25 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.24 2004/11/17 13:33:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -45,14 +45,14 @@
     (symbol
      (with-inline-assembly (:returns :eax)
        (:compile-form (:result-mode :eax) symbol)
-       (:call-local-pf dynamic-load)))))
+       (:call-local-pf dynamic-variable-lookup)))))
 
 (defun %unbounded-symbol-value (symbol)
   "Return the symbol's value without checking if it's bound or not."
   (check-type symbol symbol)
   (with-inline-assembly (:returns :eax)
     (:compile-form (:result-mode :eax) symbol)
-    (:call-local-pf dynamic-load-unprotected)
+    (:call-local-pf dynamic-variable-lookup-unbound)
    done))
 
 (defun (setf symbol-value) (value symbol)
@@ -63,7 +63,7 @@
      (with-inline-assembly (:returns :ebx)
        (:compile-form (:result-mode :eax) symbol)
        (:compile-form (:result-mode :ebx) value)
-       (:call-local-pf dynamic-store)))))
+       (:call-local-pf dynamic-variable-store)))))
 
 (defun set (symbol value)
   (setf (symbol-value symbol) value))

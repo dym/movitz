@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.35 2004/11/15 23:10:24 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.36 2004/11/17 13:33:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -623,7 +623,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				      :form value-form
 				      :result-mode :ebx)
 				    `((:load-constant ,var :eax)
-				      (:globally (:call (:edi (:edi-offset dynamic-store)))))))))))
+				      (:locally (:call (:edi (:edi-offset dynamic-variable-store)))))))))))
       (compiler-values ()
 	:code code
 	:returns last-returns
@@ -1253,11 +1253,11 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		 `((:locally (:movl :esp (:edi (:edi-offset raw-scratch0))))
 		   ,cleanup-entry
 
-		   ;; Modify unwind-protect dyn-env-entry to be normal continuation
+		   ;; Now (?), modify unwind-protect dyn-env-entry to be normal continuation
 		   (:locally (:movl (:edi (:edi-offset unbound-value)) :edx))
 		   (:movl :edx (:esp 4)) ; not unwind-protect-tag
 		   (:movl ',continue-label (:esp 8)) ; new jumper index
-		   
+
 		   (:locally (:pushl (:edi (:edi-offset raw-scratch0))))) ; push final-continuation
 		 ;; Execute cleanup-forms.
 		 (compiler-call #'compile-form-unprotected
@@ -1274,8 +1274,14 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			      (:locally (:bound (:edi (:edi-offset stack-bottom)) :eax))
 			      (:store-lexical ,next-continuation-step-binding :eax :type t))
 			    ,@cleanup-forms))
-		 `((:load-lexical ,next-continuation-step-binding :edx)
-		   (:locally (:popl (:edi (:edi-offset raw-scratch0)))) ; pop final continuation
+		 `((:locally (:popl (:edi (:edi-offset raw-scratch0)))) ; pop final continuation
+		   
+;;;		   ;; Now (?), modify unwind-protect dyn-env-entry to be normal continuation
+;;;		   (:locally (:movl (:edi (:edi-offset unbound-value)) :edx))
+;;;		   (:movl :edx (:esp 4)) ; not unwind-protect-tag
+;;;		   (:movl ',continue-label (:esp 8)) ; new jumper index
+
+		   (:load-lexical ,next-continuation-step-binding :edx)
 		   (:locally (:movl :esi (:edi (:edi-offset scratch1))))
 		   (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
 		   (:movl :edx :esp)	; enter non-local jump stack mode (possibly).

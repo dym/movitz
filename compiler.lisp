@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.106 2004/11/15 23:08:57 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.107 2004/11/17 13:32:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5602,7 +5602,7 @@ fifth:  all compiler-values for form1, as a list."
 	  :modifies nil
 	  :final-form form
 	  :code `((:load-constant ,form :eax)
-		  (:call (:edi ,(global-constant-offset 'dynamic-load))))))
+		  (:call (:edi ,(global-constant-offset 'dynamic-variable-lookup))))))
        (t (check-type binding dynamic-binding)
 	  (compiler-values ()
 	    :returns :eax
@@ -5610,7 +5610,7 @@ fifth:  all compiler-values for form1, as a list."
 	    :modifies nil
 	    :final-form form
 	    :code `((:load-constant ,form :eax)
-		    (:call (:edi ,(global-constant-offset 'dynamic-load))))))))))
+		    (:call (:edi ,(global-constant-offset 'dynamic-variable-lookup))))))))))
 
 (define-compiler compile-lambda-form (&form form)
   "3.1.2.2.4 Lambda Forms"

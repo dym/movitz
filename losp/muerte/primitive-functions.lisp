@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.53 2004/11/13 16:10:21 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.54 2004/11/17 13:33:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -162,7 +162,7 @@ and also EDX must be preserved."
     ;; Default binding strategy is naive deep binding, so this is a NOP.
     (:ret)))
     
-(define-primitive-function dynamic-load (symbol)
+(define-primitive-function dynamic-variable-lookup (symbol)
   "Load the dynamic value of SYMBOL into EAX."
   (with-inline-assembly (:returns :multiple-values)
     (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
@@ -194,7 +194,7 @@ and also EDX must be preserved."
     (:je '(:sub-program (unbound) (:int 99)))
     (:ret)))
 
-(define-primitive-function dynamic-load-unprotected (symbol)
+(define-primitive-function dynamic-variable-lookup-unbound (symbol)
   "Load the dynamic value of SYMBOL into EAX. If unbound, return unbound-value."
   (with-inline-assembly (:returns :multiple-values)
     (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
@@ -220,7 +220,7 @@ and also EDX must be preserved."
      :movl (:eax (:offset movitz-symbol value)) :eax)
     (:ret)))
 
-(define-primitive-function dynamic-store (symbol value)
+(define-primitive-function dynamic-variable-store (symbol value)
   "Store VALUE (ebx) in the dynamic binding of SYMBOL (eax).
    Preserves EBX and EAX."
   (with-inline-assembly (:returns :multiple-values)
