@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.13 2004/04/06 14:35:14 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.14 2004/04/07 00:34:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1104,19 +1104,21 @@
 	   
 	   #:*print-safely*
 
-	   stack-ref
-	   with-each-dynamic-context
-	   stack-frame-uplink
-	   current-stack-frame
-	   current-dynamic-context
-	   stack-frame-funobj
-	   stack-frame-call-site
-	   stack-frame-ref
-	   check-stack-limit
+	   #:stack-ref
+	   #:with-each-dynamic-context
+	   #:stack-frame-uplink
+	   #:current-stack-frame
+	   #:current-dynamic-context
+	   #:stack-frame-funobj
+	   #:stack-frame-call-site
+	   #:stack-frame-ref
+	   #:check-stack-limit
+	   #:interrupt-frame-ref
+	   #:interrupt-handler
 
-	   *build-number*
-	   *error-no-condition-for-debugger*
-	   formatted-error
+	   #:*build-number*
+	   #:*error-no-condition-for-debugger*
+	   #:formatted-error
 
 	   #:package-object-use-list
 	   #:package-object-internal-symbols
@@ -1289,6 +1291,7 @@
 	   
 	   #:+movitz-fixnum-factor+
 	   #:+movitz-fixnum-shift+
+	   #:+movitz-fixnum-zmask+
 	   #:+scan-skip-word+
 	   #:constant0
 	   
