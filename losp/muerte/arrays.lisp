@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.37 2004/07/20 12:38:59 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.38 2004/07/21 11:47:49 lgorrie Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -685,23 +685,25 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 (defun make-array (dimensions &key element-type initial-element initial-contents adjustable
 				   fill-pointer displaced-to displaced-index-offset)
   (declare (ignore adjustable displaced-to displaced-index-offset))
-  (etypecase dimensions
-    (cons
-     (error "Multi-dimensional arrays not supported."))
-    (integer
-     (cond
+  (let ((size (cond ((integerp dimensions)
+                     dimensions)
+                    ((and (consp dimensions) (null (cdr dimensions)))
+                     (car dimensions))
+                    (t
+                     (error "Multi-dimensional arrays not supported.")))))
+    (cond
       ;; These should be replaced by subtypep sometime.
       ((eq element-type 'character)
-       (make-basic-vector%character dimensions fill-pointer initial-element initial-contents))
+       (make-basic-vector%character size fill-pointer initial-element initial-contents))
       ((member element-type '(bit (unsigned-byte 1)) :test #'equal)
-       (make-basic-vector%bit dimensions fill-pointer initial-element initial-contents))
+       (make-basic-vector%bit size fill-pointer initial-element initial-contents))
       ((member element-type '(u8 (unsigned-byte 8)) :test #'equal)
-       (make-basic-vector%u8 dimensions fill-pointer initial-element initial-contents))
+       (make-basic-vector%u8 size fill-pointer initial-element initial-contents))
       ((member element-type '(u32 (unsigned-byte 32)) :test #'equal)
-       (make-basic-vector%u32 dimensions fill-pointer initial-element initial-contents))
+       (make-basic-vector%u32 size fill-pointer initial-element initial-contents))
       ((eq element-type 'code)
-       (make-basic-vector%code dimensions fill-pointer initial-element initial-contents))
-      (t (make-basic-vector%t dimensions fill-pointer initial-element initial-contents))))))
+       (make-basic-vector%code size fill-pointer initial-element initial-contents))
+      (t (make-basic-vector%t size fill-pointer initial-element initial-contents)))))
 
 (defun vector (&rest objects)
   "=> vector"
