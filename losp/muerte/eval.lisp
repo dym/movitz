@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.6 2004/04/15 13:16:28 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.7 2004/04/16 19:21:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -49,7 +49,7 @@
 (defun eval-symbol (form env)
   "3.1.2.1.1 Symbols as Forms"
   (if (symbol-constant-variable-p form)
-      (symbol-global-value form)
+      (symbol-value form)
     (let ((binding (env-binding env form)))
       (or (and binding (cdr binding))
 	  (symbol-value form)))))
