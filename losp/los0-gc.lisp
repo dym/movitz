@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.31 2004/07/23 15:26:51 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.32 2004/07/23 16:44:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -464,5 +464,5 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
 ~/muerte:pprint-clumps/, freed: ~/muerte:pprint-clumps/.~%"
 		    old-size new-size (- old-size new-size))))
 	(initialize-space oldspace)
-	(fill oldspace #x3 :start 2))))
+	(fill oldspace #x13 :start 2))))
   (values))
