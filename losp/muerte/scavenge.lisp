@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.11 2004/06/16 07:42:55 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.12 2004/06/22 21:41:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -92,17 +92,18 @@ start-location and end-location."
 				   #.(bt:enum-value 'movitz:movitz-vector-element-type :character)))
 	  (assert (evenp scan) ()
 	    "Scanned #x~Z at odd address #x~X." x scan)
-	  (let ((len (memref scan (word-upper16 x) 0 :unsigned-byte16)))
+	  (let ((len (word-upper16 x)))
+	    #+ignore (warn "scavenge at #x~X u8 vector len ~D." scan len)
 	    (incf scan (1+ (* 2 (truncate (+ 7 len) 8))))))
 	 ((scavenge-wide-typep x :vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u16))
 	  (assert (evenp scan) ()
 	    "Scanned #x~Z at odd address #x~X." x scan)
-	  (let ((len (memref scan (word-upper16 x) 0 :unsigned-byte16)))
+	  (let ((len (word-upper16 x)))
 	    (incf scan (1+ (* 2 (truncate (+ 3 len) 4))))))
 	 ((scavenge-wide-typep x :vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u32))
 	  (assert (evenp scan) ()
 	    "Scanned #x~Z at odd address #x~X." x scan)
-	  (let ((len (memref scan (word-upper16 x) 0 :unsigned-byte16)))
+	  (let ((len (word-upper16 x)))
 	    (incf scan (1+ (logand (1+ len) -2)))))
 	 ((eq x (fixnum-word 3))
 	  (incf scan)
