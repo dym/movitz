@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.40 2004/12/21 14:28:02 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.41 2005/01/10 14:04:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -748,40 +748,45 @@
 		    (:load-lexical (:lexical-binding ,object-var) :ebx)
 		    (,prefixes :movl :eax (:ebx :ecx)))))))))
       (:code-vector
-       (cond
-	((and (movitz:movitz-constantp offset env)
-	      (movitz:movitz-constantp index env))
-	 `(with-inline-assembly (:returns :eax)
-	    (:compile-two-forms (:eax :ebx) ,value ,object)
-	    (:movl ,movitz:+code-vector-word-offset+
-		   (:ebx ,(+ (movitz:movitz-eval offset env)
-			     (* 4 (movitz:movitz-eval index env)))))
-	    (:addl :eax (:ebx ,(+ (movitz:movitz-eval offset env)
-				  (* 4 (movitz:movitz-eval index env)))))))
-	((movitz:movitz-constantp offset env)
-	 (let ((value-var (gensym "memref-value-")))
-	   `(let ((,value-var ,value))
-	      (with-inline-assembly (:returns :eax)
-		(:compile-two-forms (:ebx :ecx) ,object ,index)
-		(:load-lexical (:lexical-binding ,value-var) :eax)
-		,@(when (plusp (- movitz:+movitz-fixnum-shift+ 2))
-		    `((:sarl ,(- movitz:+movitz-fixnum-shift+ 2)) :ecx))
-		(:movl ,movitz:+code-vector-word-offset+
-		       (:ebx :ecx ,(movitz:movitz-eval offset env)))
-		(:addl :eax (:ebx :ecx ,(movitz:movitz-eval offset env)))))))
-	(t (error "variable (setf memref) type :code-vector not implemented.")
-	   #+ignore
-	   (let ((value-var (gensym "memref-value-"))
-		 (object-var (gensym "memref-object-")))
-	     `(let ((,value-var ,value) (,object-var ,object))
+       (let ((prefixes (if localp
+			   nil
+			 movitz:*compiler-nonlocal-lispval-write-segment-prefix*)))
+	 (cond
+	  ((and (movitz:movitz-constantp offset env)
+		(movitz:movitz-constantp index env))
+	   `(with-inline-assembly (:returns :eax)
+	      (:compile-two-forms (:eax :ebx) ,value ,object)
+	      (:movl ,movitz:+code-vector-word-offset+
+		     (:ebx ,(+ (movitz:movitz-eval offset env)
+			       (* 4 (movitz:movitz-eval index env)))))
+	      (,prefixes
+	       :addl :eax (:ebx ,(+ (movitz:movitz-eval offset env)
+				    (* 4 (movitz:movitz-eval index env)))))))
+	  ((movitz:movitz-constantp offset env)
+	   (let ((value-var (gensym "memref-value-")))
+	     `(let ((,value-var ,value))
 		(with-inline-assembly (:returns :eax)
-		  (:compile-two-forms (:untagged-fixnum-ecx :ebx) ,offset ,index)
+		  (:compile-two-forms (:ebx :ecx) ,object ,index)
 		  (:load-lexical (:lexical-binding ,value-var) :eax)
-		  ,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
-		      `((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ebx))
-		  (:addl :ebx :ecx)	; index += offset
-		  (:load-lexical (:lexical-binding ,object-var) :ebx)
-		  (:movl :eax (:ebx :ecx))))))))
+		  ,@(when (plusp (- movitz:+movitz-fixnum-shift+ 2))
+		      `((:sarl ,(- movitz:+movitz-fixnum-shift+ 2)) :ecx))
+		  (:movl ,movitz:+code-vector-word-offset+
+			 (:ebx :ecx ,(movitz:movitz-eval offset env)))
+		  (,prefixes
+		   :addl :eax (:ebx :ecx ,(movitz:movitz-eval offset env)))))))
+	  (t (error "variable (setf memref) type :code-vector not implemented.")
+	     #+ignore
+	     (let ((value-var (gensym "memref-value-"))
+		   (object-var (gensym "memref-object-")))
+	       `(let ((,value-var ,value) (,object-var ,object))
+		  (with-inline-assembly (:returns :eax)
+		    (:compile-two-forms (:untagged-fixnum-ecx :ebx) ,offset ,index)
+		    (:load-lexical (:lexical-binding ,value-var) :eax)
+		    ,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
+			`((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ebx))
+		    (:addl :ebx :ecx)	; index += offset
+		    (:load-lexical (:lexical-binding ,object-var) :ebx)
+		    (:movl :eax (:ebx :ecx)))))))))
       (t ;; (warn "Can't handle inline MEMREF: ~S" form)
 	 form))))
 
