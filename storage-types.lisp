@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.15 2004/03/29 14:35:17 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.16 2004/04/21 16:22:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1126,7 +1126,7 @@ integer (native lisp) value."
 
 (defun make-movitz-hash-table (lisp-hash)
   (let* ((undef (movitz-read +undefined-hash-key+))
-	 (hash-size (* 4 (max 8 (hash-table-count lisp-hash))))
+	 (hash-size (* 2 (truncate (+ 25 (hash-table-count lisp-hash)) 1/3)))
 	 (bucket-data (make-array hash-size :initial-element undef)))
     (multiple-value-bind (hash-test hash-sxhash)
 	(ecase (hash-table-test lisp-hash)
@@ -1139,8 +1139,8 @@ integer (native lisp) value."
 	  do (loop for pos = (rem (* 2 (movitz-sxhash movitz-key)) hash-size)
 		 then (rem (+ 2 pos) hash-size)
 		 until (eq undef (svref bucket-data pos))
-;;;	       do (warn "Hash collision at ~D of ~D: ~S ~S!"
-;;;			pos hash-size movitz-key (elt bucket-list pos))
+;;;		 do (warn "Hash collision at ~D of ~D: ~S ~S!"
+;;;			  pos hash-size movitz-key (elt bucket-data pos))
 ;;;	       finally (warn "Hash: pos ~D: ~S ~S" pos movitz-key movitz-value)
 ;;;	       finally (when (equal "NIL" key)
 ;;;			 (warn "key: ~S, value: ~S pos: ~S" movitz-key movitz-value pos))
@@ -1149,7 +1149,7 @@ integer (native lisp) value."
       (let* ((bucket (make-movitz-vector hash-size :initial-contents bucket-data))
 	     (lh (make-instance 'movitz-struct
 		   :name (movitz-read 'muerte::hash-table)
-		   :length 2
+		   :length 3
 		   :slot-values (list hash-test ; test-function
 				      bucket
 				      hash-sxhash))))
@@ -1160,7 +1160,7 @@ integer (native lisp) value."
   (assert (= 3 (length (movitz-struct-slot-values movitz-hash))))
   (let* ((undef (movitz-read +undefined-hash-key+))
 	 (old-bucket (second (movitz-struct-slot-values movitz-hash)))
-	 (hash-size (* 2 (truncate (hash-table-count lisp-hash) 2/3)))
+	 (hash-size (* 2 (truncate (+ 25 (hash-table-count lisp-hash)) 1/3)))
 	 (bucket-data (or (and old-bucket
 			       (= (length (movitz-vector-symbolic-data old-bucket))
 				  hash-size)
@@ -1178,12 +1178,14 @@ integer (native lisp) value."
 		 then (rem (+ 2 pos) hash-size)
 		 until (eq undef (svref bucket-data pos))
 ;;;	       do (warn "Hash collision at ~D of ~D: ~S ~S!"
-;;;			pos hash-size movitz-key (elt bucket-list pos))
+;;;			pos hash-size movitz-key (elt bucket-data pos))
 ;;;	       finally (warn "Hash: pos ~D: ~S ~S" pos movitz-key movitz-value)
 ;;;	       finally (when (equal "NIL" key)
 ;;;			 (warn "key: ~S, value: ~S pos: ~S" movitz-key movitz-value pos))
-		 finally (setf (svref bucket-data pos) movitz-key
-			       (svref bucket-data (1+ pos)) movitz-value)))
+		 finally
+		   (setf (svref bucket-data pos) movitz-key
+			 (svref bucket-data (1+ pos)) movitz-value)))
+      (setf *foo* bucket-data)
       (setf (first (movitz-struct-slot-values movitz-hash)) hash-test
 	    (second (movitz-struct-slot-values movitz-hash)) (movitz-read bucket-data)
 	    (third (movitz-struct-slot-values movitz-hash)) hash-sxhash)
