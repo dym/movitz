@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.25 2004/12/14 16:20:57 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.26 2005/01/25 13:46:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -388,10 +388,15 @@ represented as that vector."
   (check-type funobj function)
   (memref funobj (movitz-type-slot-offset 'movitz-funobj 'debug-info) :type :unsigned-byte16))
 
-(defun funobj-frame-num-unboxed (funobj)
+(defun funobj-frame-raw-locals (funobj)
   "The number of unboxed slots in this function's stack-frame(s)."
   (declare (ignore funobj))
   0)
+
+(defun funobj-frame-headers-p (funobj)
+  "Can this function place header-vals in its stack-frame?"
+  (declare (ignore funobj))
+  t)
 
 (defun make-funobj (&key (name :unnamed)
 			 (code-vector (funobj-code-vector #'constantly-prototype))
