@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.5 2004/04/07 00:16:38 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.6 2004/04/07 00:34:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -108,10 +108,10 @@ at the start-stack-frame location."
 	      ;; 1. Scavenge the interrupt-frame
 	      (map-heap-words function
 			      (+ nether-frame 2)
-			      (+ frame (int-frame-index :ecx)))
+			      (+ frame (interrupt-frame-index :ecx)))
 	      (let* ((interrupt-frame frame)
 		     (interrupted-eip-loc
-		      (int-frame-ref interrupt-frame :eip :signed-byte30+2)))
+		      (interrupt-frame-ref interrupt-frame :eip :signed-byte30+2)))
 		;; 2. Pop to interrupted frame
 		(setf nether-frame frame
 		      frame (stack-frame-uplink frame))

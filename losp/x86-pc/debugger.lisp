@@ -10,14 +10,14 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.5 2004/04/06 14:45:24 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.6 2004/04/07 00:34:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (provide :x86-pc/debugger)
 
-(defpackage muerte.debug
-  (:use #:muerte.cl #:muerte #:muerte.x86-pc)
+(defpackage muerte
+  ;; (:use #:muerte.cl #:muerte #:muerte.x86-pc)
   (:export #:*debugger-function*
 	   #:*debugger-condition*
 	   #:*backtrace-conflate-names*
@@ -33,7 +33,7 @@
 	   #:backtrace
 	   ))
 
-(in-package muerte.debug)
+(in-package muerte)
 
 (defparameter *backtrace-be-spartan-p* nil)
 
@@ -481,8 +481,8 @@ be provided for those cases."
 		      (format t "#x~X " stack-frame))))
 	     (typecase funobj
 	       (integer
-		(let* ((int-frame stack-frame)
-		       (funobj (int-frame-ref int-frame :esi :lisp)))
+		(let* ((interrupt-frame stack-frame)
+		       (funobj (interrupt-frame-ref interrupt-frame :esi :lisp)))
 		  (if (and conflate
 			   ;; When the interrupted function has a stack-frame, conflate it.
 			   (typep funobj 'function)
@@ -492,18 +492,19 @@ be provided for those cases."
 		      (incf count)
 		      (print-leadin stack-frame count conflate-count)
 		      (setf conflate-count 0)
-		      (let ((exception (int-frame-ref int-frame :exception :unsigned-byte32))
-			    (eip (int-frame-ref int-frame :eip :unsigned-byte32)))
+		      (let ((exception (interrupt-frame-ref interrupt-frame :exception
+							    :unsigned-byte32))
+			    (eip (interrupt-frame-ref interrupt-frame :eip :unsigned-byte32)))
 			(typecase funobj
 			  (function
 			   (let ((delta (code-vector-offset (funobj-code-vector funobj) eip)))
 			     (if delta
 				 (format t "{Interrupt ~D in ~W at offset ~D. [#x~X]}"
-					 exception (funobj-name funobj) delta int-frame)
+					 exception (funobj-name funobj) delta interrupt-frame)
 			       (format t "{Interrupt ~D in ~W at EIP=#x~X. [#x~X]}"
-				       exception (funobj-name funobj) eip int-frame))))
+				       exception (funobj-name funobj) eip interrupt-frame))))
 			  (t (format t "{Interrupt ~D with ESI=#x~Z and EIP=#x~X. [#x~X]}"
-				     exception funobj eip int-frame))))))))
+				     exception funobj eip interrupt-frame))))))))
 	       (function
 		(let ((name (funobj-name funobj)))
 		  (cond

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.1 2004/04/07 00:12:23 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.2 2004/04/07 00:34:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,7 +22,7 @@
   `(with-inline-assembly (:returns :eax)
      (:movl (:esp ,(* 4 offset)) :eax)))
 
-(define-compiler-macro int-frame-index (&whole form name &environment env)
+(define-compiler-macro interrupt-frame-index (&whole form name &environment env)
   (let ((name (and (movitz:movitz-constantp name env)
 		   (movitz:movitz-eval name env))))
     (if (not name)
@@ -31,19 +31,20 @@
 		     '(nil :eflags :eip :error-code :exception :ebp nil
 		       :ecx :eax :edx :ebx :esi :edi))))))
 
-(defun int-frame-index (name)
+(defun interrupt-frame-index (name)
   (- 5 (position name
 		 '(nil :eflags :eip :error-code :exception :ebp nil
 		   :ecx :eax :edx :ebx :esi :edi))))
 
-(define-compiler-macro int-frame-ref (&whole form frame reg type &optional (offset 0) &environment env)
-  `(memref ,frame (+ (* 4 (int-frame-index ,reg)) ,offset) 0 ,type))
+(define-compiler-macro interrupt-frame-ref (&whole form frame reg type &optional (offset 0)
+					    &environment env)
+  `(memref ,frame (+ (* 4 (interrupt-frame-index ,reg)) ,offset) 0 ,type))
 
-(defun int-frame-ref (frame reg type &optional (offset 0))
-  (int-frame-ref frame reg type offset))
+(defun interrupt-frame-ref (frame reg type &optional (offset 0))
+  (interrupt-frame-ref frame reg type offset))
 
-(defun (setf int-frame-ref) (x frame reg type)
-  (setf (memref frame (* 4 (int-frame-index reg)) 0 type) x))
+(defun (setf interrupt-frame-ref) (x frame reg type)
+  (setf (memref frame (* 4 (interrupt-frame-index reg)) 0 type) x))
 
 (define-primitive-function default-interrupt-trampoline ()
   "Default first-stage interrupt handler."
@@ -118,8 +119,8 @@
     (:jnz 'skip-interrupt-handler)	; if it's not a symbol, never mind.
     (:movl (:eax #.(movitz::slot-offset 'movitz::movitz-symbol 'movitz::function-value))
 	   :esi)			; load new funobj from symbol into ESI
-    (:movl :ebp :ebx)			; pass INT-frame as arg1
-    ;; (:movl :ebx (:ebp -4))		; put INT-frame as our fake stack-frame's funobj.
+    (:movl :ebp :ebx)			; pass interrupt-frame as arg1
+    ;; (:movl :ebx (:ebp -4))		; put interrupt-frame as our fake stack-frame's funobj.
     (:movl (:ebp 4) :eax)		; pass interrupt number as arg 0.
     (:shll #.movitz::+movitz-fixnum-shift+ :eax)
     (:call (:esi #.(movitz::slot-offset 'movitz::movitz-funobj 'movitz::code-vector%2op)))
@@ -150,18 +151,18 @@
 
 (defvar *last-interrupt-frame* nil)
 
-(defun interrupt-default-handler (number int-frame)
+(defun interrupt-default-handler (number interrupt-frame)
   (declare (without-check-stack-limit))
   (macrolet ((@ (fixnum-address &optional (type :lisp))
 	       "Dereference the fixnum-address."
 	       `(memref ,fixnum-address 0 0 ,type)))
-    (let (($eip (+ int-frame (int-frame-index :eip)))
-	  ($eax (+ int-frame (int-frame-index :eax)))
-	  ($ebx (+ int-frame (int-frame-index :ebx)))
-	  ($ecx (+ int-frame (int-frame-index :ecx)))
-	  ($edx (+ int-frame (int-frame-index :edx)))
-	  ($esi (+ int-frame (int-frame-index :esi)))
-	  (*last-interrupt-frame* int-frame))
+    (let (($eip (+ interrupt-frame (interrupt-frame-index :eip)))
+	  ($eax (+ interrupt-frame (interrupt-frame-index :eax)))
+	  ($ebx (+ interrupt-frame (interrupt-frame-index :ebx)))
+	  ($ecx (+ interrupt-frame (interrupt-frame-index :ecx)))
+	  ($edx (+ interrupt-frame (interrupt-frame-index :edx)))
+	  ($esi (+ interrupt-frame (interrupt-frame-index :esi)))
+	  (*last-interrupt-frame* interrupt-frame))
       (block nil
 	(case number
 	  (0 (error "Division by zero."))
@@ -169,7 +170,7 @@
 	  (6 (error "Illegal instruction at ~@Z." $eip))
 	  (13 (error "General protection error. EIP=~@Z, error-code: #x~X, EAX: ~@Z, EBX: ~@Z, ECX: ~@Z"
 		     $eip
-		     (int-frame-ref int-frame :error-code :unsigned-byte32)
+		     (interrupt-frame-ref interrupt-frame :error-code :unsigned-byte32)
 		     $eax $ebx $ecx))
 	  (68 (warn "EIP: ~@Z EAX: ~@Z EBX: ~@Z  ECX: ~@Z EDX: ~@Z"
 		    $eip $eax $ebx $ecx $edx)
@@ -179,7 +180,7 @@
 	      (dotimes (i 100000)
 		(with-inline-assembly (:returns :nothing) (:nop))))
 	  (66 (error "Unspecified type error at ~@Z in ~S with EAX=~@Z, ECX=~@Z."
-		     $eip (@ (+ int-frame (int-frame-index :esi)))
+		     $eip (@ (+ interrupt-frame (interrupt-frame-index :esi)))
 		     $eax $ecx))
 	  (62 (error "Trying to save too many values: ~@Z." $ecx))
 	  ((5 55)
@@ -204,7 +205,7 @@
 			   new-bottom)
 		   (break "Stack overload exception ~D at ESP=~@Z with bottom #x~X."
 			  number
-			  (+ int-frame (int-frame-index :ebp))
+			  (+ interrupt-frame (interrupt-frame-index :ebp))
 			  old-bottom))
 	       (format *debug-io* "~&Stack-warning: Resetting stack-bottom to #x~X.~%"
 		       old-bottom)
@@ -222,12 +223,13 @@
 	     (when (symbolp name)
 	       (error 'unbound-variable :name name))))
 	  ((100);; 101 102 103 104 105)
-	   (let ((funobj (@ (+ int-frame (int-frame-index :esi))))
-		 (code (int-frame-ref int-frame :ecx :unsigned-byte8)))
+	   (let ((funobj (@ (+ interrupt-frame (interrupt-frame-index :esi))))
+		 (code (interrupt-frame-ref interrupt-frame :ecx :unsigned-byte8)))
 	     (error 'wrong-argument-count
 		    :function funobj
 		    :argument-count (if (logbitp 7 code)
-					(ash (int-frame-ref int-frame :ecx :unsigned-byte32)
+					(ash (interrupt-frame-ref interrupt-frame
+								  :ecx :unsigned-byte32)
 					     -24)
 				      code))))
 	  (108
