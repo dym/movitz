@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.10 2004/05/19 15:42:08 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.11 2004/05/24 14:58:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -21,6 +21,12 @@
 
 (defconstant most-positive-fixnum #.movitz::+movitz-most-positive-fixnum+)
 (defconstant most-negative-fixnum #.movitz::+movitz-most-negative-fixnum+)
+
+(deftype positive-fixnum ()
+  `(integer 0 ,movitz:+movitz-most-positive-fixnum+))
+
+(deftype positive-bignum ()
+  `(integer ,(1+ movitz:+movitz-most-positive-fixnum+) *))
 
 (defun fixnump (x)
   (typep x 'fixnum))
@@ -242,10 +248,26 @@
   "Compare real <n1> with fixnum <n2>."
   (with-inline-assembly (:returns :nothing) ; unspecified
     (:testb #.movitz::+movitz-fixnum-zmask+ :al)
+    (:jnz 'not-fixnum)
+    (:cmpl :ebx :eax)
+    (:ret)
+   not-fixnum
+    (:leal (:eax #.(cl:- (movitz:tag :other))) :ecx)
+    (:testb 7 :cl)
     (:jnz '(:sub-program (not-integer)
 	    (:int 107)
 	    (:jmp 'not-integer)))
-    (:cmpl :ebx :eax)
+    (:movl (:eax #.movitz:+other-type-offset+) :ecx)
+    (:cmpw #.(movitz:tag :bignum 0) :cx)
+    (:jne 'not-plusbignum)
+    ;; compare ebx with something bigger
+    (:cmpl #x-10000000 :edi)
+    (:ret)
+   not-plusbignum
+    (:cmpw #.(movitz:tag :bignum #xff) :cx)
+    (:jne 'not-integer)
+    ;; compare ebx with something bigger
+    (:cmpl #x10000000 :edi)
     (:ret)))
 
 ;;;
@@ -256,8 +278,8 @@
 	 (movitz:movitz-constantp max env))
     (let ((min (movitz:movitz-eval min env))
 	  (max (movitz:movitz-eval max env)))
-      (check-type min integer)
-      (check-type max integer)
+      (check-type min fixnum)
+      (check-type max fixnum)
       ;; (warn "~D -- ~D" min max)
       (cond
        ((movitz:movitz-constantp x env)
@@ -296,7 +318,7 @@
    #+ignore				; this is buggy.
    ((movitz:movitz-constantp min env)
     (let ((min (movitz:movitz-eval min env)))
-      (check-type min integer)
+      (check-type min fixnum)
       (cond
        ((minusp min)
 	`(let ((x ,x))
@@ -372,7 +394,7 @@
 	   (declare (dynamic-extent more-numbers))
 	   (cond
 	    ((null more-numbers)
-	     (check-type number integer)
+	     (check-type number fixnum)
 	     t)
 	    ((not (cdr more-numbers))
 	     (,2op-name number (first more-numbers)))
@@ -514,7 +536,7 @@
      (if (< number1 number2)
 	 number2 number1))
   (let ((label (gensym)))
-    `(with-inline-assembly (:returns :eax :type integer)
+    `(with-inline-assembly (:returns :eax :type fixnum)
        (:compile-two-forms (:eax :ebx) ,number1 ,number2)
        (:movl :ebx :ecx)
        (:orl :eax :ecx)
@@ -650,7 +672,7 @@
     `(*%2op ,(movitz:movitz-eval factor2 env) ,factor1))
    ((movitz:movitz-constantp factor1 env)
     (let ((f1 (movitz:movitz-eval factor1 env)))
-      (check-type f1 integer)
+      (check-type f1 fixnum)
       (case f1
 	(0 `(progn ,factor2 0))
 	(1 factor2)
@@ -708,9 +730,9 @@
   `(do-result-mode-case ()
      (:plural
       (no-macro-call ,@form))
-     (t (truncate%2ops%1ret ,number ,divisor))))
+     (t (truncate%1ret ,number ,divisor))))
 
-(defun truncate%2ops%1ret (number divisor)
+(defun truncate%1ret (number divisor)
   (with-inline-assembly (:returns :multiple-values)
     (:compile-form (:result-mode :eax) number)
     (:compile-form (:result-mode :ebx) divisor)
@@ -723,7 +745,7 @@
     (:shll #.movitz::+movitz-fixnum-shift+ :eax)
     (:clc)))
 
-(define-compiler-macro truncate%2ops%1ret (&whole form &environment env number divisor)
+(define-compiler-macro truncate%1ret (&whole form &environment env number divisor)
   (cond
    ((movitz:movitz-constantp divisor env)
     (let ((d (movitz:movitz-eval divisor env)))
@@ -731,7 +753,7 @@
       (case d
 	(0 (error "Truncate by zero."))
 	(1 number)
-	(t `(with-inline-assembly (:returns :eax :type integer)
+	(t `(with-inline-assembly (:returns :eax :type fixnum)
 	      (:compile-form (:result-mode :eax) ,number)
 	      (:compile-form (:result-mode :ebx) ,divisor)
 	      (:testb #.movitz::+movitz-fixnum-zmask+ :al)
@@ -741,26 +763,116 @@
 	      (:shll #.movitz::+movitz-fixnum-shift+ :eax))))))
    (t form)))
 
+(defmacro number-double-dispatch ((x y) &rest clauses)
+  `(let ((x ,x) (y ,y))
+     (cond ,@(loop for ((x-type y-type) . then-body) in clauses
+		 collect `((and (typep x ',x-type) (typep y ',y-type))
+			   ,@then-body))
+	   (t (error "Not numbers: ~S or ~S." x y)))))
+
 (defun truncate (number &optional (divisor 1))
   (numargs-case
    (1 (number)
       (values number 0))
    (t (number divisor)
-      (with-inline-assembly (:returns :multiple-values)
-	(:compile-form (:result-mode :eax) number)
-	(:compile-form (:result-mode :ebx) divisor)
-	(:movl :eax :ecx)
-	(:orl :ebx :ecx)
-	(:testb #.movitz::+movitz-fixnum-zmask+ :cl)
-	(:jnz '(:sub-program (not-integer) (:int 107)))
-	(:cdq :eax :edx)
-	(:idivl :ebx :eax :edx)
-	(:shll #.movitz::+movitz-fixnum-shift+ :eax)
-	(:movl :edx :ebx)
-	(:xorl :ecx :ecx)
-	(:movb 2 :cl)			; return values: qutient, remainder.
-	(:stc)))))
+      (number-double-dispatch (number divisor)
+	((fixnum fixnum)
+	 (with-inline-assembly (:returns :multiple-values)
+	   (:compile-form (:result-mode :eax) number)
+	   (:compile-form (:result-mode :ebx) divisor)
+	   (:std)
+	   (:cdq :eax :edx)
+	   (:idivl :ebx :eax :edx)
+	   (:shll #.movitz::+movitz-fixnum-shift+ :eax)
+	   (:cld)
+	   (:movl :edx :ebx)
+	   (:xorl :ecx :ecx)
+	   (:movb 2 :cl)		; return values: qutient, remainder.
+	   (:stc)))
+	((positive-bignum positive-fixnum)
+	 (let (r n)
+	   (with-inline-assembly (:returns :multiple-values)
+	     (:compile-form (:result-mode :ebx) number)
+	     (:movzxw (:ebx #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
+	     (:cmpl 1 :ecx)
+	     (:jne 'not-size1)
+	     (:compile-form (:result-mode :ecx) divisor)
+	     (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
+	     (:std)
+	     (:movl (:ebx #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)) :eax)
+	     (:xorl :edx :edx)
+	     (:divl :ecx :eax :edx)
+	     (:movl :eax :ecx)
+	     (:shll #.movitz:+movitz-fixnum-shift+ :edx)
+	     (:movl :edi :eax)
+	     (:cld)
+	     (:pushl :edx)
+	     (:call-global-constant normalize-u32-ecx)
+	     (:popl :ebx)
+	     (:jmp 'done)
+	    not-size1
+	     (:cmpl 2 :ecx)
+	     (:jne 'not-size2)
+	     (:compile-form (:result-mode :ecx) divisor)
+	     (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
+	     (:std)
+	     (:movl (:ebx #.(cl:+ 4 (bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		    :edx)
+	     (:cmpl :ecx :edx)
+	     (:jae 'not-size2)
+	     (:movl (:ebx #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)) :eax)
+	     (:divl :ecx :eax :edx)
+	     (:movl :eax :ecx)
+	     (:shll #.movitz:+movitz-fixnum-shift+ :edx)
+	     (:movl :edi :eax)
+	     (:cld)
+	     (:pushl :edx)
+	     (:call-global-constant normalize-u32-ecx)
+	     (:popl :ebx)
+	     (:jmp 'done)
+	    not-size2
+	     (:cmpl :ecx (:ebx #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)
+			       -4 (:ecx 4)))
+	     (:jc 'shrink-not-size2)
+	    not-shrink
+	     (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :eax)
+	     (:compile-form (:result-mode :eax)
+			    (malloc-words (with-inline-assembly (:returns :eax))))
+	     (:store-lexical (:lexical-binding r) :eax :type t)
+	     (:compile-form (:result-mode :ebx) number)
+	     (:movl (:ebx #.movitz:+other-type-offset+) :ecx)
+	     (:movl :ecx (:eax #.movitz:+other-type-offset+))
+	     (:shrl 16 :ecx)
+	     
+	     (:xorl :edx :edx)		; edx=hi-digit=0
+					; eax=lo-digit=msd(number)
+	     (:std)
+	     (:compile-form (:result-mode :esi) divisor)
+	     (:shrl #.movitz:+movitz-fixnum-shift+ :esi)
 
+	    divide-loop
+	     (:load-lexical (:lexical-binding number) :ebx)
+	     (:movl (:ebx #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)
+			  -4 (:ecx 4))
+		    :eax)
+	     (:divl :esi :eax :edx)
+	     (:load-lexical (:lexical-binding r) :ebx)
+	     (:movl :eax (:ebx #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)
+			       -4 (:ecx 4)))
+	     (:subl 1 :ecx)
+	     (:jnz 'divide-loop)
+	     (:movl :ebx :eax)
+	     (:leal ((:edx #.movitz:+movitz-fixnum-factor+)) :ebx)
+	     (:movl :edi :edx)
+	     (:movl (:ebp -4) :esi)
+	     (:cld)
+	     (:jmp 'done)
+	    shrink-not-size2
+	     (:int 107)
+	    done
+	     (:movl 2 :ecx)
+	     (:stc))))
+	))))
 
 (defun round (number &optional (divisor 1))
   "Mathematical rounding."

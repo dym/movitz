@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.22 2004/05/21 09:39:40 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.23 2004/05/24 14:58:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1283,6 +1283,7 @@
   (:export #:create-image
 	   #:dump-image
 
+	   #:class-object-offset
 	   #:other-type-byte
 	   #:+other-type-offset+
 	   #:parse-docstring-and-declarations

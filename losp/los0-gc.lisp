@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.10 2004/04/16 14:44:42 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.11 2004/05/24 14:58:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -72,6 +72,33 @@
     (:movl :ecx (:edx 2))
     (:ret)))
 
+(define-primitive-function los0-normalize-u32-ecx ()
+  "Make u32 in ECX into a fixnum or bignum."
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :multiple-values)
+	    (:cmpl ,movitz:+movitz-most-positive-fixnum+ :ecx)
+	    (:ja 'not-fixnum)
+	    (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
+	    (:ret)
+	   not-fixnum
+	   retry-cons
+	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
+	    (:movl (:edx 2) :eax)
+	    (:cmpl #x3fff4 :eax)
+	    (:jge '(:sub-program ()
+		    (:int 113)		; This interrupt can be retried.
+		    (:jmp 'retry-cons)))
+	    (:movl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0))
+		   (:edx :eax 2))
+	    (:movl :ecx (:edx :eax 6))
+	    (:addl 8 :eax)
+	    (:movl :eax (:edx 2))
+	    (:leal (:edx :eax) :eax)
+	    (:ret)
+	    (:int 107))))
+    (do-it)))
+
 (defun los0-malloc-clumps (clumps)
   (check-type clumps (integer 0 4000))
   (with-inline-assembly (:returns :eax)
@@ -129,6 +156,10 @@
   (let ((conser (symbol-value 'los0-fast-cons)))
     (check-type conser vector)
     (setf (%run-time-context-slot 'muerte::fast-cons)
+      conser))
+  (let ((conser (symbol-value 'los0-normalize-u32-ecx)))
+    (check-type conser vector)
+    (setf (%run-time-context-slot 'muerte::normalize-u32-ecx)
       conser))
   (let ((old-malloc (symbol-function 'muerte:malloc-clumps)))
     (setf (symbol-function 'muerte:malloc-clumps)

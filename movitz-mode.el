@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep 27 18:12:17 2001
 ;;;;                
-;;;; $Id: movitz-mode.el,v 1.5 2004/05/19 14:57:46 ffjeld Exp $
+;;;; $Id: movitz-mode.el,v 1.6 2004/05/24 14:58:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -301,6 +301,7 @@
   (put 'vector-double-dispatch tag '(like case))
   (put 'sequence-dispatch tag '(like case))
   (put 'sequence-double-dispatch tag '(like case))
+  (put 'number-double-dispatch tag '(like case))
   (put 'simple-stream-dispatch tag '(like case))
   (put 'with-inline-assembly tag '(like prog))
   (put 'with-inline-assembly-case tag '(like prog))

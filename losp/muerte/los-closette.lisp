@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.10 2004/04/21 15:07:27 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.11 2004/05/24 14:59:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -908,7 +908,7 @@ for a slot at position i.")
     (assert slot (slot-name)
       "No slot named ~S in class ~S." slot-name class)
     (let ((slot-location (slot-definition-location slot)))
-      (check-type slot-location (integer 0 *))
+      (check-type slot-location (integer 0 #xffff))
       (etypecase class
 	(standard-class
 	 (if (and (< slot-location (length *standard-effective-slot-readers*))

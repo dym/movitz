@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.17 2004/05/21 09:41:11 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.18 2004/05/24 14:58:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -441,8 +441,8 @@ Returns list in EAX and preserves numargs in ECX."
 
 (defun malloc-initialize (buffer-start buffer-size)
   "BUFFER-START: the (fixnum) 4K address. BUFFER-SIZE: The size in 4K units."
-  (check-type buffer-start integer)
-  (check-type buffer-size integer)
+  (check-type buffer-start fixnum)
+  (check-type buffer-size fixnum)
   (with-inline-assembly (:returns :nothing)
     (:compile-form (:result-mode :eax) buffer-start)
     (:shll #.(cl:- 12 movitz::+movitz-fixnum-shift+) :eax)
@@ -503,6 +503,17 @@ Returns list in EAX and preserves numargs in ECX."
     (:popl :edx)
     return-ok
     (:ret)))
+
+
+(define-primitive-function normalize-u32-ecx ()
+  "Make u32 in ECX into a fixnum or bignum."
+  (with-inline-assembly (:returns :multiple-values)
+    (:cmpl #.movitz:+movitz-most-positive-fixnum+ :ecx)
+    (:ja 'not-fixnum)
+    (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :eax)
+    (:ret)
+   not-fixnum
+    (:int 107)))			; not implemented by default!
 
 ;;;;
 
@@ -566,32 +577,42 @@ Returns list in EAX and preserves numargs in ECX."
     (:globally (:movl (:edi (:edi-offset classes)) :ebx))
     (:cmpl :edi :eax)
     (:je 'null)
-    (:movl (:ebx #.(movitz::class-object-offset 'illegal-object)) :eax)
+    (:movl (:ebx #.(movitz:class-object-offset 'illegal-object)) :eax)
     (:jmp 'not-null)
    null
-    (:movl (:ebx #.(movitz::class-object-offset 'null)) :eax)
+    (:movl (:ebx #.(movitz:class-object-offset 'null)) :eax)
    not-null
     (:ret)))
 
 (define-primitive-function fast-class-of-other ()
   "Return the class of an other object."
-  (with-inline-assembly (:returns :multiple-values)
-    (:movl (:eax #.movitz:+other-type-offset+) :ecx)
-    (:cmpb #.(movitz::tag :std-instance) :cl)
-    (:jne 'not-std-instance)
-    (:movl (:eax #.(bt:slot-offset 'movitz::movitz-std-instance 'movitz::class)) :eax)
-    (:ret)
-   not-std-instance
-    (:cmpw #.(cl:+ (movitz::tag :funobj)
-		   (cl:ash (bt:enum-value 'movitz::movitz-funobj-type :generic-function) 8))
-	   :cx)
-    (:jne 'not-std-gf-instance)
-    (:movl (:eax #.(bt:slot-offset 'movitz::movitz-funobj-standard-gf 'movitz::standard-gf-class))
-	   :eax)
-    (:ret)
-   not-std-gf-instance
-    (:globally (:movl (:edi (:edi-offset complicated-class-of)) :esi))
-    (:jmp (:esi #.(bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector%1op)))))
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :multiple-values)
+	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
+	    (:cmpb ,(movitz:tag :std-instance) :cl)
+	    (:jne 'not-std-instance)
+	    (:movl (:eax ,(bt:slot-offset 'movitz::movitz-std-instance 'movitz::class)) :eax)
+	    (:ret)
+	   not-std-instance
+	    (:cmpw ,(+ (movitz:tag :funobj)
+		       (ash (bt:enum-value 'movitz::movitz-funobj-type :generic-function) 8))
+		   :cx)
+	    (:jne 'not-std-gf-instance)
+	    (:movl (:eax ,(bt:slot-offset 'movitz::movitz-funobj-standard-gf
+					  'movitz::standard-gf-class))
+		   :eax)
+	    (:ret)
+	   not-std-gf-instance
+	    (:globally (:movl (:edi (:edi-offset classes)) :ebx))
+	    (:cmpb ,(movitz:tag :bignum) :cl)
+	    (:jne 'not-bignum)
+	    (:movl (:ebx ,(movitz:class-object-offset 'integer)) :eax)
+	    (:ret)
+	   not-bignum
+	    (:globally (:movl (:edi (:edi-offset complicated-class-of)) :esi))
+	    (:jmp (:esi ,(bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector%1op))))))
+    (do-it)))
 
 (defun complicated-class-of (object)
   (typecase object

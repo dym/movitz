@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.13 2004/04/23 15:04:07 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.14 2004/05/24 14:58:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -262,6 +262,24 @@
    exit
     (warn "exited: ~S" c)))
 
+
+(defun test-bignum ()
+  123456789123456)
+
+(defun ff32 ()
+  #xffffffff)
+
+(defun one32 ()
+  #x100000000)
+
+(defun test-nbignum ()
+  -123456789123456)
+
+(defun gt5 (x)
+  (<= x 5))
+
+(defun xplus (x)
+  (typep x '(integer 0 *)))
 
 (defstruct xxx
   x y (z 'init-z))

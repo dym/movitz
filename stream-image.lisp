@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Aug 27 14:46:50 2001
 ;;;;                
-;;;; $Id: stream-image.lisp,v 1.4 2004/03/31 16:34:47 ffjeld Exp $
+;;;; $Id: stream-image.lisp,v 1.5 2004/05/24 14:58:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -80,7 +80,8 @@
 		  (:other
 		   (setf (image-stream-position image)
 		     (+ 4 (extract-pointer word)))
-		   (let ((type-tag (read-binary 'other-type-byte (image-stream image))))
+		   (let* ((type-code (read-binary 'u8 (image-stream image)))
+			  (type-tag (enum-symbolic-value 'other-type-byte type-code)))
 		     (setf (image-stream-position image)
 		       (extract-pointer word))
 		     (case type-tag
@@ -92,7 +93,8 @@
 			   (read-binary 'movitz-struct (image-stream image)))
 		       (:std-instance
 			(read-binary 'movitz-std-instance (image-stream image)))
-		       (t (warn "unknown other object: #x~X: ~S" word type-tag)
+		       (t (warn "unknown other object: #x~X: ~S code #x~X."
+				word type-tag type-code)
 			  (make-instance 'movitz-fixnum :value (truncate word 4))))))
 		  (t (make-instance 'movitz-fixnum :value 0)))))
     (when (typep object 'movitz-heap-object)

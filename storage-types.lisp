@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.17 2004/05/21 09:39:30 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.18 2004/05/24 14:58:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -74,6 +74,7 @@
   :run-time-context #x50
   :illegal #x13
   :infant-object #x23
+  :bignum #x4a
 
   ;; :simple-vector #x20
   ;; :character-vector 
@@ -84,8 +85,9 @@
 (defconstant +fixnum-tags+ '(:even-fixnum :odd-fixnum))
 (defparameter +scan-skip-word+ #x00000003)
 
-(defun tag (type)
-  (bt:enum-value 'other-type-byte type))
+(defun tag (type &optional (wide-tag 0))
+  (logior (bt:enum-value 'other-type-byte type)
+	  (ash wide-tag 8)))
 
 (defun tag-name (number)
   (bt:enum-symbolic-value 'other-type-byte number))
@@ -1289,3 +1291,42 @@ integer (native lisp) value."
 	       :stream stream))))
   object)
 
+;;;;
+
+(define-binary-class movitz-bignum (movitz-heap-object-other)
+  ((type
+    :binary-type other-type-byte
+    :initform :bignum)
+   (sign
+    :binary-type u8
+    :initarg :sign
+    :accessor movitz-bignum-sign)
+   (length
+    :binary-type lu16
+    :initarg :length
+    :accessor movitz-bignum-length)
+   (bigit0 :binary-type :label)
+   (value
+    :initarg :value
+    :accessor movitz-bignum-value))
+  (:slot-align type #.+other-type-offset+))
+
+(defmethod write-binary-record ((obj movitz-bignum) stream)
+  (let* ((num (movitz-bignum-value obj))
+	 (length (ceiling (integer-length (abs num)) 32)))
+    (check-type length (unsigned-byte 16))
+    (setf (movitz-bignum-length obj) length
+	  (movitz-bignum-sign obj) (if (minusp num) #xff #x00))
+    (+ (call-next-method)		; header
+       (loop for b from 0 below length
+	   summing (write-binary 'lu32 stream (ldb (byte 32 (* b 32)) (abs num)))))))
+
+(defun make-movitz-integer (value)
+  (if (<= +movitz-most-negative-fixnum+ value +movitz-most-positive-fixnum+)
+      (make-movitz-fixnum value)
+    (make-instance 'movitz-bignum
+      :value value)))
+
+(defmethod sizeof ((obj movitz-bignum))
+  (+ (sizeof 'movitz-bignum)
+     (* 4 (ceiling (integer-length (abs (movitz-bignum-value obj))) 32))))

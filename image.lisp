@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.29 2004/05/21 09:38:52 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.30 2004/05/24 14:58:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -226,6 +226,11 @@
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
+   (normalize-u32-ecx
+    :binary-type code-vector-word
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)   
    (malloc
     :binary-type code-vector-word
     :map-binary-write 'movitz-intern-code-vector
@@ -543,6 +548,7 @@
 (defmethod image-classes-map ((image symbolic-image))
   '(muerte.cl:null muerte.cl:cons muerte.cl:fixnum muerte.cl:symbol
     muerte.cl:character muerte.cl:function muerte.cl:condition
+    muerte.cl:integer muerte.cl:ratio
     muerte.cl:vector muerte.cl:string muerte.cl:array
     muerte.cl:class muerte.cl:standard-class
     muerte.cl:standard-generic-function
@@ -553,9 +559,10 @@
     muerte:illegal-object))
 
 (defun class-object-offset (name)
-  (+ (bt:slot-offset 'movitz-vector 'data)
-     (* 4 (1+ (or (position name (image-classes-map *image*))
-		  (error "No class named ~S in class-map." name))))))
+  (let ((name (translate-program name :cl :muerte.cl)))
+    (+ (bt:slot-offset 'movitz-vector 'data)
+       (* 4 (1+ (or (position name (image-classes-map *image*))
+		    (error "No class named ~S in class-map." name)))))))
 
 (defun unbound-value ()
   (declare (special *image*))
@@ -1361,7 +1368,7 @@ this image will not be Multiboot compatible."
 	 (null *movitz-nil*)
 	 ((member t) (movitz-read 'muerte.cl:t))
 	 (symbol (intern-movitz-symbol expr))
-	 (integer (make-movitz-fixnum expr))
+	 (integer (make-movitz-integer expr))
 	 (character (make-movitz-character expr))
 	 (string (or (gethash expr (image-string-constants *image*))
 		     (setf (gethash expr (image-string-constants *image*))
