@@ -1,33 +1,62 @@
+;;;;------------------------------------------------------------------
+;;;; 
+;;;;    Copyright (C) 2003-2004, 
+;;;;    Department of Computer Science, University of Tromsoe, Norway.
+;;;; 
+;;;;    For distribution policy, see the accompanying file COPYING.
+;;;; 
+;;;; Filename:      load.lisp
+;;;; Description:   
+;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
+;;;; Created at:    Thu Jan 15 18:40:58 2004
+;;;;                
+;;;; $Id: load.lisp,v 1.2 2004/01/15 17:38:21 ffjeld Exp $
+;;;;                
+;;;;------------------------------------------------------------------
 
-(in-package :user)
+(in-package :cl-user)
 
-;; (load "../binary-types/binary-types")
+(load (compile-file #p"../binary-types/binary-types"))
 
-(compile-file #p"../binary-types/binary-types" :load-after-compile t)
+(let ((*default-pathname-defaults* #p"../ia-x86/"))
+  #+cmu (let ((pwd (ext:default-directory)))
+	  (progn
+	    (unwind-protect
+		(progn
+		  (setf (ext:default-directory) #p"../ia-x86/")
+		  (load "load"))
+	      (setf (ext:default-directory) pwd))))
+  #-cmu (load "load"))
 
-(let ((*default-pathname-defaults* #+mswindows #p"c:\\src\\read-elf32\\"
-				   #+unix #p"~/src/ia-x86/"))
-  (load "system.lisp")
-  (compile-system :ia-x86)
-  (load-system :ia-x86)
-  (load-system :ia-x86-instr :interpreted t))
+(load (compile-file #p"../infunix/procfs"))
 
-(ia-x86:init-instruction-tables)
 
-(let ((*default-pathname-defaults* #+mswindows #p"c:\\src\\read-elf32\\"
-				   #+unix #p"~/src/read-elf32/"))
-  (load "Defsystem-allegro.lisp")
-  (load-system :elf32))
+#+allegro (progn
+	    (load "packages.lisp")
+	    (load "movitz.lisp")
+	    (excl:compile-system :movitz)
+	    (excl:load-system :movitz)
+	    (setf excl:*tenured-bytes-limit* #x2000000)
+	    (setf (system::gsgc-parameter :generation-spread) 12)
+	    (sys:resize-areas :new (* 16 1024 1024)))
 
-(compile-file #p"../infunix/procfs" :load-after-compile t)
-
-(load "packages.lisp")
-(load "movitz.lisp")
-(compile-system :movitz)
-(load-system :movitz)
-
-#+allegro
-(progn
-  (setf excl:*tenured-bytes-limit* #x2000000)
-  (setf (system::gsgc-parameter :generation-spread) 12)
-  (sys:resize-areas :new (* 16 1024 1024)))
+#-allegro (with-compilation-unit ()
+	    #+cmu (setf bt::*ignore-hidden-slots-for-pcl* t)
+	    (mapcar (lambda (path)
+		      (load (compile-file (make-pathname :name path :type "lisp") :print nil)))
+		    '("packages"
+		      "movitz"
+		      "parse"
+		      "eval"
+		      "multiboot"
+		      "bootblock"
+		      "environment"
+		      "compiler-types"
+		      "compiler-protocol"
+		      "storage-types"
+		      "image"
+		      "stream-image"
+		      "procfs-image"
+		      "assembly-syntax"
+		      "compiler-protocol"
+		      "compiler" "special-operators" "special-operators-cl")))
