@@ -9,18 +9,349 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.70 2004/07/17 11:27:58 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.71 2004/07/17 12:16:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (require :muerte/basic-macros)
 (require :muerte/typep)
+(require :muerte/arithmetic-macros)
 (provide :muerte/integers)
 
 (in-package muerte)
 
 (defconstant most-positive-fixnum #.movitz::+movitz-most-positive-fixnum+)
 (defconstant most-negative-fixnum #.movitz::+movitz-most-negative-fixnum+)
+
+
+;;; Comparison
+
+(define-primitive-function fast-compare-two-reals (n1 n2)
+  "Compare two numbers (i.e. set EFLAGS accordingly)."
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :nothing) ; unspecified
+	    (:testb ,movitz::+movitz-fixnum-zmask+ :al)
+	    (:jnz 'n1-not-fixnum)
+	    (:testb ,movitz::+movitz-fixnum-zmask+ :bl)
+	    (:jnz 'n2-not-fixnum-but-n1-is)
+	    (:cmpl :ebx :eax)		; both were fixnum
+	    (:ret)
+	   n1-not-fixnum		; but we don't know about n2
+	    (:testb ,movitz::+movitz-fixnum-zmask+ :bl)
+	    (:jnz 'neither-is-fixnum)
+	    ;; n2 is fixnum
+	    (:locally (:jmp (:edi (:edi-offset fast-compare-real-fixnum))))
+	   n2-not-fixnum-but-n1-is
+	    (:locally (:jmp (:edi (:edi-offset fast-compare-fixnum-real))))
+	   neither-is-fixnum
+	    ;; Check that both numbers are bignums, and compare them.
+	    (:leal (:eax ,(- (movitz:tag :other))) :ecx)
+	    (:testb 7 :cl)
+	    (:jnz '(:sub-program (n1-not-bignum)
+		    (:int 107)))
+	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
+	    (:cmpb ,(movitz:tag :bignum) :cl)
+	    (:jne 'n1-not-bignum)
+
+	    (:cmpl :eax :ebx)		; If they are EQ, they are certainly =
+	    (:je '(:sub-program (n1-and-n2-are-eq)
+		   (:ret)))
+
+	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
+	    (:testb 7 :cl)
+	    (:jnz '(:sub-program (n2-not-bignum)
+		    (:int 107)))
+	    (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
+	    (:cmpb ,(movitz:tag :bignum) :cl)
+	    (:jne 'n2-not-bignum)
+
+	    (:cmpb :ch (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::sign)))
+	    (:jne '(:sub-program (different-signs)
+		    ;; Comparing the sign-bytes sets up EFLAGS correctly!
+		    (:ret)))
+	    (:testl #xff00 :ecx)
+	    (:jnz 'compare-negatives)
+	    ;; Both n1 and n2 are positive bignums.
+
+	    (:shrl 16 :ecx)
+	    (:cmpw :cx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length)))
+	    (:jne '(:sub-program (positive-different-sizes)
+		    (:ret)))
+
+	    ;; Both n1 and n2 are positive bignums of the same size, namely ECX.
+	    (:movl :ecx :edx)		; counter
+	   positive-compare-loop
+	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
+	    (:jz 'positive-compare-lsb)
+	    (:movl (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		   :ecx)
+	    (:cmpl :ecx
+		   (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+	    (:je 'positive-compare-loop)
+	   positive-compare-lsb
+	    ;; Now we have to make the compare act as unsigned, which is why
+	    ;; we compare zero-extended 16-bit quantities.
+	    (:movzxw (:ebx :edx ,(+ 2 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     :ecx)		; First compare upper 16 bits.
+	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:movzxw (:eax :edx ,(+ 2 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     :ecx)
+	    (:locally (:cmpl (:edi (:edi-offset scratch0)) :ecx))
+	    (:jne 'upper-16-decisive)
+	    (:movzxw (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		     :ecx)		; Then compare lower 16 bits.
+	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:movzxw (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		     :ecx)		; Then compare lower 16 bits.
+	    (:locally (:cmpl (:edi (:edi-offset scratch0)) :ecx))
+	   upper-16-decisive
+	    (:ret)
+	    
+	   compare-negatives
+	    ;; Moth n1 and n2 are negative bignums.
+
+	    (:shrl 16 :ecx)
+	    (:cmpw (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length)) :cx)
+	    (:jne '(:sub-program (negative-different-sizes)
+		    (:ret)))
+
+	    ;; Both n1 and n2 are negative bignums of the same size, namely ECX.
+	    (:movl :ecx :edx)		; counter
+	   negative-compare-loop
+	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
+	    (:jz 'negative-compare-lsb)
+	    (:movl (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		   :ecx)
+	    (:cmpl :ecx
+		   (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+	    (:je 'negative-compare-loop)
+	    (:ret)
+	   negative-compare-lsb		; it's down to the LSB bigits.
+	    ;; Now we have to make the compare act as unsigned, which is why
+	    ;; we compare zero-extended 16-bit quantities.
+	    (:movzxw (:ebx :edx ,(+ 2 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     :ecx)		; First compare upper 16 bits.
+	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:movzxw (:eax :edx ,(+ 2 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     :ecx)
+	    (:locally (:cmpl :ecx (:edi (:edi-offset scratch0))))
+	    (:jne 'negative-upper-16-decisive)
+	    (:movzxw (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		     :ecx)		; Then compare lower 16 bits.
+	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:movzxw (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		     :ecx)		; Then compare lower 16 bits.
+	    (:locally (:cmpl :ecx (:edi (:edi-offset scratch0))))
+	   negative-upper-16-decisive
+	    (:ret))))
+    (do-it)))
+
+(define-primitive-function fast-eql (x y)
+  "Compare EAX and EBX under EQL, result in ZF.
+Preserve EAX and EBX."
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :nothing) ; unspecified
+	    (:cmpl :eax :ebx)		; EQ?
+	    (:je 'done)
+	    (:leal (:eax ,(- (movitz:tag :other))) :ecx)
+	    (:testb 7 :cl)
+	    (:jne 'done)
+	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
+	    (:testb 7 :cl)
+	    (:jne 'done)
+	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
+	    (:cmpb ,(movitz:tag :bignum) :cl)
+	    (:jne 'done)
+	    (:cmpl :ecx (:ebx ,movitz:+other-type-offset+))
+	    (:jne 'done)
+	    ;; Ok.. we have two bignums of identical sign and size.
+	    (:shrl 16 :ecx)
+	    (:movl :ecx :edx)		; counter
+	   compare-loop
+	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
+	    (:jz 'done)
+	    (:movl (:eax :edx ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		   :ecx)
+	    (:cmpl :ecx
+		   (:ebx :edx ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
+	    (:je 'compare-loop)
+	   done
+	    (:ret))))
+    (do-it)))
+
+(define-primitive-function fast-compare-fixnum-real (n1 n2)
+  "Compare (known) fixnum <n1> with real <n2>."
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :nothing) ; unspecified
+	    (:testb ,movitz::+movitz-fixnum-zmask+ :bl)
+	    (:jnz 'n2-not-fixnum)
+	    (:cmpl :ebx :eax)
+	    (:ret)
+	   n2-not-fixnum
+	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
+	    (:testb 7 :cl)
+	    (:jnz '(:sub-program (not-integer)
+		    (:int 107)
+		    (:jmp 'not-integer)))
+	    (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
+	    (:cmpw ,(movitz:tag :bignum 0) :cx)
+	    (:jne 'not-plusbignum)
+	    ;; compare eax with something bigger
+	    (:cmpl #x10000000 :edi)
+	    (:ret)
+	   not-plusbignum
+	    (:cmpw ,(movitz:tag :bignum #xff) :cx)
+	    (:jne 'not-integer)
+	    ;; compare ebx with something bigger
+	    (:cmpl #x-10000000 :edi)
+	    (:ret))))
+    (do-it)))
+
+(define-primitive-function fast-compare-real-fixnum (n1 n2)
+  "Compare real <n1> with fixnum <n2>."
+  (with-inline-assembly (:returns :nothing) ; unspecified
+    (:testb #.movitz::+movitz-fixnum-zmask+ :al)
+    (:jnz 'not-fixnum)
+    (:cmpl :ebx :eax)
+    (:ret)
+   not-fixnum
+    (:leal (:eax #.(cl:- (movitz:tag :other))) :ecx)
+    (:testb 7 :cl)
+    (:jnz '(:sub-program (not-integer)
+	    (:int 107)
+	    (:jmp 'not-integer)))
+    (:movl (:eax #.movitz:+other-type-offset+) :ecx)
+    (:cmpw #.(movitz:tag :bignum 0) :cx)
+    (:jne 'not-plusbignum)
+    ;; compare ebx with something bigger
+    (:cmpl #x-10000000 :edi)
+    (:ret)
+   not-plusbignum
+    (:cmpw #.(movitz:tag :bignum #xff) :cx)
+    (:jne 'not-integer)
+    ;; compare ebx with something bigger
+    (:cmpl #x10000000 :edi)
+    (:ret)))
+
+;;;
+
+
+(defmacro define-number-relational (name 2op-name condition &key (defun-p t) 3op-name)
+  `(progn
+     ,(when condition
+	`(define-compiler-macro ,2op-name (n1 n2)
+	   (cond
+	    ((movitz:movitz-constantp n1)
+	     (let ((n1 (movitz::movitz-eval n1)))
+	       (check-type n1 (signed-byte 30))
+	       `(with-inline-assembly (:returns ,,condition :side-effects nil)
+		  (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+		  (:call-global-pf fast-compare-fixnum-real))))
+	    ((movitz:movitz-constantp n2)
+	     (let ((n2 (movitz::movitz-eval n2)))
+	       (check-type n2 (signed-byte 30))
+	       `(with-inline-assembly (:returns ,,condition :side-effects nil)
+		  (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+		  (:call-global-pf fast-compare-real-fixnum))))
+	    (t `(with-inline-assembly (:returns ,,condition :side-effects nil)
+		  (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+		  (:call-global-pf fast-compare-two-reals))))))
+
+     (defun ,2op-name (n1 n2)
+       (,2op-name n1 n2))
+
+     (define-compiler-macro ,name (&whole form number &rest more-numbers)
+       (case (length more-numbers)
+	 (0 `(progn ,number t))
+	 (1 `(,',2op-name ,number ,(first more-numbers)))
+	 ,@(when 3op-name
+	     `((2 `(,',3op-name ,number ,(first more-numbers) ,(second more-numbers)))))
+	 (t #+ignore (when (= 2 (length more-numbers))
+		       (warn "3op: ~S" form))
+	  `(and (,',2op-name ,number ,(first more-numbers))
+		  (,',name ,@more-numbers)))))
+
+     ,(when defun-p
+	`(defun ,name (number &rest more-numbers)
+	   (declare (dynamic-extent more-numbers))
+	   (cond
+	    ((null more-numbers)
+	     (check-type number fixnum)
+	     t)
+	    ((not (cdr more-numbers))
+	     (,2op-name number (first more-numbers)))
+	    (t (and (,2op-name number (first more-numbers))
+		    (do ((p more-numbers (cdr p)))
+			((not (cdr p)) t)
+		      (unless (,2op-name (car p) (cadr p))
+			(return nil))))))))))
+
+(define-number-relational >= >=%2op :boolean-greater-equal)
+(define-number-relational > >%2op :boolean-greater)
+(define-number-relational < <%2op :boolean-less)
+(define-number-relational <= <=%2op :boolean-less-equal :3op-name <=%3op)
+
+;;; Unsigned
+
+(defun below (x max)
+  "Is x between 0 and max?"
+  (compiler-macro-call below x max))
+
+
+;;; Equality
+
+(define-compiler-macro =%2op (n1 n2 &environment env)
+  (cond
+   ((movitz:movitz-constantp n1 env)
+    (let ((n1 (movitz:movitz-eval n1 env)))
+      (etypecase n1
+	((eql 0)
+	 `(do-result-mode-case ()
+	    (:booleans
+	     (with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
+	       (:compile-form (:result-mode :eax) ,n2)
+	       (:testl :eax :eax)))
+	    (t (with-inline-assembly (:returns :boolean-cf=1 :side-effects nil)
+		 (:compile-form (:result-mode :eax) ,n2)
+		 (:cmpl 1 :eax)))))
+	((signed-byte 30)
+	 `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
+	    (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+	    (:call-global-pf fast-compare-fixnum-real)))
+	(integer
+	 `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
+	    (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+	    (:call-global-pf fast-compare-two-reals))))))
+   ((movitz:movitz-constantp n2 env)
+    `(=%2op ,n2 ,n1))
+   (t `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
+	 (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+	 (:call-global-pf fast-compare-two-reals)))))
+
+(define-number-relational = =%2op nil :defun-p nil)
+
+(defun = (first-number &rest numbers)
+  (declare (dynamic-extent numbers))
+  (dolist (n numbers t)
+    (unless (= first-number n)
+      (return nil))))
+
+(define-number-relational /= /=%2op :boolean-zf=0 :defun-p nil)
+
+(defun /= (&rest numbers)
+  (declare (dynamic-extent numbers))
+  (do ((p (cdr numbers) (cdr p)))
+      ((null p) t)
+    (do ((v numbers (cdr v)))
+	((eq p v))
+      (when (= (car p) (car v))
+	(return-from /= nil)))))
+
+
+;;;;
 
 (deftype positive-fixnum ()
   `(integer 0 ,movitz:+movitz-most-positive-fixnum+))
@@ -31,33 +362,14 @@
 (deftype negative-fixnum ()
   `(integer ,movitz:+movitz-most-negative-fixnum+ -1))
 
-(defmacro number-double-dispatch ((x y) &rest clauses)
-  `(let ((x ,x) (y ,y))
-     (cond ,@(loop for ((x-type y-type) . then-body) in clauses
-		 collect `((and (typep x ',x-type) (typep y ',y-type))
-			   ,@then-body))
-	   (t (error "Not numbers: ~S or ~S." x y)))))
-
 (defun fixnump (x)
   (typep x 'fixnum))
 
-(define-compiler-macro evenp (x)
-  `(with-inline-assembly (:returns :boolean-zf=1)
-     (:compile-form (:result-mode :eax) ,x)
-     (:call-global-pf unbox-u32)
-     (:testb 1 :cl)))
-
 (defun evenp (x)
-  (evenp x))
-
-(define-compiler-macro oddp (x)
-  `(with-inline-assembly (:returns :boolean-zf=0)
-     (:compile-form (:result-mode :eax) ,x)
-     (:call-global-pf unbox-u32)
-     (:testb 1 :cl)))
+  (compiler-macro-call evenp x))
 
 (defun oddp (x)
-  (oddp x))
+  (compiler-macro-call oddp x))
 
 ;;; Types
 
@@ -101,26 +413,6 @@
 	 (:xorl #xff00 (:eax #.movitz:+other-type-offset+)))))))
 
 ;;; Addition
-
-(define-compiler-macro + (&whole form &rest operands &environment env)
-  (case (length operands)
-    (0 0)
-    (1 (first operands))
-    #+ignore (2 `(+%2op ,(first operands) ,(second operands)))
-    (2 `(let ((x ,(first operands))
-	      (y ,(second operands)))
-	  (++%2op x y)))
-    (t (let ((operands
-	      (loop for operand in operands
-		  if (movitz:movitz-constantp operand env)
-		  sum (movitz:movitz-eval operand env)
-		  into constant-term
-		  else collect operand
-		  into non-constant-operands
-		  finally (return (if (zerop constant-term)
-				      non-constant-operands
-				    (cons constant-term non-constant-operands))))))
-	 `(+ (+ ,(first operands) ,(second operands)) ,@(cddr operands))))))
 
 (defun + (&rest terms)
   (declare (without-check-stack-limit))
@@ -396,33 +688,10 @@
 (defun 1+ (number)
   (+ 1 number))
 
-(define-compiler-macro 1+ (number)
-  `(+ 1 ,number))
-
 (defun 1- (number)
   (+ -1 number))
 
-(define-compiler-macro 1- (number)
-  `(+ -1 ,number))
-
-(define-modify-macro incf (&optional (delta-form 1)) +)
-
 ;;; Subtraction
-
-(define-compiler-macro - (&whole form &rest operands &environment env)
-  (case (length operands)
-    (0 0)
-    (1 (let ((x (first operands)))
-	 (if (movitz:movitz-constantp x env)
-	     (- (movitz:movitz-eval x env))
-	   form)))
-    (2 (let ((minuend (first operands))
-	     (subtrahend (second operands)))
-	 (cond
-	  ((movitz:movitz-constantp subtrahend env)
-	   `(+ ,minuend ,(- (movitz:movitz-eval subtrahend env))))
-	  (t form))))
-    (t `(- ,(first operands) (+ ,@(rest operands))))))
 
 (defun - (minuend &rest subtrahends)
   (declare (dynamic-extent subtrahends))
@@ -532,460 +801,20 @@
       (if subtrahends
 	  (reduce #'- subtrahends :initial-value minuend)
 	(- minuend)))))
-    
-(define-modify-macro decf (&optional (delta-form 1)) -)
-
-;;; Comparison
-
-(define-primitive-function fast-compare-two-reals (n1 n2)
-  "Compare two numbers (i.e. set EFLAGS accordingly)."
-  (macrolet
-      ((do-it ()
-	 `(with-inline-assembly (:returns :nothing) ; unspecified
-	    (:testb ,movitz::+movitz-fixnum-zmask+ :al)
-	    (:jnz 'n1-not-fixnum)
-	    (:testb ,movitz::+movitz-fixnum-zmask+ :bl)
-	    (:jnz 'n2-not-fixnum-but-n1-is)
-	    (:cmpl :ebx :eax)		; both were fixnum
-	    (:ret)
-	   n1-not-fixnum		; but we don't know about n2
-	    (:testb ,movitz::+movitz-fixnum-zmask+ :bl)
-	    (:jnz 'neither-is-fixnum)
-	    ;; n2 is fixnum
-	    (:locally (:jmp (:edi (:edi-offset fast-compare-real-fixnum))))
-	   n2-not-fixnum-but-n1-is
-	    (:locally (:jmp (:edi (:edi-offset fast-compare-fixnum-real))))
-	   neither-is-fixnum
-	    ;; Check that both numbers are bignums, and compare them.
-	    (:leal (:eax ,(- (movitz:tag :other))) :ecx)
-	    (:testb 7 :cl)
-	    (:jnz '(:sub-program (n1-not-bignum)
-		    (:int 107)))
-	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
-	    (:cmpb ,(movitz:tag :bignum) :cl)
-	    (:jne 'n1-not-bignum)
-
-	    (:cmpl :eax :ebx)		; If they are EQ, they are certainly =
-	    (:je '(:sub-program (n1-and-n2-are-eq)
-		   (:ret)))
-
-	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
-	    (:testb 7 :cl)
-	    (:jnz '(:sub-program (n2-not-bignum)
-		    (:int 107)))
-	    (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
-	    (:cmpb ,(movitz:tag :bignum) :cl)
-	    (:jne 'n2-not-bignum)
-
-	    (:cmpb :ch (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::sign)))
-	    (:jne '(:sub-program (different-signs)
-		    ;; Comparing the sign-bytes sets up EFLAGS correctly!
-		    (:ret)))
-	    (:testl #xff00 :ecx)
-	    (:jnz 'compare-negatives)
-	    ;; Both n1 and n2 are positive bignums.
-
-	    (:shrl 16 :ecx)
-	    (:cmpw :cx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length)))
-	    (:jne '(:sub-program (positive-different-sizes)
-		    (:ret)))
-
-	    ;; Both n1 and n2 are positive bignums of the same size, namely ECX.
-	    (:movl :ecx :edx)		; counter
-	   positive-compare-loop
-	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
-	    (:jz 'positive-compare-lsb)
-	    (:movl (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
-		   :ecx)
-	    (:cmpl :ecx
-		   (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
-	    (:je 'positive-compare-loop)
-	   positive-compare-lsb
-	    ;; Now we have to make the compare act as unsigned, which is why
-	    ;; we compare zero-extended 16-bit quantities.
-	    (:movzxw (:ebx :edx ,(+ 2 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
-		     :ecx)		; First compare upper 16 bits.
-	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
-	    (:movzxw (:eax :edx ,(+ 2 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
-		     :ecx)
-	    (:locally (:cmpl (:edi (:edi-offset scratch0)) :ecx))
-	    (:jne 'upper-16-decisive)
-	    (:movzxw (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
-		     :ecx)		; Then compare lower 16 bits.
-	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
-	    (:movzxw (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
-		     :ecx)		; Then compare lower 16 bits.
-	    (:locally (:cmpl (:edi (:edi-offset scratch0)) :ecx))
-	   upper-16-decisive
-	    (:ret)
-	    
-	   compare-negatives
-	    ;; Moth n1 and n2 are negative bignums.
-
-	    (:shrl 16 :ecx)
-	    (:cmpw (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length)) :cx)
-	    (:jne '(:sub-program (negative-different-sizes)
-		    (:ret)))
-
-	    ;; Both n1 and n2 are negative bignums of the same size, namely ECX.
-	    (:movl :ecx :edx)		; counter
-	   negative-compare-loop
-	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
-	    (:jz 'negative-compare-lsb)
-	    (:movl (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
-		   :ecx)
-	    (:cmpl :ecx
-		   (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
-	    (:je 'negative-compare-loop)
-	    (:ret)
-	   negative-compare-lsb		; it's down to the LSB bigits.
-	    ;; Now we have to make the compare act as unsigned, which is why
-	    ;; we compare zero-extended 16-bit quantities.
-	    (:movzxw (:ebx :edx ,(+ 2 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
-		     :ecx)		; First compare upper 16 bits.
-	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
-	    (:movzxw (:eax :edx ,(+ 2 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
-		     :ecx)
-	    (:locally (:cmpl :ecx (:edi (:edi-offset scratch0))))
-	    (:jne 'negative-upper-16-decisive)
-	    (:movzxw (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
-		     :ecx)		; Then compare lower 16 bits.
-	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
-	    (:movzxw (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
-		     :ecx)		; Then compare lower 16 bits.
-	    (:locally (:cmpl :ecx (:edi (:edi-offset scratch0))))
-	   negative-upper-16-decisive
-	    (:ret))))
-    (do-it)))
-
-(define-primitive-function fast-eql (x y)
-  "Compare EAX and EBX under EQL, result in ZF.
-Preserve EAX and EBX."
-  (macrolet
-      ((do-it ()
-	 `(with-inline-assembly (:returns :nothing) ; unspecified
-	    (:cmpl :eax :ebx)		; EQ?
-	    (:je 'done)
-	    (:leal (:eax ,(- (movitz:tag :other))) :ecx)
-	    (:testb 7 :cl)
-	    (:jne 'done)
-	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
-	    (:testb 7 :cl)
-	    (:jne 'done)
-	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
-	    (:cmpb ,(movitz:tag :bignum) :cl)
-	    (:jne 'done)
-	    (:cmpl :ecx (:ebx ,movitz:+other-type-offset+))
-	    (:jne 'done)
-	    ;; Ok.. we have two bignums of identical sign and size.
-	    (:shrl 16 :ecx)
-	    (:movl :ecx :edx)		; counter
-	   compare-loop
-	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
-	    (:jz 'done)
-	    (:movl (:eax :edx ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
-		   :ecx)
-	    (:cmpl :ecx
-		   (:ebx :edx ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
-	    (:je 'compare-loop)
-	   done
-	    (:ret))))
-    (do-it)))
-
-(define-primitive-function fast-compare-fixnum-real (n1 n2)
-  "Compare (known) fixnum <n1> with real <n2>."
-  (macrolet
-      ((do-it ()
-	 `(with-inline-assembly (:returns :nothing) ; unspecified
-	    (:testb ,movitz::+movitz-fixnum-zmask+ :bl)
-	    (:jnz 'n2-not-fixnum)
-	    (:cmpl :ebx :eax)
-	    (:ret)
-	   n2-not-fixnum
-	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
-	    (:testb 7 :cl)
-	    (:jnz '(:sub-program (not-integer)
-		    (:int 107)
-		    (:jmp 'not-integer)))
-	    (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
-	    (:cmpw ,(movitz:tag :bignum 0) :cx)
-	    (:jne 'not-plusbignum)
-	    ;; compare eax with something bigger
-	    (:cmpl #x10000000 :edi)
-	    (:ret)
-	   not-plusbignum
-	    (:cmpw ,(movitz:tag :bignum #xff) :cx)
-	    (:jne 'not-integer)
-	    ;; compare ebx with something bigger
-	    (:cmpl #x-10000000 :edi)
-	    (:ret))))
-    (do-it)))
-
-(define-primitive-function fast-compare-real-fixnum (n1 n2)
-  "Compare real <n1> with fixnum <n2>."
-  (with-inline-assembly (:returns :nothing) ; unspecified
-    (:testb #.movitz::+movitz-fixnum-zmask+ :al)
-    (:jnz 'not-fixnum)
-    (:cmpl :ebx :eax)
-    (:ret)
-   not-fixnum
-    (:leal (:eax #.(cl:- (movitz:tag :other))) :ecx)
-    (:testb 7 :cl)
-    (:jnz '(:sub-program (not-integer)
-	    (:int 107)
-	    (:jmp 'not-integer)))
-    (:movl (:eax #.movitz:+other-type-offset+) :ecx)
-    (:cmpw #.(movitz:tag :bignum 0) :cx)
-    (:jne 'not-plusbignum)
-    ;; compare ebx with something bigger
-    (:cmpl #x-10000000 :edi)
-    (:ret)
-   not-plusbignum
-    (:cmpw #.(movitz:tag :bignum #xff) :cx)
-    (:jne 'not-integer)
-    ;; compare ebx with something bigger
-    (:cmpl #x10000000 :edi)
-    (:ret)))
-
-;;;
-
-(define-compiler-macro <=%3op (min x max &environment env)
-  (cond
-   ((and (movitz:movitz-constantp min env)
-	 (movitz:movitz-constantp max env))
-    (let ((min (movitz:movitz-eval min env))
-	  (max (movitz:movitz-eval max env)))
-      (check-type min fixnum)
-      (check-type max fixnum)
-      ;; (warn "~D -- ~D" min max)
-      (cond
-       ((movitz:movitz-constantp x env)
-	(<= min (movitz:movitz-eval x env) max))
-       ((< max min)
-	nil)
-       ((= max min)
-	`(= ,x ,min))
-       ((minusp min)
-	`(let ((x ,x))
-	   (and (<= ,min x) (<= x ,max))))
-       ((= 0 min)
-	`(with-inline-assembly (:returns :boolean-cf=1)
-	   (:compile-form (:result-mode :eax) ,x)
-	   (:testb ,movitz::+movitz-fixnum-zmask+ :al)
-	   (:jnz '(:sub-program () (:int 107)))
-	   (:cmpl ,(* (1+ max) movitz::+movitz-fixnum-factor+) :eax)))
-       (t `(do-result-mode-case ()
-	     (:booleans
-	      (with-inline-assembly (:returns :boolean-zf=0)
-		(:compile-form (:result-mode :eax) ,x)
-		(:testb ,movitz::+movitz-fixnum-zmask+ :al)
-		(:jnz '(:sub-program () (:int 107)))
-		(:cmpl ,(* min movitz::+movitz-fixnum-factor+) :eax)
-		(:sbbl :ecx :ecx)
-		(:cmpl ,(* (1+ max) movitz::+movitz-fixnum-factor+) :eax)
-		(:adcl 0 :ecx)))
-	     (t (with-inline-assembly (:returns (:boolean-ecx 1 0))
-		  (:compile-form (:result-mode :eax) ,x)
-		  (:testb ,movitz::+movitz-fixnum-zmask+ :al)
-		  (:jnz '(:sub-program () (:int 107)))
-		  (:cmpl ,(* min movitz::+movitz-fixnum-factor+) :eax)
-		  (:sbbl :ecx :ecx)
-		  (:cmpl ,(* (1+ max) movitz::+movitz-fixnum-factor+) :eax)
-		  (:adcl 0 :ecx))))))))
-   #+ignore				; this is buggy.
-   ((movitz:movitz-constantp min env)
-    (let ((min (movitz:movitz-eval min env)))
-      (check-type min fixnum)
-      (cond
-       ((minusp min)
-	`(let ((x ,x))
-	   (and (<= ,min x) (<= x ,max))))
-       (t `(do-result-mode-case ()
-	     (:booleans
-	      (with-inline-assembly (:returns :boolean-zf=1)
-		(:compile-two-forms (:eax :ebx) ,x ,max)
-		(:movl :eax :ecx)
-		(:orl :ebx :ecx)
-		(:testb ,movitz::+movitz-fixnum-zmask+ :cl)
-		(:jne '(:sub-program () (:int 107)))
-		(:cmpl :eax :ebx)
-		(:sbbl :ecx :ecx)
-		,@(unless (= 0 min)
-		    `((:subl ,(* min movitz::+movitz-fixnum-factor+) :ebx)))
-		(:addl :ebx :ebx)
-		(:adcl 0 :ecx)))
-	     (t (with-inline-assembly (:returns (:boolean-ecx 0 1))
-		  (:compile-two-forms (:eax :ebx) ,x ,max)
-		  (:movl :eax :ecx)
-		  (:orl :ebx :ecx)
-		  (:testb ,movitz::+movitz-fixnum-zmask+ :cl)
-		  (:jne '(:sub-program () (:int 107)))
-		  (:cmpl :eax :ebx)	; if x>max, CF=1
-		  (:sbbl :ecx :ecx)	; ecx = x>max ? -1 : 0
-		  ,@(unless (= 0 min)
-		      `((:subl ,(* min movitz::+movitz-fixnum-factor+) :ebx)))
-		  (:addl :ebx :ebx)	; if x<min, CF=1
-		  (:adcl 0 :ecx)	; 
-		  (:andl 1 :ecx))))))))
-   (t `(let ((x ,x))
-	 (and (<= ,min x) (<= x ,max))))))
-       
-
-(defmacro define-number-relational (name 2op-name condition &key (defun-p t) 3op-name)
-  `(progn
-     ,(when condition
-	`(define-compiler-macro ,2op-name (n1 n2)
-	   (cond
-	    ((movitz:movitz-constantp n1)
-	     (let ((n1 (movitz::movitz-eval n1)))
-	       (check-type n1 (signed-byte 30))
-	       `(with-inline-assembly (:returns ,,condition :side-effects nil)
-		  (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-		  (:call-global-pf fast-compare-fixnum-real))))
-	    ((movitz:movitz-constantp n2)
-	     (let ((n2 (movitz::movitz-eval n2)))
-	       (check-type n2 (signed-byte 30))
-	       `(with-inline-assembly (:returns ,,condition :side-effects nil)
-		  (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-		  (:call-global-pf fast-compare-real-fixnum))))
-	    (t `(with-inline-assembly (:returns ,,condition :side-effects nil)
-		  (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-		  (:call-global-pf fast-compare-two-reals))))))
-
-     (defun ,2op-name (n1 n2)
-       (,2op-name n1 n2))
-
-     (define-compiler-macro ,name (&whole form number &rest more-numbers)
-       (case (length more-numbers)
-	 (0 `(progn ,number t))
-	 (1 `(,',2op-name ,number ,(first more-numbers)))
-	 ,@(when 3op-name
-	     `((2 `(,',3op-name ,number ,(first more-numbers) ,(second more-numbers)))))
-	 (t #+ignore (when (= 2 (length more-numbers))
-		       (warn "3op: ~S" form))
-	  `(and (,',2op-name ,number ,(first more-numbers))
-		  (,',name ,@more-numbers)))))
-
-     ,(when defun-p
-	`(defun ,name (number &rest more-numbers)
-	   (declare (dynamic-extent more-numbers))
-	   (cond
-	    ((null more-numbers)
-	     (check-type number fixnum)
-	     t)
-	    ((not (cdr more-numbers))
-	     (,2op-name number (first more-numbers)))
-	    (t (and (,2op-name number (first more-numbers))
-		    (do ((p more-numbers (cdr p)))
-			((not (cdr p)) t)
-		      (unless (,2op-name (car p) (cadr p))
-			(return nil))))))))))
-
-(define-number-relational >= >=%2op :boolean-greater-equal)
-(define-number-relational > >%2op :boolean-greater)
-(define-number-relational < <%2op :boolean-less)
-(define-number-relational <= <=%2op :boolean-less-equal :3op-name <=%3op)
-
-;;; Unsigned
-
-(define-compiler-macro below (&whole form x max &environment env)
-  (let ((below-not-integer (gensym "below-not-integer-")))
-    (if (movitz:movitz-constantp max env)
-	`(with-inline-assembly (:returns :boolean-cf=1)
-	   (:compile-form (:result-mode :eax) ,x)
-	   (:testb ,movitz::+movitz-fixnum-zmask+ :al)
-	   (:jnz '(:sub-program (,below-not-integer) (:int 107)))
-	   (:cmpl ,(* (movitz:movitz-eval max env)
-		      movitz::+movitz-fixnum-factor+)
-		  :eax))
-      `(with-inline-assembly (:returns :boolean-cf=1)
-	 (:compile-two-forms (:eax :ebx) ,x ,max)
-	 (:movl :eax :ecx)
-	 (:orl :ebx :ecx)
-	 (:testb ,movitz::+movitz-fixnum-zmask+ :cl)
-	 (:jnz '(:sub-program (,below-not-integer) (:int 107)))
-	 (:cmpl :ebx :eax)))))
-
-(defun below (x max)
-  "Is x between 0 and max?"
-  (below x max))
-
-
-;;; Equality
-
-(define-compiler-macro =%2op (n1 n2 &environment env)
-  (cond
-   ((movitz:movitz-constantp n1 env)
-    (let ((n1 (movitz:movitz-eval n1 env)))
-      (etypecase n1
-	((eql 0)
-	 `(do-result-mode-case ()
-	    (:booleans
-	     (with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
-	       (:compile-form (:result-mode :eax) ,n2)
-	       (:testl :eax :eax)))
-	    (t (with-inline-assembly (:returns :boolean-cf=1 :side-effects nil)
-		 (:compile-form (:result-mode :eax) ,n2)
-		 (:cmpl 1 :eax)))))
-	((signed-byte 30)
-	 `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
-	    (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-	    (:call-global-pf fast-compare-fixnum-real)))
-	(integer
-	 `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
-	    (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-	    (:call-global-pf fast-compare-two-reals))))))
-   ((movitz:movitz-constantp n2 env)
-    `(=%2op ,n2 ,n1))
-   (t `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
-	 (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-	 (:call-global-pf fast-compare-two-reals)))))
-
-(define-number-relational = =%2op nil :defun-p nil)
-
-(defun = (first-number &rest numbers)
-  (declare (dynamic-extent numbers))
-  (dolist (n numbers t)
-    (unless (= first-number n)
-      (return nil))))
-
-(define-number-relational /= /=%2op :boolean-zf=0 :defun-p nil)
-
-(defun /= (&rest numbers)
-  (declare (dynamic-extent numbers))
-  (do ((p (cdr numbers) (cdr p)))
-      ((null p) t)
-    (do ((v numbers (cdr v)))
-	((eq p v))
-      (when (= (car p) (car v))
-	(return-from /= nil)))))
 
 ;;;
 
 (defun zerop (number)
   (= 0 number))
 
-(define-compiler-macro zerop (number)
-  `(= 0 ,number))
-
 (defun plusp (number)
   (> number 0))
-
-(define-compiler-macro plusp (number)
-  `(> ,number 0))
 
 (defun minusp (number)
   (< number 0))
 
-(define-compiler-macro minusp (number)
-  `(< ,number 0))
-
-(define-compiler-macro abs (x)
-  `(let ((x ,x))
-     (if (>= x 0) x (- x))))
-
 (defun abs (x)
-  (abs x))
+  (compiler-macro-call abs x))
 
 (defun signum (x)
   (cond
@@ -995,19 +824,10 @@ Preserve EAX and EBX."
 
 ;;;
 
-(define-compiler-macro max (&whole form first-number &rest more-numbers)
-  (case (length more-numbers)
-    (0 first-number)
-    (1 `(let ((x ,first-number)
-	      (y ,(car more-numbers)))
-	  (if (>= x y) x y)))
-    ((2 3 4)
-     `(max ,first-number (max ,@more-numbers)))
-    (t form)))
-
 (defun max (number1 &rest numbers)
   (numargs-case
-   (2 (x y) (max x y))
+   (2 (x y)
+      (compiler-macro-call max x y))
    (t (number1 &rest numbers)
       (declare (dynamic-extent numbers))
       (let ((max number1))
@@ -1015,19 +835,10 @@ Preserve EAX and EBX."
 	  (when (> x max)
 	    (setq max x)))))))
 
-(define-compiler-macro min (&whole form first-number &rest more-numbers)
-  (case (length more-numbers)
-    (0 first-number)
-    (1 `(let ((x ,first-number)
-	      (y ,(car more-numbers)))
-	  (if (<= x y) x y)))
-    ((2 3 4)
-     `(min ,first-number (min ,@more-numbers)))
-    (t form)))
-
 (defun min (number1 &rest numbers)
   (numargs-case
-   (2 (x y) (min x y))
+   (2 (x y)
+      (compiler-macro-call min x y))
    (t (number1 &rest numbers)
       (declare (dynamic-extent numbers))
       (let ((min number1))
@@ -1037,54 +848,6 @@ Preserve EAX and EBX."
 
 ;; shift 
 
-(define-compiler-macro ash (&whole form integer count &environment env)
-  (if (not (movitz:movitz-constantp count env))
-      form
-    (let ((count (movitz:movitz-eval count env)))
-      (cond
-       ((movitz:movitz-constantp integer env)
-	(ash (movitz::movitz-eval integer env) count))
-       ((= 0 count)
-	integer)
-       (t form
-	  #+igore
-	  (let ((load-integer `((:compile-form (:result-mode :register) ,integer)
-				(:testb ,movitz::+movitz-fixnum-zmask+ (:result-register-low8))
-				(:jnz '(:sub-program () (:int 107) (:jmp (:pc+ -4)))))))
-	    (cond
-	     ((<= 1 count 4)
-	      `(with-inline-assembly (:returns :register :side-effects nil)
-		 ,@load-integer
-		 ,@(loop repeat count
-		       append `((:addl (:result-register) (:result-register))
-				(:into)))))
-	     ((< 0 count #.(cl:1- movitz::+movitz-fixnum-bits+))
-	      `(with-inline-assembly (:returns :register :side-effects nil :type integer)
-		 ,@load-integer
-		 (:cmpl ,(ash 1 (- (- 31 0) count))
-			(:result-register))
-		 (:jge '(:sub-program () (:int 4)))
-		 (:cmpl ,(- (ash 1 (- (- 31 0) count)))
-			(:result-register))
-		 (:jl '(:sub-program () (:int 4)))
-		 (:shll ,count (:result-register))))
-	     ((= -1 count)
-	      `(with-inline-assembly (:returns :register :side-effects nil :type integer)
-		 ,@load-integer
-		 (:andb #.(cl:logxor #xfe (cl:* 2 movitz::+movitz-fixnum-zmask+)) (:result-register-low8))
-		 (:sarl 1 (:result-register))))
-	     ((> 0 count #.(cl:- (cl:1- movitz::+movitz-fixnum-bits+)))
-	      `(with-inline-assembly (:returns :register :side-effects nil :type integer)
-		 ,@load-integer
-		 (:andl ,(ldb (byte 32 0)
-			      (ash movitz:+movitz-most-positive-fixnum+
-				   (- movitz:+movitz-fixnum-shift+ count)))
-			(:result-register))
-		 (:sarl ,(- count) (:result-register))))
-	     ((minusp count)
-	      `(if (minusp ,integer) -1 0))
-	     (t `(if (= 0 ,integer) 0 (with-inline-assembly (:returns :non-local-exit) (:int 4)))))))))))
-  
 (defun ash (integer count)
   (cond
    ((= 0 count)
@@ -1201,30 +964,6 @@ Preserve EAX and EBX."
        (do-it)))))
 
 ;;; Multiplication
-
-(define-compiler-macro * (&whole form &rest operands &environment env)
-  (case (length operands)
-    (0 0)
-    (1 (first operands))
-    (2 (let ((factor1 (first operands))
-	     (factor2 (second operands)))
-	 (cond
-	  ((and (movitz:movitz-constantp factor1 env)
-		(movitz:movitz-constantp factor2 env))
-	   (* (movitz:movitz-eval factor1 env)
-	      (movitz:movitz-eval factor2 env)))
-	  ((movitz:movitz-constantp factor2 env)
-	   `(* ,(movitz:movitz-eval factor2 env) ,factor1))
-	  ((movitz:movitz-constantp factor1 env)
-	   (let ((f1 (movitz:movitz-eval factor1 env)))
-	     (check-type f1 integer)
-	     (case f1
-	       (0 `(progn ,factor2 0))
-	       (1 factor2)
-	       (2 `(let ((x ,factor2)) (+ x x)))
-	       (t `(no-macro-call * ,factor1 ,factor2)))))
-	  (t `(no-macro-call * ,factor1 ,factor2)))))
-    (t `(* (* ,(first operands) ,(second operands)) ,@(cddr operands)))))
 
 (defun * (&rest factors)
   (numargs-case
@@ -1637,16 +1376,6 @@ Preserve EAX and EBX."
 (defun byte (size position)
   (+ (* size #x400) position))
 
-(define-compiler-macro byte (&whole form size position)
-  (cond
-   ((and (integerp size)
-	 (integerp position))
-    (+ (* size #x400) position))
-   #+ignore
-   ((integerp size)
-    `(+ ,position ,(* size #x400)))
-   (t form)))
-
 (defun byte-size (bytespec)
   (truncate bytespec #x400))
 
@@ -1670,24 +1399,6 @@ Preserve EAX and EBX."
 	       (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
 	       (:btl :ecx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))))))))
     (do-it)))
-
-(define-compiler-macro logand (&whole form &rest integers &environment env)
-  (let ((constant-folded-integers (loop for x in integers
-				      with folded-constant = -1
-				      if (and (movitz:movitz-constantp x env)
-					      (not (= -1 (movitz:movitz-eval x env))))
-				      do (setf folded-constant
-					   (logand folded-constant (movitz:movitz-eval x env)))
-				      else collect x into non-constants
-				      finally (return (if (= -1 folded-constant)
-							  non-constants
-							(cons folded-constant non-constants))))))
-    (case (length constant-folded-integers)
-      (0 0)
-      (1 (first constant-folded-integers))
-      (2 `(no-macro-call logand ,(first constant-folded-integers) ,(second constant-folded-integers)))
-      (t `(logand (logand ,(first constant-folded-integers) ,(second constant-folded-integers))
-		  ,@(cddr constant-folded-integers))))))
 
 (defun logand (&rest integers)
   (numargs-case
@@ -1833,24 +1544,6 @@ Preserve EAX and EBX."
       (if (null integers)
 	  0
 	(reduce #'logior integers)))))
-
-(define-compiler-macro logior (&whole form &rest integers &environment env)
-  (let ((constant-folded-integers (loop for x in integers
-				      with folded-constant = 0
-				      if (and (movitz:movitz-constantp x env)
-					      (not (zerop (movitz:movitz-eval x env))))
-				      do (setf folded-constant
-					   (logior folded-constant (movitz:movitz-eval x env)))
-				      else collect x into non-constants
-				      finally (return (if (= 0 folded-constant)
-							  non-constants
-							(cons folded-constant non-constants))))))
-    (case (length constant-folded-integers)
-      (0 0)
-      (1 (first constant-folded-integers))
-      (2 `(no-macro-call logior ,(first constant-folded-integers) ,(second constant-folded-integers)))
-      (t `(logior (logior ,(first constant-folded-integers) ,(second constant-folded-integers))
-		  ,@(cddr constant-folded-integers))))))
 
 (defun logxor (&rest integers)
   (numargs-case
@@ -2271,103 +1964,9 @@ Preserve EAX and EBX."
 				      (:edi (:edi-offset atomically-status))))
 		    ldb-done))))
 	   (do-it)))))))
-    
-
-(define-compiler-macro ldb%byte (&whole form &environment env size position integer)
-  "This is LDB with explicit byte-size and position parameters."
-  (cond
-   ((and (movitz:movitz-constantp size env)
-	 (movitz:movitz-constantp position env)
-	 (movitz:movitz-constantp integer env))
-    (ldb (byte (movitz:movitz-eval size env)
-	       (movitz:movitz-eval position env))
-	 (movitz:movitz-eval integer env))) ; constant folding
-   ((and (movitz:movitz-constantp size env)
-	 (movitz:movitz-constantp position env))
-    (let* ((size (movitz:movitz-eval size env))
-	   (position (movitz:movitz-eval position env))
-	   (result-type `(unsigned-byte ,size)))
-      (cond
-       ((or (minusp size) (minusp position))
-	(error "Negative byte-spec for ldb."))
-       ((= 0 size)
-	`(progn ,integer 0))
-       ((<= (+ size position) (- 31 movitz:+movitz-fixnum-shift+))
-	`(with-inline-assembly (:returns :register
-					 :type ,result-type)
-	   (:compile-form (:result-mode :eax) ,integer)
-	   (:call-global-pf unbox-u32)
-	   (:andl ,(mask-field (byte size position) -1) :ecx)
-	   ,@(unless (zerop position)
-	       `((:shrl ,position :ecx)))
-	   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) (:result-register))))
-       ((<= (+ size position) 32)
-	`(with-inline-assembly-case (:type ,result-type)
-	   (do-case (t :eax :labels (nix done))
-	     (:compile-form (:result-mode :eax) ,integer)
-	     ,@(cond
-		((and (= 0 position) (= 32 size))
-		 ;; If integer is a positive bignum with one bigit, return it.
-		 `((:leal (:eax ,(- (movitz:tag :other))) :ecx)
-		   (:testb 7 :cl)
-		   (:jnz 'nix)
-		   (:cmpl ,(dpb 4 (byte 16 16) (movitz:tag :bignum 0))
-			  (:eax ,movitz:+other-type-offset+))
-		   (:je 'done)))
-		((and (= 0 position) (<= (- 32 movitz:+movitz-fixnum-shift+) size ))
-		 `((:leal (:eax ,(- (movitz:tag :other))) :ecx)
-		   (:testb 7 :cl)
-		   (:jnz 'nix)
-		   (:cmpl ,(dpb 4 (byte 16 16) (movitz:tag :bignum 0))
-			  (:eax ,movitz:+other-type-offset+))
-		   (:jne 'nix)
-		   (:movl (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
-			  :ecx)
-		   (:testl ,(logxor #xffffffff (mask-field (byte size 0) -1))
-			   :ecx)
-		   (:jz 'done)
-		   (:andl ,(mask-field (byte size 0) -1)
-			  :ecx)
-		   (:call-local-pf box-u32-ecx)
-		   (:jmp 'done))))
-	    nix
-	     (:call-global-pf unbox-u32)
-	     ,@(unless (= 32 (- size position))
-		 `((:andl ,(mask-field (byte size position) -1) :ecx)))
-	     ,@(unless (zerop position)
-		 `((:shrl ,position :ecx)))
-	     (:call-local-pf box-u32-ecx)
-	    done)))
-       (t form))))
-   (t form)))
 
 (defun ldb (bytespec integer)
   (ldb%byte (byte-size bytespec) (byte-position bytespec) integer))
-
-(define-compiler-macro ldb (&whole form &environment env bytespec integer)
-  (let ((bytespec (movitz::movitz-macroexpand bytespec env)))
-    (if (not (and (consp bytespec) (eq 'byte (car bytespec))))
-	form
-      `(ldb%byte ,(second bytespec) ,(third bytespec) ,integer))))
-
-(define-setf-expander ldb (bytespec int &environment env)
-  "Stolen from the Hyperspec example in the define-setf-expander entry."
-  (multiple-value-bind (temps vals stores store-form access-form)
-      (get-setf-expansion int env)	;Get setf expansion for int.
-    (let ((btemp (gensym))		;Temp var for byte specifier.
-	  (store (gensym))		;Temp var for byte to store.
-	  (stemp (first stores)))	;Temp var for int to store.
-      (if (cdr stores) (error "Can't expand this."))
-      ;; Return the setf expansion for LDB as five values.
-      (values (cons btemp temps)	;Temporary variables.
-	      (cons bytespec vals)	;Value forms.
-	      (list store)		;Store variables.
-	      `(let ((,stemp (dpb ,store ,btemp ,access-form)))
-		 ,store-form
-		 ,store)		;Storing form.
-	      `(ldb ,btemp ,access-form) ;Accessing form.
-              ))))
-
 
 (defun ldb-test (bytespec integer)
   (case (byte-size bytespec)
@@ -2456,14 +2055,6 @@ Preserve EAX and EBX."
 		  r+1
 		r)))
 	 (setf r next-r))))))
-
-(define-compiler-macro expt (&whole form base-number power-number &environment env)
-  (if (not (and (movitz:movitz-constantp base-number env)
-		(movitz:movitz-constantp power-number env)))
-      form
-    (expt (movitz:movitz-eval base-number env)
-	  (movitz:movitz-eval power-number env))))
-    
 
 (defun expt (base-number power-number)
   "Take base-number to the power-number."

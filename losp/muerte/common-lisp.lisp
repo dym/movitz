@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:41:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: common-lisp.lisp,v 1.7 2004/04/23 15:00:14 ffjeld Exp $
+;;;; $Id: common-lisp.lisp,v 1.8 2004/07/17 12:16:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -17,6 +17,7 @@
 
 (require :muerte/setf)
 (require :muerte/more-macros)
+(require :muerte/arithmetic-macros)
 (require :muerte/memref)
 (require :muerte/basic-functions)
 (require :muerte/variables)
