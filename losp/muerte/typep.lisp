@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.8 2004/04/17 00:02:53 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.9 2004/04/17 00:24:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -266,9 +266,8 @@
 				      :eax)))
 			  ((= 1 (logcount (1+ (- upper-limit lower-limit))))
 			   `(with-inline-assembly (:returns :boolean-zf=1)
-			      (:compile-form (:result-mode :eax) ,object)
-			      (:leal (:eax ,(* movitz:+movitz-fixnum-factor+
-					       (- lower-limit)))
+			      (:compile-form (:result-mode :ecx) ,object)
+			      (:subl ,(* movitz:+movitz-fixnum-factor+ lower-limit)
 				     :ecx)
 			      (:testl ,(logxor #xffffffff
 					       (* movitz:+movitz-fixnum-factor+
