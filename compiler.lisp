@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.47 2004/04/15 10:45:05 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.48 2004/04/15 19:58:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2701,8 +2701,7 @@ the sub-program options (&optional label) as secondary value."
 					   (truncate
 					    (or (position-if (lambda (i)
 							       (member b (find-read-bindings i)))
-							     (cdr init-pc)
-							     :end 10)
+							     (cdr init-pc))
 						15)
 					    count)))))))))
 		 ;; First, make several passes while trying to locate bindings
