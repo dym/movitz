@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.11 2004/07/28 10:01:23 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.12 2004/09/22 17:55:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -32,13 +32,12 @@
 	(error "No run-time-context slot named ~S in ~S." slot-name context))))
 
 (defun %run-time-context-slot (slot-name &optional (context (current-run-time-context)))
-  (check-type context run-time-context)
   (let ((slot (find-run-time-context-slot context slot-name)))
     (ecase (second slot)
       (word
        (memref context -6 (third slot) :lisp))
       (code-vector-word
-       (%word-offset (memref context -6 (third slot) :lisp) -2))
+       (memref context -6 (third slot) :code-vector))
       (lu32
        (memref context -6 (third slot) :unsigned-byte32)))))
 
