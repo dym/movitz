@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.16 2004/07/13 02:37:36 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.17 2004/07/13 13:00:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -127,6 +127,7 @@ start-location and end-location."
 	  (incf scan)
 	  (let ((delta (memref scan 0 0 :lisp)))
 	    (check-type delta positive-fixnum)
+	    ;; (warn "at ~S skipping ~S to ~S." scan delta (+ scan delta))
 	    (incf scan delta)))
 	 ((typep x 'pointer)
 	  (let ((new (funcall function x scan)))
