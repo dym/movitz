@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.68 2004/07/16 10:42:40 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.69 2004/07/17 01:48:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1102,26 +1102,19 @@ Preserve EAX and EBX."
 	  (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
 	  (:shll :cl :eax)))
        (t (check-type integer (integer 0 *))
-	  (multiple-value-bind (long short)
-	      (truncate count 16)
-	    (let ((result (%make-bignum (truncate (+ result-length 31) 32))))
-	      (dotimes (i long)
-		(setf (memref result -2 i :unsigned-byte16) 0))
-	      (etypecase integer
-		(fixnum
-		 (when (>= integer #x10000)
-		   (setf (memref result -2 (1+ long) :unsigned-byte16)
-		     (ldb (byte 16 16) integer)))
-		 (setf (memref result -2 long :unsigned-byte16)
-		   (ldb (byte 16 0) integer)))
-		(bignum
-		 (dotimes (i (* 2 (%bignum-bigits integer)))
-		   (setf (memref result -2 (+ i long) :unsigned-byte16)
-		     (memref integer -2 i :unsigned-byte16)))))
-	      (setf result (%bignum-canonicalize result))
-	      (dotimes (i short)
-		(setf result (* 2 result)))
-	      result))))))
+	  (let ((result (%make-bignum (truncate (+ result-length 31) 32))))
+	    (dotimes (i (* 2 (%bignum-bigits result)))
+	      (setf (memref result -2 i :unsigned-byte16)
+		(let ((pos (- (* i 16) count)))
+		  (cond
+		   ((minusp (+ pos 16)) 0)
+		   ((<= 0 pos)
+		    (ldb (byte 16 pos) integer))
+		   (t (ash (ldb (byte (+ pos 16) 0) integer)
+			   (- pos)))))))
+	    (assert (or (plusp (memref result -2 (+ -1 (* 2 (%bignum-bigits result))) :unsigned-byte16))
+			(plusp (memref result -2 (+ -2 (* 2 (%bignum-bigits result))) :unsigned-byte16))))
+	    (%bignum-canonicalize result))))))
    (t (let ((count (- count)))
 	(etypecase integer
 	  (fixnum
@@ -1134,22 +1127,42 @@ Preserve EAX and EBX."
 	     (:cld)))
 	  (positive-bignum
 	   (let ((result-length (- (integer-length integer) count)))
-	     (if (<= result-length 0)
-		 0
-	       (let ((result (%make-bignum (truncate (+ result-length 31) 32))))
-		 (multiple-value-bind (long short)
+	     (cond
+	      ((<= result-length 1)
+	       result-length)		; 1 or 0.
+	      (t (multiple-value-bind (long short)
 		     (truncate count 16)
-		   (let ((src-max-bigit (* 2 (%bignum-bigits integer))))
-		     (dotimes (i (* 2 (%bignum-bigits result)))
-		       (let ((src (+ i long)))
-			 (setf (memref result -2 i :unsigned-byte16)
-			   (if (< src src-max-bigit)
-			       (memref integer -2 src :unsigned-byte16)
-			     0)))))
-		   (setf result (%bignum-canonicalize result))
-		   (dotimes (i short result)
-		     (setf result (truncate result 2)))
-		   result))))))))))
+		   (let ((result (%make-bignum (1+ (truncate (+ result-length 31) 32)))))
+		     (let ((src-max-bigit (* 2 (%bignum-bigits integer))))
+		       (dotimes (i (* 2 (%bignum-bigits result)))
+			 (let ((src (+ i long)))
+			   (setf (memref result -2 i :unsigned-byte16)
+			     (if (< src src-max-bigit)
+				 (memref integer -2 src :unsigned-byte16)
+			       0)))))
+		     (%bignum-canonicalize
+		      (macrolet
+			  ((do-it ()
+			     `(with-inline-assembly (:returns :ebx)
+				(:compile-two-forms (:ecx :ebx) short result)
+				(:xorl :edx :edx) ; counter
+				(:xorl :eax :eax) ; We need to use EAX for u32 storage.
+				(:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+				(:std)
+			       shift-short-loop
+				(:addl 4 :edx)
+				(:cmpw :dx (:ebx (:offset movitz-bignum length)))
+				(:jbe 'end-shift-short-loop)
+				(:movl (:ebx :edx (:offset movitz-bignum bigit0))
+				       :eax)
+				(:shrdl :cl :eax
+					(:ebx :edx (:offset movitz-bignum bigit0 -4)))
+				(:jmp 'shift-short-loop)
+			       end-shift-short-loop
+				(:movl :edx :eax) ; Safe EAX
+				(:shrl :cl (:ebx :edx (:offset movitz-bignum bigit0 -4)))
+				(:cld))))
+			(do-it))))))))))))))
 
 ;;;;
 
@@ -1211,7 +1224,7 @@ Preserve EAX and EBX."
 	     (case f1
 	       (0 `(progn ,factor2 0))
 	       (1 factor2)
-;;;	       (2 `(let ((x ,factor2)) (+ x x)))
+	       (2 `(let ((x ,factor2)) (+ x x)))
 	       (t `(no-macro-call * ,factor1 ,factor2)))))
 	  (t `(no-macro-call * ,factor1 ,factor2)))))
     (t `(* (* ,(first operands) ,(second operands)) ,@(cddr operands)))))
@@ -1371,8 +1384,9 @@ Preserve EAX and EBX."
 		   ;; X is the biggest factor.
 		   (let ((r 0) (f 0))
 		     (dotimes (half-bigit (* 2 (%bignum-bigits y)))
-		       (incf r (ash (* (memref y -2 half-bigit :unsigned-byte16) x)
-				    f))
+		       (let* ((digit (* x (memref y -2 half-bigit :unsigned-byte16)))
+			      (delta1 (ash digit f)))
+			 (incf r delta1))
 		       (incf f 16))
 		     r)))
 		((t (integer * -1))
@@ -1512,29 +1526,27 @@ Preserve EAX and EBX."
 	 (cond
 	  ((= number divisor) (values 1 0))
 	  ((< number divisor) (values 0 number))
-	  (t (let* ((msb-pos (1- (* 4 (%bignum-bigits divisor))))
-		    (msb (memref divisor -2 msb-pos :unsigned-byte8)))
-	       (do () ((not (eq 0 msb)))
-		 (decf msb-pos)
-		 (setf msb (memref divisor -2 msb-pos :unsigned-byte8)))
-	       (decf msb-pos 2)
-	       (setf msb (+ (* #x10000 msb)
-			    (* #x100 (memref divisor -2 (1+ msb-pos) :unsigned-byte8))
-			    (memref divisor -2 msb-pos :unsigned-byte8)))
-	       (let ((guess-shift (- (* msb-pos 8))))
-		 (do ((msb+1 (1+ msb))
-		      (q 0) (r number))
-		     ((< r divisor) (values q r))
-		   (let ((guess (ash (truncate r msb+1) guess-shift)))
-;;;		     (dotimes (i long-shift)
-;;;		       (setf guess (truncate guess #x1000000)))
-;;;		     (dotimes (i short-shift)
-;;;		       (setf guess (truncate guess #x100)))
+	  (t (let* ((guess-pos (- (integer-length divisor) 29))
+		    (msb (ldb (byte 29 guess-pos) divisor))) 
+	       (when (eq msb most-positive-fixnum)
+		 (decf guess-pos)
+		 (setf msb (ash msb -1)))
+	       (incf msb)
+	       (do ((q 0)
+		    (r number))
+		   ((< r divisor)
+		    (assert (and (not (minusp r)) (not (minusp q))) ()
+		      "(trunc ~S ~S) r: ~S q: ~S" number divisor r q)
+;;;		    (assert (= number (+ r (* q divisor))) ()
+;;;		      "trunc failed: q: ~S R: ~S" q r)
+		    (values q r))
+		 (let* ((guess (ash (truncate r msb) (- guess-pos))))
+		   (let ((delta (* guess divisor)))
 		     (if (= 0 guess)
 			 (setf q (1+ q)
 			       r (- r divisor))
 		       (setf q (+ q guess)
-			     r (- r (* divisor guess)))))))))))
+			     r (- r delta))))))))))
 	(((integer * -1) (integer 0 *))
 	 (multiple-value-bind (q r)
 	     (truncate (- number) divisor)
@@ -1562,7 +1574,7 @@ Preserve EAX and EBX."
       (if (= 0 r)
 	  q
 	(error "Don't know how to divide ~S by ~S." number (first denominators)))))
-   (t (reduce '/ denominators :initial-value number))))
+   (t (/ number (reduce '* denominators)))))
 	       
 (defun round (number &optional (divisor 1))
   "Mathematical rounding."
@@ -2010,6 +2022,7 @@ Preserve EAX and EBX."
        (do-it)))
     (positive-bignum
      (cond
+      ((= size 0) 0)
       ((<= size 32)
        ;; The result is likely to be a fixnum (or at least an u32), due to byte-size.
        (macrolet
