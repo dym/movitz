@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.76 2004/11/12 14:51:28 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.77 2004/11/12 16:24:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -107,7 +107,7 @@
     :binary-tag :primitive-function)
    ;; per thread parameters
    (dynamic-env
-    :binary-type lu32
+    :binary-type word
     :initform 0)
    ;; More per-thread parameters
    (unwind-protect-tag
