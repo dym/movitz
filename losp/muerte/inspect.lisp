@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.21 2004/07/15 21:07:04 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.22 2004/07/16 00:02:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -306,6 +306,16 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
       (:movl :ecx (:eax :edx #.movitz:+other-type-offset+))
       (:subl 4 :edx)
       (:jnc 'copy-bignum-loop))))
+
+(defun %make-bignum (bigits)
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :eax)
+	    (:compile-two-forms (:eax :ecx) (malloc-non-pointer-words (1+ bigits)) bigits)
+	    (:shll 16 :ecx)
+	    (:orl ,(movitz:tag :bignum 0) :ecx)
+	    (:movl :ecx (:eax ,movitz:+other-type-offset+)))))
+    (do-it)))
 
 (defun print-bignum (x)
   (check-type x bignum)
