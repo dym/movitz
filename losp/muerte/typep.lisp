@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.41 2005/01/25 13:55:36 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.42 2005/02/28 23:39:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -577,6 +577,9 @@
 
 (define-simple-typep (hash-table hash-table-p))
 (define-simple-typep (package packagep))
+
+(define-simple-typep (code-vector code-vector-p) (x)
+  (typep x 'code-vector))
 
 ;;;
 
