@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.3 2004/02/05 14:46:24 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.4 2004/02/26 13:43:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -437,8 +437,8 @@ Returns list in EAX and preserves numargs in ECX."
 
 (defun malloc-initialize (buffer-start buffer-size)
   "BUFFER-START: the (fixnum) 4K address. BUFFER-SIZE: The size in 4K units."
-  (check-type buffer-start integer);  unsigned-byte)
-  (check-type buffer-size integer);  unsigned-byte)
+  (check-type buffer-start integer)
+  (check-type buffer-size integer)
   (with-inline-assembly (:returns :nothing)
     (:compile-form (:result-mode :eax) buffer-start)
     (:shll #.(cl:- 12 movitz::+movitz-fixnum-shift+) :eax)
