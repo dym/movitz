@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 30 15:19:43 2001
 ;;;;                
-;;;; $Id: packages.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.3 2004/04/13 14:21:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,8 +19,6 @@
 (provide :muerte/packages)
 
 (in-package muerte)
-
-(defvar *package*)
 
 (defstruct (package
 	    (:predicate packagep)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct 17 21:50:42 2001
 ;;;;                
-;;;; $Id: read.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
+;;;; $Id: read.lisp,v 1.3 2004/04/13 14:21:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,8 +18,6 @@
 (provide :muerte/read)
 
 (in-package muerte)
-
-(defvar *read-base* 10)
 
 (defun substring (string start end)
   (if (and (zerop start) (= end (length string)))
