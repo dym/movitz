@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.50 2004/07/13 14:17:05 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.51 2004/07/13 19:45:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -570,12 +570,22 @@
 	    (:cmpl :ecx
 		   (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
 	    (:je 'positive-compare-loop)
-	    (:ret)
-	   positive-compare-lsb		; it's down to the LSB bigits.
-	    (:movl (:ebx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
-		   :ecx)
-	    (:cmpl :ecx
-		   (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+	   positive-compare-lsb
+	    ;; Now make the compare unsigned..
+	    (:movzxw (:ebx :edx ,(+ 2 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     :ecx)		; First compare upper 16 bits.
+	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:movzxw (:eax :edx ,(+ 2 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     :ecx)
+	    (:locally (:cmpl (:edi (:edi-offset scratch0)) :ecx))
+	    (:jne 'upper-16-decisive)
+	    (:movzxw (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		     :ecx)		; Then compare lower 16 bits.
+	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:movzxw (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		     :ecx)		; Then compare lower 16 bits.
+	    (:locally (:cmpl (:edi (:edi-offset scratch0)) :ecx))
+	   upper-16-decisive
 	    (:ret)
 	    
 	   compare-negatives
@@ -1424,10 +1434,23 @@ Preserve EAX and EBX."
 	 (cond
 	  ((= number divisor) (values 1 0))
 	  ((< number divisor) (values 0 number))
-	  (t (do ((q 0 (1+ q))
-		  (r number (- r divisor)))
-		 ((< r divisor) (values q r))))))
-	))))
+	  (t (let* ((msb-pos (1- (* 2 (%bignum-bigits divisor))))
+		    (msb (memref divisor -2 msb-pos :unsigned-byte16)))
+	       (when (= 0 msb)
+		 (decf msb-pos)
+		 (setf msb (memref divisor -2 msb-pos :unsigned-byte16))
+		 (assert (plusp msb)))
+	       (do ((msb+1 (1+ msb))
+		    (q 0) (r number))
+		   ((< r divisor) (values q r))
+		 (let ((guess (truncate r msb+1)))
+		   (dotimes (i msb-pos)
+		     (setf guess (truncate guess #x10000)))
+		   (if (= 0 guess)
+		       (setf q (1+ q)
+			     r (- r divisor))
+		     (setf q (+ q guess)
+			   r (- r (* divisor guess))))))))))))))
 
 (defun / (number &rest denominators)
   (declare (dynamic-extent denominators))
