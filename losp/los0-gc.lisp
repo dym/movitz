@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.22 2004/07/12 07:59:04 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.23 2004/07/12 11:11:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -169,7 +169,8 @@ Preserve EAX and EBX."
 			       (:edi (:edi-offset atomically-status))))
 		    (:int 113)		; This interrupt can be retried.
 		    (:jmp 'retry-cons)))
-	    (:movl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0))
+	    (:movl ,(dpb movitz:+movitz-fixnum-factor+
+			 (byte 16 16) (movitz:tag :bignum 0))
 		   (:edx :eax 2))
 	    (:movl :ecx (:edx :eax 6))
 	    (:addl 8 :eax)
