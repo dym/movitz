@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.37 2004/09/15 10:22:59 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.38 2004/09/15 10:25:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -393,36 +393,3 @@ Obviously, this correspondence is not guaranteed to hold e.g. across GC."
 	    (- uplink start-frame)))
 	(setf frame uplink)))
     copy))
-  
-;;;  (let* ((stack-start-location (+ 2 (object-location stack)))
-;;;	 (start-frame-index (- start-frame stack-start-location))
-;;;	 (copy (subseq stack start-frame-index))
-;;;	 (copy-start-location (+ 2 (object-location copy))))
-;;;    (do ((frame start-frame-index)
-;;;	 (index 0))
-;;;	(nil)
-;;;      (let ((uplink-frame (stack-frame-uplink stack frame)))
-;;;	(cond
-;;;	 ((= 0 uplink-frame)
-;;;	  (setf (svref%unsafe copy index) 0)
-;;;	  (return copy))
-;;;	 (t (let* ((uplink-frame (- uplink-frame stack-start-location))
-;;;		   (uplink-index (- uplink-frame start-frame-index)))
-;;;	      (warn "~S uf ~S [~S]"
-;;;		    (+ frame stack-start-location)
-;;;		    (+ uplink-frame stack-start-location)
-;;;		    frame)
-;;;	      (assert (< -1 uplink-index (length copy)) ()
-;;;		"Uplink-index outside copy: ~S, uplink-frame: ~S frame: ~S, index: ~S"
-;;;		uplink-index uplink-frame (+ frame stack-start-location) index)
-;;;	      (setf (svref%unsafe copy index)
-;;;		(if relative-uplinks
-;;;		    uplink-index
-;;;		  (let ((x (+ uplink-index copy-start-location)))
-;;;		    (assert (= copy-start-location (+ 2 (object-location copy))) ()
-;;;		      "Destination stack re-located!")
-;;;		    (assert (location-in-object-p copy x) ()
-;;;		      "Bad uplink ~S computed from index ~S and copy ~Z, csl: ~S"
-;;;		      x uplink-index copy copy-start-location)
-;;;		    x)))
-;;;	      (setf frame uplink-frame index uplink-index))))))))
