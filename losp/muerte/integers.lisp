@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.54 2004/07/14 10:03:44 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.55 2004/07/14 11:01:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -41,34 +41,23 @@
 (defun fixnump (x)
   (typep x 'fixnum))
 
+(define-compiler-macro evenp (x)
+  `(with-inline-assembly (:returns :boolean-zf=1)
+     (:compile-form (:result-mode :eax) ,x)
+     (:call-global-constant unbox-u32)
+     (:testb 1 :cl)))
+
 (defun evenp (x)
-  (macrolet
-      ((do-it ()
-	 `(with-inline-assembly (:returns :ebx)
-	    (:compile-form (:result-mode :eax) x)
-	    (:movl :eax :ecx)
-	    (:andl 7 :ecx)
-	    (:globally (:movl (:edi (:edi-offset t-symbol)) :ebx))
-	    (:cmpl ,(movitz:tag :even-fixnum) :ecx)
-	    (:je 'done)
-	    (:movl :edi :ebx)
-	    (:cmpl ,(movitz:tag :odd-fixnum) :ecx)
-	    (:je 'done)
-	    (:cmpl ,(movitz:tag :other) :ecx)
-	    (:jnz '(:sub-program (not-integer)
-		    (:int 107)))
-	    (:cmpb ,(movitz:tag :bignum) (:eax ,movitz:+other-type-offset+))
-	    (:jne 'not-integer)
-	    (:testb 1 (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
-	    (:jnz 'done)
-	    (:globally (:movl (:edi (:edi-offset t-symbol)) :ebx))
-	   done)))
-    (do-it)))
+  (evenp x))
+
+(define-compiler-macro oddp (x)
+  `(with-inline-assembly (:returns :boolean-zf=0)
+     (:compile-form (:result-mode :eax) ,x)
+     (:call-global-constant unbox-u32)
+     (:testb 1 :cl)))
 
 (defun oddp (x)
-  (not (evenp x)))
-
-
+  (oddp x))
 
 ;;; Types
 
@@ -469,6 +458,8 @@
 		 (+ (- subtrahend) minuend))
 		((fixnum bignum)
 		 (- (+ (- minuend) subtrahend)))
+		(((integer 0 *) (integer * -1))
+		 (+ minuend (- subtrahend)))
 		((positive-bignum positive-bignum)
 		 (cond
 		  ((= minuend subtrahend)
@@ -494,8 +485,7 @@
 			       (:eax :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
 			(:jc '(:sub-program (should-not-happen)
 			       (:int 107)))
-			)))))
-		)))
+			))))))))
 	(do-it)))
    (t (minuend &rest subtrahends)
       (declare (dynamic-extent subtrahends))
@@ -571,7 +561,8 @@
 		   (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
 	    (:je 'positive-compare-loop)
 	   positive-compare-lsb
-	    ;; Now make the compare unsigned..
+	    ;; Now we have to make the compare act as unsigned, which is why
+	    ;; we compare zero-extended 16-bit quantities.
 	    (:movzxw (:ebx :edx ,(+ 2 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
 		     :ecx)		; First compare upper 16 bits.
 	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
@@ -608,10 +599,22 @@
 	    (:je 'negative-compare-loop)
 	    (:ret)
 	   negative-compare-lsb		; it's down to the LSB bigits.
-	    (:movl (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
-		   :ecx)
-	    (:cmpl :ecx
-		   (:ebx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+	    ;; Now we have to make the compare act as unsigned, which is why
+	    ;; we compare zero-extended 16-bit quantities.
+	    (:movzxw (:ebx :edx ,(+ 2 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     :ecx)		; First compare upper 16 bits.
+	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:movzxw (:eax :edx ,(+ 2 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     :ecx)
+	    (:locally (:cmpl :ecx (:edi (:edi-offset scratch0))))
+	    (:jne 'negative-upper-16-decisive)
+	    (:movzxw (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		     :ecx)		; Then compare lower 16 bits.
+	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:movzxw (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		     :ecx)		; Then compare lower 16 bits.
+	    (:locally (:cmpl :ecx (:edi (:edi-offset scratch0))))
+	   negative-upper-16-decisive
 	    (:ret))))
     (do-it)))
 
@@ -997,13 +1000,15 @@ Preserve EAX and EBX."
 (define-compiler-macro ash (&whole form integer count &environment env)
   (if (not (movitz:movitz-constantp count env))
       form
-    (let ((count (movitz::movitz-eval count env)))
+    (let ((count (movitz:movitz-eval count env)))
       (cond
        ((movitz:movitz-constantp integer env)
 	(ash (movitz::movitz-eval integer env) count))
        ((= 0 count)
 	integer)
-       (t (let ((load-integer `((:compile-form (:result-mode :register) ,integer)
+       (t form
+	  #+igore
+	  (let ((load-integer `((:compile-form (:result-mode :register) ,integer)
 				(:testb ,movitz::+movitz-fixnum-zmask+ (:result-register-low8))
 				(:jnz '(:sub-program () (:int 107) (:jmp (:pc+ -4)))))))
 	    (cond
@@ -2267,9 +2272,9 @@ Preserve EAX and EBX."
    (2 (u v)
       ;; Code borrowed from CMUCL.
       (do ((k 0 (1+ k))
-	   (u (abs u) (ash u -1))
-	   (v (abs v) (ash v -1)))
-	  ((oddp (logior u v))
+	   (u (abs u) (truncate u 2))
+	   (v (abs v) (truncate v 2)))
+	  ((or (oddp u) (oddp v))
 	   (do ((temp (if (oddp u) (- v) (ash u -1))
 		      (ash temp -1)))
 	       (nil)
