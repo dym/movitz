@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.11 2004/07/08 15:23:53 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.12 2004/07/19 09:57:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -170,7 +170,8 @@
 	  (internal-write object)
 	(handler-case (internal-write object)
 	  (serious-condition (c)
-	    (format t "#<printer error for ~Z: [~A]>" object c)))))))
+	    (print-unreadable-object (c *standard-output* :type t :identity t)
+	      (format t " while printing ~Z" object))))))))
 
 (defun internal-write (object)
   (let ((stream *standard-output*))
