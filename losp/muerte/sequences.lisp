@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.16 2004/08/12 17:01:26 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.17 2004/08/16 08:26:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -74,7 +74,8 @@
     (list
      (do ((x sequence (cdr x))
 	  (length 0 (1+ length)))
-	 ((null x) length)))))
+	 ((null x) length)
+       (declare (index length))))))
 
 (defun length%list (sequence)
   (do ((length 0 (1+ length))
