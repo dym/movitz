@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.25 2004/09/21 20:46:06 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.26 2004/09/22 17:57:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -245,7 +245,6 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:movl :ecx (:ebp ,(dit-frame-offset :eip)))
 	    (:jmp 'normal-return)
 	    
-
 	   not-restart-continuation
 	    ;; Don't know what to do.
 	    (:int 63)
@@ -361,7 +360,10 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	  (112
 	   (let ((*error-no-condition-for-debugger* t)) ; no space..
 	     (error "Out of memory. Please take out the garbage.")))
-	  (t (funcall (if (< 16 vector 50) #'warn #'error)
+	  (t (funcall (cond 
+		       ((<= 32 vector 48) #'break)
+		       ((<= 16 vector 50) #'warn)
+		       (t #'error))
 		      "Exception occurred: ~D, EIP: ~@Z, EAX: ~@Z, ECX: ~@Z, ESI: ~@Z"
 		      vector $eip $eax $ecx $esi)))
 	nil))))
@@ -377,12 +379,10 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
     (setf (svref handlers vector) handler)))
 
 (defun cli ()
-  (with-inline-assembly (:returns :nothing)
-    (:cli)))
+  (compiler-macro-call cli))
 
 (defun sti ()
-  (with-inline-assembly (:returns :nothing)
-    (:sti)))
+  (compiler-macro-call sti))
 
 (defun raise-exception (vector &optional (eax 0) (ebx 0))
   "Generate a CPU exception, with those values in EAX and EBX."
