@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.11 2004/05/24 14:58:34 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.12 2004/05/24 19:32:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -72,7 +72,7 @@
     (:movl :ecx (:edx 2))
     (:ret)))
 
-(define-primitive-function los0-normalize-u32-ecx ()
+(define-primitive-function los0-box-u32-ecx ()
   "Make u32 in ECX into a fixnum or bignum."
   (macrolet
       ((do-it ()
@@ -157,9 +157,9 @@
     (check-type conser vector)
     (setf (%run-time-context-slot 'muerte::fast-cons)
       conser))
-  (let ((conser (symbol-value 'los0-normalize-u32-ecx)))
+  (let ((conser (symbol-value 'los0-box-u32-ecx)))
     (check-type conser vector)
-    (setf (%run-time-context-slot 'muerte::normalize-u32-ecx)
+    (setf (%run-time-context-slot 'muerte::box-u32-ecx)
       conser))
   (let ((old-malloc (symbol-function 'muerte:malloc-clumps)))
     (setf (symbol-function 'muerte:malloc-clumps)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.18 2004/05/24 14:58:56 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.19 2004/05/24 19:34:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -505,8 +505,8 @@ Returns list in EAX and preserves numargs in ECX."
     (:ret)))
 
 
-(define-primitive-function normalize-u32-ecx ()
-  "Make u32 in ECX into a fixnum or bignum."
+(define-primitive-function box-u32-ecx ()
+  "Make u32 in ECX into a fixnum or bignum in EAX."
   (with-inline-assembly (:returns :multiple-values)
     (:cmpl #.movitz:+movitz-most-positive-fixnum+ :ecx)
     (:ja 'not-fixnum)
@@ -514,6 +514,32 @@ Returns list in EAX and preserves numargs in ECX."
     (:ret)
    not-fixnum
     (:int 107)))			; not implemented by default!
+
+(define-primitive-function unbox-u32 ()
+  "Coerce EAX into a u32 in ECX, or signal type error.
+Preserve EAX, EBX, and EDX."
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :multiple-values)
+	    (:testl ,(logior #x80000000 movitz:+movitz-fixnum-zmask+)
+		    :eax)
+	    (:jnz 'not-fixnum)
+	    (:movl :eax :ecx)
+	    (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	    (:ret)
+	   not-fixnum
+	    (:leal (:eax ,(- (movitz:tag :other))) :ecx)
+	    (:testb 7 :cl)
+	    (:jnz 'fail)
+	    (:cmpl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0))
+		   (:eax ,movitz:+other-type-offset+))
+	    (:jne 'fail)
+	    (:movl (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
+		   :ecx)
+	    (:ret)
+	   fail
+	    (:int 107))))
+    (do-it)))
 
 ;;;;
 
