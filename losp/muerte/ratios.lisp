@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 20 00:39:59 2004
 ;;;;                
-;;;; $Id: ratios.lisp,v 1.6 2004/08/04 13:01:14 ffjeld Exp $
+;;;; $Id: ratios.lisp,v 1.7 2004/09/22 17:52:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -21,20 +21,20 @@
 
 (in-package muerte)
 
-;;;(defstruct (ratio (:constructor make-ratio (numerator denominator))
-;;;	    (:superclass rational))
-;;;  numerator denominator)
-
 (defun make-ratio (numerator denominator)
   (check-type numerator integer)
   (check-type denominator (integer 1 *))
-  (let ((ratio (malloc-pointer-words 4)))
-    (setf (memref ratio #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::type)
-		  0 :unsigned-byte32)
-      #.(movitz:tag :ratio))
-    (setf (memref ratio -6 2 :lisp) numerator
-	  (memref ratio -6 3 :lisp) denominator)
-    ratio))
+  (macrolet
+      ((do-it ()
+	 `(with-allocation-assembly (4 :fixed-size-p t
+				       :object-register :eax)
+	    (:load-lexical (:lexical-binding numerator) :ebx)
+	    (:load-lexical (:lexical-binding denominator) :edx)
+	    (:movl ,(movitz:tag :ratio) (:eax (:offset movitz-ratio type)))
+	    (:movl :edi (:eax (:offset movitz-ratio dummy2)))
+	    (:movl :ebx (:eax (:offset movitz-ratio numerator)))
+	    (:movl :edx (:eax (:offset movitz-ratio denominator))))))
+    (do-it)))
 
 (defun ratio-p (x)
   (typep x 'ratio))
