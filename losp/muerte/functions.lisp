@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.5 2004/03/24 20:40:40 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.6 2004/03/26 13:58:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -373,13 +373,12 @@ so that we can be reasonably sure of dst's size."
 
 (defun copy-funobj (old-funobj &optional (name (funobj-name old-funobj)))
   (let* ((num-constants (funobj-num-constants old-funobj))
-	 (funobj (malloc-words (+ #.(cl:truncate (bt:sizeof 'movitz:movitz-funobj) 4)
+	 (funobj (malloc-words (+ -2 #.(cl:truncate (bt:sizeof 'movitz:movitz-funobj) 4)
 				  num-constants))))
     (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:type) 0 :unsigned-byte16)
       (memref old-funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:type) 0 :unsigned-byte16))
     (setf (funobj-num-constants funobj) num-constants)
     (replace-funobj funobj old-funobj name)))
-
 
 (defun install-funobj-name (name funobj)
   (setf (funobj-name funobj) name)
