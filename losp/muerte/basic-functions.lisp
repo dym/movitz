@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.15 2004/12/20 10:51:52 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.16 2005/01/27 07:47:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -349,18 +349,6 @@
 
 (defun object-tag (object)
   (object-tag object))
-
-;;;(define-compiler-macro object-location-offset (object)
-;;;  "The offset from the object's location to it's true address."
-;;;  `(with-inline-assembly (:returns :register)
-;;;     (:compile-form (:result-mode :register) ,object)
-;;;     (:shll ,movitz:+movitz-fixnum-shift+ (:result-register))
-;;;     (:andl ,(* movitz:+movitz-fixnum-factor+
-;;;		movitz:+movitz-fixnum-zmask+)
-;;;	    (:result-register))))
-;;;
-;;;(defun object-location-offset (object)
-;;;  (object-location-offset object))
 
 (defun halt-cpu ()
   (halt-cpu))
