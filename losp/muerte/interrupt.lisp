@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.4 2004/04/15 13:18:48 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.5 2004/04/15 15:18:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -159,7 +159,7 @@
 	  (*last-interrupt-frame* interrupt-frame))
       (block nil
 	(case number
-	  (0 (error "Division by zero."))
+	  (0 (error 'division-by-zero))
 	  (3 (break "Break instruction at ~@Z." $eip))
 	  (6 (error "Illegal instruction at ~@Z." $eip))
 	  (13 (error "General protection error. EIP=~@Z, error-code: #x~X, EAX: ~@Z, EBX: ~@Z, ECX: ~@Z"
