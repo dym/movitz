@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.80 2004/07/20 09:19:00 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.81 2004/07/21 14:18:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -344,13 +344,13 @@ Preserve EAX and EBX."
 ;;;;
 
 (deftype positive-fixnum ()
-  `(integer 0 ,movitz:+movitz-most-positive-fixnum+))
+  '(integer 0 #.movitz:+movitz-most-positive-fixnum+))
 
 (deftype positive-bignum ()
-  `(integer ,(1+ movitz:+movitz-most-positive-fixnum+) *))
+  `(integer #.(cl:1+ movitz:+movitz-most-positive-fixnum+) *))
 
 (deftype negative-fixnum ()
-  `(integer ,movitz:+movitz-most-negative-fixnum+ -1))
+  `(integer #.movitz:+movitz-most-negative-fixnum+ -1))
 
 (defun fixnump (x)
   (typep x 'fixnum))
