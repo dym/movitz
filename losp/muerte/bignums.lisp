@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 19:42:57 2004
 ;;;;                
-;;;; $Id: bignums.lisp,v 1.5 2004/07/20 08:53:56 ffjeld Exp $
+;;;; $Id: bignums.lisp,v 1.6 2004/08/18 22:36:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -413,20 +413,20 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	       (:compile-form (:result-mode :ecx) factor)
 	       (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
 	       (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
-	       (:xorl :ecx :ecx)	; Counter
+	       (:xorl :esi :esi)	; Counter (by 4)
 	       (:xorl :edx :edx)	; Initial carry
-	       (:std)			; Make EAX, EDX, ESI non-GC-roots.
+	       (:std)			; Make EAX, EDX non-GC-roots.
 	      multiply-loop
-	       (:movl (:ebx :ecx (:offset movitz-bignum bigit0))
+	       (:movl (:ebx :esi (:offset movitz-bignum bigit0))
 		      :eax)
-	       (:movl :edx :esi)	; Save carry in ESI
+	       (:movl :edx :ecx)	; Save carry in ECX
 	       (:locally (:mull (:edi (:edi-offset scratch0)) :eax :edx)) ; EDX:EAX = scratch0*EAX
-	       (:addl :esi :eax)	; Add carry
+	       (:addl :ecx :eax)	; Add carry
 	       (:adcl 0 :edx)		; Compute next carry
 	       (:jc '(:sub-program (should-not-happen) (:int 63)))
-	       (:movl :eax (:ebx :ecx (:offset movitz-bignum bigit0)))
-	       (:addl 4 :ecx)
-	       (:cmpw :cx (:ebx (:offset movitz-bignum length)))
+	       (:movl :eax (:ebx :esi (:offset movitz-bignum bigit0)))
+	       (:addl 4 :esi)
+	       (:cmpw :si (:ebx (:offset movitz-bignum length)))
 	       (:ja 'multiply-loop)
 	       (:movl (:ebp -4) :esi)
 	       (:movl :edx :ecx)	; Carry into ECX
