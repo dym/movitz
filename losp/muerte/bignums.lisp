@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 19:42:57 2004
 ;;;;                
-;;;; $Id: bignums.lisp,v 1.1 2004/07/17 19:30:09 ffjeld Exp $
+;;;; $Id: bignums.lisp,v 1.2 2004/07/18 08:45:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -64,7 +64,7 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 
 (defun copy-bignum (old)
   (check-type old bignum)
-  (let* ((length (%bignum-bigits old))
+  (let* ((length (ceiling (integer-length old) 32))
 	 (new (malloc-non-pointer-words (1+ length))))
     (with-inline-assembly (:returns :eax)
       (:compile-two-forms (:eax :ebx) new old)
@@ -172,3 +172,55 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	      add-bignum-done)))
        (do-it)))))
 
+(defun %bignum-subf (bignum delta)
+  "Destructively subtract (abs delta) from bignum."
+  (check-type bignum bignum)
+  (etypecase delta
+    (positive-fixnum
+     (%bignum-addf-fixnum bignum (- delta)))
+    (negative-fixnum
+     (%bignum-addf-fixnum bignum delta))
+    (bignum
+     (macrolet
+	 ((do-it ()
+	    `(with-inline-assembly (:returns :eax)
+	      not-size1
+	       (:load-lexical (:lexical-binding bignum) :eax) ; EAX = bignum
+	       (:load-lexical (:lexical-binding delta) :ebx) ;  EBX = delta
+	       (:xorl :edx :edx)	; Counter
+	       (:xorl :ecx :ecx)	; Carry
+	      sub-bignum-loop
+	       (:cmpw :dx (:eax (:offset movitz-bignum length)))
+	       (:jbe '(:sub-program (overflow) (:int 4)))
+	       (:addl (:ebx :edx (:offset movitz-bignum :bigit0))
+		      :ecx)
+	       (:jz 'carry+digit-overflowed) ; If CF=1, then ECX=0.
+	       (:subl :ecx (:eax :edx (:offset movitz-bignum bigit0)))
+	      carry+digit-overflowed
+	       (:sbbl :ecx :ecx)
+	       (:negl :ecx)		; ECX = Add's Carry.
+	       (:addl 4 :edx)
+	       (:cmpw :dx (:ebx (:offset movitz-bignum length)))
+	       (:ja 'sub-bignum-loop)
+	       ;; Now, if there's a carry we must propagate it.
+	       (:jecxz 'sub-bignum-done)
+	      carry-propagate-loop
+	       (:cmpw :dx (:eax (:offset movitz-bignum length)))
+	       (:jbe '(:sub-program (overflow) (:int 4)))
+	       (:addl 4 :edx)
+	       (:subl 1 (:eax :edx (:offset movitz-bignum bigit0 -4)))
+	       (:jc 'carry-propagate-loop)
+      sub-bignum-done)))
+       (do-it)))))
+
+(defun %bignum-set-zerof (bignum)
+  (check-type bignum bignum)
+  (dotimes (i (logior 1 (%bignum-bigits bignum)))
+    (setf (memref bignum -2 i :lisp) 0))
+  bignum)
+
+(defun %bignum= (x y)
+  (compiler-macro-call %bignum= x y))
+
+(defun %bignum< (x y)
+  (compiler-macro-call %bignum< x y))
