@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.23 2004/05/24 14:58:27 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.24 2004/06/02 23:52:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1271,6 +1271,7 @@
 	   #:read-time-stamp-counter
 	   #:clear-time-stamp-counter
 	   #:eflags
+	   #:decode-eflags
 	   #:load-idt
 	   #:segment-register
 	   #:control-register-lo12
