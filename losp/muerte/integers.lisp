@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.11 2004/05/24 14:58:51 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.12 2004/05/24 22:38:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -807,7 +807,7 @@
 	     (:movl :edi :eax)
 	     (:cld)
 	     (:pushl :edx)
-	     (:call-global-constant normalize-u32-ecx)
+	     (:call-global-constant box-u32-ecx)
 	     (:popl :ebx)
 	     (:jmp 'done)
 	    not-size1
@@ -827,7 +827,7 @@
 	     (:movl :edi :eax)
 	     (:cld)
 	     (:pushl :edx)
-	     (:call-global-constant normalize-u32-ecx)
+	     (:call-global-constant box-u32-ecx)
 	     (:popl :ebx)
 	     (:jmp 'done)
 	    not-size2
