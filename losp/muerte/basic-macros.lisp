@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.30 2004/07/21 14:17:35 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.31 2004/07/21 22:30:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -73,7 +73,8 @@
   (pushnew '(:use) options :key #'car)
   (let ((uses (cdr (assoc :use options))))
     (setf uses (mapcar (lambda (use)
-			 (if (member use '(:cl :common-lisp) :test #'string=)
+			 (if (member use (cons :common-lisp (package-nicknames :common-lisp))
+				     :test #'string=)
 			     :muerte.cl
 			   use))
 		       uses))
