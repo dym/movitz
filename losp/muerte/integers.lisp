@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.62 2004/07/14 16:17:57 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.63 2004/07/14 21:58:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -340,7 +340,7 @@
 			    :ecx)
 		     (:jc '(:sub-program (term1-carry)
 			    ;; The digit + carry carried over, ECX = 0
-			    (:movl 1 :ecx)
+			    (:addl 1 :ecx)
 			    (:addl 4 :edx)
 			    (:cmpw :dx (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
 			    (:jae 'add-bignum-loop)
@@ -474,7 +474,12 @@
 		  ((= minuend subtrahend)
 		   0)
 		  ((< minuend subtrahend)
-		   (- (- subtrahend minuend)))
+		   (let ((x (- subtrahend minuend)))
+		     (when (typep x 'bignum)
+		       (setf (memref x ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::sign)
+				     0 :unsigned-byte8)
+			 #xff))
+		     x))
 		  (t (%bignum-canonicalize
 		      (with-inline-assembly (:returns :eax)
 			(:compile-two-forms (:eax :ebx) (copy-bignum minuend) subtrahend)
@@ -484,8 +489,12 @@
 			(:addl (:ebx :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
 			       :ecx)
 			(:jc '(:sub-program (carry-overflow)
-			       ;;
-			       (:break)))
+			       ;; Just propagate carry
+			       (:addl 1 :ecx)
+			       (:addl 4 :edx)
+			       (:cmpw :dx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+			       (:jne 'sub-loop)
+			       (:jmp 'bignum-sub-done)))
 			(:subl :ecx
 			       (:eax :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
 			(:sbbl :ecx :ecx)
@@ -497,6 +506,7 @@
 			       (:eax :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
 			(:jc '(:sub-program (should-not-happen)
 			       (:int 107)))
+		       bignum-sub-done
 			)))))
 		(((integer 0 *) (integer * -1))
 		 (+ minuend (- subtrahend)))
