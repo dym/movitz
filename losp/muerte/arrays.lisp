@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.22 2004/05/24 21:51:52 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.23 2004/06/16 07:38:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -207,7 +207,8 @@
 		(:cmpw (:eax ,(bt:slot-offset 'movitz:movitz-vector 'movitz::num-elements)) :bx)
 		(:jae '(:sub-program ()
 			(:compile-form (:result-mode :ignore)
-			 (error "Index ~D out of bounds ~D." index (length vector)))))
+			 (error "Index ~D out of bounds ~D."
+			  index (array-dimension vector 0)))))
 
 		(:cmpl ,(movitz:vector-type-tag :any-t) :ecx)
 		(:jne 'not-any-t)
