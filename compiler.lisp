@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.39 2004/03/31 15:55:31 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.40 2004/04/01 02:09:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2095,8 +2095,8 @@ falling below the label."
 	      (binding-name object)
 	      (unless (eq object (binding-target object))
 		(binding-name (binding-target object)))
-	      (when (and (slot-exists-p object 'store-type)
-			 (slot-boundp object 'store-type)
+	      (when (and #+ignore (slot-exists-p object 'store-type)
+			 #+ignore (slot-boundp object 'store-type)
 			 (binding-store-type object))
 		(apply #'encoded-type-decode
 		       (binding-store-type object)))))))
@@ -2107,6 +2107,9 @@ falling below the label."
     :reader constant-object)))
 
 (defmethod binding-lended-p ((binding constant-object-binding)) nil)
+(defmethod binding-store-type ((binding constant-object-binding))
+  (multiple-value-list (type-specifier-encode `(eql ,(constant-object binding)))))
+
 
 (defclass operator-binding (binding) ())
 
@@ -2430,7 +2433,7 @@ the sub-program options (&optional label) as secondary value."
 	    pos)))))
 
 (defun compute-free-registers (pc distance funobj frame-map
-			       &key (free-registers '(:eax :ebx :edx)))
+			       &key (free-registers '(:eax :ebx :ecx :edx)))
   "Return set of free register, and whether there may be more registers
    free later, with a more specified frame-map."
   (loop with free-so-far = free-registers
@@ -2515,16 +2518,22 @@ the sub-program options (&optional label) as secondary value."
 	       (distance (position load-instruction (cdr init-pc))))
 	  (multiple-value-bind (free-registers more-later-p)
 	      (and distance (compute-free-registers (cdr init-pc) distance funobj frame-map))
-	    (cond
-	     ((member binding-destination free-registers)
-	      binding-destination)
-	     ((member init-with-register free-registers)
-	      init-with-register)
-	     ((not (null free-registers))
-	      (first free-registers))
-	     (more-later-p
-	      (values nil :not-now))
-	     (t (values nil :never)))))))
+	    (if (and (member :ecx free-registers)
+		     (not (typep binding 'function-argument))
+		     (or (eq :untagged-fixnum-ecx binding-destination)
+			 (eq :untagged-fixnum-ecx init-with-register)))
+		:untagged-fixnum-ecx
+	      (let ((free-registers (remove :ecx free-registers)))
+		(cond
+		 ((member binding-destination free-registers)
+		  binding-destination)
+		 ((member init-with-register free-registers)
+		  init-with-register)
+		 ((not (null free-registers))
+		  (first free-registers))
+		 (more-later-p
+		  (values nil :not-now))
+		 (t (values nil :never)))))))))
      (t (values nil :never)))))
 
 (defun discover-variables (code function-env)
@@ -3000,6 +3009,14 @@ bindings are located in the appropriate register, so no stack location is needed
 			  &key tmp-register protect-registers)
   "When tmp-register is provided, use that for intermediate storage required when
 loading borrowed bindings."
+  #+ignore
+  (when (eq :ecx result-mode)
+    ;; (warn  "loading to ecx: ~S" binding)
+    (unless (or (null (binding-store-type binding))
+		(movitz-subtypep (apply #'encoded-type-decode
+					(binding-store-type binding)) 
+				 'integer))
+      (warn "ecx from ~S" binding)))
   (when (movitz-env-get (binding-name binding) 'ignore nil (binding-env binding))
     (warn "The variable ~S is used even if it was declared ignored."
 	  (binding-name binding)))
@@ -3012,32 +3029,56 @@ loading borrowed bindings."
 					protect-registers))
 		 (error "Unable to chose a temporary register.")))
 	   (install-for-single-value (lexb lexb-location result-mode indirect-p)
-	     (if (integerp lexb-location)
-		 (append `((:movl ,(make-indirect-reference :ebp (stack-frame-offset lexb-location))
-				  ,(single-value-register result-mode)))
-			 (when indirect-p
-			   `((:movl (-1 ,(single-value-register result-mode))
-				    ,(single-value-register result-mode)))))
-	       (ecase lexb-location
-		 (:eax
-		  (assert (not indirect-p))
-		  (ecase result-mode
-		    ((:ebx :ecx :edx :esi) `((:movl :eax ,result-mode)))
-		    ((:eax :single-value) nil)))
-		 ((:ebx :ecx :edx)
-		  (assert (not indirect-p))
-		  (unless (eq result-mode lexb-location)
+	     (cond
+	      ((and (eq result-mode :untagged-fixnum-ecx)
+		    (integerp lexb-location))
+	       (assert (not indirect-p))
+	       `((:movl ,(make-indirect-reference :ebp (stack-frame-offset lexb-location))
+			:ecx)
+		 (:sarl ,+movitz-fixnum-shift+ :ecx)))
+	      ((integerp lexb-location)
+	       (append `((:movl ,(make-indirect-reference :ebp (stack-frame-offset lexb-location))
+				,(single-value-register result-mode)))
+		       (when indirect-p
+			 `((:movl (-1 ,(single-value-register result-mode))
+				  ,(single-value-register result-mode))))))
+	      (t (ecase lexb-location
+		   (:eax
+		    (assert (not indirect-p))
 		    (ecase result-mode
-		      ((:eax :single-value) `((:movl ,lexb-location :eax)))
-		      ((:ebx :ecx :edx :esi) `((:movl ,lexb-location ,result-mode))))))
-		 (:argument-stack
-		  (assert (<= 2 (function-argument-argnum lexb)) ()
-		    "lexical :argument-stack argnum can't be ~A." (function-argument-argnum lexb))
-		  (append `((:movl (:ebp ,(argument-stack-offset lexb))
-				   ,(single-value-register result-mode)))
-			  (when indirect-p
-			    `((:movl (-1 ,(single-value-register result-mode))
-				     ,(single-value-register result-mode))))))))))
+		      ((:ebx :ecx :edx :esi) `((:movl :eax ,result-mode)))
+		      ((:eax :single-value) nil)
+		      (:untagged-fixnum-ecx
+		       `((:movl :eax :ecx)
+			 (:sarl ,movitz:+movitz-fixnum-factor+ :ecx)))))
+		   ((:ebx :ecx :edx)
+		    (assert (not indirect-p))
+		    (unless (eq result-mode lexb-location)
+		      (ecase result-mode
+			((:eax :single-value) `((:movl ,lexb-location :eax)))
+			((:ebx :ecx :edx :esi) `((:movl ,lexb-location ,result-mode)))
+			(:untagged-fixnum-ecx
+			 `((:movl ,lexb-location :ecx)
+			   (:sarl ,movitz:+movitz-fixnum-factor+ :ecx))))))
+		   (:argument-stack
+		    (assert (<= 2 (function-argument-argnum lexb)) ()
+		      "lexical :argument-stack argnum can't be ~A." (function-argument-argnum lexb))
+		    (cond
+		     ((eq result-mode :untagged-fixnum-ecx)
+		      (assert (not indirect-p))
+		      `((:movl (:ebp ,(argument-stack-offset lexb)) :ecx)
+			(:sarl ,+movitz-fixnum-shift+ :ecx)))
+		     (t (append `((:movl (:ebp ,(argument-stack-offset lexb))
+					 ,(single-value-register result-mode)))
+				(when indirect-p
+				  `((:movl (-1 ,(single-value-register result-mode))
+					   ,(single-value-register result-mode))))))))
+		   (:untagged-fixnum-ecx
+		    (ecase result-mode
+		      ((:eax :ebx :ecx :edx)
+		       `((:leal ((:ecx ,+movitz-fixnum-factor+)) ,result-mode)))
+		      (:untagged-fixnum-ecx
+		       nil))))))))
       (etypecase binding
 	(forwarding-binding
 	 (assert (not (binding-lended-p binding)) (binding)
@@ -3138,9 +3179,7 @@ loading borrowed bindings."
 		       `((:cmpl :edi (:ebp ,(argument-stack-offset binding)))
 			 (:je ',(operands result-mode)))))))
 		 (:untagged-fixnum-ecx
-		  (make-result-and-returns-glue
-		   result-mode :ecx
-		   (install-for-single-value binding binding-location :ecx nil)))
+		  (install-for-single-value binding binding-location :untagged-fixnum-ecx nil))
 		 (:lexical-binding
 		  (let* ((destination result-mode)
 			 (dest-location (new-binding-location destination frame-map :default nil)))
@@ -3174,6 +3213,13 @@ loading borrowed bindings."
     "funny binding: ~W" binding)
   (let ((protect-registers (cons source protect-registers)))
     (cond
+     ((eq :untagged-fixnum-ecx source)
+      (if (eq :untagged-fixnum-ecx
+	      (new-binding-location binding frame-map))
+	  nil
+	(append (make-result-and-returns-glue :ecx :untagged-fixnum-ecx)
+		(make-store-lexical binding :ecx shared-reference-p frame-map
+				    :protect-registers protect-registers))))
      ((typep binding 'borrowed-binding)
       (let ((slot (borrowed-binding-reference-slot binding)))
 	(if (not shared-reference-p)
@@ -3214,7 +3260,12 @@ loading borrowed bindings."
 	      (:argument-stack
 	       (assert (<= 2 (function-argument-argnum binding)) ()
 		 "store-lexical argnum can't be ~A." (function-argument-argnum binding))
-	       `((:movl ,source (:ebp ,(argument-stack-offset binding))))))))))))
+	       `((:movl ,source (:ebp ,(argument-stack-offset binding)))))
+	      (:untagged-fixnum-ecx
+	       (append (unless (member source '(:ecx :untagged-fixnum-ecx))
+			 `((:movl ,source :ecx)))
+		       (unless (eq source :untagged-fixnum-ecx)
+			 `((:sarl ,+movitz-fixnum-shift+ :ecx))))))))))))
 
 (defun finalize-code (code funobj frame-map)
   ;; (print-code 'to-be-finalized code)
@@ -4631,7 +4682,10 @@ Return arg-init-code, need-normalized-ecx-p."
 	  (:untagged-fixnum-ecx
 	   (case (result-mode-type desired-result)
 	     ((:eax :ebx :ecx :edx)
-	      (values (append code `((:leal ((:ecx ,+movitz-fixnum-factor+) :edi ,(edi-offset))
+	      (values (append code `((:cmpl ,+movitz-most-positive-fixnum+ :ecx)
+				     (:ja '(:sub-program ()
+					    (:int 4)))
+				     (:leal ((:ecx ,+movitz-fixnum-factor+) :edi ,(edi-offset))
 					    ,desired-result)))
 		      desired-result))
 	     (t (make-result-and-returns-glue desired-result :eax
@@ -4695,7 +4749,7 @@ the first one takes preference. Note that :non-local-exit might also be returned
       (compiler-call #'compile-form
 	:result-mode :ebx
 	:forward form-info))
-     ((member form-returns '(:eax :ebx :ecx :edx :edi))
+     ((member form-returns '(:eax :ebx :ecx :edx :edi :untagged-fixnum-ecx))
       (compiler-values (unprotected-values)))
      (t (compiler-call #'compile-form
 	  :result-mode :eax
