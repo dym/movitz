@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.33 2004/10/12 14:52:07 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.34 2004/10/20 10:51:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -316,6 +316,20 @@
 		      (:compile-two-forms (:ebx :untagged-fixnum-ecx) ,object ,offset)
 		      (:movl ,(ldb (byte 32 0) (- movitz:+code-vector-word-offset+)) :eax)
 		      (:addl (:ebx :ecx ,(offset-by 4)) :eax)))
+		  (t (let ((object-var (gensym "memref-object-"))
+			   (offset-var (gensym "memref-offset-"))
+			   (index-var (gensym "memref-index-")))
+		       `(let ((,object-var ,object)
+			      (,offset-var ,offset)
+			      (,index-var ,index))
+			  (with-inline-assembly (:returns :eax)
+			    (:load-lexical (:lexical-binding ,offset-var) :untagged-fixnum-ecx)
+			    (:load-lexical (:lexical-binding ,object-var) :ebx)
+			    (:load-lexical (:lexical-binding ,index-var) :edx)
+			    (:addl :edx :ecx)
+			    (:movl ,(ldb (byte 32 0) (- movitz:+code-vector-word-offset+)) :eax)
+			    (:addl (:ebx :ecx ,(offset-by 4)) :eax)))))
+		  #+ignore
 		  (t (error "variable memref type :code-vector not implemented."))
 		  #+ignore
 		  (t (assert (not (movitz:movitz-constantp offset env)))
@@ -341,12 +355,13 @@
     (:character         (memref object offset :index  index :type :character))
     (:unsigned-byte8    (memref object offset :index index :type :unsigned-byte8))
     (:location          (memref object offset :index index :type :location))
-    (:unsigned-byte14   (memref object offset :index index :type :unsigned-byte14))
     (:unsigned-byte16   (ecase endian
 			  ((:host :little)
 			   (memref object offset :index index :type :unsigned-byte16 :endian :little))
 			  ((:big)
-			   (memref object offset :index index :type :unsigned-byte16 :endian :big))))))
+			   (memref object offset :index index :type :unsigned-byte16 :endian :big))))
+    (:code-vector       (memref object offset :index index :type :code-vector))
+    (:unsigned-byte14   (memref object offset :index index :type :unsigned-byte14))))
 ;;;    (:signed-byte30+2   (memref object offset index :signed-byte30+2))
 ;;;    (:unsigned-byte29+3 (memref object offset index :unsigned-byte29+3))))
 
@@ -756,18 +771,20 @@
 	(:unsigned-byte8
 	 (cond
 	  ((and (eq 0 offset) (eq 0 index))
-	   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+	   `(with-inline-assembly (:returns :untagged-fixnum-ecx
+					    :type (unsigned-byte 8))
 	      (:compile-form (:result-mode :untagged-fixnum-ecx) ,address)
-	      (,prefixes :movzxw (:ecx) :ecx)))
+	      (,prefixes :movzxb (:ecx) :ecx)))
 	  (t (let ((address-var (gensym "memref-int-address-")))
 	       `(let ((,address-var ,address))
-		  (with-inline-assembly (:returns :untagged-fixnum-ecx)
+		  (with-inline-assembly (:returns :untagged-fixnum-ecx
+						  :type (unsigned-byte 8))
 		    (:compile-two-forms (:eax :ecx) ,offset ,index)
 		    (:load-lexical (:lexical-binding ,address-var) :ebx)
 		    (:addl :eax :ecx)
 		    (:addl :ebx :ecx)
 		    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale down address
-		    (,prefixes :movzxw (:ecx) :ecx)))))))
+		    (,prefixes :movzxb (:ecx) :ecx)))))))
 	(:unsigned-byte16
 	 (cond
 	  ((and (eq 0 offset) (eq 0 index))
