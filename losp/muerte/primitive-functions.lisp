@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.11 2004/04/14 20:10:58 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.12 2004/04/15 13:07:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -270,7 +270,8 @@ with EAX still holding the tag."
     (:ret)))
 
 (define-primitive-function dynamic-store (symbol value)
-  "Store VALUE (ebx) in the dynamic binding of SYMBOL (eax)."
+  "Store VALUE (ebx) in the dynamic binding of SYMBOL (eax).
+   Preserves EBX and EAX."
   (with-inline-assembly (:returns :multiple-values)
     (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
     (:jecxz 'no-binding)
@@ -286,8 +287,7 @@ with EAX still holding the tag."
     (:jne 'search-loop)
     ;; fall through on success
    success
-    (:leal (:ecx 8) :eax)		; location of binding value cell
-    (:movl :ebx (:eax))			; Store VALUE in binding.
+    (:movl :ebx (:ecx 8))		; Store VALUE in binding.
     (:ret)
    no-binding
     (:movl :ebx (:eax #.(bt:slot-offset 'movitz::movitz-symbol 'movitz::value)))
