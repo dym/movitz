@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.28 2004/06/09 01:16:56 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.29 2004/06/09 20:23:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1242,6 +1242,12 @@ Preserve EAX and EBX."
 		(values quotient remainder))
 	       (t (values (1- quotient) (- remainder)))))))))
 
+(defun ceiling (number &optional (divisor 1))
+  (case (+ (if (minusp number) #b10 0)
+	   (if (minusp divisor) #b01 0))
+    (#b00 (truncate (+ number divisor -1) divisor))
+    (t (error "Don't know."))))
+
 (defun rem (dividend divisor)
   (with-inline-assembly (:returns :eax)
     (:compile-form (:result-mode :eax) dividend)
@@ -1985,35 +1991,3 @@ Preserve EAX and EBX."
 	 (t (values (1- q) (+ r divisor))))))
    (t (n &optional (divisor 1))
       (floor n divisor))))
-
-(define-compiler-macro %bignum-bigits (x)
-  `(with-inline-assembly (:returns :eax)
-     (:compile-form (:result-mode :eax) ,x)
-     (:movzxw (:eax #.(bt:slot-offset 'movitz::movitz-bignum
-				      'movitz::length))
-	      :ecx)
-     (:leal ((:ecx #.movitz:+movitz-fixnum-factor+))
-	    :eax)))
-
-(defun %bignum-bigits (x)
-  (%bignum-bigits x))
-
-(defun copy-bignum (old)
-  (check-type old bignum)
-  (let* ((length (1+ (%bignum-bigits old)))
-	 (new (malloc-data-words length)))
-    (with-inline-assembly (:returns :eax)
-      (:compile-two-forms (:eax :ebx) new old)
-      (:compile-form (:result-mode :edx) length)
-     copy-bignum-loop
-      (:subl #.movitz:+movitz-fixnum-factor+ :edx)
-      (:movl (:ebx :edx #.movitz:+other-type-offset+) :ecx)
-      (:movl :ecx (:eax :edx #.movitz:+other-type-offset+))
-      (:jnz 'copy-bignum-loop))))
-
-(defun print-bignum (x)
-  (check-type x bignum)
-  (dotimes (i (1+ (%bignum-bigits x)))
-    (format t "~8,'0X " (memref x -6 i :unsigned-byte32)))
-  (terpri)
-  (values))
