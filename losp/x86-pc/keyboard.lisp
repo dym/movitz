@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep 24 16:04:12 2001
 ;;;;                
-;;;; $Id: keyboard.lisp,v 1.5 2004/12/08 23:40:24 ffjeld Exp $
+;;;; $Id: keyboard.lisp,v 1.6 2004/12/10 12:48:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -115,10 +115,9 @@ Secondly, whether this was a release event is returned."
       (t (values (ldb (byte 7 0) first-code)
 		 (logbitp 7 first-code))))))
 
-(define-named-integer qualifier (:only-constants t)
-  (0 shift)
-  (1 ctrl)
-  (2 alt))
+(defconstant +qualifier-shift+ 0)
+(defconstant +qualifier-ctrl+ 1)
+(defconstant +qualifier-alt+ 2)
 
 (defvar *qualifier-state* 0)
 
