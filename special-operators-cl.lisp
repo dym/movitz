@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.26 2004/10/08 10:26:38 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.27 2004/10/11 13:48:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -721,7 +721,9 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	(movitz-env-get tag 'go-tag nil env)
       (assert (and label tagbody-env) ()
 	"Go-tag ~W is not visible." tag)
-      (if (eq funobj (movitz-environment-funobj tagbody-env))
+      (if (and (eq funobj (movitz-environment-funobj tagbody-env))
+	       ;; any unwind-protects between here and there?
+	       (null (nth-value 2 (stack-delta env tagbody-env))))
 	  (compiler-values ()
 	    :returns :non-local-exit
 	    :code `((:lexical-control-transfer nil :nothing ,env ,tagbody-env ,label)))
@@ -1210,6 +1212,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				    (make-instance 'located-binding
 				      :name (gensym "up-next-continuation-step-"))))
 	   (unwind-protect-env (make-instance 'unwind-protect-env
+				 :cleanup-form (cons 'muerte.cl:progn cleanup-forms)
 				 :uplink continuation-env
 				 :funobj (movitz-environment-funobj env))))
       (with-labels (unwind-protect (cleanup-label cleanup-entry continue continue-label))
