@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.85 2004/07/27 20:59:15 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.86 2004/07/27 21:30:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2112,10 +2112,12 @@ Preserve EAX and EBX."
 (defun minus-if (x y)
   (if (integerp x) (- x y) x))
 
-(defun gcd (&rest numbers)
+(defun gcd (&rest integers)
   (numargs-case
    (1 (u) u)
    (2 (u v)
+      (check-type u integer)
+      (check-type v integer)
       ;; Code borrowed from CMUCL.
       (do ((k 0 (1+ k))
 	   (u (abs u) (truncate u 2))
@@ -2133,26 +2135,32 @@ Preserve EAX and EBX."
 	       (setq temp (- u v))
 	       (when (zerop temp)
 		 (return (ash u k))))))))
-   (t (&rest numbers)
-      (declare (dynamic-extent numbers))
-      (do ((gcd (car numbers)
+   (t (&rest integers)
+      (declare (dynamic-extent integers))
+      (do ((gcd (car integers)
 		(gcd gcd (car rest)))
-	   (rest (cdr numbers) (cdr rest)))
+	   (rest (cdr integers) (cdr rest)))
 	  ((null rest) gcd)))))
 
 (defun floor (n &optional (divisor 1))
   "This is floor written in terms of truncate."
   (numargs-case
-   (1 (n) n)
+   (1 (n)
+      (if (not (ratio-p n))
+	  (values n 0)
+	(multiple-value-bind (r q)
+	    (floor (ratio-numerator n) (ratio-denominator n))
+	  (values r (make-rational q (ratio-denominator n))))))
    (2 (n divisor)
       (multiple-value-bind (q r)
 	  (truncate n divisor)
 	(cond
-	 ((<= 0 q)
-	  (values q r))
 	 ((= 0 r)
-	  (values q 0))
-	 (t (values (1- q) (+ r divisor))))))
+	  (values q r))
+	 ((or (and (minusp r) (plusp divisor))
+	      (and (plusp r) (minusp divisor)))
+	  (values (1- q) (+ r divisor)))
+	 (t (values q r)))))
    (t (n &optional (divisor 1))
       (floor n divisor))))
 
