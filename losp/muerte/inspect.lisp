@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.3 2004/03/26 01:49:11 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.4 2004/03/26 14:05:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -179,6 +179,6 @@ after the point that called this stack-frame."
 	     (:globally (:call (:edi (:edi-offset malloc))))
 	     (:addl #.(movitz::tag :other) :eax))))
     (dotimes (i clumps)
-      (setf (memref x -6 i :lisp) nil
-	    (memref x -2 i :lisp) nil))
+      (setf (memref x -6 (* i 2) :lisp) nil
+	    (memref x -2 (* i 2) :lisp) nil))
     x))
