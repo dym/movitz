@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.39 2004/08/07 11:12:09 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.40 2004/08/23 13:51:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -122,7 +122,7 @@ with EAX still holding the tag."
   (with-inline-assembly (:returns :push)
     (:pushl :ebp)
     (:movl :esp :ebp)			; set up a pseudo stack-frame
-    (:pushl :esi)			; for consistency
+    (:pushl 4)
     
     (:globally (:movl (:edi (:edi-offset unwind-protect-tag)) :edx))
     (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
