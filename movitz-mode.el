@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep 27 18:12:17 2001
 ;;;;                
-;;;; $Id: movitz-mode.el,v 1.6 2004/05/24 14:58:17 ffjeld Exp $
+;;;; $Id: movitz-mode.el,v 1.7 2004/06/07 22:10:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -63,7 +63,7 @@
 						  (point))
 					   (progn (forward-sexp 1)
 						  (point)))))
-      (if (and (string-equal "method" definition-type)
+      (if (and (equalp "method" definition-type)
 	       (char-equal 58 (string-to-char lambda-list)))
 	  (let ((qualifier lambda-list)
 		;; XXX we only deal with one (potential) qualifier..
