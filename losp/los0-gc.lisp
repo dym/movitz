@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.1 2004/03/29 14:35:45 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.2 2004/03/31 16:36:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -139,17 +139,24 @@
 	  (+ (object-location space)
 	     (array-dimension space 0)))))
 
-(defun report-nursery (x)
+(defun report-nursery (x location)
   "Write a message if x is inside newspace."
   (when (object-in-space-p (%run-time-context-slot 'nursery-space) x)
-    (format t "~&~Z: ~S: ~S" x (type-of x) x))
+    (format t "~&~Z: ~S: ~S from ~S" x (type-of x) x location))
   x)
 
-(defun report-inactive-space (x)
+(defun report-inactive-space (x location)
   "Check that x is not pointing into (what is presumably) oldspace."
   (when (object-in-space-p (space-other (%run-time-context-slot 'nursery-space)) x)
-    (break "~Z: ~S: ~S" x (type-of x) x))
+    (break "~Z: ~S: ~S from ~S" x (type-of x) x location))
   x)
+
+(defun location-finder (find-location)
+  (lambda (x location)
+    (when (location-in-object-p x find-location)
+      (break "The location ~S is in the object at ~Z referenced from location ~S."
+	     find-location x location))
+    x))
 
 (defun stop-and-copy ()
   (let* ((space0 (%run-time-context-slot 'nursery-space))
@@ -164,9 +171,11 @@
 	  (values space1 space0))
       ;; Ensure newspace is activated.
       (setf (%run-time-context-slot 'nursery-space) newspace)
+      ;; (assert (< #x200 (- (length newspace) (space-fresh-pointer newspace))))
       ;; Evacuate-oldspace is to be mapped over every potential pointer.
-      (flet ((evacuate-oldspace (x)
+      (flet ((evacuate-oldspace (x location)
 	       "If x is in oldspace, migrate it to newspace."
+	       (declare (ignore location))
 	       (if (not (object-in-space-p oldspace x))
 		   x
 		 (let ((forwarded-x (memref (object-location x) 0 1 :lisp)))

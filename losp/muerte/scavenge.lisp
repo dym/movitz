@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.2 2004/03/30 08:50:12 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.3 2004/03/31 16:36:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -31,7 +31,6 @@
 (defun map-heap-words (function start-location end-location)
   "Map function over each potential pointer word between
 start-location and end-location."
-  (check-type start-location fixnum)
   (macrolet ((scavenge-typep (x primary)
 	       (let ((code (movitz:tag primary)))
 		 `(with-inline-assembly (:returns :boolean-zf=1)
@@ -44,51 +43,50 @@ start-location and end-location."
 		 `(with-inline-assembly (:returns :boolean-zf=1)
 		    (:compile-form (:result-mode :eax) ,x)
 		    (:cmpw ,code :ax)))))
-    (do ((i start-location (1+ i)))
-	((>= i end-location))
-      (let ((*i* i)
-	    (x (memref i 0 0 :lisp)))
-	(declare (special *i*))
+    (do ((scan start-location (1+ scan)))
+	((>= scan end-location))
+      (let (;; (*i* i)
+	    (x (memref scan 0 0 :lisp)))
+	;; (declare (special *i*))
 	(cond
 	 ((typep x '(or null fixnum character)))
 	 ((scavenge-typep x :illegal)
-	  (error "Illegal word ~Z at ~S." x i))
+	  (error "Illegal word ~Z at ~S." x scan))
 	 ((scavenge-typep x :funobj)
 	  ;; Process code-vector pointer specially..
-	  (let ((code-vector (%word-offset (memref i 0 -1 :lisp) -2))
-		(num-jumpers (ldb (byte 14 0) (memref i 0 6 :lisp))))
+	  (let ((code-vector (%word-offset (memref scan 0 -1 :lisp) -2))
+		(num-jumpers (ldb (byte 14 0) (memref scan 0 6 :lisp))))
 	    (check-type code-vector vector-u8)
-	    (map-heap-words function (+ i 4) (+ i 6)) ; scan funobj's lambda-list and name fields
-	    (let ((new-code-vector (funcall function code-vector)))
+	    (map-heap-words function (+ scan 4) (+ scan 6)) ; scan funobj's lambda-list and name fields
+	    (let ((new-code-vector (funcall function code-vector scan)))
 	      (check-type new-code-vector vector-u8)
 	      (unless (eq code-vector new-code-vector)
 		(error "Code-vector migration is not implemented.")
-		(setf (memref i 0 -1 :lisp) (%word-offset new-code-vector 2))
+		(setf (memref scan 0 -1 :lisp) (%word-offset new-code-vector 2))
 		;; Do more stuff here to update code-vectors and jumpers
 		))
-	    (incf i (+ 6 num-jumpers)))) ; Don't scan the jumpers.
+	    (incf scan (+ 6 num-jumpers)))) ; Don't scan the jumpers.
 	 ((scavenge-typep x :infant-object)
-	  (error "Scanning an infant object ~Z at ~S." x i))
+	  (error "Scanning an infant object ~Z at ~S." x scan))
 	 ((or (scavenge-wide-typep x :vector
 				   #.(bt:enum-value 'movitz:movitz-vector-element-type :u8))
 	      (scavenge-wide-typep x :vector
 				   #.(bt:enum-value 'movitz:movitz-vector-element-type :character)))
-	  (let ((len (memref i -2 0 :unsigned-byte16)))
-	    (incf i (* 2 (truncate (+ 7 len) 8)))))
+	  (let ((len (memref scan -2 0 :unsigned-byte16)))
+	    (incf scan (* 2 (truncate (+ 7 len) 8)))))
 	 ((scavenge-wide-typep x :vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u16))
-	  (let ((len (memref i -2 0 :unsigned-byte16)))
-	    (incf i (* 2 (truncate (+ 3 len) 4)))))
+	  (let ((len (memref scan -2 0 :unsigned-byte16)))
+	    (incf scan (* 2 (truncate (+ 3 len) 4)))))
 	 ((scavenge-wide-typep x :vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u32))
-	  (let ((len (memref i -2 0 :unsigned-byte16)))
-	    (incf i (* 2 (truncate (+ 1 len) 2)))))
+	  (let ((len (memref scan -2 0 :unsigned-byte16)))
+	    (incf scan (* 2 (truncate (+ 1 len) 2)))))
 	 ((eq x (fixnum-word 3))
-	  (incf i)
-	  (incf i (memref i 0 0 :lisp)))
+	  (incf scan)
+	  (incf scan (memref scan 0 0 :lisp)))
 	 ((typep x 'pointer)
-	  (let ((new (funcall function x)))
-	    (check-type new pointer)
-	    (unless (eq x new)
-	      (setf (memref i 0 0 :lisp) new))))))))
+	  (let ((new (funcall function x scan)))
+	    (unless (eq new x)
+	      (setf (memref scan 0 0 :lisp) new))))))))
   (values))
 
 (defun map-stack-words (function start-stack-frame)
