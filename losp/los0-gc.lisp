@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.46 2005/01/25 13:56:14 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.47 2005/01/26 13:49:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -102,40 +102,41 @@
 
 (defun trigger-full-newspace (free-space)
   "Make it so that there's only free-space words left before newspace is full."
-  (let ((trigger (if (consp *gc-trigger*)
-		     (pop *gc-trigger*)
-		   *gc-trigger*)))
-    (when trigger
-      (macrolet
-	  ((do-it ()
-	     `(with-inline-assembly (:returns :nothing)
-	       retry
-		(:compile-form (:result-mode :eax) (+ free-space trigger))
-		(:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
-		(:testl ,(logxor #xffffffff
-				 (* #xfff movitz:+movitz-fixnum-factor+))
-			:eax)
-		(:jnz '(:sub-program () (:int 64)))
-		(:addl 4 :eax)
-		(:andl -8 :eax)
-		(:movl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
-		       :ecx)
-		(:subl :eax :ecx)
-		(:movl (:edx 2) :ebx)
-		(:cmpl :ecx :ebx)
-		(:jc '(:sub-program ()
-		       ;; Current newspace was too full, so trigger a GC.
-		       (:int 113)
-		       (:jmp 'retry)))
-		(:movl :ecx (:edx 2))
-		(:addl 8 :ebx)
-	       fill-loop
-		(:movl :edi (:edx :ebx -6))
-		(:addl 4 :ebx)
-		(:cmpl :ebx :ecx)
-		(:ja 'fill-loop)
-		)))
-	(do-it)))))
+  (unless *gc-running*
+    (let ((trigger (if (consp *gc-trigger*)
+		       (pop *gc-trigger*)
+		     *gc-trigger*)))
+      (when trigger
+	(macrolet
+	    ((do-it ()
+	       `(with-inline-assembly (:returns :nothing)
+		 retry
+		  (:compile-form (:result-mode :eax) (+ free-space trigger))
+		  (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
+		  (:testl ,(logxor #xffffffff
+				   (* #xfff movitz:+movitz-fixnum-factor+))
+			  :eax)
+		  (:jnz '(:sub-program () (:int 64)))
+		  (:addl 4 :eax)
+		  (:andl -8 :eax)
+		  (:movl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+			 :ecx)
+		  (:subl :eax :ecx)
+		  (:movl (:edx 2) :ebx)
+		  (:cmpl :ecx :ebx)
+		  (:jc '(:sub-program ()
+			 ;; Current newspace was too full, so trigger a GC.
+			 (:int 113)
+			 (:jmp 'retry)))
+		  (:movl :ecx (:edx 2))
+		  (:addl 8 :ebx)
+		 fill-loop
+		  (:movl :edi (:edx :ebx -6))
+		  (:addl 4 :ebx)
+		  (:cmpl :ebx :ecx)
+		  (:ja 'fill-loop)
+		  )))
+	  (do-it))))))
   
 
 (define-primitive-function los0-cons-pointer ()
@@ -156,7 +157,7 @@ Preserve ECX."
 	    (:ja '(:sub-program (probe-failed)
 		   (:int 113)
 		   (:int 63)))
-	    (:movl :edi (:edx :ebx 8 ,movitz:+other-type-offset+))
+	    (:movl #xabbabee3 (:edx :ebx 8 ,movitz:+other-type-offset+)) ; a recognizable illegal value?
 	    (:leal (:edx :ebx 8) :eax)
 	    (:ret))))
     (do-it)))
@@ -405,6 +406,7 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
 				 (break "Seeing old object in values-vector: ~Z" x))
 			       x)
 			     #x38 #xb8)
+	    #+ignore
 	    (let* ((stack (%run-time-context-slot 'muerte::stack-vector))
 		   (stack-start (- (length stack) (muerte::current-control-stack-depth))))
 	      (do ((i 0 (+ i 3)))
@@ -417,9 +419,6 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
 			   (+ (object-location stack)
 			      offender-index 2)
 			   (aref a (+ i 2))))))
-	      (loop for x from 0 to #xa0000
-		  do (when (= #x19a04e (memref x 0 :type :unsigned-byte32))
-		       (warn "Seeing foo at ~S." x)))
 	      (loop for i from stack-start below (length stack)
 		  as o = (aref stack i)
 		  do (when (and (typep o 'pointer)
@@ -433,6 +432,7 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
 	  (format t "Old space [~Z]: ~/muerte:pprint-clumps/, new space [~Z]: ~
 ~/muerte:pprint-clumps/, freed: ~/muerte:pprint-clumps/.~%"
 		  oldspace old-size newspace new-size (- old-size new-size))))
+
       (initialize-space oldspace)
       (fill oldspace #x13 :start 2)
       ;; (setf *gc-stack2* *gc-stack*)
@@ -471,3 +471,16 @@ This is a debugging tool."
 			   (+ 4 (object-location nursery) (space-fresh-pointer nursery))))
 	(map-stack-vector #'searcher nil (current-stack-frame))))
     results))
+
+(defun report-lispval (lispval &optional breakp newspace)
+  (let* ((location (truncate lispval 4))
+	 (newspace (or newspace (%run-time-context-slot 'muerte::nursery-space)))
+	 (oldspace (space-other newspace)))
+    (cond
+     ((location-in-object-p newspace location)
+      (format t "#x~X is in newspace ~Z." lispval newspace))
+     ((location-in-object-p oldspace location)
+      (funcall (if breakp 'break 'warn) "#x~X is in oldspace ~Z." lispval oldspace))
+     (t (funcall (if breakp 'break 'warn) "#x~X is neither old nor new?" lispval))))
+  (values))
+
