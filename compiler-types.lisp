@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.11 2004/04/18 23:10:30 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.12 2004/04/19 00:29:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -266,14 +266,14 @@ with the single member of <type-specifier>."
 		sub-specs)))
       (cond
        ((null sub-specs)
-	(and complement t))
+	(if complement t nil))
        ((not (cdr sub-specs))
 	(if (not complement)
 	    (car sub-specs)
-	  (cons 'not (car sub-specs))))
+	  (list 'not (car sub-specs))))
        (t (if (not complement)
 	      (cons 'or sub-specs)
-	    (cons 'not (cons 'or sub-specs))))))))
+	    (list 'not (cons 'or sub-specs))))))))
 		  
 (defun type-values (codes &key integer-range members include complement)
   ;; Members: A list of objects explicitly included in type.
@@ -376,9 +376,20 @@ with the single member of <type-specifier>."
 			`(and ,sub1 ,(encoded-type-decode code0 integer-range0 members0 include0 nil)))
 		      include1)
 	      nil))
-     (t (warn "and with two includes..")
-	(type-values t))))
-   (t (error "Not implemented."))))
+     (t ;; (warn "and with two includes: ~S ~S" include0 include1)
+	(type-values () :include `(and ,(encoded-type-decode code0 integer-range0 members0
+							     include0 complement0)
+				       ,(encoded-type-decode code1 integer-range1 members1
+							     include1 complement1))))))
+   ((and complement0 complement1)
+    (multiple-value-bind (code integer-range members include complement)
+	(encoded-types-or code0 integer-range0 members0 include0 (not complement0)
+			  code1 integer-range1 members1 include1 (not complement1))
+      (values code integer-range members include (not complement))))
+   (t (type-values () :include `(and ,(encoded-type-decode code0 integer-range0 members0
+							   include0 complement0)
+				     ,(encoded-type-decode code1 integer-range1 members1
+							   include1 complement1))))))
 
 (defun encoded-types-or (code0 integer-range0 members0 include0 complement0
 			 code1 integer-range1 members1 include1 complement1)
