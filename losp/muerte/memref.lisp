@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.21 2004/07/20 08:54:29 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.22 2004/07/24 01:28:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -112,6 +112,39 @@
 			    (:load-lexical (:lexical-binding ,object-var) :eax)
 			    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
 			    (:movzxw (:eax :ecx ,(offset-by 2)) :ecx)))))))
+		(:unsigned-byte14
+		 (cond
+		  ((and (eq 0 offset) (eq 0 index))
+		   `(with-inline-assembly (:returns :ecx :type (unsigned-byte 14))
+		      (:compile-form (:result-mode :eax) ,object)
+		      (:movzxw (:eax ,(offset-by 2)) :ecx)
+		      (:testb ,movitz:+movitz-fixnum-zmask+ :cl)
+		      (:jnz '(:sub-program () (:int 63)))))
+		  ((eq 0 offset)
+		   (let ((object-var (gensym "memref-object-"))
+			 (index-var (gensym "memref-index-")))
+		     `(let ((,object-var ,object)
+			    (,index-var ,index))
+			(with-inline-assembly (:returns :ecx)
+			  (:compile-two-forms (:eax :ecx) ,object-var ,index-var)
+			  (:sarl ,(1- movitz:+movitz-fixnum-shift+) :ecx)
+			  (:movzxw (:eax :ecx ,(offset-by 2)) :ecx)
+			  (:testb ,movitz:+movitz-fixnum-zmask+ :cl)
+			  (:jnz '(:sub-program () (:int 63)))))))
+		  (t (let ((object-var (gensym "memref-object-"))
+			   (offset-var (gensym "memref-offset-"))
+			   (index-var (gensym "memref-index-")))
+		       `(let ((,object-var ,object)
+			      (,offset-var ,offset)
+			      (,index-var ,index))
+			  (with-inline-assembly (:returns :ecx)
+			    (:compile-two-forms (:ecx :ebx) ,offset-var ,index-var)
+			    (:leal (:ecx (:ebx 2)) :ecx)
+			    (:load-lexical (:lexical-binding ,object-var) :eax)
+			    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
+			    (:movzxw (:eax :ecx ,(offset-by 2)) :ecx)
+			    (:testb ,movitz:+movitz-fixnum-shift+ :cl)
+			    (:jnz '(:sub-program () (:int 63)))))))))
 		(:unsigned-byte29+3
 		 ;; Two values: the 29 upper bits as unsigned integer,
 		 ;; and secondly the lower 3 bits as unsigned.
@@ -256,6 +289,7 @@
 (defun memref (object offset index type)
   (ecase type
     (:unsigned-byte8    (memref object offset index :unsigned-byte8))
+    (:unsigned-byte14   (memref object offset index :unsigned-byte14))
     (:unsigned-byte16   (memref object offset index :unsigned-byte16))
     (:unsigned-byte32   (memref object offset index :unsigned-byte32))
     (:character         (memref object offset index :character))
