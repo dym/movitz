@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.22 2004/04/14 22:51:24 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.23 2004/04/15 13:04:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -683,8 +683,6 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
       (ldb (byte 3 0) (image-nil-word *image*))
       (tag :null))
     (setf (image-constant-block *image*) (make-movitz-constant-block))
-    (setf (movitz-constant-block-interrupt-handlers (image-constant-block *image*))
-      (movitz-read (make-array 256 :initial-element 'muerte::interrupt-default-handler)))
     (setf (movitz-constant-block-interrupt-descriptor-table (image-constant-block *image*))
       (movitz-read (make-initial-interrupt-descriptors)))
     (setf (image-t-symbol *image*) (movitz-read t))
@@ -726,6 +724,9 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
     (assert (plusp (dump-count *image*))))
   (setf (movitz-symbol-value (movitz-read 'muerte:*build-number*))
     (1+ *bootblock-build*))
+  (let ((handler (movitz-env-symbol-function 'muerte::interrupt-default-handler)))
+    (setf (movitz-constant-block-interrupt-handlers (image-constant-block *image*))
+      (movitz-read (make-array 256 :initial-element handler))))
   (let ((load-address (image-start-address *image*)))
     (setf (image-cons-pointer *image*) (- load-address
 					  (image-ds-segment-base *image*))
