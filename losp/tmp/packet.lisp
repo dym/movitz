@@ -171,13 +171,13 @@
 (defvar *encode-bit-offset* 0 "The current accumulator bit-position.")
 
 (defmacro with-buffer-output (() &body body)
-  `(let ((*encode-buffer* (make-array '(0) :element-type 'octet
+  `(let ((*encode-buffer* (make-array '(1514) :element-type 'octet
                                       :adjustable t :fill-pointer 0))
          (*encode-position* 0)
          (*encode-bit-bucket* 0)
          (*encode-bit-offset* 0))
-    ,@body
-    (coerce *encode-buffer* 'buffer)))
+     ,@body
+     (coerce *encode-buffer* 'buffer)))
 
 (defun encoding-position ()
   (length *encode-buffer*))
@@ -793,8 +793,8 @@ SPECS is a list of specifications of what a header should contain."
 
 (defun encode-test ()
   "Check that (encode (decode PACKET)) <=> identity."
-  (assert (and (equalp *udp-packet* (encode (decode *udp-packet*)))
-               (equalp *arp-packet* (encode (decode *arp-packet*))))))
+  (assert (not (mismatch *udp-packet* (encode (decode *udp-packet*)))))
+  (assert (not (mismatch *arp-packet* (encode (decode *arp-packet*))))))
 
 (defun bench (n)
   "Show how long it takes to decode and re-encode 10^N UDP packets."
