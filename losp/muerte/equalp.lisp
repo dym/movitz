@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 13 17:09:08 2001
 ;;;;                
-;;;; $Id: equalp.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: equalp.lisp,v 1.3 2004/03/29 14:56:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -57,4 +57,10 @@
 		     ((= i length) t)
 		   (unless (equalp (aref x i) (aref y i))
 		     (return nil)))))))
+    (structure-object
+     (and (eq (class-of x) (class-of y))
+	  (dotimes (i (structure-object-length x) t)
+	    (unless (equalp (structure-ref x i)
+			    (structure-ref y i))
+	      (return nil)))))
     (t (equal x y))))
