@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.27 2004/10/11 13:48:07 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.28 2004/10/21 20:44:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -740,7 +740,6 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			;; Now, install correct jumper within tagbody as target.
 			`((:addl ,(* 4 label-id) (:edx 8))))
 		    (:globally (:call (:edi (:edi-offset dynamic-unwind-next))))
-		    (:jnc '(:sub-program () (:int 63)))
 		    ;; have next-continuation in EAX, final-continuation in EDX
 		    (:locally (:movl :edx (:edi (:edi-offset raw-scratch0)))) ; final continuation
 		    (:locally (:movl :esi (:edi (:edi-offset scratch1))))
