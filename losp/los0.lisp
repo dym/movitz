@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.6 2004/03/25 09:24:00 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.7 2004/03/26 01:53:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -789,6 +789,10 @@ s#+ignore
     (describe (gethash x *toplevel-commands*)))
    (t (describe x)))
   (values))
+
+(muerte.toplevel:define-toplevel-command :bochs-trace (form)
+  (muerte::with-bochs-tracing ()
+    (eval form)))
 
 (muerte.toplevel:define-toplevel-command :mapkey (code-char)
   (let ((char (etypecase code-char
