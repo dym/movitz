@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep  5 15:56:26 2002
 ;;;;                
-;;;; $Id: toplevel.lisp,v 1.4 2004/02/13 22:11:24 ffjeld Exp $
+;;;; $Id: toplevel.lisp,v 1.5 2004/03/26 01:46:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -43,10 +43,10 @@
 	(apply f arguments)
       (multiple-value-bind (completion completion-count)
 	  (muerte.readline:complete-symbol-name (string name)
-					      :package :keyword
-					      :filter-matches (lambda (x)
-								(and (gethash x *toplevel-commands*)
-								     t)))
+						:package :keyword
+						:filter-matches (lambda (x)
+								  (and (gethash x *toplevel-commands*)
+								       t)))
 	(case completion-count
 	  (0 (format t "~&No toplevel command named ~S." name)
 	     name)
