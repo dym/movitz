@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 20 00:39:59 2004
 ;;;;                
-;;;; $Id: ratios.lisp,v 1.3 2004/07/30 21:06:31 ffjeld Exp $
+;;;; $Id: ratios.lisp,v 1.4 2004/07/30 22:04:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,7 +22,7 @@
 (in-package muerte)
 
 (defstruct (ratio (:constructor make-ratio (numerator denominator))
-	    (:superclass number))
+	    (:superclass rational))
   numerator denominator)
 
 (defun make-rational (numerator denominator)
