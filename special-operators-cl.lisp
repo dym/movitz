@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.31 2004/11/11 19:26:06 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.32 2004/11/12 14:39:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1130,10 +1130,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 								'dynamic-variable-uninstall))))
 			(:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
 			(:popl :edx)	; number of bindings
-			(:leal (:esp (:edx 4)) :esp))
-		      #+ignore
-		      `((:popl :edx)	; pop address of first binding's tail
-			(:locally (:popl (:edi (:edi-offset dynamic-env))))))))))
+			(:leal (:esp (:edx 4)) :esp)))))))
 
 (define-special-operator labels (&all forward &form form &env env &funobj funobj)
   (destructuring-bind (labels-specs &body declarations-and-body)
