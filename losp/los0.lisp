@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.24 2004/11/11 19:28:18 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.25 2004/11/12 16:25:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1254,7 +1254,7 @@ Can be used to measure the overhead of primitive function."
     (:ret)))
 
 (defun genesis ()
-  (install-shallow-binding)
+  ;; (install-shallow-binding)
   (let ((extended-memsize 0))
     ;;  Find out how much extended memory we have 
     (setf (io-port #x70 :unsigned-byte8) #x18)
@@ -1491,9 +1491,10 @@ Preserve EDX."
     (:locally (:cmpl :ecx (:edi (:edi-offset dynamic-env))))
     (:je 'install-completed)
     (:movl (:ecx 0) :eax)		; symbol
+    (:movl (:eax (:offset movitz-symbol value)) :ebx) ; symbol's old-value into EBX
+    (:movl :ebx (:ecx 4))		; save old-value in binding's scratch
     (:movl (:ecx 8) :ebx)		; new value
-    (:xchgl :ebx (:eax (:offset movitz-symbol value))) ; exchange new and old value
-    (:movl :ebx (:ecx 8))
+    (:movl :ebx (:eax (:offset movitz-symbol value))) ; install new value
     (:movl (:ecx 12) :ecx)
     (:jmp 'install-loop)
    install-completed
@@ -1517,7 +1518,7 @@ and also EDX must be preserved."
     (:cmpl :edx :ecx)
     (:je 'uninstall-completed)
     (:movl (:ecx 0) :eax)		; symbol
-    (:movl (:ecx 8) :ebx)		; old value
+    (:movl (:ecx 4) :ebx)		; old value
     (:movl :ebx (:eax (:offset movitz-symbol value))) ; reload old value
     (:movl (:ecx 12) :ecx)
     (:jmp 'uninstall-loop)
@@ -1550,15 +1551,31 @@ and also EDX must be preserved."
     (:movl :ebx (:eax (:offset movitz-symbol value)))
     (:ret)))
 
-(defun install-shallow-binding ()
-  (macrolet ((install (slot function)
-	       `(setf (%run-time-context-slot ',slot) (symbol-value ',function))))
-    (install muerte:dynamic-variable-install dynamic-variable-install-shallow)
-    (install muerte:dynamic-variable-uninstall dynamic-variable-uninstall-shallow)
-    (install muerte::dynamic-store dynamic-store-shallow)
-    (install muerte::dynamic-load-unprotected dynamic-load-unprotected-shallow)
-    (install muerte::dynamic-load dynamic-load-shallow))
-  (values))
+(defun install-shallow-binding (&key quiet)
+  (without-interrupts
+    (unless quiet
+      (warn "Installing shallow-binding strategy.."))
+    (macrolet ((install (slot function)
+		 `(prog1 (cons ',slot (%run-time-context-slot ',slot))
+		    (setf (%run-time-context-slot ',slot) (symbol-value ',function)))))
+      (list (install muerte:dynamic-variable-install dynamic-variable-install-shallow)
+	    (install muerte:dynamic-variable-uninstall dynamic-variable-uninstall-shallow)
+	    (install muerte::dynamic-store dynamic-store-shallow)
+	    (install muerte::dynamic-load-unprotected dynamic-load-unprotected-shallow)
+	    (prog1 (install muerte::dynamic-load dynamic-load-shallow)
+	      (labels ((install-shallow-env (env)
+			 "We use this local function in order to install dynamic-env slots
+                          in reverse order, by depth-first recursion."
+			 (unless (eq 0 env)
+			   (install-shallow-env (memref env 12))
+			   (let ((name (memref env 0)))
+			     (when (symbolp name)
+			       (setf (memref env 4)
+				 (%symbol-global-value name))
+			       (setf (%symbol-global-value name)
+				 (memref env 8)))))))
+		(install-shallow-env (load-global-constant dynamic-env
+							   :thread-local t))))))))
 
 (genesis)
 
