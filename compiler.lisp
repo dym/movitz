@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.15 2004/02/05 10:45:20 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.16 2004/02/05 11:02:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -178,23 +178,25 @@ If funobj is provided, its identity will be kept, but its type (and values) migh
 		      (= 1 (length optional-vars))
 		      (null key-vars)
 		      (not rest-var))
-		 'make-compiled-function-pass1)
+		 'make-compiled-function-pass1-1req1opt)
 		(t 'make-compiled-function-pass1))
 	       name lambda-list declarations form env top-level-p funobj))))
 
 (defun ensure-pass1-funobj (funobj class &rest init-args)
   "If funobj is nil, return a fresh funobj of class.
 Otherwise coerce funobj to class."
-  (if funobj
-      (apply #'change-class funobj class init-args)
-    (apply #'make-instance class init-args)))
+  (apply #'reinitialize-instance
+	 (if funobj
+	     (change-class funobj class)
+	   (make-instance class))
+	 init-args))
 
 (defun make-compiled-function-pass1-numarg-case (name lambda-list declarations form env top-level-p funobj)
-  (let* ((funobj (ensure-pass1-funobj funobj 'movitz-funobj-pass1-numargs-case))
+  (let* ((funobj (ensure-pass1-funobj funobj 'movitz-funobj-pass1-numargs-case
+				      :name name
+				      :lambda-list (movitz-read (lambda-list-simplify lambda-list))))
 	 (funobj-env (make-local-movitz-environment env funobj :type 'funobj-env)))
-    (setf (movitz-funobj-name funobj) name
-	  (movitz-funobj-lambda-list funobj) (movitz-read (lambda-list-simplify lambda-list))
-	  (funobj-env funobj) funobj-env
+    (setf (funobj-env funobj) funobj-env
 	  (function-envs funobj) nil)
     (loop for (numargs lambda-list . clause-body) in (cdr (caddr form))
 	do (when (duplicatesp lambda-list)
@@ -232,7 +234,9 @@ Otherwise coerce funobj to class."
   "Returns funobj."
   (when (duplicatesp lambda-list)
     (error "There are duplicates in lambda-list ~S." lambda-list))
-  (let* ((funobj (ensure-pass1-funobj funobj 'movitz-funobj-pass1))
+  (let* ((funobj (ensure-pass1-funobj funobj 'movitz-funobj-pass1
+				      :name name
+				      :lambda-list (movitz-read (lambda-list-simplify lambda-list))))
 	 (funobj-env (make-local-movitz-environment env funobj :type 'funobj-env))
 	 (function-env (add-bindings-from-lambda-list
 			lambda-list
@@ -240,9 +244,7 @@ Otherwise coerce funobj to class."
 						       :type 'function-env
 						       :declaration-context :funobj
 						       :declarations declarations))))
-    (setf (movitz-funobj-name funobj) name
-	  (movitz-funobj-lambda-list funobj) (movitz-read (lambda-list-simplify lambda-list))
-	  (funobj-env funobj) funobj-env
+    (setf (funobj-env funobj) funobj-env
 	  (function-envs funobj) (list (cons 'muerte.cl::t function-env)))
     (multiple-value-bind (arg-init-code need-normalized-ecx-p)
 	(make-function-arguments-init funobj function-env)
