@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.36 2004/08/10 13:03:06 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.37 2004/09/02 09:25:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1269,6 +1269,7 @@
 	   #:%io-port-write-succession
 	   #:with-io-register-syntax
 	   #:with-register-syntax
+	   #:without-interrupts
 	   #:cpu-id
 	   #:cpu-486-class-p
 	   #:cpu-586-class-p
