@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.115 2004/11/21 12:30:35 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.116 2004/11/23 16:10:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3484,6 +3484,10 @@ loading borrowed bindings."
 		    (ecase (operator binding-location)
 		      ((:eax :ebx :ecx :edx)
 		       `((:pushl ,binding-location)))
+		      (:untagged-fixnum-ecx
+		       `((,*compiler-local-segment-prefix*
+			  :call (:edi ,(global-constant-offset 'box-u32-ecx)))
+			 (:pushl :eax)))
 		      (:argument-stack
 		       (assert (<= 2 (function-argument-argnum binding)) ()
 			 ":load-lexical argnum can't be ~A." (function-argument-argnum binding))
@@ -6446,6 +6450,9 @@ and a list of any intervening unwind-protect environment-slots."
 	   (result-type (multiple-value-call #'encoded-integer-types-add
 			  (values-list (binding-store-type term0))
 			  (values-list (binding-store-type term1)))))
+;;;      (warn "dest: ~S ~S"
+;;;	    (apply #'encoded-type-decode (binding-store-type destination))
+;;;	    result-type)	    
       (when (binding-lended-p term0)
 	(warn "Add for lend0: ~S" term0))
       (when (binding-lended-p term1)
@@ -6669,8 +6676,10 @@ and a list of any intervening unwind-protect environment-slots."
 		    (make-branch)))
 	   (y-singleton
 	    (break "y-singleton"))
-	   ((or (movitz-subtypep x-type '(or fixnum character symbol vector))
-		(movitz-subtypep y-type '(or fixnum character symbol vector)))
+	   ((and (not (eq t x-type))	; this is for bootstrapping purposes.
+		 (not (eq t y-type))	; ..
+		 (or (movitz-subtypep x-type '(or fixnum character symbol vector))
+		     (movitz-subtypep y-type '(or fixnum character symbol vector))))
 	    (append (make-load-eax-ebx)
 		    `((:cmpl :eax :ebx))
 		    (make-branch)))
