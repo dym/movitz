@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.110 2004/11/19 20:12:26 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.111 2004/11/19 23:06:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -431,6 +431,7 @@ Side-effects each binding's binding-store-type."
     (let ((binding-usage (make-hash-table :test 'eq)))
       (labels ((binding-resolved-p (binding)
 		 (or (typep binding 'constant-object-binding)
+		     (typep binding 'function-argument)
 		     (let ((analysis (gethash binding binding-usage)))
 		       (and analysis
 			    (null (type-analysis-thunks analysis))))))
@@ -441,6 +442,8 @@ Side-effects each binding's binding-store-type."
 		  ((typep binding 'constant-object-binding)
 		   (apply #'encoded-type-decode
 			  (binding-store-type binding)))
+		  ((typep binding 'function-argument)
+		   t)
 		  (t (let ((analysis (gethash binding binding-usage)))
 		       (assert (and (and analysis
 					 (null (type-analysis-thunks analysis))))
@@ -6571,11 +6574,12 @@ and a list of any intervening unwind-protect environment-slots."
 
 ;;;;;;;
 
-(define-find-read-bindings :eql (x y)
+(define-find-read-bindings :eql (x y mode)
+  (declare (ignore mode))
   (list x y))
 
 (define-extended-code-expander :eql (instruction funobj frame-map)
-  (destructuring-bind (x y)
+  (destructuring-bind (x y return-mode)
       (cdr instruction)
     (let* ((x-type (apply #'encoded-type-decode (binding-store-type x)))
 	   (y-type (apply #'encoded-type-decode (binding-store-type y)))
@@ -6585,25 +6589,105 @@ and a list of any intervening unwind-protect environment-slots."
 	(rotatef x y)
 	(rotatef x-type y-type)
 	(rotatef x-singleton y-singleton))
-      (let ((x-loc (new-binding-location (binding-target x) frame-map :default nil))
+      (let (;;(x-loc (new-binding-location (binding-target x) frame-map :default nil))
 	    (y-loc (new-binding-location (binding-target y) frame-map :default nil)))
+	#+ignore
 	(warn "eql ~S/~S ~S/~S"
 	      x x-loc
 	      y y-loc)
-	(cond
-	 ((and x-singleton y-singleton)
-	  (break "Constant EQL: ~S ~S" (car x-singleton) (car y-singleton)))
-	 ((or (movitz-subtypep x-type 'fixnum)
-	      (movitz-subtypep x-type 'character)
-	      (movitz-subtypep y-type 'fixnum)
-	      (movitz-subtypep y-type 'character))
-	  (break "EQL that is EQ."))
-	 (t (append (make-load-lexical x :eax funobj nil frame-map)
-		    (make-load-lexical y :ebx funobj nil frame-map)
+	(flet ((make-branch ()
+		 (ecase (operator return-mode)
+		   (:boolean-branch-on-false
+		    `((:jne ',(operands return-mode))))
+		   (:boolean-branch-on-true
+		    `((:je ',(operands return-mode))))
+		   (:boolean-zf=1)))
+	       (make-load-eax-ebx ()
+		 (if (eq :eax y-loc)
+		     (make-load-lexical x :ebx funobj nil frame-map)
+		   (append (make-load-lexical x :eax funobj nil frame-map)
+			   (make-load-lexical y :ebx funobj nil frame-map)))))
+	  (cond
+	   ((and x-singleton y-singleton)
+	    (let ((eql (etypecase (car x-singleton)
+			 (movitz-immediate-object
+			  (and (typep (car y-singleton) 'movitz-immediate-object)
+			       (eql (movitz-immediate-value (car x-singleton))
+				    (movitz-immediate-value (car y-singleton))))))))
+	      (case (operator return-mode)
+		(:boolean-branch-on-false
+		 (when (not eql)
+		   (warn "constant eql ~S to ~S" instruction (operands return-mode))
+		   `((:jmp ',(operands return-mode)))))
+		(t (break "Constant EQL: ~S ~S" (car x-singleton) (car y-singleton))))))
+	   ((and x-singleton
+		 (eq :untagged-fixnum-ecx y-loc))
+	    (let ((value (etypecase (car x-singleton)
+			   (movitz-fixnum
+			    (movitz-fixnum-value (car x-singleton)))
+			   (movitz-bignum
+			    (movitz-bignum-value (car x-singleton))))))
+	      (check-type value (unsigned-byte 32))
+	      `((:cmpl ,value :ecx)
+		,@(make-branch))))
+	   ((and x-singleton
+		 (typep (car x-singleton) '(or movitz-immediate-object movitz-null)))
+	    (let ((value (if (typep (car x-singleton) 'movitz-null)
+			     :edi
+			   (movitz-immediate-value (car x-singleton)))))
+	      (append (cond
+		       ((and (eql value 0)
+			     (member y-loc '(:eax :ebx :ecx :edx)))
+			`((:testl ,y-loc ,y-loc)))
+		       ((and (member y-loc '(:eax :ebx :ecx :edx))
+			     (not (binding-lended-p y)))
+			`((:cmpl ,value ,y-loc)))
+		       ((and (integerp y-loc)
+			     (not (binding-lended-p y)))
+			`((:cmpl ,value (:ebp ,(stack-frame-offset y-loc)))))
+		       ((and (eq :argument-stack (operator y-loc))
+			     (not (binding-lended-p y)))
+			`((:cmpl ,value (:ebp ,(argument-stack-offset (binding-target y))))))
+		       (t (break "x-singleton: ~S with loc ~S"
+				 (movitz-immediate-value (car x-singleton))
+				 y-loc)))
+		      (make-branch))))
+	   (y-singleton
+	    (break "y-singleton"))
+	   ((or (movitz-subtypep x-type 'fixnum)
+		(movitz-subtypep x-type 'character)
+		(movitz-subtypep y-type 'fixnum)
+		(movitz-subtypep y-type 'character))
+	    (append (make-load-eax-ebx)
+		    `((:cmpl :eax :ebx))
+		    (make-branch)))
+	   ((eq :boolean-branch-on-false (operator return-mode))
+	    (let ((eql-done (gensym "eql-done-"))
+		  (on-false-label (operands return-mode)))
+	      (append (make-load-eax-ebx)
+		      `((:cmpl :eax :ebx)
+			(:je ',eql-done)
+			(,*compiler-global-segment-prefix*
+			 :movl (:edi ,(global-constant-offset 'complicated-eql)) :esi)
+			(:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%2op)))
+			(:jne ',on-false-label)
+			,eql-done))))
+	   ((eq :boolean-branch-on-true (operator return-mode))
+	    (let ((on-true-label (operands return-mode)))
+	      (append (make-load-eax-ebx)
+		      `((:cmpl :eax :ebx)
+			(:je ',on-true-label)
+			(,*compiler-global-segment-prefix*
+			 :movl (:edi ,(global-constant-offset 'complicated-eql)) :esi)
+			(:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%2op)))
+			(:je ',on-true-label)))))
+	   ((eq return-mode :boolean-zf=1)
+	    (append (make-load-eax-ebx)
 		    (let ((eql-done (gensym "eql-done-")))
 		      `((:cmpl :eax :ebx)
 			(:je ',eql-done)
 			(,*compiler-global-segment-prefix*
 			 :movl (:edi ,(global-constant-offset 'complicated-eql)) :esi)
 			(:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%2op)))
-			,eql-done)))))))))
+			,eql-done))))
+	   (t (error "unknown eql: ~S" instruction))))))))
