@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.23 2004/06/09 17:23:16 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.24 2004/06/09 19:35:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -609,7 +609,6 @@
 (define-compiler-macro second (x) `(cadr ,x))
 (define-compiler-macro third (x) `(caddr ,x))
 (define-compiler-macro fourth (x) `(cadddr ,x))
-(define-compiler-macro fifth (x) `(caddddr ,x))
 
 (define-compiler-macro (setf car) (value cell &environment env)
   (if (and (movitz:movitz-constantp value env)
