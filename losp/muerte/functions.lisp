@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.4 2004/03/24 13:33:21 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.5 2004/03/24 20:40:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -56,8 +56,7 @@
 			       complement-prototype
 			       (function ,(movitz:movitz-eval (translate-program function-form
 									      :cl :muerte.cl)))))
-   (t #+ignore (error "Non-constant complement forms not yet supported: ~S" form)
-      form)))
+   (t form)))
 
 (defun complement (function)
   (lambda (&rest args)
@@ -72,8 +71,7 @@
 			 (compiled-function
 			  (funobj-name edx))
 			 (t '(unknown)))))
-    (error 'undefined-function :name function-name)
-    #+ignore (error "Unbound function-name ~S called with arguments ~S." function-name args)))
+    (error 'undefined-function :name function-name)))
 
 ;;; funobj object
 
