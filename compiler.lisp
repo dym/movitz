@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.18 2004/02/08 23:24:13 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.19 2004/02/10 00:25:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -53,6 +53,11 @@ compile, using the host compiler, the code rather than just using eval.")
 
 (defvar *compiling-function-name*)
 (defvar muerte.cl:*compile-file-pathname* nil)
+
+(defconstant +enter-stack-frame-code+
+    '((:pushl :ebp)
+      (:movl :esp :ebp)
+      (:pushl :esi)))
 
 (defun duplicatesp (list)
   "Returns TRUE iff at least one object occurs more than once in LIST."
@@ -874,11 +879,6 @@ a (lexical-extent) sub-function might care about its parent frame-map."
       (values '((:pushl :ebx))
 	      1))
      (t (error "make-2req confused by loc0: ~W, loc1: ~W" location-0 location-1)))))
-
-(defconstant +enter-stack-frame-code+
-    '((:pushl :ebp)
-      (:movl :esp :ebp)
-      (:pushl :esi)))
 
 #+ignore
 (defun make-compiled-function-body-1rest (form funobj env top-level-p)
