@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.25 2005/01/04 20:23:16 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.26 2005/01/25 13:52:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1004,6 +1004,7 @@ next-emf as its target for call-next-method."
 
 (defclass illegal-object (t) () (:metaclass built-in-class))
 (defclass infant-object (t) () (:metaclass built-in-class))
+(defclass unbound-value (t) () (:metaclass built-in-class))
 
 (defclass run-time-context (t)
   ()

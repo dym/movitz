@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.41 2005/01/10 14:04:52 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.42 2005/01/25 13:51:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -224,7 +224,7 @@
 			,@fix-ecx))
 		    (t (let ((object-var (gensym "memref-object-")))
 			 `(let ((,object-var ,object))
-			    (with-inline-assembly (:returns :ecx :type (unsigned-byte 29))
+			    (with-inline-assembly (:returns :multiple-values)
 			      (:compile-two-forms (:ecx :ebx) ,offset ,index)
 			      (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
 			      (:load-lexical (:lexical-binding ,object-var) :eax)
@@ -411,9 +411,9 @@
 			  ((:big)
 			   (memref object offset :index index :type :unsigned-byte16 :endian :big))))
     (:code-vector       (memref object offset :index index :type :code-vector))
-    (:unsigned-byte14   (memref object offset :index index :type :unsigned-byte14))))
-;;;    (:signed-byte30+2   (memref object offset index :signed-byte30+2))
-;;;    (:unsigned-byte29+3 (memref object offset index :unsigned-byte29+3))))
+    (:unsigned-byte14   (memref object offset :index index :type :unsigned-byte14))
+    (:signed-byte30+2   (memref object offset :index index :type :signed-byte30+2))
+    (:unsigned-byte29+3 (memref object offset :index index :type :unsigned-byte29+3))))
 
 (define-compiler-macro (setf memref) (&whole form &environment env value object offset
 				      &key (index 0) (type :lisp) (localp nil) (endian :host))
@@ -963,7 +963,7 @@
 		  (:movl :ecx (:eax ,offset)))))))
 	(:lisp
 	 (assert (= 4 movitz:+movitz-fixnum-factor+))
-	 `(with-inline-assembly (:returns :untagged-fixnum-eax)
+	 `(with-inline-assembly (:returns :eax)
 	    (:compile-form (:result-mode :push) ,address)
 	    (:compile-form (:result-mode :push) ,index)
 	    (:compile-form (:result-mode :push) ,offset)
@@ -975,7 +975,7 @@
 	    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
 	    (,prefixes :movl :eax (:ecx :ebx))))
 	(:unsigned-byte8
-	 `(with-inline-assembly (:returns :untagged-fixnum-eax)
+	 `(with-inline-assembly (:returns :nothing)
 	    (:compile-form (:result-mode :push) ,address)
 	    (:compile-form (:result-mode :push) ,index)
 	    (:compile-form (:result-mode :push) ,offset)
@@ -983,11 +983,11 @@
 	    (:popl :edx)		; offset
 	    (:popl :ebx)		; index
 	    (:popl :ecx)		; address
-	    (:shrl ,movitz::+movitz-fixnum-shift+ :eax)
+	    (:shll ,(- 8 movitz::+movitz-fixnum-shift+) :eax)
 	    (:addl :ebx :ecx)
 	    (:addl :edx :ecx)
 	    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
-	    (,prefixes :movb :al (:ecx))))
+	    (,prefixes :movb :ah (:ecx))))
 	(:unsigned-byte16
 	 (cond
 	  ((eq 0 offset)
