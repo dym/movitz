@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.38 2004/11/14 22:57:45 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.39 2004/11/23 16:07:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -73,11 +73,22 @@
 	      (case type
 		(:unsigned-byte8
 		 (cond
-		  ((and (eq 0 offset) (eq 0 index))
+		  ((and (eql 0 offset) (eql 0 index))
 		   `(with-inline-assembly (:returns :untagged-fixnum-ecx :type (unsigned-byte 8))
 		      (:compile-form (:result-mode :eax) ,object)
 		      (:movzxb (:eax ,(offset-by 1)) :ecx)))
-		  ((eq 0 offset)
+		  ((eql 0 index)
+		   (let ((object-var (gensym "memref-object-"))
+			 (offset-var (gensym "memref-offset-")))
+		     `(let ((,object-var ,object)
+			    (,offset-var ,offset))
+			(with-inline-assembly (:returns :untagged-fixnum-ecx
+							:type (unsigned-byte 16))
+			  (:compile-two-forms (:eax :untagged-fixnum-ecx) ,object-var ,offset-var)
+			  ;; (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
+			  (:movzxb (:eax :ecx ,(offset-by 1)) :ecx)
+			  ))))
+		  ((eql 0 offset)
 		   `(with-inline-assembly (:returns :untagged-fixnum-ecx :type (unsigned-byte 8))
 		      (:compile-two-forms (:eax :untagged-fixnum-ecx) ,object ,index)
 		      (:movzxb (:eax :ecx ,(offset-by 1)) :ecx)))
@@ -97,18 +108,30 @@
 					  (:little nil)
 					  (:big `((:xchgb :cl :ch))))))
 		   (cond
-		    ((and (eq 0 offset) (eq 0 index))
+		    ((and (eql 0 offset) (eql 0 index))
 		     `(with-inline-assembly (:returns :untagged-fixnum-ecx
 						      :type (unsigned-byte 16))
 			(:compile-form (:result-mode :eax) ,object)
 			(:movzxw (:eax ,(offset-by 2)) :ecx)
 			,@endian-fix-ecx))
-		    ((eq 0 offset)
+		    ((eql 0 index)
+		     (let ((object-var (gensym "memref-object-"))
+			   (offset-var (gensym "memref-offset-")))
+		       `(let ((,object-var ,object)
+			      (,offset-var ,offset))
+			  (with-inline-assembly (:returns :untagged-fixnum-ecx
+							  :type (unsigned-byte 16))
+			    (:compile-two-forms (:eax :ecx) ,object-var ,offset-var)
+			    (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
+			    (:movzxw (:eax :ecx ,(offset-by 2)) :ecx)
+			    ,@endian-fix-ecx))))
+		    ((eql 0 offset)
 		     (let ((object-var (gensym "memref-object-"))
 			   (index-var (gensym "memref-index-")))
 		       `(let ((,object-var ,object)
 			      (,index-var ,index))
-			  (with-inline-assembly (:returns :untagged-fixnum-ecx)
+			  (with-inline-assembly (:returns :untagged-fixnum-ecx
+							  :type (unsigned-byte 16))
 			    (:compile-two-forms (:eax :ecx) ,object-var ,index-var)
 			    (:sarl ,(1- movitz:+movitz-fixnum-shift+) :ecx)
 			    (:movzxw (:eax :ecx ,(offset-by 2)) :ecx)
