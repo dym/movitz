@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.5 2004/03/26 01:35:29 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.6 2004/04/23 13:00:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -120,28 +120,42 @@
 	(delete name *trace-map* :key 'car))))
   (values))
 
+(defun time-skew-measure (mem x-lo x-hi)
+  (declare (ignore mem))
+  (multiple-value-bind (y-lo y-hi)
+      (read-time-stamp-counter)
+    (assert (<= x-hi y-hi))
+    (- y-lo x-lo (if (< y-lo x-lo) most-negative-fixnum 0))))
+
+(defun report-time (start-mem start-time-lo start-time-hi)
+  (multiple-value-bind (end-time-lo end-time-hi)
+      (read-time-stamp-counter)
+    (let* ((skew (or (get 'report-time 'skew)
+		     (setf (get 'report-time 'skew)
+		       (multiple-value-bind (x-lo x-hi)
+			   (read-time-stamp-counter)
+			 (time-skew-measure start-mem x-lo x-hi)))))
+	   (clumps (- (malloc-cons-pointer) start-mem))
+	   (delta-hi (- end-time-hi start-time-hi))
+	   (delta-lo (- end-time-lo start-time-lo skew)))
+      (if (= 0 delta-hi)
+	  (format t "~&;; CPU cycles: ~D.~%;; Space used: ~D clumps = ~/muerte:pprint-clumps/.~%"
+		  delta-lo clumps clumps)
+	(format t "~&;; CPU cycles: ~DM.~%;; Space used: ~D clumps = ~/muerte:pprint-clumps/.~%"
+		(+ (ash delta-hi 9) (ash delta-lo -20)) clumps clumps)))))
+
 (defmacro time (form)
   `(let ((start-mem (malloc-cons-pointer)))
      (multiple-value-bind (start-time-lo start-time-hi)
 	 (read-time-stamp-counter)
        (multiple-value-prog1
 	   ,form
-	 (multiple-value-bind (end-time-lo end-time-hi)
-	     (read-time-stamp-counter)
-	   (let ((clumps (- (malloc-cons-pointer) start-mem))
-		 (delta-hi (- end-time-hi start-time-hi))
-		 (delta-lo (- end-time-lo start-time-lo)))
-	     (if (< delta-hi #x1f)
-		 (format t "~&;; CPU cycles: ~D.~%;; Space used: ~D clumps = ~/muerte:pprint-clumps/.~%"
-			 (+ (ash delta-hi 24) delta-lo) clumps clumps)
-	       (format t "~&;; CPU cycles: ~D000.~%;; Space used: ~D clumps = ~/muerte:pprint-clumps/.~%"
-		       (+ (ash delta-hi 14) (ash delta-lo -10)) clumps clumps))))))))
+	 (report-time start-mem start-time-lo start-time-hi)))))
 
 (defun describe (object &optional stream)
   (describe-object object (output-stream-designator stream))
   (values))
   
-
 (defmethod describe-object (object stream)
   (format stream "Don't know how to describe ~S." object))
 

@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.11 2004/04/07 00:35:51 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.12 2004/04/23 13:00:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -94,17 +94,21 @@
 ;;;  (format t "test-loop: ~S~%"
 ;;;	  (loop for i from 0 to 10 collect x)))
 ;;;	      
-;;;(defun delay (time)
-;;;  (dotimes (i time)
-;;;    (with-inline-assembly (:returns :nothing)
-;;;      (:nop)
-;;;      (:nop))))
+#+ignore
+(defun delay (time)
+  (dotimes (i time)
+    (with-inline-assembly (:returns :nothing)
+      (:nop)
+      (:nop))))
 ;;;
 ;;;(defun test-consp (x)
 ;;;  (with-inline-assembly (:returns :boolean-cf=1)
 ;;;    (:compile-form (:result-mode :ecx) x)
 ;;;    (:leal (:edi -4) :eax)
 ;;;    (:rorb :cl :al)))
+
+(defun foo (x)
+  (foo x x))
 
 
 #+ignore
@@ -335,10 +339,15 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
   (error "Huh?"))
 
 #+ignore
-(defun test-catch ()
+(defun test-catch (x)
   (catch 'test-tag
-    (test-throw 'test-tag)
+    (test-throw x 'test-tag)
     (format t "Hello world")))
+
+(defun test-throw (x tag)
+  (when x
+    (warn "Throwing ~S.." tag)
+    (throw tag (values-list x))))
 
 #+ignore
 (defun test-up-catch ()
@@ -574,13 +583,12 @@ s#+ignore
 		for s0 = (rtc-register :second)
 		while (= x s0)
 		finally (return s0))))
-    (multiple-value-bind (c0-lo c0-mid c0-hi)
+    (multiple-value-bind (c0-lo c0-hi)
 	(read-time-stamp-counter)
       (loop while (= s0 (rtc-register :second)))
-      (multiple-value-bind (c1-lo c1-mid c1-hi)
+      (multiple-value-bind (c1-lo c1-hi)
 	  (read-time-stamp-counter)
-	(+ (ash (- c1-hi c0-hi) 38)
-	   (ash (- c1-mid c0-mid) 14)
+	(+ (ash (- c1-hi c0-hi) 20)
 	   (ash (+ 512 (- c1-lo c0-lo)) -10))))))
 
 (defun report-cpu-frequency ()
@@ -588,6 +596,26 @@ s#+ignore
       (truncate (assess-cpu-frequency) 976)
     (format t "~&CPU frequency: ~D.~2,'0D MHz.~%" mhz (round khz 10)))
   (values))
+
+(defvar *cpu-frequency-mhz*)
+
+(defun init-nano-sleep ()
+  (setf *cpu-frequency-mhz*
+    (truncate (assess-cpu-frequency) 100)))
+
+(defun nano-sleep (nano-seconds)
+  (let* ((t0 (read-time-stamp-counter))
+	 (t1 (+ t0 (truncate (* nano-seconds (%symbol-global-value '*cpu-frequency-mhz*))
+			     10000))))
+    (when (< t1 t0)
+      (loop until (< (read-time-stamp-counter) t0))) ; wait for wrap-around
+    (loop until (>= (read-time-stamp-counter) t1))))
+
+(defun test-nano-sleep (x)
+  (time (nano-sleep x)))
+
+(defun test ()
+  (time 123))
 
 (defun mvtest ()
   (multiple-value-call #'list (round 5 2))
@@ -607,34 +635,36 @@ s#+ignore
 		  for s0 = (rtc-register :second)
 		  while (= x s0)
 		  finally (return s0))))
-      (multiple-value-bind (c0-lo c0-mid c0-hi)
+      (multiple-value-bind (c0-lo c0-hi)
 	  (read-time-stamp-counter)
 	(loop while (= s0 (rtc-register :second)))
-	(multiple-value-bind (c1-lo c1-mid c1-hi)
+	(multiple-value-bind (c1-lo c1-hi)
 	    (read-time-stamp-counter)
-	  (let ((lo-res (+ (ash (- c1-hi c0-hi) 24)
-			   (- c1-mid c0-mid))))
+	  (let ((res (+ (ash (- c1-hi c0-hi) 12)
+			(ash (- c1-lo c0-lo) -17))))
 	    (cond
-	     ((> lo-res 100)
+	     ((> res 100)
 	      (setf (symbol-function 'get-internal-run-time)
 		(lambda ()
-		  (multiple-value-bind (lo mid hi)
+		  (multiple-value-bind (lo hi)
 		      (read-time-stamp-counter)
-		    (declare (ignore lo))
-		    (dpb hi (byte 5 24) mid))))
-	      (setf internal-time-units-per-second lo-res))
+		    (+ (ash lo -17) 
+		       (ash (ldb (byte 10 0) hi) 12)))))
+	      (setf internal-time-units-per-second res))
 	     (t ;; This is for really slow machines, like bochs..
-	      (setf (symbol-function 'get-internal-run-time)
-		(lambda ()
-		  (multiple-value-bind (lo mid hi)
-		      (read-time-stamp-counter)
-		    (declare (ignore hi))
-		    (dpb mid
-			 (byte 19 10)
-			 (ldb (byte 10 14) lo)))))
-	      (setf internal-time-units-per-second
-		(+ (ash (ldb (byte 19 0) (- c1-mid c0-mid)) 10)
-		   (ldb (byte 10 14) (- c1-lo c0-lo))))))))))))
+	      (let ((res (+ (ash (- c1-hi c0-hi) 15)
+			    (ash (- c1-lo c0-lo) -14))))
+		(setf (symbol-function 'get-internal-run-time)
+		  (lambda ()
+		    (multiple-value-bind (lo hi)
+			(read-time-stamp-counter)
+		      (+ (ash lo -14) 
+			 (ash (ldb (byte 10 0) hi) 15)))))
+		(setf internal-time-units-per-second res)))))))
+      (warn "Internal-time will wrap in ~D days."
+	    (truncate most-positive-fixnum
+		      (* internal-time-units-per-second 60 60 24))))))
+
 
 ;;;(defun get-internal-run-time ()
 ;;;  (multiple-value-bind (lo mid hi)
@@ -873,6 +903,11 @@ s#+ignore
   
   (error "What's up? [~S]" 'hey))
 
+(defun read (&optional input-stream eof-error-p eof-value recursive-p)
+  (declare (ignore input-stream recursive-p))
+  (let ((string (muerte.readline:contextual-readline *repl-readline-context*)))
+    (simple-read-from-string string eof-error-p eof-value)))
+
 (defun handle-warning (condition)
   (format t "Handle-warning: ~S" condition)
   (throw :debugger nil))
@@ -886,7 +921,7 @@ s#+ignore
 #+ignore
 (defun progntest ()
   (unwind-protect
-      (progn (print 'x) 'foo 'bar)
+      (progn (print 'x) 'foo (error "bar"))
     (print 'y)))
 
 #+ignore
@@ -944,6 +979,5 @@ s#+ignore
 	 (case (muerte.x86-pc.keyboard:poll-char)
 	   (#\esc (break "Under the bridge."))
 	   (#\e (error "this is an error!"))))))))
-
 
 (genesis)
