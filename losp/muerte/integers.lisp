@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.35 2004/06/10 02:13:19 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.36 2004/06/10 13:31:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1459,28 +1459,59 @@ Preserve EAX and EBX."
        (:notl :ecx)
        (:andl :ecx :eax)))))
 
-(defun logior%2op (x y)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) x)
-    (:compile-form (:result-mode :ebx) y)
-    (:testb #.movitz::+movitz-fixnum-zmask+ :al)
-    (:jnz '(:sub-program () (:int 107)))
-    (:testb #.movitz::+movitz-fixnum-zmask+ :bl)
-    (:jnz '(:sub-program () (:movl :ebx :eax) (:int 107)))
-    (:orl :ebx :eax)))
-
-
-(define-compiler-macro logior%2op (&whole form x y)
-  (cond
-   ((and (movitz:movitz-constantp x) (movitz:movitz-constantp y))
-    (logior  (movitz::movitz-eval x) (movitz::movitz-eval y)))
-   (t form)))
-
 (defun logior (&rest integers)
-  (declare (dynamic-extent integers))
-  (if (null integers)
-      0
-    (reduce #'logior%2op integers)))
+  (numargs-case
+   (1 (x) x)
+   (2 (x y)
+      (number-double-dispatch (x y)
+	((fixnum fixnum)
+	 (with-inline-assembly (:returns :eax)
+	   (:compile-two-forms (:eax :ebx) x y)
+	   (:orl :ebx :eax)))
+	((positive-fixnum positive-bignum)
+	 (macrolet
+	     ((do-it ()
+		`(let ((r (copy-bignum y)))
+		   (with-inline-assembly (:returns :eax)
+		     (:compile-two-forms (:eax :ecx) r x)
+		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		     (:orl :ecx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))))))
+	   (do-it)))
+	((positive-bignum positive-fixnum)
+	 (macrolet
+	     ((do-it ()
+		`(let ((r (copy-bignum x)))
+		   (with-inline-assembly (:returns :eax)
+		     (:compile-two-forms (:eax :ecx) r y)
+		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		     (:orl :ecx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))))))
+	   (do-it)))
+	((positive-bignum positive-bignum)
+	 (if (< (%bignum-bigits x) (%bignum-bigits y))
+	     (logior y x)
+	   (let ((r (copy-bignum x)))
+	     (macrolet
+		 ((do-it ()
+		    `(with-inline-assembly (:returns :eax)
+		       (:compile-two-forms (:eax :ebx) r y)
+		       (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+				:ecx)
+		       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
+			       ,(* -1 movitz:+movitz-fixnum-factor+))
+			      :edx)	; EDX is loop counter
+		      or-loop
+		       (:movl (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+			      :ecx)
+		       (:orl :ecx
+			     (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		       (:subl 4 :edx)
+		       (:jnc 'or-loop))))
+	       (do-it)))))))
+   (t (&rest integers)
+      (declare (dynamic-extent integers))
+      (if (null integers)
+	  0
+	(reduce #'logior integers)))))
 
 (define-compiler-macro logior (&whole form &rest integers)
   (let ((constant-folded-integers (loop for x in integers
@@ -1496,8 +1527,8 @@ Preserve EAX and EBX."
     (case (length constant-folded-integers)
       (0 0)
       (1 (first constant-folded-integers))
-      (2 `(logior%2op ,(first constant-folded-integers) ,(second constant-folded-integers)))
-      (t `(logior (logior%2op ,(first constant-folded-integers) ,(second constant-folded-integers))
+      (2 `(no-macro-call logior ,(first constant-folded-integers) ,(second constant-folded-integers)))
+      (t `(logior (logior ,(first constant-folded-integers) ,(second constant-folded-integers))
 		  ,@(cddr constant-folded-integers))))))
 
 (defun logxor (&rest integers)
@@ -1535,7 +1566,6 @@ Preserve EAX and EBX."
 	       (:cmpl ,(* (1- movitz:+movitz-fixnum-bits+) movitz:+movitz-fixnum-factor+)
 		      :ecx)
 	       (:ja '(:sub-program (outside-fixnum)
-		      (:break)
 		      (:addl #x80000000 :eax) ; sign into carry
 		      (:sbbl :ecx :ecx)
 		      (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
