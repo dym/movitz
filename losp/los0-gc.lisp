@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.16 2004/06/04 13:35:31 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.17 2004/06/06 03:02:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -54,12 +54,45 @@
 (defun space-cons-pointer ()
   (aref (%run-time-context-slot 'nursery-space) 0))
 
-(define-primitive-function los0-cons-pointer ()
-  ""
+(define-primitive-function muerte::get-cons-pointer ()
+  "Return in EAX the next object location with space for EAX words, with tag 6.
+Preserve ECX."
   (with-inline-assembly (:returns :multiple-values)
-    (:locally (:movl (:edi (:edi-offset nursery-space)) :eax))
-    (:movl (:edx 2) :ecx)))
-    
+   retry
+    (:locally (:cmpl 0 (:edi (:edi-offset atomically-status)))) ; Atomically?
+    (:je '(:sub-program ()
+	   (:int 50)))			; This must be called inside atomically.
+    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
+    (:movl (:edx 2) :ebx)
+    (:leal (:ebx :eax 4) :eax)
+    (:andl -8 :eax)
+    (:cmpl #x3fff4 :eax)
+    (:jae '(:sub-program (probe-failed)
+	    (:int 113)
+	    (:jmp 'retry)))
+    (:movl :edi (:edx :ebx 8 #.movitz:+other-type-offset+))
+    (:leal (:edx :ebx 8) :eax)
+    (:ret)))
+
+(define-primitive-function muerte::cons-commit ()
+  "Commit allocation of ECX/fixnum words.
+Preserve EAX and EBX."
+  (with-inline-assembly (:returns :multiple-values)
+   retry
+    (:locally (:cmpl 0 (:edi (:edi-offset atomically-status)))) ; Atomically?
+    (:je '(:sub-program ()
+	   (:int 50)))			; This must be called inside atomically.
+    (:addl #.movitz:+movitz-fixnum-factor+ :ecx)
+    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
+    (:andl -8 :ecx)
+    (:addl (:edx 2) :ecx)
+    (:cmpl #x3fff4 :ecx)
+    (:ja '(:sub-program (commit-failed)
+	   (:int 113)
+	   (:jmp 'retry)))
+    (:movl :ecx (:edx 2))
+    (:leal (:edx :ecx) :ecx)
+    (:ret)))
     
 (define-primitive-function los0-fast-cons ()
   "Allocate a cons cell from nursery-space."
@@ -73,7 +106,7 @@
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :ecx)
 	    (:cmpl #x3fff4 :ecx)
-	    (:jge '(:sub-program (allocation-failed)
+	    (:ja '(:sub-program (allocation-failed)
 		    ;; Exit thread-atomical
 		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 			       (:edi (:edi-offset atomically-status))))
@@ -133,7 +166,7 @@
 	   retry
 	    (:compile-form (:result-mode :ebx) clumps)
 	    (:declare-label-set retry-jumper (retry))
-	    (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
+	    (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t)
 			       'retry-jumper)
 			     (:edi (:edi-offset atomically-status))))
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
