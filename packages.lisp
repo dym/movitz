@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.9 2004/03/24 11:24:35 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.10 2004/03/24 18:39:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1111,7 +1111,8 @@
 	   stack-frame-call-site
 	   stack-frame-ref
 	   check-stack-limit
-	   
+
+	   *build-number*
 	   *error-no-condition-for-debugger*
 	   formatted-error
 

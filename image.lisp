@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.18 2004/03/24 13:20:24 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.19 2004/03/24 18:39:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -718,6 +718,8 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
     (format t "~&;; Doing initiating dump..")
     (dump-image :path path :multiboot-p multiboot-p :ignore-dump-count t)
     (assert (plusp (dump-count *image*))))
+  (setf (movitz-symbol-value (movitz-read 'muerte:*build-number*))
+    (1+ *bootblock-build*))
   (let ((load-address (image-start-address *image*)))
     (setf (image-cons-pointer *image*) (- load-address
 					  (image-ds-segment-base *image*))
