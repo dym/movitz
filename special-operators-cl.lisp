@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.45 2005/02/03 09:18:45 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.46 2005/02/27 02:28:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -98,7 +98,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		    else collect
 			 (let ((binding (make-instance 'located-binding :name var)))
 			   (movitz-env-add-binding local-env binding)
-			   (compiler-values-bind (&code init-code	&functional-p functional-p
+			   (compiler-values-bind (&code init-code &functional-p functional-p
 						  &type type &returns init-register
 						  &final-form final-form)
 			       (compiler-call #'compile-form-to-register
@@ -225,12 +225,19 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 					 #+ignore (warn "replace ~S in ~S with outer ~S"
 							binding (binding-funobj binding)
 							(second (first init-code)))
-					 (let ((target (second (first init-code))))
+					 (compiler-values-bind (&code new-init-code &final-form target)
+					     (compiler-call #'compile-form-unprotected
+					       :form init-form
+					       :result-mode :ignore
+					       :env init-env
+					       :defaults all)
+					   (check-type target lexical-binding)
 					   (change-class binding 'forwarding-binding 
 							 :target-binding target)
-					   `((:init-lexvar ,binding
-							   :init-with-register ,target
-							   :init-with-type ,target))))
+					   (append new-init-code
+						   `((:init-lexvar ,binding
+								   :init-with-register ,target
+								   :init-with-type ,target)))))
 					((and (typep binding 'located-binding)
 					      (type-specifier-singleton type)
 					      (not (code-uses-binding-p body-code binding
