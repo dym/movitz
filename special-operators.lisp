@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.19 2004/04/13 13:07:46 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.20 2004/04/14 23:20:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -665,21 +665,21 @@ The valid parameters are~{ ~S~}."
 	      (#.(append +boolean-modes+ '(:boolean-branch-on-true :boolean-branch-on-false))
 		 (compiler-values (not-values)
 		   :returns (complement-boolean-result-mode not-returns)))
-	      ((:eax :function :multiple-values :ebx :edx)
-	       (case result-mode
-		 ((:eax :ebx :ecx :edx :function :multiple-values)
-		  (compiler-values (not-values)
-		    :code (append (not-values :code)
-				  `((:cmpl :edi ,(single-value-register not-returns))
-				    (:sbbl :ecx :ecx)
-				    (:cmpl ,(1+ (image-nil-word *image*))
-					   ,(single-value-register not-returns))
-				    (:adcl 0 :ecx)))
-		    :returns '(:boolean-ecx 1 0)))
-		 (t (compiler-values (not-values)
-		      :code (append (not-values :code)
-				    `((:cmpl :edi ,(single-value-register not-returns))))
-		      :returns :boolean-zf=1))))
+;;;	      ((:eax :function :multiple-values :ebx :edx)
+;;;	       (case result-mode
+;;;		 ((:eax :ebx :ecx :edx :function :multiple-values)
+;;;		  (compiler-values (not-values)
+;;;		    :code (append (not-values :code)
+;;;				  `((:cmpl :edi ,(single-value-register not-returns))
+;;;				    (:sbbl :ecx :ecx)
+;;;				    (:cmpl ,(1+ (image-nil-word *image*))
+;;;					   ,(single-value-register not-returns))
+;;;				    (:adcl 0 :ecx)))
+;;;		    :returns '(:boolean-ecx 1 0)))
+;;;		 (t (compiler-values (not-values)
+;;;		      :code (append (not-values :code)
+;;;				    `((:cmpl :edi ,(single-value-register not-returns))))
+;;;		      :returns :boolean-zf=1))))
 	      ((:eax :function :multiple-values :ebx :ecx :edx)
 	       (compiler-values (not-values)
 		 :code (append (not-values :code)
