@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.10 2004/02/09 23:41:13 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.11 2004/02/10 00:29:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1192,7 +1192,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		collect (list pc nil
 			      (format nil "  => Entry-point for ~D arguments <="
 				      (1+ (position-if (lambda (x)
-							 (= pc (* x +code-vector-entry-factor+)))
+							 (= pc x))
 						       entry-points)))
 			      nil)
 		collect (list pc
