@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.18 2004/06/16 07:40:38 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.19 2004/07/07 23:39:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,82 +18,64 @@
 
 (in-package muerte.init)
 
+(defconstant +space-size+ #xfffd)
+
 (defun make-space (location)
   "Make a space vector at a fixed location."
   (assert (evenp location))
   (macrolet ((x (index)
-	       `(memref location 0 ,index :unsigned-byte16)))
-    (setf (x 0) #x0
-	  (x 1) #xfffd
-	  (x 2) #.(cl:dpb (bt:enum-value 'movitz:movitz-vector-element-type :u32)
+	       `(memref location 0 ,index :unsigned-byte32)))
+    (setf (x 1) (* #.movitz:+movitz-fixnum-factor+ +space-size+)
+	  (x 0) #.(cl:dpb (bt:enum-value 'movitz:movitz-vector-element-type :u32)
 			  (cl:byte 8 8)
-			  (bt:enum-value 'movitz:other-type-byte :vector))
-	  (x 3) #xfffd))
+			  (bt:enum-value 'movitz:other-type-byte :basic-vector))))
   (%word-offset location #.(movitz:tag :other)))
 
-(defmacro space-other (space)
-  `(memref ,space -6 3 :lisp))
 
 (defmacro space-fresh-pointer (space)
   `(memref ,space -6 2 :lisp))
 
-(defun allocate-space (&optional other-space)
-  (let ((space (make-array #xfffd :element-type '(unsigned-byte 32))))
-    (setf (space-fresh-pointer space) 2
-	  (space-other space) other-space)
+;;;(defmacro space-last-cons (space)
+;;;  "The location of the last cons-cell that will with in this space."
+;;;  `(memref ,space -6 3 :lisp))
+
+(defmacro space-other (space)
+  `(memref ,space -6 3 :lisp))
+
+(defun allocate-space (size &optional other-space)
+  (let ((space (make-array size :element-type '(unsigned-byte 32))))
+    (initialize-space space)
+    (setf (space-other space) other-space)
     space))
 
 (defun initialize-space (space)
-  (setf (space-fresh-pointer space) 2))
+  (setf (space-fresh-pointer space) 2
+;;;	(space-last-cons space) (+ (object-location space)
+;;;				   (array-dimension space 0)))
+	)
+  space)
+				   
 
-(defun allocate-duo-space ()
-  (let* ((space1 (allocate-space))
-	 (space2 (allocate-space space1)))
-    (setf (space-other space1) space2)))
+(defun allocate-duo-space (size)
+  (let* ((space1 (allocate-space size))
+	 (space2 (allocate-space size space1)))
+    (setf (space-other space1) space2)
+    space1))
 
 (defun space-cons-pointer ()
   (aref (%run-time-context-slot 'nursery-space) 0))
 
-(define-primitive-function muerte::get-cons-pointer ()
-  "Return in EAX the next object location with space for EAX words, with tag 6.
-Preserve ECX."
-  (with-inline-assembly (:returns :multiple-values)
-   retry
-    (:locally (:cmpl 0 (:edi (:edi-offset atomically-status)))) ; Atomically?
-    (:je '(:sub-program ()
-	   (:int 50)))			; This must be called inside atomically.
-    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
-    (:movl (:edx 2) :ebx)
-    (:leal (:ebx :eax 4) :eax)
-    (:andl -8 :eax)
-    (:cmpl #x3fff4 :eax)
-    (:jae '(:sub-program (probe-failed)
-	    (:int 113)
-	    (:jmp 'retry)))
-    (:movl :edi (:edx :ebx 8 #.movitz:+other-type-offset+))
-    (:leal (:edx :ebx 8) :eax)
-    (:ret)))
+(defun test ()
+  (warn "install..")
+  (install-los0-consing 4)
+  (warn "nursery: ~Z, other: ~Z" 
+	(%run-time-context-slot 'muerte::nursery-space)
+	(space-other (%run-time-context-slot 'muerte::nursery-space)))
+  (warn "first cons: ~Z" (funcall 'truncate #x100000000 3))
+  (warn "second cons: ~Z" (funcall 'truncate #x100000000 3))
+  (halt-cpu)
+  (values))
 
-(define-primitive-function muerte::cons-commit ()
-  "Commit allocation of ECX/fixnum words.
-Preserve EAX and EBX."
-  (with-inline-assembly (:returns :multiple-values)
-   retry
-    (:locally (:cmpl 0 (:edi (:edi-offset atomically-status)))) ; Atomically?
-    (:je '(:sub-program ()
-	   (:int 50)))			; This must be called inside atomically.
-    (:addl #.movitz:+movitz-fixnum-factor+ :ecx)
-    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
-    (:andl -8 :ecx)
-    (:addl (:edx 2) :ecx)
-    (:cmpl #x3fff4 :ecx)
-    (:ja '(:sub-program (commit-failed)
-	   (:int 113)
-	   (:jmp 'retry)))
-    (:movl :ecx (:edx 2))
-    (:leal (:edx :ecx) :ecx)
-    (:ret)))
-    
 (define-primitive-function los0-fast-cons ()
   "Allocate a cons cell from nursery-space."
   (macrolet
@@ -105,8 +87,9 @@ Preserve EAX and EBX."
 			     (:edi (:edi-offset atomically-status))))
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :ecx)
-	    (:cmpl #x3fff4 :ecx)
-	    (:ja '(:sub-program (allocation-failed)
+	    (:cmpl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+		   :ecx)
+	    (:jae '(:sub-program (allocation-failed)
 		    ;; Exit thread-atomical
 		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 			       (:edi (:edi-offset atomically-status))))
@@ -124,7 +107,54 @@ Preserve EAX and EBX."
 	    (:ret))))
     (do-it)))
 
+(define-primitive-function muerte::get-cons-pointer ()
+  "Return in EAX the next object location with space for EAX words, with tag 6.
+Preserve ECX."
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :multiple-values)
+	   retry
+	    (:locally (:cmpl 0 (:edi (:edi-offset atomically-status)))) ; Atomically?
+	    (:je '(:sub-program ()
+		   (:int 50)))		; This must be called inside atomically.
+	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
+	    (:movl (:edx 2) :ebx)
+	    (:leal (:ebx :eax 4) :eax)
+	    (:andl -8 :eax)
+	    (:cmpl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+		   :eax)
+	    (:ja '(:sub-program (probe-failed)
+		   (:int 113)
+		   (:jmp 'retry)))
+	    (:movl :edi (:edx :ebx 8 ,movitz:+other-type-offset+))
+	    (:leal (:edx :ebx 8) :eax)
+	    (:ret))))
+    (do-it)))
 
+(define-primitive-function muerte::cons-commit ()
+  "Commit allocation of ECX/fixnum words.
+Preserve EAX and EBX."
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :multiple-values)
+	   retry
+	    (:locally (:cmpl 0 (:edi (:edi-offset atomically-status)))) ; Atomically?
+	    (:je '(:sub-program ()
+		   (:int 50)))		; This must be called inside atomically.
+	    (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
+	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
+	    (:andl -8 :ecx)
+	    (:addl (:edx 2) :ecx)
+	    (:cmpl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+		   :ecx)
+	    (:ja '(:sub-program (commit-failed)
+		   (:int 113)
+		   (:jmp 'retry)))
+	    (:movl :ecx (:edx 2))
+	    (:leal (:edx :ecx) :ecx)
+	    (:ret))))
+    (do-it)))
+    
 (define-primitive-function los0-box-u32-ecx ()
   "Make u32 in ECX into a fixnum or bignum."
   (macrolet
@@ -140,8 +170,9 @@ Preserve EAX and EBX."
 			     (:edi (:edi-offset atomically-status))))
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :eax)
-	    (:cmpl #x3fff4 :eax)
-	    (:jge '(:sub-program ()
+	    (:cmpl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+		   :eax)
+	    (:jae '(:sub-program ()
 		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 			       (:edi (:edi-offset atomically-status))))
 		    (:int 113)		; This interrupt can be retried.
@@ -159,7 +190,7 @@ Preserve EAX and EBX."
     (do-it)))
 
 (defun los0-malloc-clumps (clumps)
-  (check-type clumps (integer 0 16000))
+  (check-type clumps (integer 0 160000))
   (macrolet
       ((do-it ()
 	 `(with-inline-assembly (:returns :eax)
@@ -172,13 +203,14 @@ Preserve EAX and EBX."
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :ecx)
 	    (:leal ((:ebx 2) :ecx) :eax)
-	    (:cmpl #x3fff4 :eax)
-	    (:jge '(:sub-program ()
-		    (:int 113)))
+	    (:cmpl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+		   :eax)
+	    (:ja '(:sub-program ()
+		   (:int 113)))
 	    (:movl :eax (:edx 2))
 	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 			     (:edi (:edi-offset atomically-status))))
-	    (:movl #.(movitz:tag :infant-object) (:edx :ecx 6))
+	    (:movl ,(movitz:tag :infant-object) (:edx :ecx 6))
 	    (:leal (:edx :ecx 8) :eax)		
 	    (:xorl :ecx :ecx)
 	   init-loop			; Now init eax number of clumps.
@@ -190,7 +222,7 @@ Preserve EAX and EBX."
     (do-it)))
 
 (defun los0-malloc-data-clumps (clumps)
-  (check-type clumps (integer 0 4000))
+  (check-type clumps (integer 0 160000))
   (macrolet
       ((do-it ()
 	 `(with-inline-assembly (:returns :eax)
@@ -203,9 +235,10 @@ Preserve EAX and EBX."
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :ecx)
 	    (:leal ((:ebx 2) :ecx) :eax)
-	    (:cmpl #x3fff4 :eax)
-	    (:jge '(:sub-program ()
-		    (:int 113)))
+	    (:cmpl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+		   :eax)
+	    (:ja '(:sub-program ()
+		   (:int 113)))
 	    (:movl :eax (:edx 2))
 	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 			     (:edi (:edi-offset atomically-status))))
@@ -214,33 +247,34 @@ Preserve EAX and EBX."
 	    (:leal (:edx :ecx 8) :eax))))
     (do-it)))
 
-(defun install-los0-consing ()
-  (setf (%run-time-context-slot 'nursery-space)
-    (allocate-duo-space))
-  (setf (exception-handler 113)
-    (lambda (exception interrupt-frame)
-      (declare (ignore exception interrupt-frame))
-      (format t "~&;; Handling out-of-memory exception..")
-      (stop-and-copy)))
-  (let ((conser (symbol-value 'los0-fast-cons)))
-    (check-type conser vector)
-    (setf (%run-time-context-slot 'muerte::fast-cons)
-      conser))
-  (let ((conser (symbol-value 'los0-box-u32-ecx)))
-    (check-type conser vector)
-    (setf (%run-time-context-slot 'muerte::box-u32-ecx)
-      conser))
-  (let ((old-malloc (symbol-function 'muerte:malloc-clumps)))
-    (setf (symbol-function 'muerte:malloc-clumps)
-      (symbol-function 'los0-malloc-clumps))
-    (setf (symbol-function 'los0-malloc-clumps)
-      old-malloc))
-  (let ((old-malloc-data (symbol-function 'muerte:malloc-data-clumps)))
-    (setf (symbol-function 'muerte:malloc-data-clumps)
-      (symbol-function 'los0-malloc-data-clumps))
-    (setf (symbol-function 'los0-malloc-data-clumps)
-      old-malloc-data))
-  (values))
+(defun install-los0-consing (&optional (space-kilobytes 2048))
+  (let ((size (* space-kilobytes #x100)))
+    (setf (%run-time-context-slot 'nursery-space)
+      (allocate-duo-space size))
+    (setf (exception-handler 113)
+      (lambda (exception interrupt-frame)
+	(declare (ignore exception interrupt-frame))
+	(format t "~&;; Handling out-of-memory exception..")
+	(stop-and-copy)))
+    (let ((conser (symbol-value 'los0-fast-cons)))
+      (check-type conser vector)
+      (setf (%run-time-context-slot 'muerte::fast-cons)
+	conser))
+    (let ((conser (symbol-value 'los0-box-u32-ecx)))
+      (check-type conser vector)
+      (setf (%run-time-context-slot 'muerte::box-u32-ecx)
+	conser))
+    (let ((old-malloc (symbol-function 'muerte:malloc-clumps)))
+      (setf (symbol-function 'muerte:malloc-clumps)
+	(symbol-function 'los0-malloc-clumps))
+      (setf (symbol-function 'los0-malloc-clumps)
+	old-malloc))
+    (let ((old-malloc-data (symbol-function 'muerte:malloc-data-clumps)))
+      (setf (symbol-function 'muerte:malloc-data-clumps)
+	(symbol-function 'los0-malloc-data-clumps))
+      (setf (symbol-function 'los0-malloc-data-clumps)
+	old-malloc-data))
+    (values)))
 
 (defun install-old-consing ()
   (let ((conser (symbol-value 'muerte::fast-cons)))
@@ -333,7 +367,7 @@ Preserve EAX and EBX."
 			   forward-x))))))))
 	;; Scavenge roots
 	(map-heap-words evacuator 0 (+ (malloc-buffer-start)
-						 (* 2 (malloc-cons-pointer))))
+				       (* 2 (malloc-cons-pointer))))
 	(map-stack-words evacuator (current-stack-frame))
 	;; Scan newspace, Cheney style.
 	(loop with newspace-location = (+ 2 (object-location newspace))
