@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.15 2004/04/13 13:07:40 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.16 2004/04/13 13:28:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1168,7 +1168,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
     (let ((up-env (make-instance 'unwind-protect-env
 		    :uplink env
 		    :funobj (movitz-environment-funobj env))))
-      (with-labels (unwind-protect (cleanup-entry-offset cleanup-entry))
+      (with-labels (unwind-protect (cleanup-label cleanup-entry))
 	(compiler-call #'compile-form
 	  :result-mode :multiple-values
 	  :forward all
@@ -1178,9 +1178,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			 (do-case (t :multiple-values)
 			   ;; install up dynamic-env..
 			   (:locally (:pushl (:edi (:edi-offset dynamic-env))))
-			   (:call (:pc+ 0)) ; EIP
-			   ,cleanup-entry-offset
-			   (:addl '(:funcall - ',cleanup-entry ',cleanup-entry-offset) (:esp))
+			   (:declare-label-set ,cleanup-label (,cleanup-entry))
+			   (:pushl ',cleanup-label) ; jumper index
 			   (:globally (:pushl (:edi (:edi-offset unwind-protect-tag)))) ; tag
 			   (:pushl :ebp) ; stack-frame
 			   (:locally (:movl :esp (:edi (:edi-offset dynamic-env)))))) ; install up-env
@@ -1196,7 +1195,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		       ;; execute cleanup-forms
 		       (:call '(:sub-program (,cleanup-entry) ; label
 				,@(compiler-call #'compile-form
-				    :with-stack-used t
+				    :with-stack-used t ; stack distance is _really_ unknown!
 				    :defaults all
 				    :result-mode :ignore
 				    :form `(muerte.cl::progn ,@cleanup-forms))
