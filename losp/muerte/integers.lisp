@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.90 2004/08/01 00:37:31 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.91 2004/08/04 12:59:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2228,7 +2228,7 @@ Preserve EAX and EBX."
 	  (values n 0)
 	(multiple-value-bind (r q)
 	    (floor (%ratio-numerator n) (%ratio-denominator n))
-	  (values r (%make-rational q (%ratio-denominator n))))))
+	  (values r (make-rational q (%ratio-denominator n))))))
    (2 (n divisor)
       (multiple-value-bind (q r)
 	  (truncate n divisor)

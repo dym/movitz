@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.5 2004/07/23 15:35:23 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.6 2004/08/04 12:59:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -486,3 +486,10 @@
      (:jnc 'done)
      (:addl ,movitz:+movitz-fixnum-factor+ :eax)
     done))
+
+(define-compiler-macro %ratio-numerator (x)
+  `(memref ,x ,(bt:slot-offset 'movitz::movitz-ratio 'movitz::numerator) 0 :lisp))
+
+(define-compiler-macro %ratio-denominator (x)
+  `(memref ,x ,(bt:slot-offset 'movitz::movitz-ratio 'movitz::denominator) 0 :lisp))
+
