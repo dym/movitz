@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.14 2004/06/14 19:40:42 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.15 2004/07/07 23:22:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -172,8 +172,8 @@
       (%create-symbol (symbol-name symbol))
     (let ((x (%word-offset (malloc-clumps 3) 1)))
       (dotimes (i 6)
-	(setf (memref x #.movitz:+other-type-offset+ i :lisp)
-	  (memref symbol #.movitz:+other-type-offset+ i :lisp)))
+	(setf (memref x #.(cl:- (movitz:tag :symbol)) i :lisp)
+	  (memref symbol #.(cl:- (movitz:tag :symbol)) i :lisp)))
       x)))
 
 (defun symbol-flags (symbol)
