@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.4 2004/03/24 11:24:52 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.5 2004/03/29 14:34:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -188,6 +188,8 @@
 		(tag5 (make-tag-typep :null))
 		(tag6 (make-tag-typep :other))
 		(pointer
+		 (assert (equal (mapcar 'movitz::tag '(:cons :other :symbol))
+				'(1 6 7)))
 		 `(with-inline-assembly-case ()
 		    (do-case (t :boolean-zf=0 :labels (done))
 		      (:compile-form (:result-mode :eax) ,object)
