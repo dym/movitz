@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov  2 13:58:58 2001
 ;;;;                
-;;;; $Id: readline.lisp,v 1.4 2004/02/13 22:11:19 ffjeld Exp $
+;;;; $Id: readline.lisp,v 1.5 2004/07/29 16:20:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -135,7 +135,7 @@ completion-start and completion-end are bounding indexes into completion's name.
 	when (member key terminator-keys)
 	do (when displayed-completions-p
 	     (do ((y (1+ (cursor-y console)) (1+ y)))
-		 ((>= y 25))
+		 ((>= y (console-height console)))
 	       (clear-line console 0 y)))
 	and return key
 	do (case key
