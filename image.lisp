@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.61 2004/08/04 12:58:45 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.62 2004/08/06 14:43:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -324,14 +324,6 @@
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
-;;;   (malloc-buffer
-;;;    :binary-type lu32
-;;;    :initform 0)
-   (default-interrupt-trampoline
-       :map-binary-write 'movitz-intern-code-vector
-     :binary-tag :primitive-function
-     :map-binary-read-delayed 'movitz-word-code-vector
-     :binary-type code-vector-word)
    (classes				; A vector of class meta-objects.
     :initform nil			; The first element is the map of corresponding names
     :binary-type word
@@ -355,12 +347,19 @@
 			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
 						'word))
     :map-binary-read-delayed 'movitz-word)
-   (interrupt-handlers
+   (exception-handlers
     :binary-type word
     :map-binary-write 'movitz-intern
     :map-binary-read-delayed 'movitz-word
-    :initarg :interrupt-handlers
-    :accessor movitz-run-time-context-interrupt-handlers)
+    :initarg :exception-handlers
+    :accessor movitz-run-time-context-exception-handlers)
+   (exception-handler-tails
+    :binary-type word
+    :initform nil
+    :map-binary-write 'movitz-read-and-intern
+    :map-binary-read-delayed 'movitz-word
+    :initarg :exception-handler-tails
+    :accessor movitz-run-time-context-exception-handler-tails)
    (interrupt-descriptor-table
     :binary-type word
     :accessor movitz-run-time-context-interrupt-descriptor-table
@@ -538,7 +537,7 @@
     :t-symbol (movitz-read 't)
     :null-symbol  *movitz-nil*))
 
-(defclass image ()
+(defclass movitz-image ()
   ((ds-segment-base
     :initform #x100000
     :accessor image-ds-segment-base)
@@ -546,7 +545,7 @@
     :initform #x100000
     :accessor image-cs-segment-base)))
 
-(defclass symbolic-image (image)
+(defclass symbolic-image (movitz-image)
   ((object-hash
     :accessor image-object-hash)	; object => address
    (address-hash
@@ -861,7 +860,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
   (setf (movitz-symbol-value (movitz-read 'muerte:*build-number*))
     (1+ *bootblock-build*))
   (let ((handler (movitz-env-symbol-function 'muerte::interrupt-default-handler)))
-    (setf (movitz-run-time-context-interrupt-handlers (image-run-time-context *image*))
+    (setf (movitz-run-time-context-exception-handlers (image-run-time-context *image*))
       (movitz-read (make-array 256 :initial-element handler))))
   (let ((load-address (image-start-address *image*)))
     (setf (image-cons-pointer *image*) (- load-address
@@ -964,7 +963,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	  (assert (file-position stream 512) () ; leave room for bootblock.
 	    "Couldn't set file-position for ~W." (pathname stream))
 	  (let* ((stack-vector (make-instance 'movitz-basic-vector
-				 :num-elements #x1ffe
+				 :num-elements #x2ffe
 				 :fill-pointer 0
 				 :symbolic-data nil
 				 :element-type :u32))
@@ -1587,6 +1586,7 @@ this image will not be Multiboot compatible."
     (movitz-fixnum
      (movitz-fixnum-value expr))
     (movitz-std-instance expr)
+    (movitz-struct expr)
     (movitz-heap-object
      (or (image-movitz-to-lisp-object *image* expr)
 	 (error "Unknown Movitz object: ~S" expr)))))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Aug 27 14:46:50 2001
 ;;;;                
-;;;; $Id: stream-image.lisp,v 1.10 2004/07/28 10:00:59 ffjeld Exp $
+;;;; $Id: stream-image.lisp,v 1.11 2004/08/06 14:43:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,7 +18,7 @@
 (in-package movitz)
 
 
-(defclass stream-image (image)
+(defclass stream-image (movitz-image)
   ((stream
     :reader image-stream
     :initarg :stream)
@@ -36,7 +36,10 @@
 		(progn
 		  (format *query-io* "~&Please enter the stream-images NIL value: ")
 		  (read *query-io*)))
-    :reader image-nil-word)))
+    :reader image-nil-word)
+   (nil-object
+    :initform (make-movitz-nil)
+    :reader image-nil-object)))
 
 (defmethod image-register32 ((image stream-image) register-name)
   (declare (ignorable image) (ignore register-name))
@@ -64,14 +67,7 @@
 		  (:character
 		   (make-instance 'movitz-character :char (code-char (ldb (byte 8 8) word))))
 		  (:null
-		   #+ignore
-		   (assert (= (- word (tag :null)) (image-run-time-context-address image)) (word)
-		     "The word #x~8,'0X has NIL tag but isn't NIL." word)
-		   (setf (image-stream-position image) 0 #+ignore (- word (tag :null)))
-		   (let ((object (read-binary 'movitz-run-time-context (image-stream image))))
-		     (setf (movitz-heap-object-word (movitz-run-time-context-null-symbol object))
-		       word)
-		     object))
+		   (image-nil-object image))
 		  (:symbol
 		   ;; (warn "loading new symbol at ~S" word)
 		   (setf (image-stream-position image)
