@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.8 2004/03/31 21:35:27 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.9 2004/04/01 02:13:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -65,8 +65,7 @@
 		      (:movzxb (:eax ,(offset-by 1)) :ecx)))
 		  ((eq 0 offset)
 		   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
-		      (:compile-two-forms (:eax :ecx) ,object ,index)
-		      (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
+		      (:compile-two-forms (:eax :untagged-fixnum-ecx) ,object ,index)
 		      (:movzxb (:eax :ecx ,(offset-by 1)) :ecx)))
 		  (t (let ((object-var (gensym "memref-object-")))
 		       `(let ((,object-var ,object))
@@ -156,15 +155,11 @@
 		  ((and (eq 0 offset) (eq 0 index))
 		   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
 		      (:compile-form (:result-mode :eax) ,object)
-		      (:movl (:eax ,(offset-by 4)) :ecx)
-		      (:cmpl ,movitz::+movitz-most-positive-fixnum+ :ecx)
-		      (:jg '(:sub-program () (:int 4)))))
+		      (:movl (:eax ,(offset-by 4)) :ecx)))
 		  ((eq 0 offset)
 		   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
 		      (:compile-two-forms (:eax :ecx) ,object ,index)
-		      (:movl (:eax :ecx ,(offset-by 4)) :ecx)
-		      (:cmpl ,movitz::+movitz-most-positive-fixnum+ :ecx)
-		      (:jg '(:sub-program () (:int 4)))))
+		      (:movl (:eax :ecx ,(offset-by 4)) :ecx)))
 		  (t (let ((object-var (gensym "memref-object-")))
 		       `(let ((,object-var ,object))
 			  (with-inline-assembly (:returns :untagged-fixnum-ecx)
@@ -269,8 +264,7 @@
 	((and (movitz:movitz-constantp offset env)
 	      (movitz:movitz-constantp index env))
 	 `(with-inline-assembly (:returns :untagged-fixnum-ecx)
-	    (:compile-two-forms (:ecx :ebx) ,value ,object)
-	    (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	    (:compile-two-forms (:untagged-fixnum-ecx :ebx) ,value ,object)
 	    (:movl :ecx (:ebx ,(+ (movitz:movitz-eval offset env)
 				  (* 4 (movitz:movitz-eval index env)))))))
 	((and (movitz:movitz-constantp offset env)
@@ -317,8 +311,7 @@
 	((and (movitz:movitz-constantp offset env)
 	      (movitz:movitz-constantp index env))
 	 `(with-inline-assembly (:returns :untagged-fixnum-ecx)
-	    (:compile-two-forms (:ecx :ebx) ,value ,object)
-	    (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	    (:compile-two-forms (:untagged-fixnum-ecx :ebx) ,value ,object)
 	    (:movw :cx (:ebx ,(+ (movitz:movitz-eval offset env)
 				 (* 2 (movitz:movitz-eval index env)))))))
 	((and (movitz:movitz-constantp offset env)
