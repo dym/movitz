@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 20012000, 2002-2004,
+;;;;    Copyright (C) 2000-2004,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      basic-macros.lisp
@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.47 2004/11/18 17:59:03 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.48 2004/11/18 23:49:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
