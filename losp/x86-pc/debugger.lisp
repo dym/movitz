@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.26 2004/09/25 15:53:25 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.27 2004/10/21 20:27:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -500,7 +500,7 @@ be provided for those cases."
 			(cond
 			 ((eq 0 casf-funobj)
 			  (values 'default-interrupt-trampoline
-				  (code-vector-offset (slot-value 'default-interrupt-trampoline)
+				  (code-vector-offset (symbol-value 'default-interrupt-trampoline)
 						      eip)))
 			 ((not (typep casf-funobj 'function))
 			  ;; Hm.. very suspicius
