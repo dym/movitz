@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 21 22:14:08 2001
 ;;;;                
-;;;; $Id: io-port.lisp,v 1.7 2004/02/03 10:02:59 ffjeld Exp $
+;;;; $Id: io-port.lisp,v 1.8 2004/02/26 11:18:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -306,8 +306,8 @@ that reads from <io-base-form> plus some offset."
 		  (:cmpl :ecx (:esp))
 		  (:jbe 'end-io-read-loop)
 		  (:inw :dx :ax)
-		  (:addl 1 :ecx)
-		  (:movw :ax (:ebx ,(+ offset -2) (:ecx 2)))
+		  (:addl 2 :ecx)
+		  (:movw :ax (:ebx ,(+ offset -2) :ecx))
 		  (:jmp 'io-read-loop)
 		  (:popl :eax)		; increment :esp, and put a lispval in :eax.
 		 end-io-read-loop)))
@@ -439,8 +439,8 @@ that reads from <io-base-form> plus some offset."
 		 io-read-loop
 		  (:cmpl :ecx (:esp))
 		  (:jbe 'end-io-read-loop)
-		  (:addl 1 :ecx)
-		  (:movw (:ebx ,(+ offset -2) (:ecx 2)) :ax)
+		  (:addl 2 :ecx)
+		  (:movw (:ebx ,(+ offset -2) :ecx) :ax)
 		  (:outw :ax :dx)
 		  (:jmp 'io-read-loop)
 		  (:popl :eax)		; increment :esp, and put a lispval in :eax.
