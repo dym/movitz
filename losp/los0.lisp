@@ -9,17 +9,18 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.3 2004/02/10 23:38:20 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.4 2004/03/22 09:49:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (provide :los0 :load-priority 0)
 
 (require :common-lisp)
+(require :x86-pc/interrupt)
 (require :x86-pc/all)
 (require :x86-pc/io-space)
 (require :x86-pc/ne2k)
-;; (require :x86-pc/floppy)
+(require :x86-pc/floppy)
 
 (require :lib/readline)
 (require :lib/toplevel)
@@ -28,7 +29,10 @@
 (require :lib/repl)
 
 (defpackage muerte.init
-  (:use muerte.cl muerte muerte.lib muerte.x86-pc muerte.readline muerte.toplevel
+  (:use muerte.cl muerte muerte.lib
+	muerte.x86-pc
+	muerte.readline
+	muerte.toplevel
 	muerte.ethernet
 	muerte.ip6
 	muerte.ip4
@@ -225,9 +229,10 @@
   (format t "~&test-funcall args: ~S~%" args))
 
 #+ignore
-(defun test-rest (&optional a0 a1 a3 &rest args)
+(defun test-rest (&optional (a0 nil a0-p) a1 a3 &rest args)
   (declare (dynamic-extent args))
-  (format t "args: ~S, ~S, ~S: ~S~%" a0 a1 a3 args))
+  (when a0-p
+    (format t "args: ~S, ~S, ~S: ~S~%" a0 a1 a3 args)))
 
 
 (defun test-return ()
@@ -316,8 +321,10 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
     (print 'hello)))
 
 #+ignore
-(defun sloo (x y)
-  'sllooo)
+(defun sloo (&rest x)
+  (declare (dynamic-extent x))
+  (let ((y (car x)))
+    (sloo y)))
 
 #+ignore
 (defun test-throw (tag)
@@ -343,7 +350,11 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
 (defun test-up (tag)
  (unwind-protect
       (test-throw tag)
-    (print 'hello-cleanup)))
+   (print 'hello-cleanup)))
+
+(defun test-cons (x)
+  (let ((c (cons x x)))
+    (cdr c)))
 
 (defun test-fixed (x y z)
   (warn "x: ~W, y: ~W, z: ~W" x y z))
@@ -469,6 +480,17 @@ s#+ignore
     (return-from dingu 'fooob))
   (+ x y))
 
+
+(defun foo (&edx edx x &optional (y nil yp))
+  (format t "~@{ ~A~}" x y yp edx))
+
+(defun wefwe (&rest args)
+  (declare (dynamic-extent args))
+  (do ((p args (cdr p)))
+      ((endp p))
+    (let ((x (car p)))
+      (print x))))
+
 ;;;;;
 
 (defclass food () ())
@@ -487,12 +509,22 @@ s#+ignore
   (declare (ignore f))
   (print "Cooking some food."))
 
-(defun foo (x &optional (y nil yp))
-  (format t "~@{ ~A~}" yp))
-
 (defun test-pie (n pie)
   (dotimes (i n)
     (pie-filling pie)))
+
+(defun test-inc (n)
+  (dotimes (i n)
+    (warn "foo: ~S" (lambda ()
+		      (setf i 5)))))
+
+(defun test-id (n x)
+  (dotimes (i n)
+    (identity x)))
+
+(defun test-inc2 (x)
+  (print (prog1 x (incf x)))
+  (print x))
 
 (defclass pie (food)
   ((filling :accessor pie-filling 
@@ -500,40 +532,39 @@ s#+ignore
 	    :initform 'apple))
   #+ignore (:default-initargs :filling (if (foo) 'apple 'banana)))
 
-#+ignore
 (defclass pie2 (food)
   ((filling :accessor pie-filling 
 	    :initarg :filling
 	    :initform nil)))
 
-;;;(defmethod cook ((p (eql 'pie)))
-;;;  (warn "Won't really cook a symbolic pie!")
-;;;  (values))
-;;;
-;;;(defmethod cook ((p (eql 'pudding)))
-;;;  'cooked-pudding)
+(defmethod cook ((p (eql 'pie)))
+  (warn "Won't really cook a symbolic pie!")
+  (values))
 
-;;;(defmethod slot-value-using-class :after (class (pie pie2) slot)
-;;;  (warn "HEy, don't poke inside my pie2!"))
+(defmethod cook ((p (eql 'pudding)))
+  'cooked-pudding)
 
-;;;(defmethod cook :after ((p symbol))
-;;;  (warn "A symbol may or may not have been cooked."))
+(defmethod slot-value-using-class :after (class (pie pie2) slot)
+  (warn "HEy, don't poke inside my pie2!"))
 
-;;;(defmethod cook ((p pie))
-;;;  (cond
-;;;   ((eq 'banana (pie-filling p))
-;;;    (print "Won't cook a banana-pie, trying next.")
-;;;    (call-next-method))
-;;;   (t (print "Cooking a pie.")
-;;;      (setf (pie-filling p) (list 'cooked (pie-filling p))))))
+(defmethod cook :after ((p symbol))
+  (warn "A symbol may or may not have been cooked."))
 
-;;;(defmethod cook :before ((p pie))
-;;;  (declare (ignore p))
-;;;  (print "A pie is about to be cooked."))
-;;;
-;;;(defmethod cook :after ((p pie))
-;;;  (declare (ignore p))
-;;;  (print "A pie has been cooked."))
+(defmethod cook ((p pie))
+  (cond
+   ((eq 'banana (pie-filling p))
+    (print "Won't cook a banana-pie, trying next.")
+    (call-next-method))
+   (t (print "Cooking a pie.")
+      (setf (pie-filling p) (list 'cooked (pie-filling p))))))
+
+(defmethod cook :before ((p pie))
+  (declare (ignore p))
+  (print "A pie is about to be cooked."))
+
+(defmethod cook :after ((p pie))
+  (declare (ignore p))
+  (print "A pie has been cooked."))
 
 (defun assess-cpu-frequency ()
   "Assess the CPU's frequency in units of 1024 Hz."
@@ -828,10 +859,13 @@ s#+ignore
 		       *standard-input* s
 		       *terminal-io* s
 		       *debug-io* s)))
-    (loop 
-      (catch 'top-level-repl		; If restarts don't work, you can throw this..
-	(with-simple-restart (abort "Abort to the top command level.")
-	  (read-eval-print)))))
+    (let ((* nil) (** nil) (*** nil)
+	  (/ nil) (// nil) (/// nil)
+	  (+ nil) (++ nil) (+++ nil))
+      (loop
+	(catch :top-level-repl		; If restarts don't work, you can throw this..
+	  (with-simple-restart (abort "Abort to the top command level.")
+	    (read-eval-print))))))
   
   (error "What's up? [~S]" 'hey))
 
@@ -884,6 +918,7 @@ s#+ignore
        ,(when error-spec
 	  `(error ,@error-spec))))
 
+#+ignore
 (defun bridge (&optional (inside (do-default (*inside* "No inside NIC.")
 				   (muerte.x86-pc.ne2k:ne2k-probe #x300)))
 			 (outside (do-default (*outside* "No outside NIC.")
