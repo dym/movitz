@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.21 2004/06/06 10:24:29 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.22 2004/06/06 14:25:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -754,18 +754,76 @@
   (numargs-case
    (1 (x) x)
    (2 (x y)
-      (with-inline-assembly (:returns :eax)
-	(:compile-form (:result-mode :eax) x)
-	(:compile-form (:result-mode :ebx) y)
-	(:movl :eax :ecx)
-	(:orl :ebx :ecx)
-	(:testb #.movitz::+movitz-fixnum-zmask+ :cl)
-	(:jne '(:sub-program (not-fixnum)
-		(:int 107)))
-	(:movl :ebx :ecx)
-	(:sarl #.movitz::+movitz-fixnum-shift+ :ecx)
-	(:imull :ecx :eax :edx)
-	(:into)))
+      (macrolet
+	  ((do-it ()
+	     `(number-double-dispatch (x y)
+		((fixnum fixnum)
+		 (let (d0 d1)
+		   (with-inline-assembly (:returns :eax)
+		     (:compile-two-forms (:eax :ecx) x y)
+		     (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
+		     (:std)
+		     (:imull :ecx :eax :edx)
+		     (:jno 'fixnum-result) ; most likely/optimized path.
+		     (:cmpl ,movitz::+movitz-fixnum-factor+ :edx)
+		     (:jc 'u32-result)
+		     (:cmpl #xfffffffc :edx)
+		     (:ja 'u32-negative-result)
+		     (:jne 'two-bigits)
+		     (:testl :eax :eax)
+		     (:jnz 'u32-negative-result)
+		     ;; The result requires 2 bigits..
+		    two-bigits
+		     (:shll ,movitz::+movitz-fixnum-shift+ :edx) ; guaranteed won't overflow.
+		     (:cld)
+		     (:store-lexical (:lexical-binding d0) :eax :type fixnum)
+		     (:store-lexical (:lexical-binding d1) :edx :type fixnum)
+		     (:compile-form (:result-mode :eax)
+				    (malloc-data-words 3))
+		     (:movl ,(dpb 2 (byte 16 16) (movitz:tag :bignum 0))
+			    (:eax ,movitz:+other-type-offset+))
+		     (:load-lexical (:lexical-binding d0) :ecx)
+		     (:movl :ecx (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		     (:load-lexical (:lexical-binding d1) :ecx)
+		     (:sarl ,movitz:+movitz-fixnum-shift+
+			    :ecx)
+		     (:shrdl ,movitz:+movitz-fixnum-shift+ :ecx
+			     (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		     (:sarl ,movitz:+movitz-fixnum-shift+
+			    :ecx)
+		     (:movl :ecx (:eax ,(+ 4 (bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))))
+		     (:jns 'fixnum-done)
+		     ;; if result was negative, we must negate bignum
+		     (:notl (:eax ,(+ 4 (bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))))
+		     (:negl (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		     (:cmc)
+		     (:adcl 0 (:eax ,(+ 4 (bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))))
+		     (:xorl #xff00 (:eax ,movitz:+other-type-offset+))
+		     (:jmp 'fixnum-done)
+		     
+		    u32-result
+		     (:movl :eax :ecx)
+		     (:shrdl ,movitz::+movitz-fixnum-shift+ :edx :ecx)
+		     (:movl :edi :edx)
+		     (:cld)
+		     (:call-global-constant box-u32-ecx)
+		     (:jmp 'fixnum-done)
+		     
+		    u32-negative-result
+		     (:movl :eax :ecx)
+		     (:shrdl ,movitz::+movitz-fixnum-shift+ :edx :ecx)
+		     (:movl :edi :edx)
+		     (:cld)
+		     (:negl :ecx)
+		     (:call-global-constant box-u32-ecx)
+		     (:xorl #xff00 (:eax ,movitz:+other-type-offset+))
+		     (:jmp 'fixnum-done)
+
+		    fixnum-result
+		     (:movl :edi :edx)
+		     (:cld)
+		    fixnum-done))))))
+	(do-it)))
    (t (&rest factors)
       (declare (dynamic-extent factors))
       (if (null factors)
