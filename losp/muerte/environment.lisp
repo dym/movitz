@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.9 2005/01/25 13:45:54 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.10 2005/03/09 07:19:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -139,13 +139,10 @@
 				    (time-skew-measure start-mem x-lo x-hi))
 			   finally (return x)))))
 	   (clumps (and start-mem (- (malloc-cons-pointer) start-mem)))
-	   (delta-hi (- end-time-hi start-time-hi))
-	   (delta-lo (- end-time-lo start-time-lo skew)))
-      (if (= 0 delta-hi)
-	  (format t "~&;; CPU cycles: ~D.~@[~%;; Space used: ~D clumps = ~/muerte:pprint-clumps/.~]~%"
-		  delta-lo clumps clumps)
-	(format t "~&;; CPU cycles: ~DM.~%~@[;; Space used: ~D clumps = ~/muerte:pprint-clumps/.~]~%"
-		(+ (ash delta-hi 9) (ash delta-lo -20)) clumps clumps)))))
+	   (delta-time (+ (ash (- end-time-hi start-time-hi) 29)
+			  (- end-time-lo start-time-lo skew))))
+      (format t "~&;; CPU cycles: ~D.~%~@[;; Space used: ~D clumps = ~/muerte:pprint-clumps/.~]~%"
+	      delta-time clumps clumps))))
 
 (defmacro time (form)
   `(let ((start-mem (malloc-cons-pointer)))
