@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.9 2004/07/08 18:53:33 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.10 2004/07/22 00:28:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -169,7 +169,8 @@
   (- 5 (position name
 		 '(nil :eflags :eip :error-code :exception :ebp nil
 		   :ecx :eax :edx :ebx :esi :edi))))
-(defun backtrace ()
+
+(defun backtrace (&key reqs)
   (format t "~&Backtracing from EIP = #x~X: "
 	  (image-register32 *image* :eip))
   ;; (search-image-funobj (image-register32 *image* :eip))
@@ -197,7 +198,11 @@
 		(write-string (symbol-name name))
 		(when (string= name 'toplevel-function)
 		  (loop-finish))
-		(format t " (#x~X)" (stack-frame-return-address stack-frame))))
+		(format t " (#x~X)" (stack-frame-return-address stack-frame))
+		(when reqs
+		  (format t " req1: ~S, req2: ~S"
+			  (movitz-word (get-word stack-frame -2))
+			  (movitz-word (get-word stack-frame -3))))))
 	     (t (write (movitz-print movitz-name)))))
       do (format t "~& => "))
   (values))
