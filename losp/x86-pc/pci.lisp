@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2003, 
+;;;;    Copyright (C) 2003-2004, 
 ;;;;    Department of Computer Science, University of Tromsoe, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,11 +10,13 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Dec 14 22:33:42 2003
 ;;;;                
-;;;; $Id: pci.lisp,v 1.1 2004/01/13 11:05:06 ffjeld Exp $
+;;;; $Id: pci.lisp,v 1.2 2004/04/23 15:04:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (in-package muerte.x86-pc)
+
+(provide :x86-pc/pci)
 
 (defun bios32-find ()
   (loop for bios32 from #xe0000 to #xffff0 by 16

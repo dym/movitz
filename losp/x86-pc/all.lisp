@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep 27 21:14:56 2001
 ;;;;                
-;;;; $Id: all.lisp,v 1.3 2004/01/19 11:23:51 ffjeld Exp $
+;;;; $Id: all.lisp,v 1.4 2004/04/23 15:04:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -23,6 +23,7 @@
 (require :x86-pc/pit8253)
 (require :x86-pc/interrupt)
 (require :x86-pc/cmos)
+(require :x86-pc/pci)
 ;; (require :x86-pc/serial)
 (require :x86-pc/textmode-console)
 (require :x86-pc/debugger)

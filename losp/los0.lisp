@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.12 2004/04/23 13:00:08 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.13 2004/04/23 15:04:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -627,43 +627,38 @@ s#+ignore
 
 ;;;;;;;;;;;;;;; CL
 
-(defun install-internal-time ()
+(defun install-internal-time (&optional (minimum-frequency 100))
   "Figure out this CPU's internal-time-unit. Warning: This process takes about 1.5 seconds."
-  (if (not (cpu-featurep :tsc))
-      (warn "This CPU has no time-stamp-counter. Timer-related functions will not work.")
-    (let ((s0 (loop with x = (rtc-register :second)
-		  for s0 = (rtc-register :second)
-		  while (= x s0)
-		  finally (return s0))))
-      (multiple-value-bind (c0-lo c0-hi)
+  (let ((s0 (loop with x = (rtc-register :second)
+		for s0 = (rtc-register :second)
+		while (= x s0)
+		finally (return s0))))
+    (multiple-value-bind (c0-lo c0-hi)
+	(read-time-stamp-counter)
+      (loop while (= s0 (rtc-register :second)))
+      (multiple-value-bind (c1-lo c1-hi)
 	  (read-time-stamp-counter)
-	(loop while (= s0 (rtc-register :second)))
-	(multiple-value-bind (c1-lo c1-hi)
-	    (read-time-stamp-counter)
-	  (let ((res (+ (ash (- c1-hi c0-hi) 12)
-			(ash (- c1-lo c0-lo) -17))))
-	    (cond
-	     ((> res 100)
+	(let ((res (+ (ash (ldb (byte 22 0) (- c1-hi c0-hi)) 7)
+		      (ash (- c1-lo c0-lo) -22))))
+	  (cond
+	   ((> res minimum-frequency)
+	    (setf (symbol-function 'get-internal-run-time)
+	      (lambda ()
+		(multiple-value-bind (lo hi)
+		    (read-time-stamp-counter)
+		  (+ (ash lo -22)
+		     (ash (ldb (byte 22 0) hi) 7)))))
+	    (setf internal-time-units-per-second res))
+	   (t ;; This is for really slow machines, like bochs..
+	    (let ((res (+ (ash (- c1-hi c0-hi) 13)
+			  (ash (- c1-lo c0-lo) -16))))
 	      (setf (symbol-function 'get-internal-run-time)
 		(lambda ()
 		  (multiple-value-bind (lo hi)
 		      (read-time-stamp-counter)
-		    (+ (ash lo -17) 
-		       (ash (ldb (byte 10 0) hi) 12)))))
-	      (setf internal-time-units-per-second res))
-	     (t ;; This is for really slow machines, like bochs..
-	      (let ((res (+ (ash (- c1-hi c0-hi) 15)
-			    (ash (- c1-lo c0-lo) -14))))
-		(setf (symbol-function 'get-internal-run-time)
-		  (lambda ()
-		    (multiple-value-bind (lo hi)
-			(read-time-stamp-counter)
-		      (+ (ash lo -14) 
-			 (ash (ldb (byte 10 0) hi) 15)))))
-		(setf internal-time-units-per-second res)))))))
-      (warn "Internal-time will wrap in ~D days."
-	    (truncate most-positive-fixnum
-		      (* internal-time-units-per-second 60 60 24))))))
+		    (+ (ash (ldb (byte 16 0) hi) 13) 
+		       (ash lo -16)))))
+	      (setf internal-time-units-per-second res)))))))))
 
 
 ;;;(defun get-internal-run-time ()
@@ -865,9 +860,7 @@ s#+ignore
     (incf extended-memsize (io-port #x71 :unsigned-byte8))
     (format t "Extended memory: ~D KB" extended-memsize))
 
-;;;  (loop for i from  #x40600 below #x80000
-;;;      do (setf (memref i 0 0 :unsigned-byte32) #xababe13))
-
+  (idt-init)
   (install-los0-consing)
   
   (let ((*repl-readline-context* (make-readline-context :history-size 16))
@@ -875,17 +868,22 @@ s#+ignore
 	#+ignore (*error-no-condition-for-debugger* t)
 	(*debugger-function* #'los0-debugger)
 	(*package* nil))
-    (with-simple-restart (continue "Abort LOS0 boot-up initialization.")
+    (with-simple-restart (abort "Skip Los0 boot-up initialization.")
       (setf *cpu-features*
 	(find-cpu-features))
       (format t "~&CPU features:~:[ none~;~{ ~A~#[~; and~:;,~]~}~].~%"
 	      *cpu-features* *cpu-features*)
-      (install-internal-time)
-      (funcall #'idt-init)
       ;; (muerte:asm :int 49)
 
       (setf *package* (find-package "INIT"))
       (clos-bootstrap)
+      (cond
+       ((not (cpu-featurep :tsc))
+	(warn "This CPU has no time-stamp-counter. Timer-related functions will not work."))
+       (t (install-internal-time)
+	  (warn "Internal-time will wrap in ~D days."
+		(truncate most-positive-fixnum
+			  (* internal-time-units-per-second 60 60 24)))))
       ;; (muerte.toplevel:invoke-toplevel-command :mapkey #\newline)
       #+ignore (let ((s (make-instance 'muerte.x86-pc:vga-text-console)))
 		 (setf *standard-output* s
