@@ -1,3 +1,12 @@
+2005-01-29  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* There's been quite a bit of work on scavenge.lisp. The stack scavenging
+	has been re-designed completely, and should now not break as it
+	sometimes did before in certain interrupt
+	situations. Interestingly, the scavenging API essentially didn't
+	change at all. There are still some holes left empty when it comes
+	to migrating code-vectors, but this should be trivial to fix.
+
 2005-01-04  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
 
 	* Fixed some support for stack-allocating funobjs and cons-cells
