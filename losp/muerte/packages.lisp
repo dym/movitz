@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 30 15:19:43 2001
 ;;;;                
-;;;; $Id: packages.lisp,v 1.4 2004/09/25 15:36:16 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.5 2004/10/21 20:50:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -82,14 +82,14 @@
       (unless status
 	(let ((name (subseq name start end)))
 	  (map-into name key name)
-	  (setf symbol (make-symbol name))
+	  (setf symbol (%create-symbol name package))
 	  (when (eq package (find-package :keyword))
 	    (setf (symbol-flags symbol)
 	      #.(bt:enum-value 'movitz::movitz-symbol-flags '(:constant-variable)))
 	    (setf (symbol-value symbol)
 	      symbol))))
       (unless (symbol-package symbol)
-	(setf-movitz-accessor (symbol movitz-symbol package) package))
+	(setf (memref symbol (movitz-type-slot-offset 'movitz-symbol 'package)) package))
       (unless status
 	(if (eq package (find-package :keyword))
 	    (setf (gethash (symbol-name symbol) (package-object-external-symbols package)) symbol)
