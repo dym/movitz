@@ -1546,7 +1546,7 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
   (multiple-value-bind (list constantp list-value) (loop-constant-fold-if-possible val)
     (let ((listvar var))
       (cond ((and var (symbolp var)) (loop-make-iteration-variable var list data-type))
-	    (t (loop-make-variable (setq listvar (loop-gentemp)) list 'list)
+	    (t (loop-make-variable (setq listvar (loop-gentemp)) list t)
 	       (loop-make-iteration-variable var nil data-type)))
       (multiple-value-bind (list-step step-function) (loop-list-step listvar)
 	(declare #+(and (not LOOP-Prefer-POP) (not CLOE)) (ignore step-function))
