@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon May 12 17:13:31 2003
 ;;;;                
-;;;; $Id: misc.lisp,v 1.6 2004/11/24 10:05:47 ffjeld Exp $
+;;;; $Id: misc.lisp,v 1.7 2004/11/24 14:20:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -88,6 +88,18 @@
       (declare (dynamic-extent integers))
       (reduce #'add-u16-ones-complement integers :initial-value 0))))
 
+(defun extract-zero-terminated-string (vector &optional start (end (length vector)))
+  (check-type vector (and vector (not simple-vector)))
+  (let ((string (make-string (- (or (position 0 vector :start start) end)
+				start))))
+    (loop for i from 0 below (length string)
+	do (setf (char string i)
+	     (memref vector (+ (movitz-type-slot-offset 'movitz-basic-vector 'data)
+			       start)
+		     :index i
+		     :type :character))
+	finally (return string))))
+    
 
 
 (defstruct (counter-u32 (:constructor make-counter-u32-object)) lo hi)
