@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.86 2004/07/27 21:30:51 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.87 2004/07/27 22:05:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1384,6 +1384,14 @@ Preserve EAX and EBX."
 	 (multiple-value-bind (q r)
 	     (truncate (- number) (- divisor))
 	   (values q (%negatef r number divisor))))
+	((rational rational)
+	 (multiple-value-bind (q r)
+	     (truncate (* (numerator number)
+			  (denominator divisor))
+		       (* (denominator number)
+			  (numerator divisor)))
+	   (values q (make-rational r (* (denominator number)
+					 (denominator divisor))))))
 	))))
 
 (defun / (number &rest denominators)
@@ -2116,25 +2124,26 @@ Preserve EAX and EBX."
   (numargs-case
    (1 (u) u)
    (2 (u v)
-      (check-type u integer)
-      (check-type v integer)
       ;; Code borrowed from CMUCL.
-      (do ((k 0 (1+ k))
-	   (u (abs u) (truncate u 2))
-	   (v (abs v) (truncate v 2)))
-	  ((or (oddp u) (oddp v))
-	   (do ((temp (if (oddp u)
-			  (- v)
-			(truncate u 2))
-		      (truncate temp 2)))
-	       (nil)
-	     (when (oddp temp)
-	       (if (plusp temp)
-		   (setq u temp)
-		 (setq v (- temp)))
-	       (setq temp (- u v))
-	       (when (zerop temp)
-		 (return (ash u k))))))))
+      (cond
+       ((= 0 u) v)
+       ((= 0 v) u)
+       (t (do ((k 0 (1+ k))
+	       (u (abs u) (truncate u 2))
+	       (v (abs v) (truncate v 2)))
+	      ((or (oddp u) (oddp v))
+	       (do ((temp (if (oddp u)
+			      (- v)
+			    (truncate u 2))
+			  (truncate temp 2)))
+		   (nil)
+		 (when (oddp temp)
+		   (if (plusp temp)
+		       (setq u temp)
+		     (setq v (- temp)))
+		   (setq temp (- u v))
+		   (when (zerop temp)
+		     (return (ash u k))))))))))
    (t (&rest integers)
       (declare (dynamic-extent integers))
       (do ((gcd (car integers)
