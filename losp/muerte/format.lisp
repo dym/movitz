@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Mar 23 01:18:36 2002
 ;;;;                
-;;;; $Id: format.lisp,v 1.7 2004/07/30 22:15:23 ffjeld Exp $
+;;;; $Id: format.lisp,v 1.8 2004/10/12 14:42:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -60,26 +60,29 @@
       (write x))))
 
 (defun format-float (x &optional at-sign-p colon-p w d (k 0) overflowchar padchar)
-  (declare (ignore w overflowchar padchar at-sign-p colon-p))
-  (if (eql 0 d)
-      (write-integer (round x) *standard-output* 10 nil)
-    (multiple-value-bind (integer-part decimal-part)
-	(truncate x)
-      (write-integer integer-part *standard-output* 10 nil)
-      (dotimes (i k)
-	(write-char #\0))
-      (write-char #\.)
-      (do ((remainder decimal-part)
-	   (last-i (if d (1- d) 15))
-	   (i 0 (1+ i)))
-	  ((or (and (not d) (plusp i) (zerop remainder))
-	       (> i last-i)))
-	(multiple-value-bind (next-digit next-remainder)
-	    (if (= i last-i)
-		(round (* 10 remainder))
-	      (truncate (* 10 remainder)))
-	  (setf remainder next-remainder)
-	  (write-digit next-digit *standard-output*))))))
+  (cond
+   ((eql 0 d)
+    (write-integer (round x) *standard-output* 10 nil))
+   ((minusp x)
+    (write-char #\-)
+    (format-float (- x) at-sign-p colon-p w d k overflowchar padchar))
+   (t (multiple-value-bind (integer-part decimal-part)
+	  (truncate x)
+	(write-integer integer-part *standard-output* 10 nil)
+	(dotimes (i k)
+	  (write-char #\0))
+	(write-char #\.)
+	(do ((remainder decimal-part)
+	     (last-i (if d (1- d) 15))
+	     (i 0 (1+ i)))
+	    ((or (and (not d) (plusp i) (zerop remainder))
+		 (> i last-i)))
+	  (multiple-value-bind (next-digit next-remainder)
+	      (if (= i last-i)
+		  (round (* 10 remainder))
+		(truncate (* 10 remainder)))
+	    (setf remainder next-remainder)
+	    (write-digit next-digit *standard-output*)))))))
 
 (defun find-directive (string i directive &optional recursive-skip-start
 						    (recursive-skip-end directive))
