@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:25:31 2002
 ;;;;                
-;;;; $Id: ethernet.lisp,v 1.6 2004/11/24 10:07:11 ffjeld Exp $
+;;;; $Id: ethernet.lisp,v 1.7 2004/12/09 14:18:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -47,7 +47,20 @@
 	   #:+destination-mac+
 	   #:+max-ethernet-frame-size+
 	   #:+min-ethernet-frame-size+
-	   #:+broadcast-address+))
+	   #:+broadcast-address+
+
+	   #:+ether-type-ip4+
+	   #:+ether-type-chaosnet+
+	   #:+ether-type-arp+
+	   #:+ether-type-symbolics+
+	   #:+ether-type-rarp+
+	   #:+ether-type-snmp+
+	   #:+ether-type-ip6+
+	   #:+ether-type-ppp+
+	   #:+ether-type-mswin-heartbeat+
+	   #:+ether-type-loopback+
+
+	   ))
 	   
 (in-package muerte.ethernet)
 
@@ -114,20 +127,18 @@
 
 ;;;
 
-(define-named-integer ether-type (:export-constants t)
-  ;; http://www.iana.org/assignments/ethernet-numbers
-  ;; These are just a random selection, really.
-  (#x0800 ip4)
-  (#x0804 chaosnet)
-  (#x0806 arp)
-  (#x081c symbolics)
-  (#x0835 rarp)
-  (#x814c snmp)
-  (#x86dd ip6)
-  (#x880b ppp)
-  ;; http://www.microsoft.com/technet/treeview/default.asp?url=/TechNet/prodtechnol/windows2000serv/deploy/confeat/nlbovw.asp
-  (#x886f mswin-heartbeat)
-  (#x9000 loopback))
+(defconstant +ether-type-ip4+ #x0800)
+(defconstant +ether-type-chaosnet+ #x0804)
+(defconstant +ether-type-arp+ #x0806)
+(defconstant +ether-type-symbolics+ #x081c)
+(defconstant +ether-type-rarp+ #x0835)
+(defconstant +ether-type-snmp+ #x814c)
+(defconstant +ether-type-ip6+ #x86dd)
+(defconstant +ether-type-ppp+ #x880b)
+;; http://www.microsoft.com/technet/treeview/default.asp?
+;;        url=/TechNet/prodtechnol/windows2000serv/deploy/confeat/nlbovw.asp
+(defconstant +ether-type-mswin-heartbeat+ #x886f)
+(defconstant +ether-type-loopback+ #x9000)
 
 ;;;
 
