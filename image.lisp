@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.4 2004/02/02 13:04:49 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.5 2004/02/02 13:27:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1238,19 +1238,11 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
     (string
      (or (gethash expr (image-string-constants *image*))
 	 (setf (gethash expr (image-string-constants *image*))
-	   (make-movitz-string expr))))
+	   (movitz-read expr))))
     (cons
      (or (gethash expr (image-cons-constants *image*))
 	 (setf (gethash expr (image-cons-constants *image*))
-	    (if (eq '#0=#:error (ignore-errors (when (not (list-length expr)) '#0#)))
-		(multiple-value-bind (unfolded-expr cdr-index)
-		    (unfold-circular-list expr)
-		  (let ((result (movitz-read unfolded-expr)))
-		    (setf (movitz-last-cdr result)
-		      (movitz-nthcdr cdr-index result))
-		    result))
-	      (make-movitz-cons (movitz-read (car expr))
-			     (movitz-read (cdr expr)))))))
+	   (movitz-read expr))))
     (t (movitz-read expr))))
 
 ;;; "Reader"
@@ -1291,22 +1283,25 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	 (null *movitz-nil*)
 	 ((member t) (movitz-read 'muerte.cl:t))
 	 (symbol (intern-movitz-symbol expr))
-	 (string (image-read-intern-constant *image* expr))
 	 (integer (make-movitz-fixnum expr))
 	 (character (make-movitz-character expr))
+	 (string (or (gethash expr (image-string-constants *image*))
+		     (setf (gethash expr (image-string-constants *image*))
+		       (make-movitz-string expr))))
 	 (vector (make-movitz-vector (length expr)
 				     :initial-contents (map 'vector #'movitz-read expr)))
 	 (cons
-	  (image-read-intern-constant *image* expr)
-	  #+ignore (if (eq '#0=#:error (ignore-errors (when (not (list-length expr)) '#0#)))
-		       (multiple-value-bind (unfolded-expr cdr-index)
-			   (unfold-circular-list expr)
-			 (let ((result (movitz-read unfolded-expr)))
-			   (setf (movitz-last-cdr result)
-			     (movitz-nthcdr cdr-index result))
-			   result))
-		     (make-movitz-cons (movitz-read (car expr))
-				    (movitz-read (cdr expr)))))
+	  (or (gethash expr (image-cons-constants *image*))
+	      (setf (gethash expr (image-cons-constants *image*))
+		(if (eq '#0=#:error (ignore-errors (when (not (list-length expr)) '#0#)))
+		    (multiple-value-bind (unfolded-expr cdr-index)
+			(unfold-circular-list expr)
+		      (let ((result (movitz-read unfolded-expr)))
+			(setf (movitz-last-cdr result)
+			  (movitz-nthcdr cdr-index result))
+			result))
+		  (make-movitz-cons (movitz-read (car expr))
+				    (movitz-read (cdr expr)))))))
 	 (hash-table
 	  (make-movitz-hash-table expr))
 	 (structure-object
