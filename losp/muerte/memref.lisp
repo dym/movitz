@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.12 2004/04/14 12:31:08 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.13 2004/04/14 20:05:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -177,9 +177,7 @@
 			    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
 			    (:load-lexical (:lexical-binding ,object-var) :eax)
 			    (:addl :ebx :ecx)
-			    (:movl (:eax :ecx ,(offset-by 4)) :ecx)
-			    (:cmpl ,movitz::+movitz-most-positive-fixnum+ :ecx)
-			    (:jg '(:sub-program () (:int 4)))))))))
+			    (:movl (:eax :ecx ,(offset-by 4)) :ecx)))))))
 		(:lisp
 		 (cond
 		  ((and (eql 0 index) (eql 0 offset))
@@ -335,17 +333,24 @@
 		(:load-lexical (:lexical-binding ,value-var) :ecx)
 		(:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 		(:movl :ecx (:eax :ebx ,(movitz:movitz-eval offset env)))))))
-	(t (warn "Compiling unsafely: ~A" form)
-	   `(with-inline-assembly (:returns :untagged-fixnum-eax)
-	      (:compile-form (:result-mode :push) ,object)
-	      (:compile-form (:result-mode :push) ,offset)
-	      (:compile-two-forms (:ebx :eax) ,index ,value)
-	      (:popl :ecx)		; offset
-	      (:shrl ,movitz::+movitz-fixnum-shift+ :eax)
-	      (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
-	      (:addl :ebx :ecx)		; index += offset
-	      (:popl :ebx)		; object
-	      (:movl :eax (:ebx :ecx))))))
+	(t (let ((value-var (gensym "memref-value-"))
+		 (object-var (gensym "memref-object-"))
+		 (offset-var (gensym "memref-offset-"))
+		 (index-var (gensym "memref-index-")))
+	     (assert (= 4 movitz:+movitz-fixnum-factor+))
+	     `(let ((,value-var ,value)
+		    (,object-var ,object)
+		    (,offset-var ,offset)
+		    (,index-var ,index))
+		(with-inline-assembly (:returns :eax)
+		  (:compile-two-forms (:edx :untagged-fixnum-ecx) ,index-var ,offset-var)
+		  (:addl :edx :ecx)	; offset+index in ECX
+		  (:compile-two-forms (:eax :ebx) ,value-var ,object-var)
+		  (:std)
+		  (:shrl ,movitz::+movitz-fixnum-shift+ :eax)
+		  (:movl :eax (:ebx :ecx))
+		  (:shll ,movitz:+movitz-fixnum-shift+ :eax)
+		  (:cld)))))))
       (:unsigned-byte16
        (cond
 	((and (movitz:movitz-constantp value env)
