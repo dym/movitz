@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.19 2004/06/09 17:19:24 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.20 2004/06/11 23:26:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -342,10 +342,10 @@ integer (native lisp) value."
 		   :bit 5)
     :initarg :element-type
     :reader movitz-vector-element-type)
-   (fill-pointer
+   (num-elements
     :binary-type lu16
-    :initarg :fill-pointer
-    :accessor movitz-vector-fill-pointer)
+    :initarg :num-elements
+    :reader movitz-vector-num-elements)
    (flags
     :accessor movitz-vector-flags
     :initarg :flags
@@ -359,10 +359,10 @@ integer (native lisp) value."
     :initform 0
     :initarg :alignment-power
     :reader movitz-vector-alignment-power)
-   (num-elements
+   (fill-pointer
     :binary-type lu16
-    :initarg :num-elements
-    :reader movitz-vector-num-elements)
+    :initarg :fill-pointer
+    :accessor movitz-vector-fill-pointer)   
    (data
     :binary-lisp-type :label)		; data follows physically here
    (symbolic-data
