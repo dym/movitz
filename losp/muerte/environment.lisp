@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.3 2004/03/24 19:33:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -88,14 +88,16 @@
 	      (write-string "  " *trace-output*))
 	    (format *trace-output* "~D: (~S~{ ~S~})~%"
 		    *trace-level* function-name args))
-	  (let ((result (let ((*trace-level* (1+ *trace-level*)))
-			  (multiple-value-list (apply function args))))
-		(*trace-escape* t))
-	    (fresh-line *trace-output*)
-	    (dotimes (i *trace-level*)
-	      (write-string "  " *trace-output*))
-	    (format *trace-output* "~D: => ~:S~%" *trace-level* result)
-	    (values-list result)))))))
+	  (multiple-value-call
+	      (lambda (&rest results)
+		(declare (dynamic-extent results))
+		(let ((*trace-escape* t))
+		  (fresh-line *trace-output*)
+		  (dotimes (i *trace-level*)
+		    (write-string "  " *trace-output*))
+		  (format *trace-output* "~&~D: =>~{ ~W~^,~}.~%" *trace-level* results)
+		  (values-list results)))
+	    (apply function args)))))))
 
 (defun do-trace (function-name &key (callers t))
   (when (assoc function-name *trace-map* :test #'equal)
