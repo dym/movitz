@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.15 2004/03/31 16:39:38 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.16 2004/04/01 02:09:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -106,7 +106,7 @@
   
 (defun fill-pointer (vector)
   (check-type vector vector)
-  (memref vector #.(bt:slot-offset 'movitz::movitz-vector 'movitz::fill-pointer) 0
+  (memref vector #.(bt:slot-offset 'movitz:movitz-vector 'movitz::fill-pointer) 0
 	  :unsigned-byte16))
 
 
