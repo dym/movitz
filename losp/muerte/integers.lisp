@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.33 2004/06/10 01:30:31 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.34 2004/06/10 01:51:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -835,27 +835,35 @@ Preserve EAX and EBX."
 	     ((minusp count)
 	      `(if (minusp ,integer) -1 0))
 	     (t `(if (= 0 ,integer) 0 (with-inline-assembly (:returns :non-local-exit) (:int 4)))))))))))
-
+  
 (defun ash (integer count)
-  (check-type integer fixnum)
-  (check-type count fixnum)
   (cond
-   ((= 0 count)
-    integer)
-   ((<= 1 count 29)
+   ((not (minusp count))
     (dotimes (i count integer)
-      (setq integer (ash integer 1))))
-   ((<= count #.(cl:- 1 movitz::+movitz-fixnum-bits+))
-    (if (minusp integer) -1 0))
-   ((minusp count)
-    (with-inline-assembly (:returns :eax)
-      (:compile-form (:result-mode :ecx) count)
-      (:compile-form (:result-mode :eax) integer)
-      (:negl :ecx)
-      (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
-      (:sarl :cl :eax)
-      (:andb #.(cl:logxor #xff movitz::+movitz-fixnum-zmask+) :al)))
-   (t (if (= 0 integer) 0 (error "Illegal ash count: ~D" count)))))
+      (setf integer (no-macro-call * 2 integer))))
+   (t (dotimes (i (- count) integer)
+	(setf integer (truncate integer 2))))))
+
+;;;(defun ash (integer count)
+;;;  (check-type integer fixnum)
+;;;  (check-type count fixnum)
+;;;  (cond
+;;;   ((= 0 count)
+;;;    integer)
+;;;   ((<= 1 count 29)
+;;;    (dotimes (i count integer)
+;;;      (setq integer (ash integer 1))))
+;;;   ((<= count #.(cl:- 1 movitz::+movitz-fixnum-bits+))
+;;;    (if (minusp integer) -1 0))
+;;;   ((minusp count)
+;;;    (with-inline-assembly (:returns :eax)
+;;;      (:compile-form (:result-mode :ecx) count)
+;;;      (:compile-form (:result-mode :eax) integer)
+;;;      (:negl :ecx)
+;;;      (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
+;;;      (:sarl :cl :eax)
+;;;      (:andb #.(cl:logxor #xff movitz::+movitz-fixnum-zmask+) :al)))
+;;;   (t (if (= 0 integer) 0 (error "Illegal ash count: ~D" count)))))
 
 ;;; Types
 
