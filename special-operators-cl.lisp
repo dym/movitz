@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.16 2004/04/13 13:28:26 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.17 2004/04/13 16:55:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -895,7 +895,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			 (:globally (:cmpl (:edi (:edi-offset unbound-function))
 					   ,register))
 			 (:je '(:sub-program ()
-				(:load-constant ,movitz-name :ecx)
+				(:load-constant ,movitz-name :edx)
 				(:int 98))))
 		 :modifies nil
 		 :functional-p t

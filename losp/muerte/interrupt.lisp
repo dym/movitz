@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.2 2004/04/07 00:34:47 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.3 2004/04/13 16:55:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -215,7 +215,7 @@
 	  (70
 	   (error "[EIP=~@Z] Index ~@Z out of bounds ~@Z for ~S." $eip $ecx $ebx (@ $eax)))
 	  (98
-	   (let ((name (@ $ecx)))
+	   (let ((name (@ $edx)))
 	     (when (symbolp name)
 	       (error 'undefined-function :name name))))
 	  (99
