@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.30 2004/07/21 14:16:57 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.31 2004/07/21 22:36:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -276,6 +276,8 @@
 		       (if (not (eql dim 1))
 			   form
 			 (cond
+			  ((eq et '*)
+			   (make-other-typep :basic-vector))
 			  ((movitz:movitz-subtypep et '(unsigned-byte 8))
 			   (make-basic-vector-typep :u8))
 			  ((movitz:movitz-subtypep et '(unsigned-byte 32))
@@ -560,6 +562,8 @@
 
 (define-simple-typep (hash-table hash-table-p))
 (define-simple-typep (package packagep))
+
+;;;
 
 (define-typep and (x &rest types)
   (declare (dynamic-extent types))
