@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:16:00 2002
 ;;;;                
-;;;; $Id: ne2k.lisp,v 1.11 2004/08/23 13:53:36 ffjeld Exp $
+;;;; $Id: ne2k.lisp,v 1.12 2004/11/24 13:12:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,8 +20,7 @@
 (defpackage muerte.x86-pc.ne2k
   (:use muerte.cl muerte muerte.lib muerte.x86-pc muerte.ethernet)
   (:export #:ne2k-probe
-	   #:+ne2k-probe-addresses+
-	   
+	   #:*ne2k-probe-addresses*
 	   #:with-dp8390
 	   #:with-dp8390-dma
 	   #:dp8390-initialize
@@ -41,7 +40,8 @@
 
 (in-package muerte.x86-pc.ne2k)
 
-(defconstant +ne2k-probe-addresses+ '(#x240 #x260 #x280 #x300 #x320 #x340))
+(defparameter *ne2k-probe-addresses*
+    '(#x300 #x240 #x260 #x280 #x300 #x320 #x340))
 
 (defun ne2k-probe (io-base)
   (let ((io-space (make-io-space :range io-base #x20)))
