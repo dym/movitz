@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 19 14:58:12 2003
 ;;;;                
-;;;; $Id: repl.lisp,v 1.8 2004/03/29 19:16:19 ffjeld Exp $
+;;;; $Id: repl.lisp,v 1.9 2004/03/31 16:38:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -52,6 +52,7 @@
 		      (invoke-restart 'muerte::next-line
 				      (muerte.readline:contextual-readline *repl-readline-context*)))))
 		(simple-read-from-string buffer-string t t))
+	    (fresh-line)		; Let the user know something happened.
 	    (flet ((process-expresion (form previous-package printp &rest results)
 		     (declare (dynamic-extent results))
 		     (unless (packagep *package*)
