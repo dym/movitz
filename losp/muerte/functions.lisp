@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.11 2004/04/23 15:05:35 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.12 2004/06/10 12:09:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -75,14 +75,17 @@
     (not (apply function args))))
 
 (defun unbound-function (&edx edx &rest args)
-  (declare (ignore args))
+  "This is the function that is the unbound value for function cells."
+  (declare (dynamic-extent args))
   (let ((function-name (typecase edx
 			 (symbol
 			  edx)
 			 (compiled-function
 			  (funobj-name edx))
 			 (t '(unknown)))))
-    (error 'undefined-function :name function-name)))
+    (error 'undefined-function-call
+	   :name function-name
+	   :arguments (copy-list args))))
 
 ;;; funobj object
 
