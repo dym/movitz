@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.37 2004/09/02 09:25:35 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.38 2004/09/22 17:59:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1141,11 +1141,7 @@
 
 	   #:map-heap-words
 	   #:map-stack-words
-	   #:malloc-buffer-start
-	   #:malloc-end
-	   
-	   #:malloc-pointer-words
-	   #:malloc-non-pointer-words
+
 	   #:%memory-map%
 	   #:%memory-map-roots%
 
