@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.9 2004/04/19 22:38:27 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.10 2004/04/21 15:07:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -227,44 +227,12 @@ funcallable-instance will run the new function."
 (defun class-of (object)
   (class-of object))			; compiler-macro
 
-#+ignore
-(defun class-of (object)
-  (typecase object
-    (std-instance
-     (movitz-accessor object movitz-std-instance class))
-    (standard-gf-instance
-     (movitz-accessor object movitz-funobj-standard-gf standard-gf-class))
-    (null
-     (find-class 'null))
-    (cons
-     (find-class 'cons))
-    (symbol
-     (find-class 'symbol))
-    (fixnum
-     (find-class 'fixnum))
-    (vector
-     (find-class 'vector))
-    (compiled-function
-     (find-class 'function))
-    (hash-table
-     (find-class 'hash-table))
-    (package
-     (find-class 'package))
-    (structure-object
-     (find-class 'structure-object))
-    (t (warn "Don't know the class of ~Z!" object)
-       (find-class t))))
-
 (defun subclassp (c1 c2)
   (not (null (find c2 (class-precedence-list c1)))))
 
 ;;;
-;;;
-;;;
-;;;
-;;;
-;;;
 ;;; Generic function stuff
+;;;
 
 
 ;;; Several tedious functions for analyzing lambda lists
@@ -1025,6 +993,8 @@ next-emf as its target for call-next-method."
 (defclass float (real) () (:metaclass built-in-class))
 (defclass complex (number) () (:metaclass built-in-class))
 
+(defclass illegal-object (t) () (:metaclass built-in-class))
+
 (defclass run-time-context (t)
   ()
   (:metaclass built-in-class)
@@ -1144,7 +1114,7 @@ next-emf as its target for call-next-method."
   (declare (dynamic-extent init-args))
   (let ((class (if (symbolp class) (find-class class nil) class)))
     (check-type class structure-class)
-    (let* ((slots (structure-slots class))
+    (let* ((slots (class-slots class))
 	   (num-slots (length slots))
 	   (struct (malloc-words num-slots)))
       (setf (memref struct #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)
@@ -1717,6 +1687,10 @@ in an instance whose metaclass is standard-class."))
 (defmethod print-object ((x run-time-context) stream)
   (print-unreadable-object (x stream :type t :identity t)
     (format stream " ~S" (%run-time-context-slot 'name x)))
+  x)
+
+(defmethod print-object ((x illegal-object) stream)
+  (print-unreadable-object (x stream :type t :identity t))
   x)
 
 ;;;
