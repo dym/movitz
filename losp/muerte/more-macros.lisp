@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.21 2004/11/20 17:36:07 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.22 2004/12/09 14:20:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -380,7 +380,7 @@ respect to multiple threads."
 
 (defmacro without-interrupts (&body body)
   (let ((var (gensym "interrupts-enabled-p-")))
-    `(let ((,var (logbitp ,(position :if +eflags-map+) (eflags))))
+    `(let ((,var (logbitp ,(position :if (symbol-value '+eflags-map+)) (eflags))))
        (unwind-protect (progn (cli) ,@body)
 	 (when ,var (sti))))))
 
