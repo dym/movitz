@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Apr 15 22:47:13 2002
 ;;;;                
-;;;; $Id: cpu-id.lisp,v 1.5 2004/06/02 23:49:27 ffjeld Exp $
+;;;; $Id: cpu-id.lisp,v 1.6 2004/07/13 02:27:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -216,31 +216,6 @@ This is an illegal instruction on lesser CPUs."
      (do-case (t :multiple-values)
        (:compile-form (:result-mode :multiple-values) (no-macro-call read-time-stamp-counter)))))
 		      
-
-;;;(defun read-time-stamp-counter ()
-;;;  "Read the 64-bit i686 time-stamp counter.
-;;;Returned as three values: low 24 bits, mid 24 bits, high 16 bits.
-;;;This is an illegal instruction on lesser CPUs."
-;;;  (with-inline-assembly (:returns :multiple-values)
-;;;    (:std)
-;;;    (:rdtsc)				; Read Time-Stamp Counter into EDX:EAX
-;;;    ;; Load upper 16 bits (of EDX) as ternary value.
-;;;    (:movl :edx :ecx)
-;;;    (:andl #xffff0000 :edx)
-;;;    (:shll #.(cl:- 16 movitz::+movitz-fixnum-shift+) :edx)
-;;;    ((:fs-override) :movl :edx (:edi #.(movitz::global-constant-offset 'values)))
-;;;    ;; Bits 24-47 as fixnum into EBX
-;;;    (:shldl #.(cl:+ 8 movitz::+movitz-fixnum-shift+) :eax :ebx)
-;;;    (:andl #.(cl:* #x00ffffff movitz::+movitz-fixnum-factor+) :ebx)
-;;;    ;; Bits 0-23 as fixnum into EAX
-;;;    (:andl #x00ffffff :eax)
-;;;    (:shll #.movitz::+movitz-fixnum-shift+ :eax)
-;;;    (:cld)
-;;;    ;; Return 3 values
-;;;    ((:fs-override) :movl 1 (:edi #.(movitz::global-constant-offset 'num-values)))
-;;;    (:movl 3 :ecx)
-;;;    (:stc)))
-
 (defun clear-time-stamp-counter ()
   "Reset the i686 time-stamp-counter.
 This is an illegal instruction on lesser CPUs, and a no-op on some, such as bochs."
@@ -256,9 +231,6 @@ This is an illegal instruction on lesser CPUs, and a no-op on some, such as boch
      (:popl (:result-register))
      (:movl (:result-register) (#x1000))
      (:shll 2 (:result-register))))
-;;;     (:popl :ecx)
-;;;     (:leal ((:ecx ,movitz::+movitz-fixnum-factor+) :edi ,(movitz::edi-offset))
-;;;	    (:result-register))))
 
 (defun eflags ()
   (eflags))
