@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.12 2004/07/12 11:09:29 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.13 2004/07/13 14:28:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -312,7 +312,9 @@ respect to multiple threads."
   `(with-inline-assembly (:returns :eax :type (unsigned-byte 14))
      (:compile-form (:result-mode :eax) ,x)
      (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
-	      :eax)))
+	      :eax)
+     (:testb 3 :al)			; Just to be sure..
+     (:jnz '(:sub-program () (:int 63)))))
 
 ;;; Some macros that aren't implemented, and we want to give compiler errors.
 
