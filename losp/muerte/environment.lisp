@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.8 2004/07/17 01:54:55 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.9 2005/01/25 13:45:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -52,10 +52,10 @@
 	      (get-global-property :setf-namespace)))))
 
 (defun match-caller (name)
-  (do ((frame (stack-frame-uplink (current-stack-frame))
-	      (stack-frame-uplink frame)))
+  (do ((frame (stack-frame-uplink nil (current-stack-frame))
+	      (stack-frame-uplink nil frame)))
       ((not (plusp frame)))
-    (let ((f (stack-frame-funobj frame)))
+    (let ((f (stack-frame-funobj nil frame)))
       (cond
        ((not (typep f 'function))
 	(return nil))
