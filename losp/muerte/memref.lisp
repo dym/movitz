@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.37 2004/11/10 15:30:53 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.38 2004/11/14 22:57:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -759,8 +759,9 @@
 	 (setf (memref object offset :index index :localp t) value)
        (setf (memref object offset :index index :localp nil) value)))))
 
-(define-compiler-macro memref-int (&whole form &environment env address offset index type
-				   &optional physicalp)
+(define-compiler-macro memref-int
+    (&whole form address &key (offset 0) (index 0) (type :unsigned-byte32) (physicalp t)
+     &environment env)
   (if (or (not (movitz:movitz-constantp type physicalp))
 	  (not (movitz:movitz-constantp physicalp env)))
       form
@@ -793,9 +794,6 @@
 		(:shll 2 :ecx)
 		(:addl :ebx :eax)
 		(:into)
-;;;		(:testb ,(mask-field (byte (+ 2 movitz::+movitz-fixnum-shift+) 0) -1)
-;;;			:al)
-;;;		(:jnz '(:sub-program () (:int 63)))
 		(:addl :eax :ecx)
 		(:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale down address
 		(,prefixes :movl (:ecx) :ecx)))))
@@ -852,31 +850,32 @@
 		    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale down address
 		    (,prefixes :movzxw (:ecx) :ecx)))))))))))
 
-(defun memref-int (address offset index type &optional physicalp)
+(defun memref-int (address &key (offset 0) (index 0) (type :unsigned-byte32) (physicalp t))
   (cond
-   ((not physicalp)
-    (ecase type
-      (:lisp
-       (memref-int address offset index :lisp))
-      (:unsigned-byte8
-       (memref-int address offset index :unsigned-byte8))
-      (:unsigned-byte16
-       (memref-int address offset index :unsigned-byte16))
-      (:unsigned-byte32
-       (memref-int address offset index :unsigned-byte32))))
    (physicalp
     (ecase type
       (:lisp
-       (memref-int address offset index :lisp t))
+       (memref-int address :offset offset :index index))
       (:unsigned-byte8
-       (memref-int address offset index :unsigned-byte8 t))
+       (memref-int address :offset offset :index index :type :unsigned-byte8))
       (:unsigned-byte16
-       (memref-int address offset index :unsigned-byte16 t))
+       (memref-int address :offset offset :index index :type :unsigned-byte16))
       (:unsigned-byte32
-       (memref-int address offset index :unsigned-byte32 t))))))
+       (memref-int address :offset offset :index index))))
+   ((not physicalp)
+    (ecase type
+      (:lisp
+       (memref-int address :offset offset :index index :physicalp nil))
+      (:unsigned-byte8
+       (memref-int address :offset offset :index index :type :unsigned-byte8 :physicalp nil))
+      (:unsigned-byte16
+       (memref-int address :offset offset :index index :type :unsigned-byte16 :physicalp nil))
+      (:unsigned-byte32
+       (memref-int address :offset offset :index index :physicalp nil))))))
 
-(define-compiler-macro (setf memref-int) (&whole form &environment env value address offset index type
-					  &optional physicalp)
+(define-compiler-macro (setf memref-int)
+    (&whole form value address &key (offset 0) (index 0) (type :type) (physicalp t)
+     &environment env)
   (if (or (not (movitz:movitz-constantp type env))
 	  (not (movitz:movitz-constantp physicalp env)))
       (progn
@@ -977,20 +976,25 @@
 		    (:leal ((:eax ,movitz:+movitz-fixnum-factor+)) :eax)
 		    (:cld)))))))))))
 
-(defun (setf memref-int) (value address offset index type &optional physicalp)
+(defun (setf memref-int)
+    (value address &key (offset 0) (index 0) (type :unsigned-byte32) (physicalp t))
   (cond
-   ((not physicalp)
-    (ecase type
-      (:unsigned-byte8
-       (setf (memref-int address offset index :unsigned-byte8) value))
-      (:unsigned-byte16
-       (setf (memref-int address offset index :unsigned-byte16) value))))
    (physicalp
     (ecase type
       (:unsigned-byte8
-       (setf (memref-int address offset index :unsigned-byte8 t) value))
+       (setf (memref-int address :offset offset :index index :type :unsigned-byte8)
+	 value))
       (:unsigned-byte16
-       (setf (memref-int address offset index :unsigned-byte16 t) value))))))
+       (setf (memref-int address :offset offset :index index :type :unsigned-byte16)
+	 value))))
+   ((not physicalp)
+    (ecase type
+      (:unsigned-byte8
+       (setf (memref-int address :offset offset :index index :type :unsigned-byte8 :physicalp nil)
+	 value))
+      (:unsigned-byte16
+       (setf (memref-int address :offset offset :index index :type :unsigned-byte16 :physicalp nil)
+	 value))))))
 
 (defun memcopy (object-1 object-2 offset index-1 index-2 count type)
   (ecase type

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Dec 14 22:33:42 2003
 ;;;;                
-;;;; $Id: pci.lisp,v 1.3 2004/05/05 08:24:38 ffjeld Exp $
+;;;; $Id: pci.lisp,v 1.4 2004/11/14 22:58:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,12 +20,11 @@
 
 (defun find-bios32 ()
   (loop for bios32 from #xe0000 to #xffff0 by 16
-      if (and (= (memref-int bios32 0 0 :unsigned-byte16 t) #x335f)
-	      (= (memref-int bios32 0 1 :unsigned-byte16 t) #x5f32)
+      if (and (= (memref-int bios32) #x5f32335f)
 	      (loop with checksum = 0
-		  ;; initially (warn "PCI magic found at #x~X" bios32)
-		  as i from 0 below (* 16 (memref-int bios32 0 9 :unsigned-byte8 t))
+				    ;; initially (warn "PCI magic found at #x~X" bios32)
+		  as i from 0 below (* 16 (memref-int bios32 :offset 9 :type :unsigned-byte8))
 		  do (incf checksum
-			   (memref-int bios32 0 i :unsigned-byte8 t))
+			   (memref-int bios32 :offset i :type :unsigned-byte8))
 		  finally (return (= 0 (ldb (byte 8 0 ) checksum)))))
       return bios32))

@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  9 15:38:56 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: textmode.lisp,v 1.12 2004/09/23 11:05:51 ffjeld Exp $
+;;;; $Id: textmode.lisp,v 1.13 2004/11/14 22:58:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -95,10 +95,9 @@
 	 (when (>= x *screen-width*)
 	   (textmode-write-char #\newline)
 	   (setf x *cursor-x* y *cursor-y*))
-	 (let ((index (+ x (* y *screen-stride*))))
-	   (setf (memref-int *screen* 0 index :unsigned-byte16 t)
-	     (logior #x0700 (char-code c)))
-	   (move-vga-cursor (setf *cursor-x* (1+ x)) y)))))
+	 (setf (memref-int *screen* :index (+ x (* y *screen-stride*)) :type :unsigned-byte16)
+	   (logior #x0700 (char-code c)))
+	 (move-vga-cursor (setf *cursor-x* (1+ x)) y))))
   nil)
 
 (defun textmode-copy-line (destination source count)
@@ -137,19 +136,19 @@
 (defun textmode-clear-line (from-column line)
   (let ((dest (+ *screen* (* line *screen-width* 2) (* from-column 2))))
     (dotimes (i (- *screen-width* from-column))
-      (setf (memref-int dest 0 i :unsigned-byte16 t) #x0720))))
+      (setf (memref-int dest :index i :type :unsigned-byte16) #x0720))))
       
 (defun write-word (word)
   (let ((dest (+ *screen* (* *cursor-x* 2) (* *cursor-y* *screen-width* 2))))
-    (setf (memref-int dest 0 0 :unsigned-byte16 t) #x0723
-	  (memref-int dest 0 1 :unsigned-byte16 t) #x0778)
+    (setf (memref-int dest :index 0 :type :unsigned-byte16) #x0723
+	  (memref-int dest :index 1 :type :unsigned-byte16) #x0778)
     (write-word-lowlevel word (+ dest 4))
     (textmode-write-char #\newline)))
 
 (defun write-word-nl (word)
   (let ((dest (+ *screen* (* *cursor-x* 2) (* *cursor-y* 160))))
-    (setf (memref-int dest 0 0 :unsigned-byte16 t) #x0723
-	  (memref-int dest 0 1 :unsigned-byte16 t) #x0778)
+    (setf (memref-int dest :index 0 :type :unsigned-byte16) #x0723
+	  (memref-int dest :index 1 :type :unsigned-byte16) #x0778)
     (write-word-lowlevel word (+ dest 4))))
 
 (defun write-word-bottom (word)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 25 14:08:20 2001
 ;;;;                
-;;;; $Id: vga.lisp,v 1.5 2004/04/21 16:24:16 ffjeld Exp $
+;;;; $Id: vga.lisp,v 1.6 2004/11/14 22:58:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -314,7 +314,7 @@
 
 (defun vmemwr (dst-off src start end)
   (loop for i from start below end as dst upfrom dst-off
-      do (setf (memref-int (vga-memory-map) 0 dst :unsigned-byte8 t)
+      do (setf (memref-int (vga-memory-map) :index dst :type :unsigned-byte8)
 	   (aref src i)))
   (values))
 

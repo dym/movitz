@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.26 2004/11/12 20:55:49 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.27 2004/11/14 22:57:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -351,9 +351,17 @@
 #+ignore
 (defun test-lexthrow (x)
   (apply (lambda (a b)
-	   (if (plusp a) 0 (return-from test-lexthrow (+ a b))))
+	   (unwind-protect
+	       (if (plusp a) 0 (return-from test-lexthrow (+ a b)))
+	     (warn "To serve and protect!")))
 	 x))
 
+#+ignore
+(defun test-lexgo (x)
+  (let ((*print-base* 2))
+    (return-from test-lexgo (print 123))))
+
+#+ignore
 (defun test-xgo (c x)
   (tagbody
    loop
@@ -1241,10 +1249,10 @@ Can be used to measure the overhead of primitive function."
 			 (progn
 ;;;			   (unless (logbitp 9 (eflags))
 ;;;			     (break "Someone switched off interrupts!"))
-			   (incf (memref-int muerte.x86-pc::*screen* 0 0 :unsigned-byte16 t))
+			   (incf (memref-int muerte.x86-pc::*screen* :type :unsigned-byte16))
 			   (throw 'foo 'inner-peace))
-		       (incf (memref-int muerte.x86-pc::*screen* 0 80 :unsigned-byte16 t)))))
-	(incf (memref-int muerte.x86-pc::*screen* 0 160 :unsigned-byte16 t))))))
+		       (incf (memref-int muerte.x86-pc::*screen* :index 80 :type :unsigned-byte16)))))
+	(incf (memref-int muerte.x86-pc::*screen* :index 160 :type :unsigned-byte16))))))
 
 (defun mumbojumbo ()
   (with-inline-assembly (:returns :multiple-values)
@@ -1354,11 +1362,11 @@ Can be used to measure the overhead of primitive function."
 #+ignore
 (defun ztstring (physical-address)
   (let ((s (make-string (loop for i upfrom 0
-			    until (= 0 (memref-int physical-address 0 i :unsigned-byte8 t))
+			    until (= 0 (memref-int physical-address :index i :type :unsigned-byte8))
 			    finally (return i)))))
     (loop for i from 0 below (length s)
 	do (setf (char s i)
-	     (code-char (memref-int physical-address 0 i :unsigned-byte8 t))))
+	     (code-char (memref-int physical-address :index i :type :unsigned-byte8))))
     s))
 
 (defmacro do-default ((var &rest error-spec) &body init-forms)
@@ -1416,9 +1424,9 @@ Can be used to measure the overhead of primitive function."
 (defun general-protection-handler (vector dit-frame)
   (assert (= vector 13))
   (let ((eip (dit-frame-ref nil dit-frame :eip :unsigned-byte32)))
-    (assert (= #x26 (memref-int eip 0 0 :unsigned-byte8))) ; ES override prefix?
-    (let ((opcode (memref-int eip 1 0 :unsigned-byte8))
-	  (mod/rm (memref-int eip 2 0 :unsigned-byte8)))
+    (assert (= #x26 (memref-int eip :offset 0 :type :unsigned-byte8 :physicalp nil))) ; ES override prefix?
+    (let ((opcode (memref-int eip :offset 1 :type :unsigned-byte8 :physicalp nil))
+	  (mod/rm (memref-int eip :offset 2 :type :unsigned-byte8 :physicalp nil)))
       (if (not (= #x89 opcode))
 	  (interrupt-default-handler vector dit-frame)
 	(let ((value (ecase (ldb (byte 3 3) mod/rm)
@@ -1432,29 +1440,29 @@ Can be used to measure the overhead of primitive function."
 		(case (logand mod/rm #xc7)
 		  (#x40			; (:movl <value> (:eax <disp8>))
 		   (values (dit-frame-ref nil dit-frame :eax)
-			   (memref-int eip 3 0 :signed-byte8)))
+			   (memref-int eip :offset 3 :type :signed-byte8 :physicalp nil)))
 		  (#x43			; (:movl <value> (:ebx <disp8>))
 		   (values (dit-frame-ref nil dit-frame :ebx)
-			   (memref-int eip 3 0 :signed-byte8)))
+			   (memref-int eip :offset 3 :type :signed-byte8 :physicalp nil)))
 		  (#x44			; the disp8/SIB case
-		   (let ((sib (memref-int eip 3 0 :unsigned-byte8)))
+		   (let ((sib (memref-int eip :offset 3 :type :unsigned-byte8 :physicalp nil)))
 		     (case sib
 		       ((#x19 #x0b)
 			(values (dit-frame-ref nil dit-frame :ebx)
 				(+ (dit-frame-ref nil dit-frame :ecx :unsigned-byte8)
-				   (memref-int eip 4 0 :signed-byte8))))
+				   (memref-int eip :offset 4 :type :signed-byte8 :physicalp nil))))
 		       ((#x1a)
 			(values (dit-frame-ref nil dit-frame :ebx)
 				(+ (dit-frame-ref nil dit-frame :edx :unsigned-byte8)
-				   (memref-int eip 4 0 :signed-byte8))))))))
+				   (memref-int eip :offset 4 :type :signed-byte8 :physicalp nil))))))))
 	      (when (not object)
 		(setf (segment-register :es) (segment-register :ds))
 		(break "[~S] With value ~S, unknown movl at ~S: ~S ~S ~S ~S"
 		       dit-frame value eip
-		       (memref-int eip 1 0 :unsigned-byte8)
-		       (memref-int eip 2 0 :unsigned-byte8)
-		       (memref-int eip 3 0 :unsigned-byte8)
-		       (memref-int eip 4 0 :unsigned-byte8)))
+		       (memref-int eip :offset 1 :type :unsigned-byte8 :physicalp nil)
+		       (memref-int eip :offset 2 :type :unsigned-byte8 :physicalp nil)
+		       (memref-int eip :offset 3 :type :unsigned-byte8 :physicalp nil)
+		       (memref-int eip :offset 4 :type :unsigned-byte8 :physicalp nil)))
 	      (check-type object pointer)
 	      (check-type offset fixnum)
 	      (let ((write-barrier *write-barrier*)
