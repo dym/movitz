@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  9 15:38:56 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: textmode.lisp,v 1.3 2004/01/19 11:23:52 ffjeld Exp $
+;;;; $Id: textmode.lisp,v 1.4 2004/04/01 02:15:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -45,7 +45,7 @@
 (defun (setf cursor-row) (value &optional device)
   (declare (ignore device))
   (setf *cursor-y* value)
-  (move-vga-cursor *cursor-x* *cursor-y*)
+  (move-vga-cursor *cursor-x* value)
   value)
 
 (defun cursor-column (&optional device)
@@ -55,7 +55,7 @@
 (defun (setf cursor-column) (value &optional device)
   (declare (ignore device))
   (setf *cursor-x* value)
-  (move-vga-cursor *cursor-x* *cursor-y*)
+  (move-vga-cursor value *cursor-y*)
   value)
 
 (defun textmode-write-char (c)
@@ -80,9 +80,9 @@
 	 (cond
 	  ((= *screen-height* *cursor-y*)
 	   (textmode-scroll-down)
-	   (move-vga-cursor *cursor-x* *cursor-y*))
+	   (move-vga-cursor 0 *cursor-y*))
 	  (t (incf *cursor-y*)
-	     (move-vga-cursor *cursor-x* *cursor-y*))))
+	     (move-vga-cursor 0 *cursor-y*))))
 	(#\backspace
 	 (if (/= 0 *cursor-x*)
 	     (decf *cursor-x*)
@@ -92,18 +92,20 @@
 	 (move-vga-cursor *cursor-x* *cursor-y*))
 	(#\return
 	  (setf *cursor-x* 0)
-	  (move-vga-cursor *cursor-x* *cursor-y*))
+	  (move-vga-cursor 0 *cursor-y*))
 	(#\tab
 	 (textmode-write-char #\space)
 	 (do () ((zerop (rem *cursor-x* 8)))
 	   (textmode-write-char #\space)))
-	(t (when (>= *cursor-x* *screen-width*)
-	     (textmode-write-char #\newline))
-	   (let ((index (+ *cursor-x* (* *cursor-y* *screen-stride*))))
-	     (setf (memref-int *screen* 0 index :unsigned-byte16 t)
-	       (logior #x0700 (char-code c)))
-	     (incf *cursor-x*)
-	     (move-vga-cursor *cursor-x* *cursor-y*))))))
+	(t (let ((x *cursor-x*)
+		 (y *cursor-y*))
+	     (when (>= x *screen-width*)
+	       (textmode-write-char #\newline)
+	       (setf x *cursor-x* y *cursor-y*))
+	     (let ((index (+ x (* y *screen-stride*))))
+	       (setf (memref-int *screen* 0 index :unsigned-byte16 t)
+		 (logior #x0700 (char-code c)))
+	       (move-vga-cursor (setf *cursor-x* (1+ x)) y)))))))
   nil)
 
 (defun textmode-scroll-down ()
@@ -128,7 +130,6 @@
     (:subl 1 :ecx)
     (:jnz 'clear-loop)))
 
-  
 (defun textmode-clear-line (from-column line)
   (let ((dest (+ *screen* (* line 80 2) (* from-column 2))))
     (dotimes (i (- 80 from-column))
