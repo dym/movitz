@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.32 2004/11/24 16:24:16 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.33 2004/11/26 14:59:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1200,15 +1200,15 @@ Can be used to measure the overhead of primitive function."
 	  (error "Double interrupt.")))
       #+ignore
       (dolist (range muerte::%memory-map-roots%)
-	(map-heap-words (lambda (x type)
-			  (declare (ignore type))
+	(map-header-vals (lambda (x type)
+			   (declare (ignore type))
+			   x)
+			 (car range) (cdr range)))
+      (map-stack-vector (lambda (x foo)
+			  (declare (ignore foo))
 			  x)
-			(car range) (cdr range)))
-      (map-stack-words (lambda (x foo)
-			 (declare (ignore foo))
-			 x)
-		       nil
-		       (current-stack-frame))
+			nil
+			(current-stack-frame))
       (with-inline-assembly (:returns :nothing)
 	(:compile-form (:result-mode :ecx) muerte.x86-pc::*screen*)
 	(:shrl 2 :ecx)
@@ -1305,7 +1305,7 @@ Can be used to measure the overhead of primitive function."
     (idt-init)
     #+ignore
     (install-los0-consing :kb-size 500)
-    (install-los0-consing :kb-size (max 100 (truncate (- extended-memsize 1024 2048) 2))))
+    (install-los0-consing :kb-size (max 100 (truncate (- extended-memsize 2048) 2))))
 
   (setf *debugger-function* #'los0-debugger)
   (clos-bootstrap)
