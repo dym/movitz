@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.10 2004/06/10 13:51:24 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.11 2004/06/10 16:28:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1586,6 +1586,8 @@ quick-sort with cut-off greater than 1."
      (if (not initial-element-p)
 	 (make-string size)
        (make-string size :initial-element initial-element)))
+    (vector
+     (make-array size :initial-element initial-element))
     (list
      (make-list size :initial-element initial-element))))
 
@@ -1600,10 +1602,11 @@ quick-sort with cut-off greater than 1."
     (copy-seq (first sequences)))
    ((= 0 (length (first sequences)))
     (apply #'concatenate result-type (cdr sequences)))
-   ((eq result-type 'vector)
-    (let* ((r (make-array (let ((length 0))
-			    (dolist (s sequences length)
-			      (incf length (length s))))))
+   ((member result-type '(vector string))
+    (let* ((r (make-sequence result-type
+			     (let ((length 0))
+			       (dolist (s sequences length)
+				 (incf length (length s))))))
 	   (i 0))
       (dolist (s sequences)
 	(replace r s :start1 i)
