@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.18 2004/04/07 00:21:28 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.19 2004/04/13 13:07:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1243,33 +1243,41 @@ on the current result."
 		   :forward all)
 	  finally (error "No compiler-typecase clause matched compile-time type ~S." keyform-type)))))
 
-(define-special-operator muerte::exact-throw (&all all-throw &form form)
+(define-special-operator muerte::exact-throw (&all all-throw &form form &env env &funobj funobj)
   (destructuring-bind (tag context value-form)
       (cdr form)
-    (with-labels (throw (save-tag-variable save-context-var tag-not-found-label))
-      (compiler-values ()
-	:returns :non-local-exit
-	:code (append (compiler-call #'compile-form
-			:forward all-throw
-			:result-mode :multiple-values
-			:form `(muerte.cl:let ((,save-tag-variable ,tag)
-					     (,save-context-var ,context))
-				 (muerte.cl:multiple-value-prog1
-				     ,value-form
-				   (muerte::with-inline-assembly (:returns :nothing)
-				     (:compile-form (:result-mode :eax) ,save-tag-variable)
-				     (:compile-form (:result-mode :ebx) ,save-context-var)
-				     (:globally (:call (:edi (:edi-offset dynamic-locate-catch-tag))))
-				     (:jnc '(:sub-program (,tag-not-found-label) (:int 108)))
-				     (:movl :eax :ebp))))) ; save dynamic-slot in EBP
-		      ;; now outside of m-v-prog1's cloak, with final dynamic-slot in ESP..
-		      ;; ..unwind it and transfer control.
-		      `((:movl :ebp :esp)
-			(:popl :ebp)
-			(:movl (:ebp -4) :esi)
-			(:leal (:esp 8) :esp) ; skip tag and eip
-			(:locally (:popl (:edi (:edi-offset dynamic-env)))) ; unwind dynamic env
-			(:jmp (:esp -8))))))))
+    (let* ((local-env (make-local-movitz-environment env funobj :type 'let-env))
+	   (dynamic-slot-binding (movitz-env-add-binding local-env
+							 (make-instance 'located-binding
+							   :name (gensym "dynamic-slot-")))))
+      (with-labels (throw (save-tag-var save-context-var))
+	(compiler-values ()
+	  :returns :non-local-exit
+	  :code (append (compiler-call #'compile-form
+			  :forward all-throw
+			  :result-mode :multiple-values
+			  :form `(muerte.cl:let ((,save-tag-var ,tag)
+						 (,save-context-var ,context))
+				   (muerte.cl:multiple-value-prog1
+				       ,value-form
+				     (muerte::with-inline-assembly (:returns :nothing)
+				       (:compile-two-forms (:eax :ebx) ,save-tag-var ,save-context-var)
+				       (:globally (:call (:edi (:edi-offset dynamic-locate-catch-tag))))
+				       (:jnc '(:sub-program () (:int 108)))
+				       (:store-lexical ,dynamic-slot-binding :eax :type t)
+				       )))) ; save dynamic-slot in EBP
+			;; now outside of m-v-prog1's cloak, with final dynamic-slot in ESP..
+			;; ..unwind it and transfer control.
+			`((:load-lexical ,dynamic-slot-binding :ebp)
+			  (:leave)
+			  (:movl (:ebp -4) :esi)
+			  (:movl (:esp 4) :edx)
+			  ;; (:halt)
+			  (:jmp (:esi :edx ,(slot-offset 'movitz-funobj 'constant0))))))))))
+
+;;;			(:leal (:esp 8) :esp) ; skip tag and eip
+;;;			(:locally (:popl (:edi (:edi-offset dynamic-env)))) ; unwind dynamic env
+;;;			(:jmp (:esp -8))))))))
 
 (define-special-operator muerte::with-basic-restart (&all defaults &form form &env env)
   (destructuring-bind ((name function interactive test format-control
@@ -1278,16 +1286,28 @@ on the current result."
       (cdr form)
     (check-type name symbol "a restart name")
     (let* ((entry-size (+ 10 (* 2 (length format-arguments)))))
-      (with-labels (basic-restart-catch (exit-point-offset exit-point))
+      (with-labels (basic-restart-catch (label-set exit-point))
 	(compiler-values ()
 	  :returns :multiple-values
-	  :code	(append `((:locally (:pushl (:edi (:edi-offset dynamic-env))))
-			  (:call (:pc+ 0))
-			  ,exit-point-offset
-			  (:addl '(:funcall - ',exit-point ',exit-point-offset) (:esp))
-			  (:globally (:pushl (:edi (:edi-offset restart-tag))))
-			  (:pushl :ebp)
-			  (:load-constant ,name :push))
+;;; Basic-restart entry:
+;;;   12: parent
+;;;    8: jumper index (=> eip)
+;;;    4: tag = #:basic-restart-tag
+;;;    0: ebp/stack-frame
+;;;   -4: name
+;;;   -8: function
+;;;  -12: interactive function
+;;;  -16: test
+;;;  -20: format-control
+;;;  -24: (on-stack) list of format-arguments
+;;;  -28: cdr
+;;;  -32: car ...
+	  :code	(append `((:locally (:pushl (:edi (:edi-offset dynamic-env)))) ; parent
+			  (:declare-label-set ,label-set (,exit-point))
+			  (:pushl ',label-set) ; jumper index
+			  (:globally (:pushl (:edi (:edi-offset restart-tag)))) ; tag
+			  (:pushl :ebp)	; ebp
+			  (:load-constant ,name :push)) ; name
 			(compiler-call #'compile-form
 			  :defaults defaults
 			  :form function
@@ -1333,6 +1353,8 @@ on the current result."
 			  :result-mode :multiple-values
 			  :with-stack-used entry-size
 			  :form body)
-			`((:leal (:esp ,(+ -4 (* 4 entry-size))) :esp)
+			`((:leal (:esp ,(+ -12 (* 4 entry-size))) :esp)
+			  ,exit-point
+			  (:leal (:esp ,(+ -8 16)) :esp)
 			  (:locally (:popl (:edi (:edi-offset dynamic-env))))
-			  ,exit-point)))))))
+			  )))))))

@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.14 2004/03/30 21:33:54 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.15 2004/04/13 13:07:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -713,7 +713,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			    (:jmp (:esi :ecx ,(+ (slot-offset 'movitz-funobj 'constant0)
 						 (* 4 label-id)))))))))))) ; transfer control, finally.
 
-(define-special-operator block (&all forward &funobj funobj &form form &env env &result-mode result-mode)
+(define-special-operator block (&all forward &funobj funobj &form form &env env
+				     &result-mode result-mode)
   (destructuring-bind (block-name &body body)
       (cdr form)
     (let* ((exit-block-label (gensym (format nil "exit-block-~A-" block-name)))
@@ -1140,27 +1141,26 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	    :type '(values &rest t)
 	    :code code))))))
 
-(defun make-compiled-catch-wrapper (tag-form funobj env body-returns body-code &optional exit-point-pusher)
+(defun make-compiled-catch-wrapper (tag-form funobj env body-returns body-code)
   (assert (member body-returns '(:multiple-values :non-local-exit)))
   (values 4				; stack-used, must be added to body-code's env.
-	  (with-labels (catch (exit-point-offset exit-point))
-	    (append (or exit-point-pusher
-			`((:locally (:pushl (:edi (:edi-offset dynamic-env))))
-			  (:call (:pc+ 0)) ; push EIP
-			  ,exit-point-offset
-			  (:addl '(:funcall - ',exit-point ',exit-point-offset) (:esp))))
+	  (with-labels (catch (label-set exit-point))
+	    (append `((:declare-label-set ,label-set (,exit-point))
+		      (:locally (:pushl (:edi (:edi-offset dynamic-env)))) ; push dynamic-env
+		      (:pushl ',label-set))
 		    (compiler-call #'compile-form
 		      :env env
-		      ;; :with-stack-used 2
+		      :with-stack-used 2
 		      :funobj funobj
 		      :form tag-form
 		      :result-mode :push)
 		    `((:pushl :ebp)	; push stack frame
 		      (:locally (:movl :esp (:edi (:edi-offset dynamic-env))))) ; install catch
 		    body-code
-		    `((:leal (:esp ,(+ -4 16)) :esp)
-		      (:locally (:popl (:edi (:edi-offset dynamic-env)))))
-		    `(,exit-point)))))
+		    `((:popl :ebp)	; This value is identical to current EBP.
+		      ,exit-point
+		      (:leal (:esp ,(+ -8 16)) :esp)
+		      (:locally (:popl (:edi (:edi-offset dynamic-env)))))))))
 
 (define-special-operator unwind-protect (&all all &form form &env env)
   (destructuring-bind (protected-form &body cleanup-forms)
