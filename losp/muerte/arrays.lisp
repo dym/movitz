@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.19 2004/05/20 17:41:46 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.20 2004/05/21 09:41:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -186,69 +186,72 @@
 (defun aref (vector &rest subscripts)
   (numargs-case
    (2 (vector index)
-      (with-inline-assembly (:returns :eax)
-	(:compile-form (:result-mode :eax) vector)
-	(:compile-form (:result-mode :ebx) index)
-	(:leal (:eax #.(cl:- (movitz::tag :other))) :ecx)
-	(:testb #.movitz::+movitz-fixnum-zmask+ :bl)
-	(:jnz '(:sub-program (not-fixnum) (:int 107))) ; index not fixnum
-	(:andl #.(cl:ash #x000ffff movitz::+movitz-fixnum-shift+) :ebx)
+      (macrolet
+	  ((do-it ()
+	     `(with-inline-assembly (:returns :eax)
+		(:compile-form (:result-mode :eax) vector)
+		(:compile-form (:result-mode :ebx) index)
+		(:leal (:eax ,(- (movitz:tag :other))) :ecx)
+		(:testb ,movitz::+movitz-fixnum-zmask+ :bl)
+		(:jnz '(:sub-program (not-fixnum) (:int 107))) ; index not fixnum
+		(:andl ,(ash #x000ffff movitz:+movitz-fixnum-shift+) :ebx)
 
-	(:testb 7 :cl)
-	(:jnz '(:sub-program ()
-		(:compile-form (:result-mode :ignore)
-		 (error "Not a vector: ~S" vector))))
+		(:testb 7 :cl)
+		(:jnz '(:sub-program ()
+			(:compile-form (:result-mode :ignore)
+			 (error "Not a vector: ~S" vector))))
 		
-	(:shrl #.movitz::+movitz-fixnum-shift+ :ebx)
-	(:movzxw (:eax -2) :ecx)
+		(:shrl ,movitz:+movitz-fixnum-shift+ :ebx)
+		(:movzxw (:eax ,movitz:+other-type-offset+) :ecx)
 
-	(:cmpw (:eax #.(bt:slot-offset 'movitz:movitz-vector 'movitz::num-elements)) :bx)
-	(:jae '(:sub-program ()
+		(:cmpw (:eax #.(bt:slot-offset 'movitz:movitz-vector 'movitz::num-elements)) :bx)
+		(:jae '(:sub-program ()
+			(:compile-form (:result-mode :ignore)
+			 (error "Index ~D out of bounds ~D." index (length vector)))))
+
+		(:cmpl #.(movitz:vector-type-tag :any-t) :ecx)
+		(:jne 'not-any-t)
+		(:movl (:eax (:ebx 4) 2) :eax)
+		(:jmp 'done)
+
+	       not-any-t
+		(:cmpl #.(movitz:vector-type-tag :character) :ecx)
+		(:jne 'not-character)
+		(:movb (:eax :ebx 2) :bl)
+		(:xorl :eax :eax)
+		(:movb :bl :ah)
+		(:movb #.(movitz::tag :character) :al) ; character
+		(:jmp 'done)
+    
+	       not-character
+		(:cmpl #.(movitz:vector-type-tag :u8) :ecx)
+		(:jne 'not-u8)
+		(:movzxb (:eax :ebx 2) :eax) ; u8
+		(:shll #.movitz::+movitz-fixnum-shift+ :eax)
+		(:jmp 'done)
+    
+	       not-u8
+		(:cmpl #.(movitz:vector-type-tag :u16) :ecx)
+		(:jne 'not-u16)
+		(:movzxw (:eax (:ebx 2) 2) :eax) ; u16
+		(:jmp 'done)
+
+	       not-u16
+		(:cmpl ,(movitz:vector-type-tag :u32) :ecx)
+		(:jne 'not-u32)
+		(:movl (:eax (:ebx 4) 2) :ecx) ; u32
+		(:cmpl ,movitz:+movitz-most-positive-fixnum+ :ecx)
+		(:jg '(:sub-program (:overflowing-u32)
+		       (:int 107)))
+		(:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
+		(:jmp 'done)
+
+	       not-u32
 		(:compile-form (:result-mode :ignore)
-		 (error "Index ~D out of bounds ~D." index (length vector)))))
+			       (error "Not a vector: ~S" vector))
 
-	(:cmpl #.(movitz:vector-type-tag :any-t) :ecx)
-	(:jne 'not-any-t)
-	(:movl (:eax (:ebx 4) 2) :eax)
-	(:jmp 'done)
-
-       not-any-t
-	(:cmpl #.(movitz:vector-type-tag :character) :ecx)
-	(:jne 'not-character)
-	(:movb (:eax :ebx 2) :bl)
-	(:xorl :eax :eax)
-	(:movb :bl :ah)
-	(:movb #.(movitz::tag :character) :al) ; character
-	(:jmp 'done)
-    
-       not-character
-	(:cmpl #.(movitz:vector-type-tag :u8) :ecx)
-	(:jne 'not-u8)
-	(:movzxb (:eax :ebx 2) :eax)	; u8
-	(:shll #.movitz::+movitz-fixnum-shift+ :eax)
-	(:jmp 'done)
-    
-       not-u8
-	(:cmpl #.(movitz:vector-type-tag :u16) :ecx)
-	(:jne 'not-u16)
-	(:movzxw (:eax (:ebx 2) 2) :eax) ; u16
-	(:jmp 'done)
-
-       not-u16
-	(:cmpl #.(movitz:vector-type-tag :u32) :ecx)
-	(:jne 'not-u32)
-	(:movl (:eax (:ebx 4) 2) :ecx)	; u32
-	(:cmpl #.movitz::+movitz-most-positive-fixnum+ :ecx)
-	(:jg '(:sub-program (:overflowing-u32)
-	       (:int 107)))
-	(:leal ((:ecx #.movitz::+movitz-fixnum-factor+)) :eax)
-	(:jmp 'done)
-
-       not-u32
-	(:compile-form (:result-mode :ignore)
-		       (error "Not a vector: ~S" vector))
-
-       done))
+	       done)))
+	(do-it)))
    (t (vector &rest subscripts)
       (declare (ignore vector subscripts))
       (error "Multi-dimensional arrays not implemented."))))
@@ -256,82 +259,85 @@
 (defun (setf aref) (value vector &rest subscripts)
   (numargs-case
    (3 (value vector index)
-      (with-inline-assembly (:returns :ebx)
-	(:compile-form (:result-mode :ebx) value)
-	(:compile-form (:result-mode :eax) vector)
+      (macrolet
+	  ((do-it ()
+	     `(with-inline-assembly (:returns :ebx)
+		(:compile-form (:result-mode :ebx) value)
+		(:compile-form (:result-mode :eax) vector)
 
-	(:leal (:eax #.(cl:- (movitz::tag :other))) :ecx)
-	(:testb 7 :cl)
-	(:jnz '(:sub-program ()
-		(:compile-form (:result-mode :ignore)
-		 (error "Not a vector: ~S" vector))))
-	(:movzxw (:eax -2) :edx)
+		(:leal (:eax #.(cl:- (movitz::tag :other))) :ecx)
+		(:testb 7 :cl)
+		(:jnz '(:sub-program ()
+			(:compile-form (:result-mode :ignore)
+			 (error "Not a vector: ~S" vector))))
+		(:movzxw (:eax ,movitz:+other-type-offset+) :edx)
     
-	(:compile-form (:result-mode :ecx) index)
-	(:testb #.movitz::+movitz-fixnum-zmask+ :cl)
-	(:jnz '(:sub-program () (:int 107))) ; index not fixnum
-	(:andl #.(cl:ash #xffff movitz::+movitz-fixnum-shift+) :ecx)
-	(:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
+		(:compile-form (:result-mode :ecx) index)
+		(:testb #.movitz::+movitz-fixnum-zmask+ :cl)
+		(:jnz '(:sub-program () (:int 107))) ; index not fixnum
+		(:andl #.(cl:ash #xffff movitz::+movitz-fixnum-shift+) :ecx)
+		(:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
 
-	(:cmpw (:eax #.(bt:slot-offset 'movitz:movitz-vector 'movitz::num-elements)) :cx)
-	(:jae '(:sub-program () (:int 61) (:jmp (:pc+ -4)))) ; index out of bounds
+		(:cmpw (:eax #.(bt:slot-offset 'movitz:movitz-vector 'movitz::num-elements)) :cx)
+		(:jae '(:sub-program () (:int 61) (:jmp (:pc+ -4)))) ; index out of bounds
 
-	(:cmpl #.(movitz:vector-type-tag :any-t) :edx)
-	(:jnz 'not-any-t)
+		(:cmpl #.(movitz:vector-type-tag :any-t) :edx)
+		(:jnz 'not-any-t)
 
-	(:movl :ebx (:eax (:ecx 4) 2))
-	(:jmp 'done)
+		(:movl :ebx (:eax (:ecx 4) 2))
+		(:jmp 'done)
 
-       not-any-t
-	(:cmpl #.(movitz:vector-type-tag :character) :edx)
-	(:jnz 'not-character)
-	(:cmpb #.(movitz:tag :character) :bl)
-	(:jnz '(:sub-program (not-character-value)
-		(:compile-form (:result-mode :ignore)
-		 (error "Value not character: ~S" value))))
-	(:movb :bh (:eax :ecx 2))
-	(:jmp 'done)
+	       not-any-t
+		(:cmpl #.(movitz:vector-type-tag :character) :edx)
+		(:jnz 'not-character)
+		(:cmpb #.(movitz:tag :character) :bl)
+		(:jnz '(:sub-program (not-character-value)
+			(:compile-form (:result-mode :ignore)
+			 (error "Value not character: ~S" value))))
+		(:movb :bh (:eax :ecx 2))
+		(:jmp 'done)
     
-       not-character
-	(:cmpl #.(movitz:vector-type-tag :u8) :edx)
-	(:jnz 'not-u8)
-	(:testl #.(cl:ldb (cl:byte 32 0) (cl:- -1 (cl:* #xff movitz:+movitz-fixnum-factor+))) :ebx)
-	(:jnz '(:sub-program (not-u8-value)
-		(:compile-form (:result-mode :ignore)
-		 (error "Value not (unsigned-byte 8): ~S" value))))
-	(:shrl #.movitz:+movitz-fixnum-shift+ :ebx)
-	(:movb :bl (:eax (:ecx 1) #.(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
-	(:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :ebx)
-	(:jmp 'done)
+	       not-character
+		(:cmpl #.(movitz:vector-type-tag :u8) :edx)
+		(:jnz 'not-u8)
+		(:testl #.(cl:ldb (cl:byte 32 0) (cl:- -1 (cl:* #xff movitz:+movitz-fixnum-factor+))) :ebx)
+		(:jnz '(:sub-program (not-u8-value)
+			(:compile-form (:result-mode :ignore)
+			 (error "Value not (unsigned-byte 8): ~S" value))))
+		(:shrl #.movitz:+movitz-fixnum-shift+ :ebx)
+		(:movb :bl (:eax (:ecx 1) #.(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
+		(:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :ebx)
+		(:jmp 'done)
     
     
-       not-u8
-	(:cmpl #.(movitz:vector-type-tag :u16) :edx)
-	(:jnz 'not-u16)
-	(:testl #.(cl:ldb (cl:byte 32 0) (cl:- -1 (cl:* #xffff movitz:+movitz-fixnum-factor+))) :ebx)
-	(:jnz '(:sub-program (not-u16-value)
-		(:compile-form (:result-mode :ignore)
-		 (error "Value not (unsigned-byte 16): ~S" value))))
-	(:shrl #.movitz:+movitz-fixnum-shift+ :ebx)
-	(:movw :bx (:eax (:ecx 2) #.(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
-	(:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :ebx)
-	(:jmp 'done)
+	       not-u8
+		(:cmpl #.(movitz:vector-type-tag :u16) :edx)
+		(:jnz 'not-u16)
+		(:testl #.(cl:ldb (cl:byte 32 0) (cl:- -1 (cl:* #xffff movitz:+movitz-fixnum-factor+))) :ebx)
+		(:jnz '(:sub-program (not-u16-value)
+			(:compile-form (:result-mode :ignore)
+			 (error "Value not (unsigned-byte 16): ~S" value))))
+		(:shrl #.movitz:+movitz-fixnum-shift+ :ebx)
+		(:movw :bx (:eax (:ecx 2) #.(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
+		(:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :ebx)
+		(:jmp 'done)
 
-       not-u16
-	(:cmpl #.(movitz:vector-type-tag :u32) :edx)
-	(:jnz 'not-u32)
-	(:testl #.(cl:ldb (cl:byte 32 0) (cl:- -1 (cl:* #xffffffff movitz:+movitz-fixnum-factor+))) :ebx)
-	(:jnz '(:sub-program (not-u32-value)
-		(:compile-form (:result-mode :ignore)
-		 (error "Value not (unsigned-byte 32): ~S" value))))
-	(:shrl #.movitz:+movitz-fixnum-shift+ :ebx)
-       	(:movl :ebx (:eax (:ecx 4) #.(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
-	(:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :ebx)
-	(:jmp 'done)
+	       not-u16
+		(:cmpl #.(movitz:vector-type-tag :u32) :edx)
+		(:jnz 'not-u32)
+		(:testl #.(cl:ldb (cl:byte 32 0) (cl:- -1 (cl:* #xffffffff movitz:+movitz-fixnum-factor+))) :ebx)
+		(:jnz '(:sub-program (not-u32-value)
+			(:compile-form (:result-mode :ignore)
+			 (error "Value not (unsigned-byte 32): ~S" value))))
+		(:shrl #.movitz:+movitz-fixnum-shift+ :ebx)
+		(:movl :ebx (:eax (:ecx 4) #.(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
+		(:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :ebx)
+		(:jmp 'done)
 
-       not-u32
-	(:compile-form (:result-mode :ignore) (error "Not a vector: ~S" vector))
-       done))
+	       not-u32
+		(:compile-form (:result-mode :ignore) (error "Not a vector: ~S" vector))
+	       done)))
+	(do-it)))
    (t (value vector &rest subscripts)
       (declare (ignore value vector subscripts))
       (error "Multi-dimensional arrays not implemented."))))

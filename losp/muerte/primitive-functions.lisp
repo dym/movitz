@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.16 2004/04/21 15:08:36 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.17 2004/05/21 09:41:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -576,7 +576,7 @@ Returns list in EAX and preserves numargs in ECX."
 (define-primitive-function fast-class-of-other ()
   "Return the class of an other object."
   (with-inline-assembly (:returns :multiple-values)
-    (:movl (:eax -2) :ecx)
+    (:movl (:eax #.movitz:+other-type-offset+) :ecx)
     (:cmpb #.(movitz::tag :std-instance) :cl)
     (:jne 'not-std-instance)
     (:movl (:eax #.(bt:slot-offset 'movitz::movitz-std-instance 'movitz::class)) :eax)

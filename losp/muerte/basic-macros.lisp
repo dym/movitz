@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.18 2004/05/20 17:43:46 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.19 2004/05/21 09:40:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -522,9 +522,10 @@
      (:globally (:call (:edi (:edi-offset malloc))))
      (:addl ,(if (integerp tag) tag (movitz::tag tag)) :eax)
      ,@(when (and (eq tag :other) other-tag (not wide-other-tag))
-	 `((:movb ,(movitz::tag other-tag) (:eax -2))))
+	 `((:movb ,(movitz::tag other-tag) (:eax ,movitz:+other-type-offset+))))
      ,@(when (and (eq tag :other) other-tag wide-other-tag)
-	 `((:movw ,(dpb wide-other-tag (byte 8 8) (movitz::tag other-tag)) (:eax -2))))))
+	 `((:movw ,(dpb wide-other-tag (byte 8 8) (movitz:tag other-tag))
+		  (:eax ,movitz:+other-type-offset+))))))
 
 (defmacro check-type (place type &optional type-string)
   (if (not (stringp type-string))
@@ -693,7 +694,7 @@
        (:cmpb 7 :cl)
        (:jne '(:sub-program (not-funobj)
 	       (:int 69)))
-       (:cmpb ,(movitz::tag :funobj) (:edx -2))
+       (:cmpb ,(movitz:tag :funobj) (:edx ,movitz:+other-type-offset+))
        (:jne 'not-funobj)
        (:movl :edx :esi)
       funobj-ok
@@ -743,7 +744,7 @@
 	    (:testb 7 :cl)
 	    (:jne '(:sub-program (not-funobj)
 		    (:int 69)))
-	    (:cmpb ,(movitz::tag :funobj) (:edx -2))
+	    (:cmpb ,(movitz::tag :funobj) (:edx ,movitz:+other-type-offset+))
 	    (:jne 'not-funobj)
 	    (:movl :edx :esi)
 	   funobj-ok
@@ -765,7 +766,7 @@
 	   (:cmpb 7 :cl)
 	   (:jnz '(:sub-program (not-funobj)
 		   (:int 69)))
-	   (:cmpb ,(movitz::tag :funobj) (:edx -2))
+	   (:cmpb ,(movitz::tag :funobj) (:edx ,movitz:+other-type-offset+))
 	   (:jne 'not-funobj)
 	   (:movl :edx :esi)
 	  funobj-ok
@@ -787,7 +788,7 @@
 	   (:cmpb 7 :cl)
 	   (:jnz '(:sub-program (not-funobj)
 		   (:int 69)))
-	   (:cmpb ,(movitz::tag :funobj) (:edx -2))
+	   (:cmpb ,(movitz::tag :funobj) (:edx ,movitz:+other-type-offset+))
 	   (:jne 'not-funobj)
 	   (:movl :edx :esi)
 	  funobj-ok

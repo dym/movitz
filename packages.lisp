@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.21 2004/04/21 16:00:25 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.22 2004/05/21 09:39:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1284,6 +1284,7 @@
 	   #:dump-image
 
 	   #:other-type-byte
+	   #:+other-type-offset+
 	   #:parse-docstring-and-declarations
 	   #:global-constant-offset
 	   #:tag #:tag-name

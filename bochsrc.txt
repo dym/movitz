@@ -36,5 +36,5 @@ ne2k: ioaddr=0x300, irq=3, mac=00:40:05:18:66:d9, ethmod=fbsd, ethdev=xl0
 error: action=report
 # debug: action=report
 
-ips: 3000000
+ips: 2000000
 # com1: dev=/dev/ptypv

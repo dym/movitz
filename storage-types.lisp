@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.16 2004/04/21 16:22:56 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.17 2004/05/21 09:39:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -83,7 +83,6 @@
 
 (defconstant +fixnum-tags+ '(:even-fixnum :odd-fixnum))
 (defparameter +scan-skip-word+ #x00000003)
-
 
 (defun tag (type)
   (bt:enum-value 'other-type-byte type))
@@ -165,12 +164,14 @@
 ;;; Fixnums
 
 (eval-when (:compile-toplevel :execute :load-toplevel)
-(defconstant +movitz-fixnum-bits+ 30)
-(defconstant +movitz-fixnum-shift+ (- 32 +movitz-fixnum-bits+))
-(defconstant +movitz-fixnum-factor+ (expt 2 +movitz-fixnum-shift+))
-(defconstant +movitz-fixnum-zmask+ (1- +movitz-fixnum-factor+))
-(defconstant +movitz-most-positive-fixnum+ (1- (expt 2 (1- +movitz-fixnum-bits+))))
-(defconstant +movitz-most-negative-fixnum+ (- (expt 2 (1- +movitz-fixnum-bits+)))))
+  (defconstant +movitz-fixnum-bits+ 30)
+  (defconstant +movitz-fixnum-shift+ (- 32 +movitz-fixnum-bits+))
+  (defconstant +movitz-fixnum-factor+ (expt 2 +movitz-fixnum-shift+))
+  (defconstant +movitz-fixnum-zmask+ (1- +movitz-fixnum-factor+))
+  (defconstant +movitz-most-positive-fixnum+ (1- (expt 2 (1- +movitz-fixnum-bits+))))
+  (defconstant +movitz-most-negative-fixnum+ (- (expt 2 (1- +movitz-fixnum-bits+))))
+
+  (defparameter +other-type-offset+ -6))
 
 (defun fixnum-integer (word)
   "For a Movitz word, that must be a fixnum, return the corresponding
@@ -325,24 +326,7 @@ integer (native lisp) value."
 ;;; movitz-vectors
 
 (define-binary-class movitz-vector (movitz-heap-object-other)
-  ((flags
-    :accessor movitz-vector-flags
-    :initarg :flags
-    :initform nil
-    :binary-type (define-bitfield movitz-vector-flags (u8)
-		   (((:bits) :fill-pointer-p 2
-			     :code-vector-p 3
-			     :std-instance-slots-p 4))))
-   (alignment-power
-    :binary-lisp-type u8		; align to 2^(high-nibble+3) + low-nibble
-    :initform 0
-    :initarg :alignment-power
-    :reader movitz-vector-alignment-power)
-   (num-elements
-    :binary-type lu16
-    :initarg :num-elements
-    :reader movitz-vector-num-elements)
-   (type
+  ((type
     :binary-type other-type-byte
     :reader movitz-vector-type
     :initform :vector)
@@ -360,43 +344,60 @@ integer (native lisp) value."
     :binary-type lu16
     :initarg :fill-pointer
     :accessor movitz-vector-fill-pointer)
+   (flags
+    :accessor movitz-vector-flags
+    :initarg :flags
+    :initform nil
+    :binary-type (define-bitfield movitz-vector-flags (u8)
+		   (((:bits) :fill-pointer-p 2
+			     :code-vector-p 3
+			     :std-instance-slots-p 4))))
+   (alignment-power
+    :binary-lisp-type u8		; align to 2^(high-nibble+3) + low-nibble
+    :initform 0
+    :initarg :alignment-power
+    :reader movitz-vector-alignment-power)
+   (num-elements
+    :binary-type lu16
+    :initarg :num-elements
+    :reader movitz-vector-num-elements)
    (data
     :binary-lisp-type :label)		; data follows physically here
    (symbolic-data
     :initarg :symbolic-data
     :accessor movitz-vector-symbolic-data))
-  (:slot-align type -2))
+  (:slot-align type #.+other-type-offset+))
 
 (defun vector-type-tag (element-type)
   (dpb (enum-value 'movitz-vector-element-type element-type)
        (byte 8 8)
        (enum-value 'other-type-byte :vector)))
 
-(define-binary-class movitz-new-vector (movitz-heap-object-other)
-  ((length
-    :binary-type u32
-    :initarg :length
-    :accessor movitz-simple-vector-length)
-   (type
-    :binary-type other-type-byte
-    :reader movitz-vector-type)
-   #+ignore
-   (element-type
-    :binary-type (define-enum movitz-vector-element-type (u8)
-		   :any-t 0
-		   :character 1
-		   :u8 2
-		   :u16 3
-		   :u32 4
-		   :bit 5)
-    :initarg :element-type
-    :reader movitz-vector-element-type)
-   (data
-    :binary-lisp-type :label)
-   (symbolic-data
-    :initarg :symbolic-data
-    :accessor movitz-vector-symbolic-data))
-  (:slot-align type -2))
+;;;(define-binary-class movitz-new-vector (movitz-heap-object-other)
+;;;  ((length
+;;;    :binary-type u32
+;;;    :initarg :length
+;;;    :accessor movitz-simple-vector-length)
+;;;   (type
+;;;    :binary-type other-type-byte
+;;;    :reader movitz-vector-type)
+;;;   #+ignore
+;;;   (element-type
+;;;    :binary-type (define-enum movitz-vector-element-type (u8)
+;;;		   :any-t 0
+;;;		   :character 1
+;;;		   :u8 2
+;;;		   :u16 3
+;;;		   :u32 4
+;;;		   :bit 5)
+;;;    :initarg :element-type
+;;;    :reader movitz-vector-element-type)
+;;;   (data
+;;;    :binary-lisp-type :label)
+;;;   (symbolic-data
+;;;    :initarg :symbolic-data
+;;;    :accessor movitz-vector-symbolic-data))
+;;;  (:slot-align type #.+other-type-offset+))
 
 (defun movitz-type-word-size (type)
   (truncate (sizeof (intern (symbol-name type) :movitz)) 4))
@@ -745,14 +746,7 @@ integer (native lisp) value."
 ;;; Compiled funobj
 
 (define-binary-class movitz-funobj (movitz-heap-object-other)
-  ((code-vector
-    :binary-type code-vector-word
-    :initform 'muerte::no-code-vector
-    :initarg :code-vector
-    :map-binary-write 'movitz-intern-code-vector
-    :map-binary-read-delayed 'movitz-word-code-vector
-    :accessor movitz-funobj-code-vector)
-   (type
+  ((type
     :binary-type other-type-byte
     :initform :funobj)
    (funobj-type
@@ -767,6 +761,13 @@ integer (native lisp) value."
     ;; Bit    5: The code-vector's uses-stack-frame-p.
     :binary-type 'lu16
     :initform 0)
+   (code-vector
+    :binary-type code-vector-word
+    :initform 'muerte::no-code-vector
+    :initarg :code-vector
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :accessor movitz-funobj-code-vector)
    (code-vector%1op
     :binary-type code-pointer
     :initform 'muerte::trampoline-funcall%1op
@@ -858,7 +859,7 @@ integer (native lisp) value."
     :initform :default
     :initarg :entry-protocol
     :reader funobj-entry-protocol))
-  (:slot-align type -2))
+  (:slot-align type #.+other-type-offset+))
 
 (defmethod write-binary-record ((obj movitz-funobj) stream)
   (declare (special *record-all-funobjs*))
@@ -908,12 +909,7 @@ integer (native lisp) value."
 
 (define-binary-class movitz-funobj-standard-gf (movitz-funobj)
   ;; This class is binary congruent with movitz-funobj.
-  ((code-vector
-    :binary-type code-vector-word
-    :initform 'muerte::standard-gf-dispatcher
-    :map-binary-write 'movitz-intern-code-vector
-    :map-binary-read-delayed 'movitz-word-code-vector)
-   (type
+  ((type
     :binary-type other-type-byte)
    (funobj-type
     :binary-type movitz-funobj-type
@@ -922,6 +918,11 @@ integer (native lisp) value."
     ;; Bits 0-4: The value of the start-stack-frame-setup label.
     :binary-type 'lu16
     :initform 0)
+   (code-vector
+    :binary-type code-vector-word
+    :initform 'muerte::standard-gf-dispatcher
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector)
    (code-vector%1op
     :initform 'muerte::standard-gf-dispatcher%1op
     :binary-type code-pointer
@@ -993,17 +994,10 @@ integer (native lisp) value."
     :map-binary-read-delayed 'movitz-word)
    (plist
     :initform nil))
-  (:slot-align type -2))
+  (:slot-align type #.+other-type-offset+))
 
 (defmethod movitz-funobj-const-list ((funobj movitz-funobj-standard-gf))
   nil)
-
-#+ignore
-(defun make-movitz-funobj (lambda-list &key (name ""))
-  (check-type name (or symbol cons))
-  (make-instance 'movitz-funobj
-    :lambda-list lambda-list
-    :name name))
 
 (defun make-standard-gf (class slots &key lambda-list (name "unnamed")
 					  (function 'muerte::unbound)
@@ -1020,38 +1014,8 @@ integer (native lisp) value."
 
 ;;;
 
-#+ignore
-(define-binary-class movitz-bignum (movitz-heap-object-other)
-  ((low32
-    :binary-lisp-type u32
-    :map-binary-write 'movitz-intern
-    :map-binary-read-delayed 'movitz-word
-    :initarg :name)
-   (type
-    :binary-lisp-type other-type-byte
-    :initform :bignum)
-   (pad :binary-lisp-type 1)
-   (length
-    :binary-lisp-type lu16
-    :initarg :length
-    :accessor movitz-bignum-length)
-   (slot0 :binary-lisp-type :label)	; the slot values follows here.
-   (slot-values
-    :initform '()
-    :initarg :slot-values
-    :accessor movitz-struct-slot-values))
-  (:slot-align type -2))
-
-;;;
-
 (define-binary-class movitz-struct (movitz-heap-object-other)
-  ((name
-    :binary-type word
-    :map-binary-write 'movitz-intern
-    :map-binary-read-delayed 'movitz-word
-    :reader movitz-struct-name
-    :initarg :name)
-   (type
+  ((type
     :binary-type other-type-byte
     :initform :defstruct)
    (pad :binary-lisp-type 1)
@@ -1059,12 +1023,18 @@ integer (native lisp) value."
     :binary-lisp-type lu16
     :initarg :length
     :accessor movitz-struct-length)
+   (name
+    :binary-type word
+    :map-binary-write 'movitz-intern
+    :map-binary-read-delayed 'movitz-word
+    :reader movitz-struct-name
+    :initarg :name)
    (slot0 :binary-lisp-type :label)	; the slot values follows here.
    (slot-values
     :initform '()
     :initarg :slot-values
     :accessor movitz-struct-slot-values))
-  (:slot-align type -2))
+  (:slot-align type #.+other-type-offset+))
 
 (defmethod update-movitz-object ((movitz-struct movitz-struct) lisp-struct)
   (declare (ignore lisp-struct))
@@ -1271,15 +1241,15 @@ integer (native lisp) value."
 ;;; std-instance
 
 (define-binary-class movitz-std-instance (movitz-heap-object-other)
-  ((dummy
+  ((type
+    :binary-type other-type-byte
+    :initform :std-instance)
+   (pad :binary-lisp-type 3)
+   (dummy
     :binary-type word
     :initform *movitz-nil*
     :map-binary-write 'movitz-intern
     :map-binary-read-delayed 'movitz-word)
-   (type
-    :binary-type other-type-byte
-    :initform :std-instance)
-   (pad :binary-lisp-type 3)
    (class
     :binary-type word
     :map-binary-write 'movitz-intern
@@ -1292,7 +1262,7 @@ integer (native lisp) value."
     :map-binary-read-delayed 'movitz-word
     :initarg :slots
     :accessor movitz-std-instance-slots))
-  (:slot-align type -2))
+  (:slot-align type #.+other-type-offset+))
 
 ;; (defmethod movitz-object-offset ((obj movitz-std-instance)) (- #x1e))
 

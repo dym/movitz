@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.28 2004/05/19 14:59:52 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.29 2004/05/21 09:38:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -569,9 +569,10 @@
 (defmethod image-intern-object ((image symbolic-image) object &optional (size (sizeof object)))
   (assert				; sanity check on "other" storage-types.
       (or (not (typep object 'movitz-heap-object-other))
-	  (and (= -6 (slot-offset (type-of object)
-				  (first (binary-record-slot-names (type-of object)))))
-	       (= -2 (slot-offset (type-of object) 'type))))
+	  (and (= (- (tag :other))
+		  (slot-offset (type-of object)
+			       (first (binary-record-slot-names (type-of object)))))
+	       (= +other-type-offset+ (slot-offset (type-of object) 'type))))
       ()
     "The MOVITZ-HEAP-OBJECT-OTHER type ~A is malformed!" (type-of object))
   (etypecase object
