@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.9 2004/04/14 20:03:33 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.10 2004/04/14 21:59:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -135,12 +135,12 @@
     `(defparameter ,name ,value ,documentation)))
 
 (defmacro define-compile-time-variable (name value)
-  `(progn
-     (eval-when (:compile-toplevel)
-       (defparameter ,name ,value)
-       ;; (setf (symbol-value ',name) ,value)
-       (pushnew ',name (movitz::image-compile-time-variables movitz::*image*)))
-     (defparameter ,name (get-global-property ',name))))
+  (let ((the-value (eval value)))
+    `(progn
+       (eval-when (:compile-toplevel)
+	 (defparameter ,name ',the-value)
+	 (pushnew ',name (movitz::image-compile-time-variables movitz::*image*)))
+       (defparameter ,name ',the-value))))
 
 (defmacro let* (var-list &body body)
   (labels ((expand (rest-vars body)
