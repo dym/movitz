@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.27 2004/02/16 17:22:47 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.28 2004/02/16 17:53:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2433,6 +2433,49 @@ the sub-program options (&optional label) as secondary value."
 	 (t (setf free-so-far nil)))
       finally (return free-so-far)))
 
+(defun try-locate-in-register (binding var-counts funobj frame-map)
+  "Try to locate binding in a register. Return a register, or NIL.
+   This function is factored out from assign-bindings."
+  (let* ((count-init-pc (gethash binding var-counts))
+	 (count (car count-init-pc))
+	 (init-pc (cdr count-init-pc)))
+    (cond
+     ((binding-lended-p binding)
+      ;; We can't lend a register.
+      nil)
+     ((and (= 1 count)
+	   init-pc)
+      (assert (instruction-is (first init-pc) :init-lexvar))
+      (destructuring-bind (init-binding &key init-with-register init-with-type
+					     protect-registers protect-carry)
+	  (cdr (first init-pc))
+	(declare (ignore protect-registers protect-carry init-with-type))
+	(assert (eq binding init-binding))
+	(let* ((load-instruction
+		(find-if (lambda (i)
+			   (member binding (find-read-bindings i)))
+			 (cdr init-pc)
+			 :end 7))
+	       (binding-destination (third load-instruction))
+	       (distance (position load-instruction (cdr init-pc)))
+	       (free-registers
+		(and distance
+		     (compute-free-registers (cdr init-pc) distance funobj frame-map))))
+	  (cond
+	   ((member binding-destination free-registers)
+	    binding-destination)
+	   ((member init-with-register free-registers)
+	    init-with-register)
+	   ((first free-registers))
+	   (t nil))))))))
+;;;	    (when (and (symbolp location) (< 2 distance))
+;;;	      (warn "Assigning ~A to ~A dist ~S."
+;;;		    (binding-name binding)
+;;;		    location
+;;;		    distance)
+;;;	      (print-code 'middle (subseq init-pc 0 (+ 2 distance))))
+;;;	    (setf (new-binding-location binding frame-map) location)))))
+
 (defun discover-variables (code function-env)
   "Iterate over CODE, and take note in the hash-table VAR-COUNTER which ~
    variables CODE references that are lexically bound in ENV."
@@ -2554,9 +2597,10 @@ the sub-program options (&optional label) as secondary value."
 			    (setf (new-binding-location binding frame-map)
 			      (post-incf stack-frame-position)))))
 		 (dolist (binding (sort (copy-list bindings-to-locate) #'>
-					;; Sort so as to make the least likely
+					;; Sort so as to make the most likely
 					;; candidates for locating to registers
-					;; be assigned last.
+					;; be assigned last (i.e. maps to
+					;; a smaller value).
 					:key (lambda (b)
 					       (etypecase b
 						 ((or constant-object-binding
@@ -2596,59 +2640,21 @@ the sub-program options (&optional label) as secondary value."
 			(setf (new-binding-location binding frame-map)
 			  :argument-stack))
 		       (located-binding
-;;;			(when (and (binding-store-type binding)
-;;;				   (apply #'encoded-type-singleton
-;;;					  (binding-store-type binding)))
-;;;			  (warn "Locating constant binding: ~S" binding))
-;;;			(warn "binding: ~S type ~S, count: ~S"
-;;;			      binding
-;;;			      (apply #'encoded-type-decode 
-;;;				     (binding-store-type binding))
-;;;			      (gethash binding var-counts))
+			(let ((register (try-locate-in-register binding var-counts
+								(movitz-environment-funobj function-env)
+								frame-map)))
+;;;			  (when (and (binding-store-type binding)
+;;;				     (apply #'encoded-type-singleton
+;;;					    (binding-store-type binding)))
+;;;			    (warn "Locating constant binding: ~S" binding))
+;;;			  (warn "binding: ~S type ~S, count: ~S"
+;;;				binding
+;;;				(apply #'encoded-type-decode 
+;;;				       (binding-store-type binding))
+;;;				(gethash binding var-counts))
 ;;;			    (print-code 'foo code)
-			(let* ((count-init-pc (gethash binding var-counts))
-			       (count (car count-init-pc))
-			       (init-pc (cdr count-init-pc)))
-			  (cond
-			   ((binding-lended-p binding)
-			    (setf (new-binding-location binding frame-map)
-			      (post-incf stack-frame-position)))
-			   ((and (= 1 count)
-				 init-pc)
-			    (assert (instruction-is (first init-pc) :init-lexvar))
-			    (destructuring-bind (init-binding &key init-with-register init-with-type
-								   protect-registers protect-carry)
-				(cdr (first init-pc))
-			      (declare (ignore protect-registers protect-carry init-with-type))
-			      (assert (eq binding init-binding))
-			      (let* ((load-instruction
-				      (find-if (lambda (i)
-						 (member binding (find-read-bindings i)))
-					       (cdr init-pc)
-					       :end 7))
-				     (binding-destination (third load-instruction))
-				     (distance (position load-instruction (cdr init-pc)))
-				     (free-registers
-				      (and distance
-					   (compute-free-registers (cdr init-pc) distance
-								   (movitz-environment-funobj function-env)
-								   frame-map))))
-				(let ((location (cond
-						 ((member binding-destination free-registers)
-						  binding-destination)
-						 ((member init-with-register free-registers)
-						  init-with-register)
-						 ((first free-registers))
-						 (t (post-incf stack-frame-position)))))
-;;;				  (when (and (symbolp location) (< 2 distance))
-;;;				    (warn "Assigning ~A to ~A dist ~S."
-;;;					  (binding-name binding)
-;;;					  location
-;;;					  distance)
-;;;				    (print-code 'middle (subseq init-pc 0 (+ 2 distance))))
-				  (setf (new-binding-location binding frame-map) location)))))
-			   (t (setf (new-binding-location binding frame-map)
-				(post-incf stack-frame-position)))))))))
+			  (setf (new-binding-location binding frame-map)
+			    (or register (post-incf stack-frame-position))))))))
 		 (setf (getf env-roof-map env)
 		   stack-frame-position)))))
       (loop ;; with funobj = (movitz-environment-funobj function-env)
