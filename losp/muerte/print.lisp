@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.3 2004/03/22 14:38:13 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.4 2004/03/30 21:32:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -31,6 +31,7 @@
 (defvar *print-length* 8)
 (defvar *print-level* 3)
 (defvar *print-pretty* t)
+(defvar *print-circle* nil)
 
 (defvar *standard-output* #'muerte.x86-pc::textmode-console)
 (defvar *standard-input* #'muerte.x86-pc::textmode-console)
