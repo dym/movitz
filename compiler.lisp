@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.33 2004/02/26 13:48:42 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.34 2004/03/24 18:38:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2436,9 +2436,12 @@ the sub-program options (&optional label) as secondary value."
 	  (destructuring-bind (binding &key init-with-register init-with-type
 					    protect-registers protect-carry)
 	      (cdr i)
-	    (declare (ignore binding protect-registers protect-carry init-with-type))
+	    (declare (ignore binding protect-carry init-with-type))
 	    (when init-with-register
-	      (setf free-so-far (remove init-with-register free-so-far)))))
+	      (setf free-so-far (remove-if (lambda (x)
+					     (or (eq x init-with-register)
+						 (member x protect-registers)))
+					   free-so-far)))))
 	 (t (case (instruction-is i)
 	      ((nil :call)
 	       (return nil))
@@ -5575,12 +5578,13 @@ and a list of any intervening unwind-protect environment-slots."
     (list source)))
 
 (define-extended-code-expander :store-lexical (instruction funobj frame-map)
-  (destructuring-bind (destination source &key shared-reference-p type)
+  (destructuring-bind (destination source &key shared-reference-p type protect-registers)
       (cdr instruction)
     (declare (ignore type))
     (make-store-lexical (ensure-local-binding destination funobj)
 			(ensure-local-binding source funobj)
-			shared-reference-p frame-map)))
+			shared-reference-p frame-map
+			:protect-registers protect-registers)))
 
 ;;;;;;;;;;;;;;;;;; Init-lexvar
 
