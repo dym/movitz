@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.8 2004/03/29 14:32:40 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.9 2004/04/01 02:10:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -117,12 +117,13 @@
 	      (:call (:esi #.(movitz::slot-offset 'movitz::movitz-funobj 'movitz::code-vector%2op)))))
 	   ((not (next x))		; 3 args
 	    (with-inline-assembly (:returns :multiple-values)
-	      (:compile-form (:result-mode :ecx) args)
-	      (:movl (:ecx -1) :eax)	; arg0
-	      (:movl (:ecx 3) :ecx)	; ecx = (cdr ebx)
-	      (:movl (:ecx -1) :ebx)	; ecx = (car ebx) = arg1
-	      (:movl (:ecx 3) :ecx)	; ecx = (cdr ebx)
-	      (:pushl (:ecx -1))	; arg2
+	      (:compile-form (:result-mode :edx) args)
+	      (:movl (:edx -1) :eax)	; arg0
+	      (:movl (:edx 3) :edx)	; edx = (cdr ebx)
+	      (:movl (:edx -1) :ebx)	; edx = (car ebx) = arg1
+	      (:movl (:edx 3) :edx)	; edx = (cdr ebx)
+	      (:pushl (:edx -1))	; arg2
+	      (:compile-form (:result-mode :edx) function-or-name)
 	      (:compile-form (:result-mode :esi) function)
 	      (:call (:esi #.(movitz::slot-offset 'movitz::movitz-funobj 'movitz::code-vector%3op)))))
 	   (t (with-inline-assembly (:returns :multiple-values)
