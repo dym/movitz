@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.93 2004/08/12 17:25:06 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.94 2004/08/14 17:47:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -415,33 +415,7 @@ Side-effects each binding's binding-store-type."
 		   (cond
 		    (thunk
 		     (assert (some #'bindingp thunk-args))
-;;;		     (assert (notany (lambda (arg)
-;;;				       (and (bindingp arg)
-;;;					    (binding-eql arg binding)))
-;;;				     thunk-args)
-;;;			 () "A thunk on itself for ~S?" binding)
 		     (push (cons thunk thunk-args) (type-analysis-thunks analysis)))
-;;;		    ((typep binding 'function-argument)
-;;;		     (setf (type-analysis-encoded-type analysis)
-;;;		       (multiple-value-list
-;;;			(type-specifier-encode (etypecase binding
-;;;						 (rest-function-argument 'list)
-;;;						 (supplied-p-function-argument 'boolean)
-;;;						 (function-argument t))))))
-;;;		    ((and (consp type) (eq 'binding-type (car type)))
-;;;		     (break "Got binding-type.")
-;;;		     (let ((target-binding (binding-target (cadr type))))
-;;;		       (cond
-;;;			((eq binding target-binding))
-;;;			((typep binding 'constant-object-binding)
-;;;			 (setf (type-analysis-encoded-type analysis)
-;;;			   (multiple-value-list
-;;;			    (multiple-value-call
-;;;				#'encoded-types-or 
-;;;			      (values-list (type-analysis-encoded-type analysis))
-;;;			      (member-type-encode (constant-object target-binding))))))
-;;;			(t (pushnew target-binding (type-analysis-binding-types analysis))
-;;;			   ))))
 		    ((and (bindingp type)
 			  (binding-eql type binding))
 		     (break "got binding type")
@@ -451,10 +425,7 @@ Side-effects each binding's binding-store-type."
 			  (multiple-value-call
 			      #'encoded-types-or 
 			    (values-list (type-analysis-encoded-type analysis))
-			    (type-specifier-encode type)))))))
-		 #+ignore
-		 (when (typep binding 'forwarding-binding)
-		   (analyze-store (forwarding-binding-target binding) type thunk thunk-args)))
+			    (type-specifier-encode type))))))))
 	       (analyze-code (code)
 		 (dolist (instruction code)
 		   (when (listp instruction)
@@ -478,10 +449,8 @@ Side-effects each binding's binding-store-type."
 	(flet ((resolve-thunks ()
 		 (loop with more-thunks-p = t
 		     repeat 20
-		     finally (return t)
-		     do (unless more-thunks-p
-			  (return nil))
-			(setf more-thunks-p nil)
+		     while more-thunks-p
+		     do (setf more-thunks-p nil)
 			(maphash (lambda (binding analysis)
 				   (declare (ignore binding))
 				   (setf (type-analysis-thunks analysis)
@@ -504,8 +473,8 @@ Side-effects each binding's binding-store-type."
 									 thunk-args)))))))
 					 (setf more-thunks-p t))))
 				 binding-usage))))
-	  (when (and (resolve-thunks)
-		     *compiler-trust-user-type-declarations-p*)
+	  (resolve-thunks)
+	  (when *compiler-trust-user-type-declarations-p*
 	    ;; For each unresolved binding, just use the declared type.
 	    (maphash (lambda (binding analysis)
 		       (declare (ignore binding))
