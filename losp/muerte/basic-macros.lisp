@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.12 2004/04/16 19:25:11 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.13 2004/04/16 23:33:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -138,9 +138,11 @@
   (let ((the-value (eval value)))
     `(progn
        (eval-when (:compile-toplevel)
-	 (defparameter ,name ',the-value)
-	 (pushnew ',name (movitz::image-compile-time-variables movitz::*image*)))
-       (defparameter ,name ',the-value))))
+	 (defvar ,name)
+	 (unless (member ',name (movitz::image-compile-time-variables movitz::*image*))
+	   (setf ,name ',the-value)
+	   (push ',name (movitz::image-compile-time-variables movitz::*image*))))
+       (defvar ,name 'uninitialized-compile-time-variable))))
 
 (defmacro let* (var-list &body body)
   (labels ((expand (rest-vars body)
