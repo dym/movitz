@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.37 2004/12/10 12:47:37 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.38 2005/01/03 11:53:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -248,9 +248,9 @@ at the start-stack-frame location."
 				    (dit-frame-ref stack dit-frame :eip :unsigned-byte32)
 				    (memref interrupted-esp 0 :type :unsigned-byte32)
 				    (funobj-name casf-funobj))
-			      (map-region function (+ interrupted-esp 1) frame)
 			      (when (eq 0 (stack-frame-ref stack frame -1))
 				(break "X1 call in DIT-frame."))
+			      (map-region function (+ interrupted-esp 1) frame)
 			      (setf next-frame frame
 				    next-nether-frame (+ interrupted-esp 1 -2)))
 			     ((let ((x1-tag (ldb (byte 3 0)
@@ -280,6 +280,8 @@ at the start-stack-frame location."
 
 				() "Stack discipline situation ii. invariant broken. CASF=#x~X, ESP=~S, EBP=~S"
 				casf-frame interrupted-esp interrupted-ebp)
+			    (when (eq 0 (stack-frame-ref stack frame -1))
+			      (break "X1 ii call in DIT-frame."))
 			    (map-region function (+ interrupted-esp 2) frame)
 			    (setf next-frame frame
 				  next-nether-frame (+ interrupted-esp 2 -2)))
@@ -288,6 +290,8 @@ at the start-stack-frame location."
 							  (memref interrupted-esp 0 :type :location))
 				() "Stack discipline situation iii. invariant broken. CASF=#x~X"
 				casf-frame)
+			    (when (eq 0 (stack-frame-ref stack frame -1))
+			      (break "X1 iii call in DIT-frame."))
 			    (map-region function (+ interrupted-esp 1) frame)
 			    (setf next-frame frame
 				  next-nether-frame (+ interrupted-esp 1 -2))))))
