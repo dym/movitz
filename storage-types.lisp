@@ -9,13 +9,11 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.43 2004/10/21 20:42:51 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.44 2004/11/10 15:35:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (in-package movitz)
-
-;; (defconstant +tag-other+ 6)
 
 (define-unsigned lu64 8 :little-endian)
 
@@ -171,14 +169,15 @@
 ;;; Fixnums
 
 (eval-when (:compile-toplevel :execute :load-toplevel)
-  (defconstant +movitz-fixnum-bits+ 30)
-  (defconstant +movitz-fixnum-shift+ (- 32 +movitz-fixnum-bits+))
-  (defconstant +movitz-fixnum-factor+ (expt 2 +movitz-fixnum-shift+))
-  (defconstant +movitz-fixnum-zmask+ (1- +movitz-fixnum-factor+))
-  (defconstant +movitz-most-positive-fixnum+ (1- (expt 2 (1- +movitz-fixnum-bits+))))
-  (defconstant +movitz-most-negative-fixnum+ (- (expt 2 (1- +movitz-fixnum-bits+))))
+  (defparameter +movitz-fixnum-bits+ 30)
+  (defparameter +movitz-fixnum-shift+ (- 32 +movitz-fixnum-bits+))
+  (defparameter +movitz-fixnum-factor+ (expt 2 +movitz-fixnum-shift+))
+  (defparameter +movitz-fixnum-zmask+ (1- +movitz-fixnum-factor+))
+  (defparameter +movitz-most-positive-fixnum+ (1- (expt 2 (1- +movitz-fixnum-bits+))))
+  (defparameter +movitz-most-negative-fixnum+ (- (expt 2 (1- +movitz-fixnum-bits+))))
 
-  (defparameter +other-type-offset+ -6))
+  (defparameter +object-pointer-shift+ 0)
+  (defparameter +other-type-offset+ (- -6 +object-pointer-shift+)))
 
 (defun fixnum-integer (word)
   "For a Movitz word, that must be a fixnum, return the corresponding
@@ -266,7 +265,7 @@ integer (native lisp) value."
 	:map-binary-read-delayed 'movitz-word
 	:initarg :cdr
 	:accessor movitz-cdr))
-  (:slot-align car -1))
+  (:slot-align car #.(- -1 +object-pointer-shift+)))
 
 (defmethod movitz-object-offset ((obj movitz-cons)) 1)
 

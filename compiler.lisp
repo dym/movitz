@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.102 2004/10/21 20:38:28 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.103 2004/11/10 15:31:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -47,13 +47,18 @@ run-time context.")
 (defparameter *compiler-physical-segment-prefix* '(:gs-override)
   "Use this instruction prefix when accessing a physical memory location (i.e. typically some memory-mapped hardware device).")
 
-(defparameter *compiler-nonlocal-lispval-read-segment-prefix* '(:fs-override)
+(defparameter *compiler-nonlocal-lispval-read-segment-prefix* '()
   "Use this segment prefix when reading a lispval at (potentially)
 non-local locations.")
 
 (defparameter *compiler-nonlocal-lispval-write-segment-prefix* '(:es-override)
   "Use this segment prefix when writing a lispval at (potentially)
 non-local locations.")
+
+(defparameter *compiler-use-cons-reader-segment-protocol-p* nil)
+
+(defparameter *compiler-cons-read-segment-prefix* '(:gs-override)
+  "Use this segment prefix for CAR and CDR, when using cons-reader protocol.")
 
 (defvar *compiler-allow-untagged-word-bits* 0
   "Allow (temporary) untagged values of this bit-size to exist, because
@@ -6187,20 +6192,35 @@ and a list of any intervening unwind-protect environment-slots."
 	(cond
 	 ((and binding-is-list-p
 	       (member location '(:eax :ebx :ecx :edx)))
-	  `((:movl (,location ,op-offset) ,dst)))
+	  `(,*compiler-nonlocal-lispval-read-segment-prefix*
+	    (:movl (,location ,op-offset) ,dst)))
 	 (binding-is-list-p
 	  `(,@(make-load-lexical binding dst funobj nil frame-map)
-	      (:movl (,dst ,op-offset) ,dst)))
-	 ((eq location :ebx)
-	  `((,*compiler-global-segment-prefix*
-	     :call (:edi ,(global-constant-offset fast-op-ebx)))
-	    ,@(when (not (eq dst :eax))
-		`((:movl :eax ,dst)))))
-	 (t `(,@(make-load-lexical binding :eax funobj nil frame-map)
-		(,*compiler-global-segment-prefix* 
-		 :call (:edi ,(global-constant-offset fast-op)))
-		,@(when (not (eq dst :eax))
-		    `((:movl :eax ,dst))))))))))
+	      (,*compiler-nonlocal-lispval-read-segment-prefix*
+	       :movl (,dst ,op-offset) ,dst)))
+	 ((not *compiler-use-cons-reader-segment-protocol-p*)
+	  (cond
+	   ((eq location :ebx)
+	    `((,*compiler-global-segment-prefix*
+	       :call (:edi ,(global-constant-offset fast-op-ebx)))
+	      ,@(when (not (eq dst :eax))
+		  `((:movl :eax ,dst)))))
+	   (t `(,@(make-load-lexical binding :eax funobj nil frame-map)
+		  (,*compiler-global-segment-prefix* 
+		   :call (:edi ,(global-constant-offset fast-op)))
+		  ,@(when (not (eq dst :eax))
+		      `((:movl :eax ,dst)))))))
+	 (t (cond
+	     ((member location '(:ebx :ecx :edx))
+	      `((,(or *compiler-cons-read-segment-prefix*
+		      *compiler-nonlocal-lispval-read-segment-prefix*)
+		 :movl (:eax ,op-offset) ,dst)))
+	     (t (append (make-load-lexical binding :eax funobj nil frame-map)
+			`((,(or *compiler-cons-read-segment-prefix*
+				*compiler-nonlocal-lispval-read-segment-prefix*)
+			   :movl (:eax ,op-offset) ,dst)))))))))))
+
+	     
 
 
 ;;;;;;;;;;;;;;;;;; endp

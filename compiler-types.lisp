@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.20 2004/09/15 10:19:06 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.21 2004/11/10 15:31:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -667,7 +667,7 @@ If it isn't, also return wether we _know_ it isn't."
 	      (cdar intscope)))
     (list (movitz-read (caar intscope))))
    ((and (null members) (null intscope))
-    (warn "Not singleton, nulloton."))))
+    (break "Not singleton, nulloton."))))
 
 (defun movitz-subtypep (type0 type1)
   "Compile-time subtypep."
@@ -678,11 +678,11 @@ If it isn't, also return wether we _know_ it isn't."
 (defun encoded-integer-types-add (code0 integer-range0 members0 include0 complement0
 				  code1 integer-range1 members1 include1 complement1)
   "Return the integer type that can result from adding a member of type0 to a member of type1."
-  (declare (ignore members0 members1))
+  ;; (declare (ignore members0 members1))
   (cond
-   ((or include0 include1)
+   ((or include0 include1 members0 members1)
     ;; We can't know..
-    'integer)
+    'number)
    ((or complement0 complement1)
     (break "adding complement types..?"))
    (t (let ((integer-range (numscope-plus (encoded-numscope code0 integer-range0)
