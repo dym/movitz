@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.25 2004/07/07 17:37:30 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.26 2004/07/11 23:04:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -966,9 +966,9 @@
   `(progn ,@body))
 
 
-(defmacro with-inline-assembly ((&key returns (side-effects t) (type t)) &body program)
+(defmacro with-inline-assembly ((&key returns (side-effects t) (type t) labels) &body program)
   `(with-inline-assembly-case (:side-effects ,side-effects :type ,type)
-     (do-case (t ,returns)
+     (do-case (t ,returns :labels ,labels)
        ,@program)))
 
 (defmacro numargs-case (&rest args)
