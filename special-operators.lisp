@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.22 2004/04/16 10:24:54 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.23 2004/06/06 15:12:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1110,12 +1110,9 @@ on the current result."
 	(let ((constant-term2 (eval-form term2 env)))
 	  (check-type constant-term2 (signed-byte 30))
 	  (compile-constant-add constant-term2 term1)))
-       (t (compiler-call #'compile-form-unprotected
+       (t (compiler-call #'compile-apply-symbol
 	    :forward all
-	    :form `(muerte::with-inline-assembly (:returns :eax :side-effects nil)
-		     (:compile-two-forms (:ebx :eax) ,term1 ,term2)
-		     (:addl :ebx :eax)
-		     (:into))))))))
+	    :form `(muerte.cl:+ ,term1 ,term2)))))))
 
 (define-special-operator muerte::include (&form form)
   (let ((*require-dependency-chain*
