@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.49 2004/07/13 13:41:17 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.50 2004/07/13 14:17:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1064,31 +1064,13 @@ Preserve EAX and EBX."
 (defun ash (integer count)
   (cond
    ((not (minusp count))
+    (do () ((< count 16))
+      (setf integer (no-macro-call * #x10000 integer))
+      (decf count 16))
     (dotimes (i count integer)
       (setf integer (no-macro-call * 2 integer))))
    (t (dotimes (i (- count) integer)
 	(setf integer (truncate integer 2))))))
-
-;;;(defun ash (integer count)
-;;;  (check-type integer fixnum)
-;;;  (check-type count fixnum)
-;;;  (cond
-;;;   ((= 0 count)
-;;;    integer)
-;;;   ((<= 1 count 29)
-;;;    (dotimes (i count integer)
-;;;      (setq integer (ash integer 1))))
-;;;   ((<= count #.(cl:- 1 movitz::+movitz-fixnum-bits+))
-;;;    (if (minusp integer) -1 0))
-;;;   ((minusp count)
-;;;    (with-inline-assembly (:returns :eax)
-;;;      (:compile-form (:result-mode :ecx) count)
-;;;      (:compile-form (:result-mode :eax) integer)
-;;;      (:negl :ecx)
-;;;      (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
-;;;      (:sarl :cl :eax)
-;;;      (:andb #.(cl:logxor #xff movitz::+movitz-fixnum-zmask+) :al)))
-;;;   (t (if (= 0 integer) 0 (error "Illegal ash count: ~D" count)))))
 
 ;;;;
 
@@ -1150,7 +1132,6 @@ Preserve EAX and EBX."
 	     (case f1
 	       (0 `(progn ,factor2 0))
 	       (1 factor2)
-	       (2 `(ash ,factor2 1))
 	       (t `(no-macro-call * ,factor1 ,factor2)))))
 	  (t `(no-macro-call * ,factor1 ,factor2)))))
     (t `(* (* ,(first operands) ,(second operands)) ,@(cddr operands)))))
