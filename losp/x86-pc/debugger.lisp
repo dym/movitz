@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.23 2004/09/02 09:41:18 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.24 2004/09/15 10:23:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -118,6 +118,8 @@
       (0 . (#xb1 #x00 #xff #x56		; movb 0 :cl
 	    #.(cl:ldb (cl:byte 8 0)
 	       (bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector))))
+      (2 . (#xff #x57
+	    #.(movitz:global-constant-offset 'fast-compare-two-reals)))
       (:ecx . (#xff #x56 #.(cl:ldb (cl:byte 8 0)
 			    (bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector))))))
 
@@ -227,6 +229,7 @@ It is quite possible to return success without having found the result-{register
 		(:* 1 ((:or (#xb1 (:cl-numargs))))) ; (:movb x :cl)
 		(:* 1 ((:or (#x8b #x55 (:edx :ebp))
 			    (#x8b #x56 (:edx :esi)))))
+		(:* 4 (#x90))		; (:nop)
 		#xff #x56 (:code-vector)))) ; (:call (:esi x))
       ;; APPLY 3 args
       ((20 20 . (#x8b #x5d (:ebx :ebp)	; #<asm MOVL [#x-c+%EBP] => %EBX>
@@ -455,15 +458,17 @@ be provided for those cases."
 	(*standard-output* *debug-io*)
 	(*print-length* *backtrace-print-length*)
 	(*print-level* *backtrace-print-level*))
-    (loop with conflate-count = 0 with count = 0
+    (loop with conflate-count = 0 with count = 0 with next-frame = nil
 	for frame = initial-stack-frame-index
-	then (let ((uplink (stack-frame-uplink stack frame)))
-	       (assert (> uplink frame) ()
-		 "Backtracing uplink ~S from frame index ~S." uplink frame)
-	       uplink)
+	then (or next-frame
+		 (let ((uplink (stack-frame-uplink stack frame)))
+		   (assert (> uplink frame) ()
+		     "Backtracing uplink ~S from frame index ~S." uplink frame)
+		   uplink))
 	     ;; as xxx = (warn "frame: ~S" frame)
 	as funobj = (stack-frame-funobj stack frame)
-	do (flet ((print-leadin (stack frame count conflate-count)
+	do (setf next-frame nil)
+	   (flet ((print-leadin (stack frame count conflate-count)
 		    (when *backtrace-do-fresh-lines*
 		      (fresh-line))
 		    (cond
@@ -480,8 +485,9 @@ be provided for those cases."
 		      (format t "#x~X " frame))))
 	     (typecase funobj
 	       ((eql 0)
-		(let* ((dit-frame (if (null stack) frame (+ frame 2 (object-location stack))))
-		       (funobj (dit-frame-ref :esi :lisp 0 dit-frame)))
+		(let* (#+ignore (dit-frame (if (null stack) frame (+ frame 2 (object-location stack))))
+		       (funobj (dit-frame-ref stack frame :esi)))
+		  (setf next-frame (dit-frame-casf stack frame))
 		  (if (and conflate-interrupts conflate
 			   ;; When the interrupted function has a stack-frame, conflate it.
 			   (typep funobj 'function)
@@ -491,10 +497,8 @@ be provided for those cases."
 		      (incf count)
 		      (print-leadin stack frame count conflate-count)
 		      (setf conflate-count 0)
-		      (let ((exception (dit-frame-ref :exception-vector :unsigned-byte32
-						      0 dit-frame))
-			    (eip (dit-frame-ref :eip :unsigned-byte32
-						      0 dit-frame)))
+		      (let ((exception (dit-frame-ref stack frame :exception-vector :unsigned-byte32))
+			    (eip (dit-frame-ref stack frame :eip :unsigned-byte32)))
 			(typecase funobj
 			  (function
 			   (let ((delta (code-vector-offset (funobj-code-vector funobj) eip)))
@@ -546,6 +550,7 @@ be provided for those cases."
 				 (string= name 'toplevel-function))
 			(write-char #\.)
 			(return))))))
-	       (t (format t "~&?: ~Z" funobj))))))
+	       (t (print-leadin stack frame count conflate-count)
+		  (format t "?: ~Z" funobj))))))		  
   (values))
 

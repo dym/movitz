@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.28 2004/09/02 09:38:46 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.29 2004/09/15 10:22:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -316,12 +316,13 @@
 
 (defun memref (object offset index type)
   (ecase type
-    (:unsigned-byte8    (memref object offset index :unsigned-byte8))
-    (:unsigned-byte14   (memref object offset index :unsigned-byte14))
-    (:unsigned-byte16   (memref object offset index :unsigned-byte16))
+    (:lisp              (memref object offset index :lisp))
     (:unsigned-byte32   (memref object offset index :unsigned-byte32))
     (:character         (memref object offset index :character))
-    (:lisp              (memref object offset index :lisp))
+    (:unsigned-byte8    (memref object offset index :unsigned-byte8))
+    (:location          (memref object offset index :location))
+    (:unsigned-byte14   (memref object offset index :unsigned-byte14))
+    (:unsigned-byte16   (memref object offset index :unsigned-byte16))
     (:signed-byte30+2   (memref object offset index :signed-byte30+2))
     (:unsigned-byte29+3 (memref object offset index :unsigned-byte29+3))))
 
@@ -337,7 +338,7 @@
 	      (movitz:movitz-constantp offset env)
 	      (movitz:movitz-constantp index env))
 	 (let ((value (movitz:movitz-eval value env)))
-	   (check-type value movitz-character)
+	   (check-type value movitz::movitz-character)
 	   `(progn
 	      (with-inline-assembly (:returns :nothing)
 		(:compile-form (:result-mode :ebx) ,object)
@@ -667,63 +668,66 @@
 		       movitz:*compiler-physical-segment-prefix*)))
       (ecase (movitz::eval-form type)
 	(:lisp
-	 `(with-inline-assembly (:returns :eax)
-	    (:compile-form (:result-mode :push) ,address)
-	    (:compile-form (:result-mode :push) ,offset)
-	    (:compile-form (:result-mode :ecx) ,index)
-	    (:popl :ebx)		; offset
-	    (:popl :eax)		; address
-	    (:shll 2 :ecx)
-	    (:addl :ecx :eax)
-	    (:addl :ebx :eax)
-	    (:shrl ,movitz::+movitz-fixnum-shift+ :eax)
-	    (,prefixes :movl (:eax) :eax)))
-	(:unsigned-byte8
-	 `(with-inline-assembly (:returns :untagged-fixnum-eax)
-	    (:compile-form (:result-mode :push) ,address)
-	    (:compile-form (:result-mode :push) ,offset)
-	    (:compile-form (:result-mode :ecx) ,index)
-	    (:popl :eax)		; offset
-	    (:popl :ebx)		; address
-	    (:addl :ecx :ebx)		; add index
-	    (:addl :eax :ebx)		; add offset
-	    (:xorl :eax :eax)
-	    (:shrl ,movitz::+movitz-fixnum-shift+ :ebx) ; scale down address
-	    (,prefixes :movb (:ebx) :al)))
+	 (let ((address-var (gensym "memref-int-address-")))
+	   `(let ((,address-var ,address))
+	      (with-inline-assembly (:returns :eax)
+		(:compile-two-forms (:eax :ecx) ,offset ,index)
+		(:load-lexical (:lexical-binding ,address-var) :ebx)
+		(:shll 2 :ecx)
+		(:addl :ebx :eax)
+		(:into)
+		(:testb ,(mask-field (byte (+ 2 movitz::+movitz-fixnum-shift+) 0) -1)
+			:al)
+		(:jnz '(:sub-program () (:int 63)))
+		(:addl :eax :ecx)
+		(:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale down address
+		(,prefixes :movl (:ecx) :eax)))))
 	(:unsigned-byte32
-	 `(with-inline-assembly (:returns :eax)
-	    (:compile-form (:result-mode :push) ,address)
-	    (:compile-two-forms (:eax :ecx) ,offset ,index)
-	    (:popl :ebx)		; address
-	    (:shll 2 :ecx)
-	    (:addl :ebx :eax)
-	    (:into)
-	    (:testb ,(mask-field (byte (+ 2 movitz::+movitz-fixnum-shift+) 0) -1)
-		    :al)
-	    (:jnz '(:sub-program () (:int 63)))
-	    (:addl :ecx :eax)
-	    (:shrl ,movitz::+movitz-fixnum-shift+ :eax) ; scale down address
-	    (,prefixes :movl (:eax) :ecx)
-	    (:call-local-pf box-u32-ecx)))
+	 (let ((address-var (gensym "memref-int-address-")))
+	   `(let ((,address-var ,address))
+	      (with-inline-assembly (:returns :untagged-fixnum-ecx)
+		(:compile-two-forms (:eax :ecx) ,offset ,index)
+		(:load-lexical (:lexical-binding ,address-var) :ebx)
+		(:shll 2 :ecx)
+		(:addl :ebx :eax)
+		(:into)
+		(:testb ,(mask-field (byte (+ 2 movitz::+movitz-fixnum-shift+) 0) -1)
+			:al)
+		(:jnz '(:sub-program () (:int 63)))
+		(:addl :eax :ecx)
+		(:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale down address
+		(,prefixes :movl (:ecx) :ecx)))))
+	(:unsigned-byte8
+	 (cond
+	  ((and (eq 0 offset) (eq 0 index))
+	   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+	      (:compile-form (:result-mode :untagged-fixnum-ecx) ,address)
+	      (,prefixes :movzxw (:ecx) :ecx)))
+	  (t (let ((address-var (gensym "memref-int-address-")))
+	       `(let ((,address-var ,address))
+		  (with-inline-assembly (:returns :untagged-fixnum-ecx)
+		    (:compile-two-forms (:eax :ecx) ,offset ,index)
+		    (:load-lexical (:lexical-binding ,address-var) :ebx)
+		    (:addl :eax :ecx)
+		    (:addl :ebx :ecx)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale down address
+		    (,prefixes :movzxw (:ecx) :ecx)))))))
 	(:unsigned-byte16
 	 (cond
 	  ((and (eq 0 offset) (eq 0 index))
-	   `(with-inline-assembly (:returns :untagged-fixnum-eax)
-	      (:compile-form (:result-mode :ebx) ,address)
-	      (:xorl :eax :eax)
-	      (:shrl ,movitz::+movitz-fixnum-shift+ :ebx) ; scale down address
-	      (,prefixes :movw (:ebx (:ecx 2)) :ax)))
-	  (t `(with-inline-assembly (:returns :untagged-fixnum-eax)
-		(:compile-form (:result-mode :push) ,address)
-		(:compile-form (:result-mode :push) ,offset)
-		(:compile-form (:result-mode :ecx) ,index)
-		(:popl :eax)		; offset
-		(:popl :ebx)		; address
-		(:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale index
-		(:addl :eax :ebx)	; add offset
-		(:xorl :eax :eax)
-		(:shrl ,movitz::+movitz-fixnum-shift+ :ebx) ; scale down address
-		(,prefixes :movw (:ebx (:ecx 2)) :ax)))))))))
+	   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+	      (:compile-form (:result-mode :untagged-fixnum-ecx) ,address)
+	      (,prefixes :movzxw (:ecx) :ecx)))
+	  (t (let ((address-var (gensym "memref-int-address-")))
+	       `(let ((,address-var ,address))
+		  (with-inline-assembly (:returns :untagged-fixnum-ecx)
+		    (:compile-two-forms (:eax :ecx) ,offset ,index)
+		    (:load-lexical (:lexical-binding ,address-var) :ebx)
+		    (:shll 1 :ecx)	; scale index
+		    (:addl :eax :ecx)
+		    (:addl :ebx :ecx)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale down address
+		    (,prefixes :movzxw (:ecx) :ecx)))))))))))
 
 (defun memref-int (address offset index type &optional physicalp)
   (cond

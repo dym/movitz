@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.36 2004/08/30 15:16:59 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.37 2004/09/15 10:22:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -38,8 +38,13 @@ This variable should be initialized during bootup initialization.")
   (declare (without-check-stack-limit))	; we do it explicitly..
   (check-stack-limit))
 
+(defun stack-frame-funobj (stack frame)
+  (stack-frame-ref stack frame -1))
+
 (defun stack-frame-uplink (stack frame)
-  (stack-frame-ref stack frame 0))
+  (if (eq 0 (stack-frame-funobj stack frame))
+      (dit-frame-casf stack frame)
+    (stack-frame-ref stack frame 0)))
 
 (define-compiler-macro current-stack-frame ()
   `(with-inline-assembly (:returns :eax)
@@ -48,15 +53,6 @@ This variable should be initialized during bootup initialization.")
 
 (defun current-stack-frame ()
   (stack-frame-uplink nil (current-stack-frame)))
-
-(defun stack-frame-funobj (stack frame)
-  (stack-frame-ref stack frame -1)
-  #+ignore
-  (when stack-frame
-    (let ((x (stack-frame-ref stack-frame -1 stack)))
-      (and (or accept-non-funobjs
-	       (typep x 'function))
-	   x))))
 
 (defun stack-frame-call-site (stack frame)
   "Return the code-vector and offset into this vector that is immediately
@@ -82,6 +78,16 @@ Otherwise, stack-frame is an absolute location."
 	  () "Index ~S, pos ~S, len ~S" index pos (length stack))
       (memref stack 2 pos type)))
    (t (memref frame 0 index type))))
+
+(defun (setf stack-frame-ref) (value stack frame index &optional (type ':lisp))
+  (cond
+   ((not (eq nil stack))
+    (check-type stack (simple-array (unsigned-byte 32) 1))
+    (let ((pos (+ frame index)))
+      (assert (< -1 pos (length stack))
+	  () "Index ~S, pos ~S, len ~S" index pos (length stack))
+      (setf (memref stack 2 pos type) value)))
+   (t (setf (memref frame 0 index type) value))))
 
 (defun current-dynamic-context ()
   (with-inline-assembly (:returns :eax)
@@ -154,6 +160,57 @@ Otherwise, stack-frame is an absolute location."
        (when (member :catch types)
 	 (format t "~&catch:   ~Z: ~S" tag tag))))))
 
+
+(defun malloc-pointer-words (words)
+  (check-type words (integer 2 *))
+  (with-allocation-assembly (words :fixed-size-p t
+				   :object-register :eax
+				   :size-register :ecx)
+    (:load-lexical (:lexical-binding words) :ecx)
+    (:leal (:eax :ecx #.movitz:+other-type-offset+) :edx)
+    (:testb 3 :dl)
+    (:jnz '(:sub-program () (:int 63)))
+    (:movl :edi (:eax :ecx #.movitz:+other-type-offset+))))
+    
+    
+
+(defun malloc-non-pointer-words (words)
+  (check-type words (integer 2 *))
+  (with-non-pointer-allocation-assembly (words :fixed-size-p t
+					       :object-register :eax
+					       :size-register :ecx)
+    (:load-lexical (:lexical-binding words) :ecx)
+    (:leal (:eax :ecx #.movitz:+other-type-offset+) :edx)
+    (:testb 3 :dl)
+    (:jnz '(:sub-program () (:int 63)))
+    (:movl :edi (:eax :ecx #.movitz:+other-type-offset+))))
+
+(defun %shallow-copy-object (object word-count)
+  "Copy any object with size word-count."
+  (check-type word-count (integer 2 *))
+  (with-allocation-assembly (word-count
+			     :object-register :eax
+			     :size-register :ecx)
+    (:load-lexical (:lexical-binding object) :ebx)
+    (:load-lexical (:lexical-binding word-count) :edx)
+    (:xorl :esi :esi)			; counter
+    (:addl 4 :edx)
+    (:andl -8 :edx)
+    copy-loop
+    (:movl (:ebx :esi #.movitz:+other-type-offset+) :ecx)
+    (:movl :ecx (:eax :esi #.movitz:+other-type-offset+))
+    (:addl 4 :esi)
+    (:cmpl :esi :edx)
+    (:jne 'copy-loop)
+    (:movl (:ebp -4) :esi)
+;;;    ;; Copy tag from EBX onto EAX
+;;;    (:movl :ebx :ecx)
+;;;    (:andl 7 :ecx)
+;;;    (:andl -8 :eax)
+;;;    (:orl :ecx :eax)
+    ;; Load word-count into ECX
+    (:movl :edx :ecx)))
+
 (defun shallow-copy (old)
   "Allocate a new object that is similar to the old one."
   (etypecase old
@@ -181,52 +238,55 @@ Otherwise, stack-frame is an absolute location."
 (defun objects-equalp (x y)
   "Basically, this verifies whether x is a shallow-copy of y, or vice versa."
   (or (eql x y)
-      (if (not (and (typep x 'pointer)
-		    (typep y 'pointer)))
-	  nil
-	(macrolet ((test (accessor &rest args)
-		     `(objects-equalp (,accessor x ,@args)
-				      (,accessor y ,@args))))
-	  (typecase x
-	    (bignum
-	     (= x y))
-	    (function
-	     (and (test funobj-code-vector)
-		  (test funobj-code-vector%1op)
-		  (test funobj-code-vector%2op)
-		  (test funobj-code-vector%3op)
-		  (test funobj-lambda-list)
-		  (test funobj-name)
-		  (test funobj-num-constants)
-		  (test funobj-num-jumpers)
-		  (dotimes (i (funobj-num-constants x) t)
-		    (unless (test funobj-constant-ref i)))))
-	    (symbol
-	     (and (test memref #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::function-value)
-			0 :lisp)
-		  (test memref #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::name)
-			0 :lisp)
-		  (test memref #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::flags)
-			0 :lisp)))
-	    (vector
-	     (and (typep y 'vector)
-		  (test array-element-type)
-		  (every #'objects-equalp x y)))
-	    (cons
-	     (and (typep y 'cons)
-		  (test car)
-		  (test cdr)))
-	    (structure-object
-	     (and (typep y 'structure-object)
-		  (test structure-object-class)
-		  (test structure-object-length)
-		  (dotimes (i (structure-object-length x) t)
-		    (unless (test structure-ref i)
-		      (return nil)))))
-	    (std-instance
-	     (and (typep y 'std-instance)
-		  (test std-instance-class)
-		  (test std-instance-slots))))))))
+      (cond
+       ((not (objects-equalp (class-of x) (class-of y)))
+	nil)
+       ((not (and (typep x 'pointer)
+		  (typep y 'pointer)))
+	nil)
+       (t (macrolet ((test (accessor &rest args)
+		       `(objects-equalp (,accessor x ,@args)
+					(,accessor y ,@args))))
+	    (typecase x
+	      (bignum
+	       (= x y))
+	      (function
+	       (and (test funobj-code-vector)
+		    (test funobj-code-vector%1op)
+		    (test funobj-code-vector%2op)
+		    (test funobj-code-vector%3op)
+		    (test funobj-lambda-list)
+		    (test funobj-name)
+		    (test funobj-num-constants)
+		    (test funobj-num-jumpers)
+		    (dotimes (i (funobj-num-constants x) t)
+		      (unless (test funobj-constant-ref i)))))
+	      (symbol
+	       (and (test memref #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::function-value)
+			  0 :lisp)
+		    (test memref #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::name)
+			  0 :lisp)
+		    (test memref #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::flags)
+			  0 :lisp)))
+	      (vector
+	       (and (typep y 'vector)
+		    (test array-element-type)
+		    (every #'objects-equalp x y)))
+	      (cons
+	       (and (typep y 'cons)
+		    (test car)
+		    (test cdr)))
+	      (structure-object
+	       (and (typep y 'structure-object)
+		    (test structure-object-class)
+		    (test structure-object-length)
+		    (dotimes (i (structure-object-length x) t)
+		      (unless (test structure-ref i)
+			(return nil)))))
+	      (std-instance
+	       (and (typep y 'std-instance)
+		    (test std-instance-class)
+		    (test std-instance-slots)))))))))
 
 (define-compiler-macro %lispval-object (integer &environment env)
   "Return the object that is wrapped in the 32-bit integer lispval."
@@ -312,33 +372,57 @@ Obviously, this correspondence is not guaranteed to hold e.g. across GC."
 	      #.(movitz::movitz-type-word-size :movitz-struct)
 	      (* 2 (truncate (+ (structure-object-length object) 1) 2))))))))
 
+(defun current-control-stack-depth (&optional (start-frame (current-stack-frame)))
+  "How deep is the stack currently?"
+  (do ((frame start-frame (stack-frame-uplink nil frame)))
+      ((eq 0 (stack-frame-uplink nil frame))
+       (1+ (- frame start-frame)))))
 
-(defun copy-control-stack (&key (relative-uplinks t)
-				(stack (%run-time-context-slot 'stack-vector))
-				(frame (current-stack-frame)))
-  (assert (location-in-object-p stack frame))
-  (let* ((stack-start-location (+ 2 (object-location stack)))
-	 (frame-index (- frame stack-start-location))
-	 (copy (subseq stack frame-index))
-	 (copy-start-location (+ 2 (object-location copy)))
-	 (cc (subseq copy 0)))
-    (do ((i 0)) (nil)
-      (let ((uplink-frame (svref%unsafe copy i)))
-	(cond
-	 ((= 0 uplink-frame)
-	  (setf (svref%unsafe copy i) 0)
-	  (return (values copy cc)))
-	 (t (let ((uplink-index (- uplink-frame stack-start-location frame-index)))
-	      (assert (< -1 uplink-index (length copy)) ()
-		"Uplink-index outside copy: ~S, i: ~S" uplink-index i)
-	      (setf (svref%unsafe copy i)
-		(if relative-uplinks
-		    uplink-index
-		  (let ((x (+ uplink-index copy-start-location)))
-		    (assert (= copy-start-location (+ 2 (object-location copy))) ()
-		      "Destination stack re-located!")
-		    (assert (location-in-object-p copy x) ()
-		      "Bad uplink ~S computed from index ~S and copy ~Z, csl: ~S"
-		      x uplink-index copy copy-start-location)
-		    x)))
-	      (setf i uplink-index))))))))
+(defun copy-current-control-stack (&optional (start-frame (current-stack-frame)))
+  (let ((copy (make-array (current-control-stack-depth start-frame)
+			  :element-type '(unsigned-byte 32))))
+    (dotimes (i (length copy))
+      (setf (stack-frame-ref copy i 0 :unsigned-byte32)
+	(stack-frame-ref nil start-frame i :unsigned-byte32)))
+    (do ((frame start-frame))
+	((eq 0 frame))
+      (let ((uplink (stack-frame-uplink nil frame)))
+	(setf (stack-frame-ref copy 0 (- frame start-frame) :lisp)
+	  (if (eql 0 uplink)
+	      0
+	    (- uplink start-frame)))
+	(setf frame uplink)))
+    copy))
+  
+;;;  (let* ((stack-start-location (+ 2 (object-location stack)))
+;;;	 (start-frame-index (- start-frame stack-start-location))
+;;;	 (copy (subseq stack start-frame-index))
+;;;	 (copy-start-location (+ 2 (object-location copy))))
+;;;    (do ((frame start-frame-index)
+;;;	 (index 0))
+;;;	(nil)
+;;;      (let ((uplink-frame (stack-frame-uplink stack frame)))
+;;;	(cond
+;;;	 ((= 0 uplink-frame)
+;;;	  (setf (svref%unsafe copy index) 0)
+;;;	  (return copy))
+;;;	 (t (let* ((uplink-frame (- uplink-frame stack-start-location))
+;;;		   (uplink-index (- uplink-frame start-frame-index)))
+;;;	      (warn "~S uf ~S [~S]"
+;;;		    (+ frame stack-start-location)
+;;;		    (+ uplink-frame stack-start-location)
+;;;		    frame)
+;;;	      (assert (< -1 uplink-index (length copy)) ()
+;;;		"Uplink-index outside copy: ~S, uplink-frame: ~S frame: ~S, index: ~S"
+;;;		uplink-index uplink-frame (+ frame stack-start-location) index)
+;;;	      (setf (svref%unsafe copy index)
+;;;		(if relative-uplinks
+;;;		    uplink-index
+;;;		  (let ((x (+ uplink-index copy-start-location)))
+;;;		    (assert (= copy-start-location (+ 2 (object-location copy))) ()
+;;;		      "Destination stack re-located!")
+;;;		    (assert (location-in-object-p copy x) ()
+;;;		      "Bad uplink ~S computed from index ~S and copy ~Z, csl: ~S"
+;;;		      x uplink-index copy copy-start-location)
+;;;		    x)))
+;;;	      (setf frame uplink-frame index uplink-index))))))))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.22 2004/09/02 09:45:26 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.23 2004/09/15 10:22:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,16 +20,22 @@
 
 (defvar *last-dit-frame* nil)
 
-(defun dit-frame-esp (dit-frame)
-  (+ dit-frame 6))
-
 (defconstant +dit-frame-map+
-    '(nil :eflags :eip :error-code :exception-vector :ebp :funobj
+    '(nil :eflags :eip :error-code :exception-vector
+      :ebp
+      :funobj
       :edi
       :atomically-status
       :atomically-esp
-      :scratch0      
-      :ecx :eax :edx :ebx :esi))
+      :raw-scratch0      
+      :ecx :eax :edx :ebx :esi
+      :scratch1))
+
+
+(defun dit-frame-esp (stack dit-frame)
+  "Return the frame ESP pointed to when interrupt at dit-frame occurred."
+  (declare (ignore stack))
+  (+ dit-frame 6))
 
 (define-compiler-macro dit-frame-index (&whole form name &environment env)
   (let ((name (and (movitz:movitz-constantp name env)
@@ -44,28 +50,37 @@
   (defun dit-frame-offset (name)
     (* 4 (dit-frame-index name))))
 
-(define-compiler-macro dit-frame-ref (&whole form reg type
-					    &optional (offset 0)
-						      (frame '*last-dit-frame*)
-					    &environment env)
-  `(memref ,frame (+ (dit-frame-offset ,reg) ,offset) 0 ,type))
+(define-compiler-macro dit-frame-ref (&whole form stack frame reg
+				      &optional (type :lisp)
+				      &environment env)
+  (if (not (and (movitz:movitz-constantp stack env)
+		(eq nil (movitz:movitz-eval stack env))))
+      form
+    `(memref ,frame (dit-frame-offset ,reg) 0 ,type)))
 
-(defun dit-frame-ref (reg type &optional (offset 0) (frame *last-dit-frame*))
-  (dit-frame-ref reg type offset frame))
+(defun dit-frame-ref (stack frame reg &optional (type :lisp))
+  (stack-frame-ref stack frame (dit-frame-index reg) type))
 
-(defun (setf dit-frame-ref) (x reg type &optional (frame *last-dit-frame*))
-  (setf (memref frame (dit-frame-offset reg) 0 type) x))
+;;;(defun (setf dit-frame-ref) (x reg type &optional (frame *last-dit-frame*))
+;;;  (setf (memref frame (dit-frame-offset reg) 0 type) x))
 
-(defun dit-frame-casf (dit-frame)
+(defun dit-frame-casf (stack dit-frame)
   "Compute the `currently active stack-frame' when the interrupt occurred."
-  (let ((ebp (dit-frame-ref :ebp :lisp 0 dit-frame))
-	(esp (dit-frame-esp dit-frame)))
-    (if (< esp ebp)
-	ebp
-      (let ((next-ebp (memref ebp 0 0 :lisp)))
+  (let ((ebp (dit-frame-ref stack dit-frame :ebp))
+	(esp (dit-frame-esp stack dit-frame)))
+    (cond
+     ((< esp ebp)
+      ebp)
+     ((> esp ebp)
+      ;; A throw situation
+      (let ((next-ebp (stack-frame-ref stack esp 0)))
 	(check-type next-ebp fixnum)
 	(assert (< esp next-ebp))
-	next-ebp))))
+	next-ebp))
+     (t (let ((next-ebp (stack-frame-ref stack esp 0)))
+	  (check-type next-ebp fixnum)
+	  (assert (< esp next-ebp))
+	  next-ebp)))))
 
 (define-primitive-function (default-interrupt-trampoline :symtab-property t) ()
   "Default first-stage/trampoline interrupt handler. Assumes the IF flag in EFLAGS
@@ -92,17 +107,26 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:pushl :ebp)
 	    (:movl :esp :ebp)
 	    (:pushl 0)			; 0 'funobj' means default-interrupt-trampoline frame
-	    (:pushl :edi)		; -28
+	    (:pushl :edi)		; 
 	    (:movl ':nil-value :edi)	; We want NIL!
 	    (:locally (:pushl (:edi (:edi-offset atomically-status))))
 	    (:locally (:pushl (:edi (:edi-offset atomically-esp))))
-	    (:locally (:pushl (:edi (:edi-offset scratch0))))
+	    (:locally (:pushl (:edi (:edi-offset raw-scratch0))))
 	    ,@(loop for reg in (sort (copy-list '(:eax :ebx :ecx :edx :esi))
 				     #'>
 				     :key #'dit-frame-index)
 		  collect `(:pushl ,reg))
+	    (:locally (:pushl (:edi (:edi-offset scratch1))))
 
 	    (:locally (:movl 0 (:edi (:edi-offset atomically-status))))
+	    
+;;;	    ;; See if ESP/EBP signalled a throwing situation
+;;;	    (:leal (:ebp 24) :edx)	; Interrupted ESP
+;;;	    (:cmpl :edx (:ebp))		; cmp ESP EBP
+;;;	    (:jae 'not-throwing)
+;;;	    (:movl (:edx) :edx)
+;;;	    (:movl :edx (:ebp))
+;;;	   not-throwing
 
 	    ;; rearrange stack for return
 	    (:movl (:ebp 12) :eax)	; load return address
@@ -166,8 +190,10 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:locally (:movl :ecx (:edi (:edi-offset atomically-status))))
 	    (:movl (:ebp ,(dit-frame-offset :atomically-esp)) :ecx)
 	    (:locally (:movl :ecx (:edi (:edi-offset atomically-esp))))
-	    (:movl (:ebp ,(dit-frame-offset :scratch0)) :ecx)
-	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:movl (:ebp ,(dit-frame-offset :raw-scratch0)) :ecx)
+	    (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0))))
+	    (:movl (:ebp ,(dit-frame-offset :scratch1)) :eax)
+	    (:locally (:movl :eax (:edi (:edi-offset scratch1))))
 	    (:movl (:ebp ,(dit-frame-offset :edi)) :edi)
 	    (:movl (:ebp ,(dit-frame-offset :esi)) :esi)
 	    (:movl (:ebp ,(dit-frame-offset :ebx)) :ebx)
@@ -296,7 +322,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	  (6 (error "Illegal instruction at ~@Z." $eip))
 	  (13 (error "General protection error. EIP=~@Z, error-code: #x~X, EAX: ~@Z, EBX: ~@Z, ECX: ~@Z"
 		     $eip
-		     (dit-frame-ref :error-code :unsigned-byte32 0 dit-frame)
+		     (dit-frame-ref nil dit-frame :error-code :unsigned-byte32)
 		     $eax $ebx $ecx))
 	  ((60)
 	   ;; EAX failed type in EDX. May be restarted by returning with a new value in EAX.
@@ -328,10 +354,13 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 		  (stack-left (- old-bottom real-bottom))
 		  (old-dynamic-env (%run-time-context-slot 'dynamic-env))
 		  (new-bottom (cond
-			       ((< stack-left 10)
+			       ((< stack-left 50)
 				(princ "Halting CPU due to stack exhaustion.")
 				(halt-cpu))
-			       ((<= stack-left 256)
+			       ((<= stack-left 1024)
+				(backtrace :print-frames t)
+				(halt-cpu)
+				#+ignore
 				(format *debug-io*
 					"~&This is your LAST chance to pop off stack.~%")
 				real-bottom)
@@ -366,13 +395,12 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	       (error 'unbound-variable :name name))))
 	  ((100);; 101 102 103 104 105)
 	   (let ((funobj (dereference (+ dit-frame (dit-frame-index :esi))))
-		 (code (dit-frame-ref :ecx :unsigned-byte8 0 dit-frame)))
+		 (code (dit-frame-ref nil dit-frame :ecx :unsigned-byte8)))
 	     (error 'wrong-argument-count
 		    :function funobj
 		    :argument-count (if (logbitp 7 code)
-					(ash (dit-frame-ref :ecx :unsigned-byte32
-								  0 dit-frame)
-					     -24)
+					(ldb (byte 8 24)
+					     (dit-frame-ref nil dit-frame :ecx :unsigned-byte32))
 				      code))))
 	  (108
 	   (error 'throw-error :tag (dereference $eax)))

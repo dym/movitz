@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.18 2004/08/16 15:28:07 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.19 2004/09/15 10:22:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -359,7 +359,6 @@ as that vector."
 (defun make-funobj (&key (name :unnamed)
 			 (code-vector (funobj-code-vector #'constantly-prototype))
 			 (constants nil)
-			 ;; (num-constants (length constants))
 			 lambda-list)
   (setf code-vector
     (etypecase code-vector
@@ -372,18 +371,67 @@ as that vector."
        (make-array (length code-vector)
 		   :element-type 'code
 		   :initial-contents code-vector))))
-  (let ((funobj (malloc-pointer-words (+ #.(cl:truncate (bt:sizeof 'movitz:movitz-funobj) 4)
-					 (length constants)))))
-    (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:type) 0 :unsigned-byte16)
-      #.(movitz:tag :funobj))
+  (let* ((num-constants (length constants))
+	 (funobj (macrolet
+		     ((do-it ()
+			`(with-allocation-assembly ((+ num-constants
+						       ,(movitz::movitz-type-word-size 'movitz-funobj))
+						    :object-register :eax
+						    :size-register :ecx)
+			   (:movl ,(movitz:tag :funobj) (:eax ,movitz:+other-type-offset+))
+			   (:load-lexical (:lexical-binding num-constants) :edx)
+			   (:movl :edx :ecx)
+			   (:shll ,(- 16 movitz:+movitz-fixnum-shift+) :ecx)
+			   (:movl :ecx (:eax (:offset movitz-funobj num-jumpers)))
+			   (:xorl :ecx :ecx)
+			   (:xorl :ebx :ebx)
+			   (:testl :edx :edx)
+			   (:jmp 'init-done)
+			   init-loop
+			   (:movl :ecx (:eax :ebx ,movitz:+other-type-offset+))
+			   (:addl 4 :ebx)
+			   (:cmpl :ebx :edx)
+			   (:ja 'init-loop)
+			   init-done
+			   (:leal (:edx ,(bt:sizeof 'movitz:movitz-funobj)) :ecx))
+			#+ignore
+			`(with-inline-assembly (:returns :eax :labels (retry-alloc retry-jumper))
+			   (:declare-label-set retry-jumper (retry-alloc))
+			  retry-alloc
+			   (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
+					      'retry-jumper)
+					    (:edi (:edi-offset atomically-status))))
+			   (:compile-form (:result-mode :eax)
+					  (+ num-constants
+					     #.(cl:truncate (bt:sizeof 'movitz:movitz-funobj) 4)))
+			   (:call-local-pf get-cons-pointer)
+			   (:movl #.(movitz:tag :funobj) (:eax #.movitz:+other-type-offset+))
+			   (:load-lexical (:lexical-binding num-constants) :edx)
+			   (:movl :edx :ecx)
+			   (:shll #.(cl:- 16 movitz:+movitz-fixnum-shift+) :ecx)
+			   (:movl :ecx (:eax (:offset movitz-funobj num-jumpers)))
+			   (:xorl :ecx :ecx)
+			   (:xorl :ebx :ebx)
+			   (:testl :edx :edx)
+			   (:jmp 'init-done)
+			  init-loop
+			   (:movl :ecx (:eax :ebx #.movitz:+other-type-offset+))
+			   (:addl 4 :ebx)
+			   (:cmpl :ebx :edx)
+			   (:ja 'init-loop)
+			  init-done
+			   (:leal (:edx #.(bt:sizeof 'movitz:movitz-funobj)) :ecx)
+			   (:call-local-pf cons-commit)
+			   (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+					    (:edi (:edi-offset atomically-status)))))))
+		   (do-it))))
     (setf (funobj-name funobj) name
 	  (funobj-code-vector funobj) code-vector
 	  ;; revert to default trampolines for now..
-	  (funobj-code-vector%1op funobj) (get-global-property :trampoline-funcall%1op)
-	  (funobj-code-vector%2op funobj) (get-global-property :trampoline-funcall%2op)
-	  (funobj-code-vector%3op funobj) (get-global-property :trampoline-funcall%3op)
-	  (funobj-lambda-list funobj) lambda-list
-	  (funobj-num-constants funobj) (length constants))
+	  (funobj-code-vector%1op funobj) (symbol-value 'trampoline-funcall%1op)
+	  (funobj-code-vector%2op funobj) (symbol-value 'trampoline-funcall%2op)
+	  (funobj-code-vector%3op funobj) (symbol-value 'trampoline-funcall%3op)
+	  (funobj-lambda-list funobj) lambda-list)
     (do* ((i 0 (1+ i))
 	  (p constants (cdr p))
 	  (x (car p)))
@@ -414,14 +462,11 @@ so that we can be reasonably sure of dst's size."
       (funobj-constant-ref src i)))
   dst)
 
-(defun copy-funobj (old-funobj &optional (name (funobj-name old-funobj)))
-  (let* ((num-constants (funobj-num-constants old-funobj))
-	 (funobj (malloc-pointer-words (+ #.(movitz::movitz-type-word-size 'movitz-funobj)
-					  num-constants))))
-    (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:type) 0 :unsigned-byte16)
-      (memref old-funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:type) 0 :unsigned-byte16))
-    (setf (funobj-num-constants funobj) num-constants)
-    (replace-funobj funobj old-funobj name)))
+(defun copy-funobj (old-funobj)
+  (check-type old-funobj function)
+  (%shallow-copy-object old-funobj
+			(+ (funobj-num-constants old-funobj)
+			   #.(movitz::movitz-type-word-size 'movitz-funobj))))
 
 (defun install-funobj-name (name funobj)
   (setf (funobj-name funobj) name)

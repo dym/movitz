@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.41 2004/09/02 09:21:31 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.42 2004/09/15 10:22:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -321,54 +321,56 @@ Result in EAX, with tag :other."
     (:leal (:eax :ecx 6) :eax)
     (:ret)))
 
-(define-primitive-function malloc-non-pointer-words ()
-  "Stupid allocator.. Number of words in EAX/fixnum.
-Result in EAX, with tag 6."
-  (with-inline-assembly (:returns :multiple-values)
-    (:movl :eax :ebx)
-    (:locally (:movl (:edi (:edi-offset nursery-space)) :eax))
-    (:testb #xff :al)
-    (:jnz '(:sub-program (not-initialized)
-	    (:int 110)
-	    (:halt)
-	    (:jmp 'not-initialized)))
-    (:addl 7 :ebx)
-    (:andb #xf8 :bl)
-    (:movl (:eax 4) :ecx)		; cons pointer to ECX
-    (:leal (:ebx :ecx) :edx)		; new roof to EDX
-    (:cmpl :edx (:eax))			; end of buffer?
-    (:jl '(:sub-program (failed)
-	   (:int 112)
-	   (:halt)
-	   (:jmp 'failed)))
-    (:movl :edx (:eax 4))		; new cons pointer
-    (:leal (:eax :ecx 6) :eax)
-    (:ret)))
-
-(defun malloc-pointer-words (words)
-  (check-type words (integer 2 *))
-  (compiler-macro-call malloc-pointer-words words))
-
-(defun malloc-non-pointer-words (words)
-  (check-type words (integer 2 *))
-  (compiler-macro-call malloc-non-pointer-words words))
+;;;(define-primitive-function malloc-non-pointer-words ()
+;;;  "Stupid allocator.. Number of words in EAX/fixnum.
+;;;Result in EAX, with tag 6."
+;;;  (with-inline-assembly (:returns :multiple-values)
+;;;    (:movl :eax :ebx)
+;;;    (:locally (:movl (:edi (:edi-offset nursery-space)) :eax))
+;;;    (:testb #xff :al)
+;;;    (:jnz '(:sub-program (not-initialized)
+;;;	    (:int 110)
+;;;	    (:halt)
+;;;	    (:jmp 'not-initialized)))
+;;;    (:addl 7 :ebx)
+;;;    (:andb #xf8 :bl)
+;;;    (:movl (:eax 4) :ecx)		; cons pointer to ECX
+;;;    (:leal (:ebx :ecx) :edx)		; new roof to EDX
+;;;    (:cmpl :edx (:eax))			; end of buffer?
+;;;    (:jl '(:sub-program (failed)
+;;;	   (:int 112)
+;;;	   (:halt)
+;;;	   (:jmp 'failed)))
+;;;    (:movl :edx (:eax 4))		; new cons pointer
+;;;    (:leal (:eax :ecx 6) :eax)
+;;;    (:ret)))
 
 (define-primitive-function get-cons-pointer ()
   "Return in EAX the next object location with space for EAX words, with tag 6.
 Preserve ECX."
   (macrolet
       ((do-it ()
-	 ;; Here we just call malloc, and don't care if the allocation
-	 ;; is never comitted.
 	 `(with-inline-assembly (:returns :multiple-values)
-	    ;; We need a stack-frame sice we're using the stack
-	    (:pushl :ebp)
-	    (:movl :esp :ebp)
-	    (:pushl 4)
-	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
-	    (:call-local-pf malloc-pointer-words)
-	    (:locally (:movl (:edi (:edi-offset scratch0)) :ecx))
-	    (:leave)
+	    (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0)))) ; Preserve ECX
+	    (:movl :eax :ebx)
+	    (:locally (:movl (:edi (:edi-offset nursery-space)) :eax))
+	    (:testb #xff :al)
+	    (:jnz '(:sub-program (not-initialized)
+		    (:int 110)
+		    (:halt)
+		    (:jmp 'not-initialized)))
+	    (:addl 4 :ebx)
+	    (:andb #xf8 :bl)
+	    (:movl (:eax 4) :ecx)	; cons pointer to ECX
+	    (:leal (:ebx :ecx) :edx)	; new roof to EDX
+	    (:cmpl :edx (:eax))		; end of buffer?
+	    (:jl '(:sub-program (failed)
+		   (:int 112)
+		   (:halt)
+		   (:jmp 'failed)))
+	    (:movl :edx (:eax 4))	; new cons pointer
+	    (:leal (:eax :ecx 6) :eax)
+	    (:locally (:movl (:edi (:edi-offset raw-scratch0)) :ecx))
 	    (:ret))))
     (do-it)))
 
@@ -382,6 +384,18 @@ Preserve EAX and EBX."
 	 `(with-inline-assembly (:returns :multiple-values)
 	    (:ret))))
     (do-it)))
+
+(define-primitive-function get-cons-pointer-non-pointer ()
+  "Return in EAX the next object location with space for EAX non-pointer words, with tag 6.
+Preserve ECX."
+  (with-inline-assembly (:returns :multiple-values)
+    (:locally (:jmp (:edi (:edi-offset get-cons-pointer))))))
+
+(define-primitive-function cons-commit-non-pointer ()
+  "Return in EAX the next object location with space for EAX non-pointer words, with tag 6.
+Preserve ECX."
+  (with-inline-assembly (:returns :multiple-values)
+    (:locally (:jmp (:edi (:edi-offset cons-commit))))))
 
 (defun malloc-initialize (buffer-start buffer-size)
   "BUFFER-START is the location from which to allocate.
@@ -468,16 +482,9 @@ BUFFER-SIZE is the number of words in the buffer."
 	    (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
 	    (:ret)
 	   not-fixnum
-	    (:locally (:movl :ecx (:edi (:edi-offset scratch0)))) ; Save value for later
-	    (:movl ,(* 2 movitz:+movitz-fixnum-factor+) :eax)
-	    (:call-local-pf malloc-non-pointer-words)
-	    (:movl ,(dpb movitz:+movitz-fixnum-factor+
-			 (byte 16 16)
-			 (movitz:tag :bignum 0))
-		   (:eax ,movitz:+other-type-offset+))
-	    (:locally (:movl (:edi (:edi-offset scratch0)) :ecx)) ; Restore value
-	    (:movl :ecx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
-	    (:ret))))
+	    ;; XXX Implement bignum consing here.
+	   fail
+	    (:int 63))))
     (do-it)))
 	    
 

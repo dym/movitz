@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.98 2004/09/02 09:16:42 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.99 2004/09/15 10:22:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2194,15 +2194,15 @@ falling below the label."
 		       (setq p (list i `(:pushl ,(twop-src i)))
 			     next-pc (nthcdr 2 pc))
 		       (explain nil "store, push => store, push reg: ~S ~S" i i2))
-		      ((and (instruction-is i :cmpl)
-			    (true-and-equal (stack-frame-operand (twop-dst i))
-					    (load-stack-frame-p i3))
-			    (branch-instruction-label i2))
-		       (setf p (list i3
-				     `(:cmpl ,(twop-src i) ,(twop-dst i3))
-				     i2)
-			     next-pc (nthcdr 3 pc))
-		       (explain nil "~S ~S ~S => ~S" i i2 i3 p))
+;;;		      ((and (instruction-is i :cmpl)
+;;;			    (true-and-equal (stack-frame-operand (twop-dst i))
+;;;					    (load-stack-frame-p i3))
+;;;			    (branch-instruction-label i2))
+;;;		       (setf p (list i3
+;;;				     `(:cmpl ,(twop-src i) ,(twop-dst i3))
+;;;				     i2)
+;;;			     next-pc (nthcdr 3 pc))
+;;;		       (explain t "~S ~S ~S => ~S" i i2 i3 p))
 		      ((and (instruction-is i :pushl)
 			    (instruction-is i3 :popl)
 			    (store-stack-frame-p i2)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.18 2004/08/23 13:49:40 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.19 2004/09/15 10:22:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -341,15 +341,15 @@ respect to multiple threads."
 	 `(with-inline-assembly (:returns :untagged-fixnum-ecx)
 	    (:locally (:movl (:edi (:edi-offset ,slot-name)) :ecx))))))))
 
-(define-compiler-macro malloc-pointer-words (words)
-  `(with-inline-assembly (:returns :eax :type pointer)
-     (:compile-form (:result-mode :eax) ,words)
-     (:call-local-pf malloc-pointer-words)))
-
-(define-compiler-macro malloc-non-pointer-words (words)
-  `(with-inline-assembly (:returns :eax :type pointer)
-     (:compile-form (:result-mode :eax) ,words)
-     (:call-local-pf malloc-non-pointer-words)))
+;;;(define-compiler-macro malloc-pointer-words (words)
+;;;  `(with-inline-assembly (:returns :eax :type pointer)
+;;;     (:compile-form (:result-mode :eax) ,words)
+;;;     (:call-local-pf malloc-pointer-words)))
+;;;
+;;;(define-compiler-macro malloc-non-pointer-words (words)
+;;;  `(with-inline-assembly (:returns :eax :type pointer)
+;;;     (:compile-form (:result-mode :eax) ,words)
+;;;     (:call-local-pf malloc-non-pointer-words)))
 
 (define-compiler-macro read-time-stamp-counter ()
   `(with-inline-assembly-case ()

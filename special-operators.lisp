@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.37 2004/09/02 09:27:38 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.38 2004/09/15 10:22:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1199,16 +1199,23 @@ on the current result."
 				       )))) ; save dynamic-slot in EBP
 			;; now outside of m-v-prog1's cloak, with final dynamic-slot in ESP..
 			;; ..unwind it and transfer control.
-			`((:load-lexical ,dynamic-slot-binding :ebp)
-			  (:leave)
-			  (:movl (:ebp -4) :esi)
-			  (:movl (:esp 4) :edx)
-			  ;; (:halt)
+			;;
+			;; * 12 dynamic-env uplink
+			;; *  8 target jumper number
+			;; *  4 target catch tag
+			;; *  0 target EBP
+;;;			`((:load-lexical ,dynamic-slot-binding :edx)
+;;;			  ())
+			`((:load-lexical ,dynamic-slot-binding :edx)
+			  (:locally (:movl :esi (:edi (:edi-offset scratch1))))
+			  (:movl :edx :esp) ; enter non-local jump stack mode.
+			  
+			  (:movl (:esp) :edx) ; target stack-frame EBP
+			  (:movl (:edx -4) :esi) ; get target funobj into EDX
+			  
+			  (:movl (:esp 8) :edx) ; target jumper number
 			  (:jmp (:esi :edx ,(slot-offset 'movitz-funobj 'constant0))))))))))
 
-;;;			(:leal (:esp 8) :esp) ; skip tag and eip
-;;;			(:locally (:popl (:edi (:edi-offset dynamic-env)))) ; unwind dynamic env
-;;;			(:jmp (:esp -8))))))))
 
 (define-special-operator muerte::with-basic-restart (&all defaults &form form &env env)
   (destructuring-bind ((name function interactive test format-control
@@ -1284,8 +1291,9 @@ on the current result."
 			  :result-mode :multiple-values
 			  :with-stack-used entry-size
 			  :form body)
-			`((:leal (:esp ,(+ -12 (* 4 entry-size))) :esp)
+			`((:leal (:esp ,(+ -12 -4 (* 4 entry-size))) :esp)
 			  ,exit-point
-			  (:leal (:esp ,(+ -8 16)) :esp)
+			  (:popl :ebp)
+			  (:leal (:esp 8) :esp)
 			  (:locally (:popl (:edi (:edi-offset dynamic-env))))
 			  )))))))

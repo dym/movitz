@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.35 2004/09/02 09:33:06 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.36 2004/09/15 10:22:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -146,7 +146,7 @@ Preserve ECX."
 	   retry
 	    (:locally (:cmpl 0 (:edi (:edi-offset atomically-status)))) ; Atomically?
 	    (:je '(:sub-program ()
-		   (:int 50)))		; This must be called inside atomically.
+		   (:int 63)))		; This must be called inside atomically.
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :ebx)
 	    (:leal (:ebx :eax 4) :eax)
@@ -205,6 +205,8 @@ Preserve EAX and EBX."
 	    (:jae '(:sub-program ()
 		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 			       (:edi (:edi-offset atomically-status))))
+		    (:movl :edx (#x1000000))
+		    (:addl :eax (#x1000000))
 		    (:int 113)		; This interrupt can be retried.
 		    (:jmp 'retry-cons)))
 	    (:movl ,(dpb movitz:+movitz-fixnum-factor+
@@ -239,9 +241,13 @@ Preserve EAX and EBX."
 		   (:movl :ebx :eax)	; Restore count in EAX before retry
 		   (:jmp 'retry)))
 	    (:movl :eax (:edx 2))
-	    (:movl ,(movitz:tag :infant-object) (:edx :ecx ,(+ 8 movitz:+other-type-offset+)))
+	    (:movl ,(movitz:basic-vector-type-tag :any-t)
+		   (:edx :ecx ,(+ 8 movitz:+other-type-offset+)))
+	    (:subl 8 :ebx)
+	    (:movl :ebx (:edx :ecx ,(+ 16 movitz:+other-type-offset+)))
 	    (:leal (:edx :ecx 8) :eax)		
 	    (:xorl :ecx :ecx)
+	    (:addl 8 :ecx)
 	   init-loop			; Now init ebx number of words
 	    (:movl :edi (:eax :ecx ,(- (movitz:tag :other))))
 	    (:addl 4 :ecx)
@@ -285,22 +291,22 @@ duo-space where each space is KB-SIZE kilobytes."
   (setf (exception-handler 113)
     (lambda (exception interrupt-frame)
       (declare (ignore exception interrupt-frame))
-      (let ((*standard-output* *terminal-io*))
-	(when *gc-running*
-	  (let ((muerte::*error-no-condition-for-debugger* t))
-	    (warn "Recursive GC triggered.")))
-	(let ((*gc-running* t))
-	  (unless *gc-quiet*
-	    (format t "~&;; GC.. "))
-	  (stop-and-copy))
-	(if *gc-break*
-	    (break "GC break.")
-	  (loop				; This is  a nice opportunity to poll the keyboard..
-	    (case (muerte.x86-pc.keyboard:poll-char)
-	      ((#\esc)
-	       (break "Los0 GC keyboard poll."))
-	      ((nil)
-	       (return))))))))
+      (without-interrupts
+	(let ((*standard-output* *terminal-io*))
+	  (when *gc-running*
+	    (break "Recursive GC triggered."))
+	  (let ((*gc-running* t))
+	    (unless *gc-quiet*
+	      (format t "~&;; GC.. "))
+	    (stop-and-copy))
+	  (if *gc-break*
+	      (break "GC break.")
+	    (loop			; This is  a nice opportunity to poll the keyboard..
+	      (case (muerte.x86-pc.keyboard:poll-char)
+		((#\esc)
+		 (break "Los0 GC keyboard poll."))
+		((nil)
+		 (return)))))))))
   (let* ((actual-duo-space (or duo-space
 			       (allocate-duo-space (* kb-size #x100))))
 	 (last-location (object-location (cons 1 2))))
@@ -315,8 +321,8 @@ duo-space where each space is KB-SIZE kilobytes."
       (install-primitive los0-box-u32-ecx muerte::box-u32-ecx)
       (install-primitive los0-get-cons-pointer muerte::get-cons-pointer)
       (install-primitive los0-cons-commit muerte::cons-commit)
-      (install-primitive los0-malloc-pointer-words muerte::malloc-pointer-words)
-      (install-primitive los0-malloc-non-pointer-words muerte::malloc-non-pointer-words))
+      #+ignore (install-primitive los0-malloc-pointer-words muerte::malloc-pointer-words)
+      #+ignore (install-primitive los0-malloc-non-pointer-words muerte::malloc-non-pointer-words))
     (if (eq context (current-run-time-context))
 	(setf (%run-time-context-slot 'muerte::nursery-space)
 	  actual-duo-space)
@@ -384,6 +390,10 @@ duo-space where each space is KB-SIZE kilobytes."
 	  (check-type space0 vector-u32)
 	  (check-type space1 vector-u32)
 	  (assert (eq space0 (space-other space1)))
+	  (assert (= 2 (space-fresh-pointer space1)))
+	  (setf (%run-time-context-slot 'nursery-space) space1)
+	  (values space1 space0)
+	  #+ignore
 	  (multiple-value-bind (newspace oldspace)
 	      (if (< (space-fresh-pointer space0) ; Chose the emptiest space as newspace.
 		     (space-fresh-pointer space1))
@@ -403,23 +413,22 @@ duo-space where each space is KB-SIZE kilobytes."
 		   nil)
 		  ((not (object-in-space-p oldspace x))
 		   x)
-		  (t 
-		       (or (and (eq (object-tag x)
-				    (ldb (byte 3 0)
-					 (memref (object-location x) 0 0 :unsigned-byte8)))
-				(let ((forwarded-x (memref (object-location x) 0 0 :lisp)))
-				  (and (object-in-space-p newspace forwarded-x)
-				       forwarded-x)))
-			   (let ((forward-x (shallow-copy x)))
-			     (when (and (typep x 'muerte::pointer)
-					*gc-consitency-check*)
-			       (let ((a *x*))
-				 (vector-push (%object-lispval x) a)
-				 (vector-push (memref (object-location x) 0 0 :unsigned-byte32) a)
-				 (assert (vector-push (%object-lispval forward-x) a))))
-			     (setf (memref (object-location x) 0 0 :lisp) forward-x)
-			     forward-x))))))))
-      (setf *gc-stack* (muerte::copy-control-stack))
+		  (t (or (and (eq (object-tag x)
+				  (ldb (byte 3 0)
+				       (memref (object-location x) 0 0 :unsigned-byte8)))
+			      (let ((forwarded-x (memref (object-location x) 0 0 :lisp)))
+				(and (object-in-space-p newspace forwarded-x)
+				     forwarded-x)))
+			 (let ((forward-x (shallow-copy x)))
+			   (when (and (typep x 'muerte::pointer)
+				      *gc-consitency-check*)
+			     (let ((a *x*))
+			       (vector-push (%object-lispval x) a)
+			       (vector-push (memref (object-location x) 0 0 :unsigned-byte32) a)
+			       (assert (vector-push (%object-lispval forward-x) a))))
+			   (setf (memref (object-location x) 0 0 :lisp) forward-x)
+			   forward-x))))))))
+      (setf *gc-stack* (muerte::copy-current-control-stack))
       ;; Scavenge roots
       (dolist (range muerte::%memory-map-roots%)
 	(map-heap-words evacuator (car range) (cdr range)))
@@ -470,5 +479,36 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
 ~/muerte:pprint-clumps/, freed: ~/muerte:pprint-clumps/.~%"
 		  old-size new-size (- old-size new-size))))
       (initialize-space oldspace)
-      #+ignore (fill oldspace #x13 :start 2)))
+      (fill oldspace #x13 :start 2)))
   (values))
+
+
+(defun find-object-by-location (location &key (continuep t) (breakp nil))
+  "Scan the heap for a (pointer) object that matches location.
+This is a debugging tool."
+  (let ((results nil))
+    (flet ((searcher (x ignore)
+	     (declare (ignore ignore))
+	     (when (and (typep x '(or muerte::tag1 muerte::tag6 muerte::tag7))
+			(not (eq x (%run-time-context-slot 'muerte::nursery-space)))
+			(location-in-object-p x location)
+			(not (member x results)))
+	       (push x results)
+	       (funcall (if breakp #'break #'warn)
+			"Found pointer ~Z of type ~S at location ~S."
+			x (type-of x) (object-location x)))
+	     x))
+      (handler-bind
+	  ((serious-condition (lambda (c)
+				(when (and continuep
+					   (find-restart 'muerte::continue-map-heap-words))
+				  (warn "Automatic continue from scanning error: ~A" c)
+				  (invoke-restart 'muerte::continue-map-heap-words)))))
+	(dolist (range muerte::%memory-map-roots%)
+	  (map-heap-words #'searcher (car range) (cdr range)))
+	(let ((nursery (%run-time-context-slot 'muerte::nursery-space)))
+	  (map-heap-words #'searcher
+			  (+ 4 (object-location nursery))
+			  (+ 4 (object-location nursery) (space-fresh-pointer nursery))))
+	(map-stack-words #'searcher nil (current-stack-frame))))
+    results))

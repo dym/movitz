@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.93 2004/08/18 09:50:33 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.94 2004/09/15 10:22:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -90,16 +90,16 @@
 	    ;; Now we have to make the compare act as unsigned, which is why
 	    ;; we compare zero-extended 16-bit quantities.
 	    (:movzxw (:ebx :edx (:offset movitz-bignum bigit0 2)) :ecx) ; First compare upper 16 bits.
-	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0))))
 	    (:movzxw (:eax :edx (:offset movitz-bignum bigit0 2)) :ecx)
-	    (:locally (:cmpl (:edi (:edi-offset scratch0)) :ecx))
+	    (:locally (:cmpl (:edi (:edi-offset raw-scratch0)) :ecx))
 	    (:jne 'upper-16-decisive)
 	    (:movzxw (:ebx :edx (:offset movitz-bignum bigit0))
 		     :ecx)		; Then compare lower 16 bits.
-	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0))))
 	    (:movzxw (:eax :edx (:offset movitz-bignum bigit0))
 		     :ecx)		; Then compare lower 16 bits.
-	    (:locally (:cmpl (:edi (:edi-offset scratch0)) :ecx))
+	    (:locally (:cmpl (:edi (:edi-offset raw-scratch0)) :ecx))
 	   upper-16-decisive
 	    (:ret)
 	    
@@ -125,16 +125,16 @@
 	    ;; we compare zero-extended 16-bit quantities.
 	    (:movzxw (:ebx :edx (:offset movitz-bignum bigit0 2))
 		     :ecx)		; First compare upper 16 bits.
-	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0))))
 	    (:movzxw (:eax :edx (:offset movitz-bignum bigit0)) :ecx)
-	    (:locally (:cmpl :ecx (:edi (:edi-offset scratch0))))
+	    (:locally (:cmpl :ecx (:edi (:edi-offset raw-scratch0))))
 	    (:jne 'negative-upper-16-decisive)
 	    (:movzxw (:ebx :edx (:offset movitz-bignum bigit0))
 		     :ecx)		; Then compare lower 16 bits.
-	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0))))
 	    (:movzxw (:eax :edx (:offset movitz-bignum bigit0))
 		     :ecx)		; Then compare lower 16 bits.
-	    (:locally (:cmpl :ecx (:edi (:edi-offset scratch0))))
+	    (:locally (:cmpl :ecx (:edi (:edi-offset raw-scratch0))))
 	   negative-upper-16-decisive
 	    (:ret))))
     (do-it)))
@@ -1303,26 +1303,29 @@
 		     (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
 		     (:movl :ecx (:eax ,movitz:+other-type-offset+))
 		     (:shrl 16 :ecx)
+		     (:testb 3 :cl)
+		     (:jnz '(:sub-program () (:int 63)))
+		     (:movl :ecx :esi)
 	     
 		     (:xorl :edx :edx)	; edx=hi-digit=0
 					; eax=lo-digit=msd(number)
+		     (:compile-form (:result-mode :ecx) divisor)
+		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 		     (:std)
-		     (:compile-form (:result-mode :esi) divisor)
-		     (:shrl ,movitz:+movitz-fixnum-shift+ :esi)
 
 		    divide-loop
 		     (:load-lexical (:lexical-binding number) :ebx)
-		     (:movl (:ebx :ecx (:offset movitz-bignum bigit0 -4))
+		     (:movl (:ebx :esi (:offset movitz-bignum bigit0 -4))
 			    :eax)
-		     (:divl :esi :eax :edx)
+		     (:divl :ecx :eax :edx)
 		     (:load-lexical (:lexical-binding r) :ebx)
-		     (:movl :eax (:ebx :ecx (:offset movitz-bignum bigit0 -4)))
-		     (:subl 4 :ecx)
+		     (:movl :eax (:ebx :esi (:offset movitz-bignum bigit0 -4)))
+		     (:subl 4 :esi)
 		     (:jnz 'divide-loop)
 		     (:movl :edi :eax)	; safe value
 		     (:leal ((:edx ,movitz:+movitz-fixnum-factor+)) :edx)
-		     (:movl (:ebp -4) :esi)
 		     (:cld)
+		     (:movl (:ebp -4) :esi)
 		     (:movl :ebx :eax)
 		     (:movl :edx :ebx)
 

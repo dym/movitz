@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.18 2004/08/30 14:59:23 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.19 2004/09/15 10:22:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -196,6 +196,7 @@
 	       (null
 		(write-string "?")
 		(let* ((eax (get-word (+ (* 4 (interrupt-frame-index :eax)) stack-frame)))
+		       (ebx (get-word (+ (* 4 (interrupt-frame-index :ebx)) stack-frame)))
 		       (ecx (get-word (+ (* 4 (interrupt-frame-index :ecx)) stack-frame)))
 		       (edx (get-word (+ (* 4 (interrupt-frame-index :edx)) stack-frame)))
 		       (edi (get-word (+ (* 4 (interrupt-frame-index :edi)) stack-frame)))
@@ -203,9 +204,9 @@
 		       (esi (get-word (+ (* 4 (interrupt-frame-index :esi)) stack-frame)))
 		       (exception (get-word (+ (* 4 (interrupt-frame-index :exception-vector))
 					       stack-frame))))
-		  (format t "#x~X {EAX: #x~X, ECX: #x~X, EDX: #x~X, EDI: #x~X, ESI: #x~X, EIP: #x~X, exception ~D}"
+		  (format t "#x~X {EAX: #x~X, EBX: #x~X, ECX: #x~X, EDX: #x~X, EDI: #x~X, ESI: #x~X, EIP: #x~X, exception ~D}"
 			  stack-frame
-			  eax ecx edx edi esi eip exception)))
+			  eax ebx ecx edx edi esi eip exception)))
 	       (movitz-symbol
 		(let ((name (movitz-print movitz-name)))
 		  (when print-frames

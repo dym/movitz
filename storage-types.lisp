@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.39 2004/08/18 22:32:53 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.40 2004/09/15 10:22:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -58,9 +58,14 @@
   :odd-fixnum 4
   :cons 1
   :character 2
+  :tag0 0
+  :tag1 1
   :tag2 2
   :tag3 3				; unused
   :tag4 4
+  :tag5 5
+  :tag6 6
+  :tag7 7
   ;; :immediate 4
   :null 5
   :other 6
@@ -72,7 +77,7 @@
   :bignum #x4a
   :ratio #x52
   :complex #x5a
-  :defstruct #x20
+  :defstruct #x2a
   :std-instance #x40
   :run-time-context #x50
   :illegal #x13
@@ -1171,12 +1176,6 @@ integer (native lisp) value."
   (make-instance 'movitz-std-instance
     :class (movitz-read class)
     :slots slots))
-
-;;;(defmethod write-binary-record ((obj movitz-std-instance) stream)
-;;;  (+ (write-binary 'word stream (movitz-intern (movitz-std-instance-class obj)))
-;;;     (let ((slots (movitz-read (movitz-std-instance-slots obj))))
-;;;       (assert (typep slots 'movitz-vector))
-;;;       (write-binary 'word stream (movitz-intern slots)))))
 
 (defmethod print-object ((object movitz-std-instance) stream)
   (print-unreadable-object (object stream :identity t)

@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.38 2004/08/18 22:35:45 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.39 2004/09/15 10:22:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1066,7 +1066,52 @@ busy-waiting loop on P4."
      (define-symbol-macro ,name (%symbol-global-value ',name))))
 
 (define-compiler-macro assembly-register (register)
-  `(with-inline-assembly (:returns ,register)))
+  `(with-inline-assembly (:returns :eax)
+     (:movl ,register :eax)))
+
+(defmacro with-allocation-assembly
+    ((size-form &key object-register size-register fixed-size-p labels) &body code)
+  (assert (eq object-register :eax))
+  (assert (or fixed-size-p (eq size-register :ecx)))
+  (let ((size-var (gensym "malloc-size-")))
+    `(let ((,size-var ,size-form))
+       (with-inline-assembly (:returns :eax :labels (retry-alloc retry-jumper ,@labels))
+	 (:declare-label-set retry-jumper (retry-alloc))
+	retry-alloc
+	 (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
+	 (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
+			    'retry-jumper)
+			  (:edi (:edi-offset atomically-status))))
+	 (:load-lexical (:lexical-binding ,size-var) :eax)
+	 (:call-local-pf get-cons-pointer)
+	 ,@code
+	 ,@(when fixed-size-p
+	     `((:load-lexical (:lexical-binding ,size-var) :ecx)))
+	 (:call-local-pf cons-commit)
+	 (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+			  (:edi (:edi-offset atomically-status))))))))
+
+(defmacro with-non-pointer-allocation-assembly
+    ((size-form &key object-register size-register fixed-size-p labels) &body code)
+  (assert (eq object-register :eax))
+  (assert (or fixed-size-p (eq size-register :ecx)))
+  (let ((size-var (gensym "malloc-size-")))
+    `(let ((,size-var ,size-form))
+       (with-inline-assembly (:returns :eax :labels (retry-alloc retry-jumper ,@labels))
+	 (:declare-label-set retry-jumper (retry-alloc))
+	retry-alloc
+	 (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
+	 (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
+			    'retry-jumper)
+			  (:edi (:edi-offset atomically-status))))
+	 (:load-lexical (:lexical-binding ,size-var) :eax)
+	 (:call-local-pf get-cons-pointer-non-pointer)
+	 ,@code
+	 ,@(when fixed-size-p
+	     `((:load-lexical (:lexical-binding ,size-var) :ecx)))
+	 (:call-local-pf cons-commit-non-pointer)
+	 (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+			  (:edi (:edi-offset atomically-status))))))))
 
 (require :muerte/setf)
 

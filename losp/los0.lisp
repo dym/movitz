@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.20 2004/07/28 14:15:17 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.21 2004/09/15 10:22:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -45,8 +45,6 @@
 (require :los0-gc)			; Must come after defpackage.
 
 (in-package muerte.init)
-
-(declaim (special muerte::*multiboot-data*))
 
 (defun test-floppy ()
   (muerte.x86-pc::fd-start-disk)	; to initialize the controller and spin the drive up.
@@ -101,10 +99,12 @@
 ;;;      (values-list x)
 ;;;    (warn "sym: ~S, stat: ~S" symbol status)))
 ;;;
-;;;(defun test-loop (x)
-;;;  (format t "test-loop: ~S~%"
-;;;	  (loop for i from 0 to 10 collect x)))
-;;;	      
+
+#+ignore
+(defun test-loop (x)
+  (format t "test-loop: ~S~%"
+	  (loop for i from 0 to 10 collect x)))
+	      
 #+ignore
 (defun delay (time)
   (dotimes (i time)
@@ -133,6 +133,23 @@
   (print x)
   'jumbo)
 
+(defun jumbo2 (a b &rest x)
+  (declare (dynamic-extent x))
+  (print a) (print b)
+  (print x)
+  'jumbo)
+
+(defun jumbo3 (a &rest x)
+  (declare (dynamic-extent x))
+  (print a)
+  (print x)
+  'jumbo)
+
+(defun jumbo4 (&rest x)
+  (declare (dynamic-extent x))
+  (print x)
+  'jumbo)
+
 #+ignore
 (defun kumbo (&key a b (c (jumbo 1 2 3)) d)
   (print a)
@@ -145,14 +162,33 @@
   (print a)
   (print b))
 
+(defmacro do-check-esp (&body body)
+  `(let ((before (with-inline-assembly (:returns :eax) (:movl :esp :eax))))
+     (with-inline-assembly (:returns :nothing)
+       (:compile-form (:result-mode :multiple-values) (progn ,@body)))
+     (unless (eq before
+		 (with-inline-assembly (:returns :eax) (:movl :esp :eax)))
+       (error "ESP before body: ~S, after: ~S"
+	      (with-inline-assembly (:returns :eax) (:movl :esp :eax))))))
+
 #+ignore
 (defun test-m-v-call ()
+  (do-check-esp
+      (multiple-value-call #'format t "~@{ ~D~}~%"
+			   'a (values) 'b (test-loop 1) (make-values)
+			   'c 'd  'e (make-no-values) 'f)))
+
+(defun test-m-v-call2 ()
   (multiple-value-call #'format t "~@{ ~D~}~%"
-		       'a (values) 'b (test-loop 1) (make-values)
-		       'c 'd  'e (make-no-values) 'f))
+		       'a 'b (values 1 2 3) 'c 'd 'e 'f))
 
 (defun make-values ()
   (values 0 1 2 3 4 5))
+
+(defun xfuncall (&rest args)
+  (declare (dynamic-extent args))
+  (break "xfuncall:~{ ~S~^,~}" args)
+  (values))
 
 (defun xx ()
   (format t "wefewf")
@@ -162,10 +198,11 @@
     (:leal (:edx :ecx 1) :ecx)))
 
 (defun xfoo (f) 
-  (multiple-value-bind (a b c d)
-      (multiple-value-prog1 (make-values)
-	(format t "hello world"))
-    (format t "~&a: ~S, b: ~S, c: ~S, d: ~S" a b c d f)))
+  (do-check-esp
+      (multiple-value-bind (a b c d)
+	  (multiple-value-prog1 (make-values)
+	    (format t "hello world"))
+	(format t "~&a: ~S, b: ~S, c: ~S, d: ~S ~S" a b c d f))))
 
 
 #+ignore
@@ -213,6 +250,17 @@
 	     (when (plusp x)
 	       (pingo (1- x)))))
     (pingo 5)))
+
+#+ignore
+(defun foo-type (length start1 sequence-1)
+  (do* ((i 0 #+ignore (+ start1 length -1) (1- i)))
+      ((< i start1) sequence-1)
+    (declare (type muerte::index i length))
+    (setf (sequence-1-ref i)
+      'foo)))
+
+(defun plus (a b)
+  (+ b a))
 
 #+ignore
 (defun test-values ()
@@ -573,6 +621,11 @@ s#+ignore
     (let ((x (car p)))
       (print x))))
 
+(defun mubmo ()
+  (let ((x (muerte::copy-funobj #'format))
+	(y (cons 1 2)))
+    (warn "x: ~Z, y: ~Z" x y)))
+
 ;;;;;
 
 (defclass food () ())
@@ -695,10 +748,6 @@ s#+ignore
   (time (nano-sleep x)))
 
 ;;;;;
-
-(defvar div #xa65feaab511c61e33df38fdddaf03b59b6f25e1fa4de57e5cf00ae478a855dda4f3638d38bb00ac4af7d8414c3fb36e04fbdf3d3166712d43b421bfa757e85694ad27c48f396d03c8bce8da58db5b82039f35dcf857235c2f1c73b2226a361429190dcb5b6cd0edfb0ff6933900b02cecc0ce69274d8dae7c694804318d6d6b9)
-
-(defvar guess #x1dc19f99401de22d476c89943491fc187b80bcfa8293ec1cf69c1a81352f047e894e262d24116c82ad0be241c6c6216cab9b66d64417d43bf433db10114c0)
 
 ;;;;;;;;;;;;;;; CL
 
@@ -956,23 +1005,24 @@ s#+ignore
 	  (return (values)))))))
 
 (defun los0-debugger (condition)
-  (let ((*debugger-dynamic-context* (current-dynamic-context))
-	(*standard-output* *debug-io*)
-	(*standard-input* *debug-io*)
-	(*debugger-condition* condition)
-	(*package* (or (and (packagep *package*) *package*)
-		       (find-package "INIT")
-		       (find-package "USER")
-		       (find-package "COMMON-LISP")
-		       (error "Unable to find any package!")))
-	(*repl-prompt-context* #\d)
-	(*repl-readline-context* (or *repl-readline-context*
-				     (make-readline-context :history-size 16))))
-    (let ((*print-safely* t))
-      (invoke-toplevel-command :error))
-    (loop
-      (with-simple-restart (abort "Abort to command level ~D." (1+ *repl-level*))
-	(read-eval-print)))))
+  (without-interrupts
+    (let ((*debugger-dynamic-context* (current-dynamic-context))
+	  (*standard-output* *debug-io*)
+	  (*standard-input* *debug-io*)
+	  (*debugger-condition* condition)
+	  (*package* (or (and (packagep *package*) *package*)
+			 (find-package "INIT")
+			 (find-package "USER")
+			 (find-package "COMMON-LISP")
+			 (error "Unable to find any package!")))
+	  (*repl-prompt-context* #\d)
+	  (*repl-readline-context* (or *repl-readline-context*
+				       (make-readline-context :history-size 16))))
+      (let ((*print-safely* t))
+	(invoke-toplevel-command :error))
+      (loop
+	(with-simple-restart (abort "Abort to command level ~D." (1+ *repl-level*))
+	  (read-eval-print))))))
 
 (defun ub (x)
   `(hello world ,x or . what))
@@ -1020,6 +1070,109 @@ s#+ignore
 	(:stc))
     (values eax ebx ecx edx p1 p2)))
 
+(defun my-test-labels (x)
+  (labels (#+ignore (p () (print x))
+		    (q (y) (list x y)))
+    (declare (ignore q))
+    (1+ x)))
+
+(defparameter *timer-stack* nil)
+(defparameter *timer-esi* nil)
+(defparameter *timer-frame* #100())
+
+(defun test-clc (&optional timeout)
+  (test-timer timeout)
+  (loop
+    (clc::test-clc)))
+
+(defun test-timer (&optional timeout)
+  (setf (exception-handler 32)
+    (lambda (exception-vector exception-frame)
+      (declare (ignore exception-vector #+ignore exception-frame))
+;;;      (loop with f = *timer-frame*
+;;;	  for o from 20 downto -36 by 4 as i upfrom 0
+;;;	  do (setf (aref f i) (memref exception-frame o 0 :lisp)))
+;;;      (let ((ts *timer-stack*))
+;;;	(setf (fill-pointer ts) 0)
+;;;	(loop for stack-frame = exception-frame then (stack-frame-uplink stack-frame)
+;;;	    while (plusp stack-frame)
+;;;	    do (multiple-value-bind (offset code-vector funobj)
+;;;		   (stack-frame-call-site stack-frame)
+;;;		 (vector-push funobj ts)
+;;;		 (vector-push offset ts)
+;;;		 (vector-push code-vector ts))))
+      (muerte::cli)
+      (pic8259-end-of-interrupt 0)
+      (with-inline-assembly (:returns :nothing)
+	(:compile-form (:result-mode :ecx) muerte.x86-pc::*screen*)
+	(:shrl 2 :ecx)
+	((:gs-override) :addb 1 (:ecx 158))
+	((:gs-override) :movb #x40 (:ecx 159)))
+      (setf *timer-esi* (muerte::dit-frame-ref nil exception-frame :esi :unsigned-byte32))
+      (do ((frame (stack-frame-uplink nil (current-stack-frame))
+		  (stack-frame-uplink nil frame)))
+	  ((plusp frame))
+	(when (eq (with-inline-assembly (:returns :eax) (:movl :esi :eax))
+		  (stack-frame-funobj nil frame))
+	  (error "Double interrupt.")))
+      #+ignore
+      (dolist (range muerte::%memory-map-roots%)
+	(map-heap-words (lambda (x type)
+			  (declare (ignore type))
+			  x)
+			(car range) (cdr range)))
+      (map-stack-words (lambda (x foo)
+			 (declare (ignore foo))
+			 x)
+		       nil
+		       (current-stack-frame))
+      (setf *timer-stack* (muerte::copy-current-control-stack))
+      (setf (pit8253-timer-mode 0) +pit8253-mode-single-timeout+
+	    (pit8253-timer-count 0) (or timeout (+ 10 (random 4000))))
+      (with-inline-assembly (:returns :nothing)
+	(:compile-form (:result-mode :ecx) muerte.x86-pc::*screen*)
+	(:shrl 2 :ecx)
+	((:gs-override) :movb #x20 (:ecx 159)))      
+      (muerte::sti)
+      ))
+  (with-inline-assembly (:returns :nothing)
+    (:compile-form (:result-mode :ecx) muerte.x86-pc::*screen*)
+    (:shrl 2 :ecx)
+    ((:gs-override) :movw #x4646 (:ecx 158)))
+  (setf (pit8253-timer-mode 0) +pit8253-mode-single-timeout+
+	(pit8253-timer-count 0) (or timeout (+ 10 (random 4000))))
+  (setf (pic8259-irq-mask) #xfffe)
+  (pic8259-end-of-interrupt 0)
+  (with-inline-assembly (:returns :nothing) (:sti))
+  ;; (dotimes (i 100000))
+  #+ignore
+  (with-inline-assembly (:returns :nothing)
+    (:compile-two-forms (:ebx :edx)
+			(read-time-stamp-counter)
+			(read-time-stamp-counter))
+    (:movl :eax (#x1000000))
+    (:movl :ebx (#x1000004))
+    (:movl :ecx (#x1000008))
+    (:movl :edx (#x100000c))
+    (:movl :ebp (#x1000010))
+    (:movl :esp (#x1000014))
+    (:movl :esi (#x1000018))
+    (:halt)
+    (:cli)
+    (:halt)
+    ))
+
+(defun test-throwing (&optional (x #xffff))
+  (test-timer x)
+  (loop
+    (catch 'foo
+      (funcall (lambda ()
+		 (unless (logbitp 9 (eflags))
+		   (break "Someone switched off interrupts!"))
+		 (incf (memref-int muerte.x86-pc::*screen* 0 0 :unsigned-byte16 t))
+		 (throw 'foo nil))))))
+
+
 (defun genesis ()
   (let ((extended-memsize 0))
     ;;  Find out how much extended memory we have 
@@ -1030,10 +1183,10 @@ s#+ignore
     (format t "Extended memory: ~D KB~%" extended-memsize)
 
     (idt-init)
-    (install-los0-consing :kb-size 50)
+    (install-los0-consing :kb-size 500)
     #+ignore
     (install-los0-consing :kb-size (max 100 (truncate (- extended-memsize 1024 2048) 2))))
-  
+
   (setf *debugger-function* #'los0-debugger)
   (let ((*repl-readline-context* (make-readline-context :history-size 16))
 	#+ignore (*backtrace-stack-frame-barrier* (stack-frame-uplink (current-stack-frame)))
@@ -1049,6 +1202,9 @@ s#+ignore
 
       (setf *package* (find-package "INIT"))
       (clos-bootstrap)
+      (when muerte::*multiboot-data*
+	(set-textmode +vga-state-90x60+))
+      
       (cond
        ((not (cpu-featurep :tsc))
 	(warn "This CPU has no time-stamp-counter. Timer-related functions will not work."))
@@ -1065,7 +1221,7 @@ s#+ignore
     (let ((* nil) (** nil) (*** nil)
 	  (/ nil) (// nil) (/// nil)
 	  (+ nil) (++ nil) (+++ nil))
-      (format t "~&Movitz image Los0 build ~D." *build-number*)
+      (format t "~&Movitz image Los0 build ~D [~Z]." *build-number* (cons 1 2))
       (loop
 	(catch :top-level-repl		; If restarts don't work, you can throw this..
 	  (with-simple-restart (abort "Abort to the top command level.")

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 19:42:57 2004
 ;;;;                
-;;;; $Id: bignums.lisp,v 1.6 2004/08/18 22:36:37 ffjeld Exp $
+;;;; $Id: bignums.lisp,v 1.7 2004/09/15 10:22:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -64,6 +64,8 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 
 (defun copy-bignum (old)
   (check-type old bignum)
+  (%shallow-copy-object old (1+ (%bignum-bigits old)))
+  #+ignore
   (let* ((length (%bignum-bigits old))
 	 (new (malloc-non-pointer-words (1+ length))))
     (with-inline-assembly (:returns :eax)
@@ -412,15 +414,16 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	       (:load-lexical (:lexical-binding bignum) :ebx) ; bignum
 	       (:compile-form (:result-mode :ecx) factor)
 	       (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
-	       (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	       (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0))))
 	       (:xorl :esi :esi)	; Counter (by 4)
 	       (:xorl :edx :edx)	; Initial carry
 	       (:std)			; Make EAX, EDX non-GC-roots.
 	      multiply-loop
+	       (:movl :esi (#x1000000))
 	       (:movl (:ebx :esi (:offset movitz-bignum bigit0))
 		      :eax)
 	       (:movl :edx :ecx)	; Save carry in ECX
-	       (:locally (:mull (:edi (:edi-offset scratch0)) :eax :edx)) ; EDX:EAX = scratch0*EAX
+	       (:locally (:mull (:edi (:edi-offset raw-scratch0)) :eax :edx)) ; EDX:EAX = scratch0*EAX
 	       (:addl :ecx :eax)	; Add carry
 	       (:adcl 0 :edx)		; Compute next carry
 	       (:jc '(:sub-program (should-not-happen) (:int 63)))
@@ -428,11 +431,11 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	       (:addl 4 :esi)
 	       (:cmpw :si (:ebx (:offset movitz-bignum length)))
 	       (:ja 'multiply-loop)
-	       (:movl (:ebp -4) :esi)
 	       (:movl :edx :ecx)	; Carry into ECX
 	       (:movl :edi :eax)
 	       (:movl :edi :edx)
 	       (:cld)
+	       (:movl (:ebp -4) :esi)
 	       (:testl :ecx :ecx)	; Carry overflow?
 	       (:jnz '(:sub-program (overflow) (:int 4)))
 	       )))

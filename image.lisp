@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.66 2004/09/02 09:21:14 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.67 2004/09/15 10:22:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -290,12 +290,24 @@
     :initform 0)
    (values
     :binary-type #.(* 4 +movitz-multiple-values-limit+))
-   (malloc-pointer-words
+   (get-cons-pointer
+    :binary-type code-vector-word
+    :initform nil
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)
+   (cons-commit
+    :binary-type code-vector-word
+    :initform nil
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)
+   (get-cons-pointer-non-pointer
     :binary-type code-vector-word
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
-   (malloc-non-pointer-words
+   (cons-commit-non-pointer
     :binary-type code-vector-word
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
@@ -438,11 +450,13 @@
    (segment-descriptor-7
     :binary-type segment-descriptor
     :initform (make-segment-descriptor))
-   (scratch0				; A non-GC-root scratch register
+   (raw-scratch0			; A non-GC-root scratch register
     :binary-type lu32
     :initform 0)
    (non-pointers-end :binary-type :label) ; ========= NON-POINTER-END =======
-   
+   (scratch1
+    :binary-type word
+    :initform 0)
    (atomically-status
     :binary-type (define-bitfield atomically-status (lu32)
 		   (((:enum :byte (3 2))
@@ -456,19 +470,7 @@
     :initform '(:inactive))
    (atomically-esp
     :binary-type lu32
-    :initform 0)
-   (get-cons-pointer
-    :binary-type code-vector-word
-    :initform nil
-    :map-binary-write 'movitz-intern-code-vector
-    :map-binary-read-delayed 'movitz-word-code-vector
-    :binary-tag :primitive-function)
-   (cons-commit
-    :binary-type code-vector-word
-    :initform nil
-    :map-binary-write 'movitz-intern-code-vector
-    :map-binary-read-delayed 'movitz-word-code-vector
-    :binary-tag :primitive-function))
+    :initform 0))
   (:slot-align null-symbol -5))
 
 (defun atomically-status-simple-pf (pf-name reset-status-p &rest registers)
@@ -937,7 +939,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	  (assert (file-position stream 512) () ; leave room for bootblock.
 	    "Couldn't set file-position for ~W." (pathname stream))
 	  (let* ((stack-vector (make-instance 'movitz-basic-vector
-				 :num-elements #x2ffe
+				 :num-elements #x3ffe
 				 :fill-pointer 0
 				 :symbolic-data nil
 				 :element-type :u32))

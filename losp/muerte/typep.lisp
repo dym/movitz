@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.36 2004/07/31 23:35:13 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.37 2004/09/15 10:22:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -201,11 +201,14 @@
 		(symbol-not-nil
 		 (make-tag-typep :symbol))
 		(cons (make-tag-typep :cons))
+		(tag0 (make-tag-typep :tag0))
+		(tag1 (make-tag-typep :tag1))
 		(tag2 (make-tag-typep :tag2))
 		(tag3 (make-tag-typep :tag3))
 		(tag4 (make-tag-typep :tag4))
-		(tag5 (make-tag-typep :null))
-		(tag6 (make-tag-typep :other))
+		(tag5 (make-tag-typep :tag5))
+		(tag6 (make-tag-typep :tag6))
+		(tag7 (make-tag-typep :tag7))
 		(basic-restart (make-tag-typep :basic-restart))
 		(pointer
 		 (assert (equal (mapcar 'movitz::tag '(:cons :other :symbol))
