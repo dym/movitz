@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Feb  8 20:43:20 2001
 ;;;;                
-;;;; $Id: setf.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
+;;;; $Id: setf.lisp,v 1.3 2004/02/18 14:38:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -151,7 +151,7 @@
 		,setter-form)))))))
 
 
-(define-compiler-macro setf (&environment env &rest pairs)
+(defmacro setf (&environment env &rest pairs)
   (let ((num-pairs (length pairs)))
     (cond
      ((= 2 num-pairs)
@@ -159,11 +159,6 @@
 	  pairs
 	;; 5.1.2 Kinds of Places
 	(cond
-	 #+ignore
-	 ((nth-value 1 (movitz::movitz-macroexpand-1 place env))
-	  ;; 5.1.2.7 Macro forms as places
-	  ;; ..and 5.1.2.8 Symbol Macros as places.
-	  `(setf ,(movitz::movitz-macroexpand-1 place env) ,new-value-form))
 	 ((symbolp place)		; 5.1.2.1 Variable Names as Places
 	  (multiple-value-bind (expansion expanded-p)
 	      (movitz::movitz-macroexpand-1 place env)
@@ -172,9 +167,6 @@
 	      `(setq ,place ,new-value-form))))
 	 (t (multiple-value-bind (tmp-vars tmp-forms store-vars setter-form)
 		(get-setf-expansion place env)
-	      #+ignore
-	      (warn "tmp-vars: ~W, tmp-forms: ~W, store-vars: ~W, setter-form: ~W"
-		    tmp-vars tmp-forms store-vars setter-form)
 	      (case (length store-vars)
 		(0 `(progn ,@tmp-forms ,new-value-form nil))
 		(1 `(let (,@(loop for tmp-var in tmp-vars 
@@ -188,31 +180,7 @@
 			      collect `(,tmp-var ,tmp-form))
 		      (multiple-value-bind ,store-vars
 			  ,new-value-form
-			,setter-form))))))
-	 #+ignore
-	 ((listp place)			; 5.1.2.9 Other Compound Forms as Places
-	  (let ((place-operator (first place))
-		(place-args (rest place)))
-	    (multiple-value-bind (newvalue-form newvalue-lets)
-		(if (movitz:movitz-constantp new-value-form)
-		    (values new-value-form nil)
-		  (let ((newvalue-var (gensym "setf-newvalue")))
-		    (values newvalue-var
-			    (list (list newvalue-var new-value-form)))))
-	      (multiple-value-bind (place-forms place-lets)
-		  (loop for pa in place-args
-		      as var = (gensym "setf-var")
-		      if (movitz:movitz-constantp pa)
-		      collect pa into forms
-		      else
-		      collect var into forms
-		      and collect (list var pa) into lets
-		      finally (return (values forms lets)))
-		`(let (,@place-lets ,@newvalue-lets)
-		   (,(movitz::movitz-env-setf-operator-name (movitz::translate-program place-operator
-										:cl :muerte.cl))
-		    ,newvalue-form
-		    ,@place-forms)))))))))
+			,setter-form)))))))))
      ((evenp num-pairs)
       (cons 'progn
 	    (loop for (place newvalue) on pairs by #'cddr
