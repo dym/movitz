@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.17 2004/02/05 14:46:02 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.18 2004/02/08 23:24:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -135,11 +135,14 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
   object)
 
 (defun movitz-macro-expander-make-function (lambda-form &key name (type :unknown))
-  "Make a lambda-form that is a macro-expander into a proper function."
-  (if *compiler-compile-macro-expanders*
-      (compile (gensym (format nil "~A-expander-~@[~A-~]" type name))
-	       lambda-form)
-    (coerce lambda-form 'function)))
+  "Make a lambda-form that is a macro-expander into a proper function.
+Gensym a name whose symbol-function is set to the macro-expander, and return that symbol."
+  (let ((function-name (gensym (format nil "~A-expander-~@[~A-~]" type name))))
+    (if *compiler-compile-macro-expanders*
+	(compile function-name lambda-form)
+      (setf (symbol-function function-name)
+	(coerce lambda-form 'function)))
+    function-name))
 
 (defun make-compiled-funobj (name lambda-list declarations form env top-level-p &key funobj)
   "Compiler entry-point for making a (lexically) top-level function."
@@ -349,12 +352,12 @@ Otherwise coerce funobj to class."
 	       (loop for function-binding in (sub-function-binding-usage funobj) by #'cddr
 		   do (analyze-funobj (function-binding-funobj function-binding)))
 	       funobj))
-      #+ignore (analyze-funobj toplevel-funobj)
-      #+ignore (dolist (binding bindings)
-		 (let ((types (binding-store-type binding)))
-		   (unless (some #'type-is-t types)
-		     (warn "binding: ~S~%      types: ~S"
-			   binding types))))
+;;;      (analyze-funobj toplevel-funobj)
+;;;      (dolist (binding bindings)
+;;;	(let ((types (binding-store-type binding)))
+;;;	  (when (or t (notany #'type-is-t types))
+;;;	    (warn "binding: ~S~%      types: ~S"
+;;;		  binding types))))
       toplevel-funobj)))
 
 (defun resolve-borrowed-bindings (toplevel-funobj)
@@ -545,42 +548,60 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	 (optional-stack-frame-p (tree-search resolved-optional-code
 					      '(:ebp :esp :call :leave))))
     (assert (not optional-stack-frame-p))
-    (let* ((stack-setup-size stack-frame-size)
-	   (function-code
+    (let* ((function-code
 	    (let* ((req-binding (movitz-binding (first (required-vars function-env))
 						function-env nil))
 		   (req-location (cdr (assoc req-binding frame-map)))
 		   (opt-binding (movitz-binding (first (optional-vars function-env))
 						function-env nil))
-		   (opt-location (cdr (assoc opt-binding frame-map))))
+		   (opt-location (cdr (assoc opt-binding frame-map)))
+		   (optp-binding (movitz-binding (optional-function-argument-supplied-p-var opt-binding)
+						 function-env nil))
+		   (optp-location (cdr (assoc optp-binding frame-map)))
+		   (stack-setup-pre 0))
 	      (append `((:jmp (:edi ,(global-constant-offset 'trampoline-cl-dispatch-1or2))))
 		      '(entry%1op)
 		      (unless (eql nil opt-location)
 			resolved-optional-code)
+		      (when optp-location
+			`((:movl :edi :ecx)
+			  (:jmp 'optp-into-ecx-ok)))
 		      '(entry%2op)
+		      (when optp-location
+			`((,*compiler-global-segment-prefix*
+			   :movl (:edi ,(global-constant-offset 't-symbol)) :ecx)
+			  optp-into-ecx-ok))
 		      (when use-stack-frame-p
 			+enter-stack-frame-code+)
 		      '(start-stack-frame-setup)
 		      (cond
 		       ((and (eql 1 req-location)
 			     (eql 2 opt-location))
-			(decf stack-setup-size 2)
+			(incf stack-setup-pre 2)
 			`((:pushl :eax)
 			  (:pushl :ebx)))
 		       ((and (eql 1 req-location)
 			     (eql nil opt-location))
-			(decf stack-setup-size 1)
+			(incf stack-setup-pre 1)
 			`((:pushl :eax)))
 		       ((and (member req-location '(nil :eax))
 			     (eql 1 opt-location))
-			(decf stack-setup-size 1)
+			(incf stack-setup-pre 1)
 			`((:pushl :ebx)))
 		       ((and (member req-location '(nil :eax))
 			     (member opt-location '(nil :ebx)))
 			nil)
 		       (t (error "Can't deal with req ~S opt ~S."
 				 req-location opt-location)))
-		      (make-stack-setup-code stack-setup-size)
+		      (cond
+		       ((not optp-location)
+			())
+		       ((= optp-location (1+ stack-setup-pre))
+			(incf stack-setup-pre 1)
+			`((:pushl :ecx)))
+		       (t (error "Can't deal with optional-p at ~S, after (~S ~S)."
+				 optp-location req-location opt-location)))
+		      (make-stack-setup-code (- stack-frame-size stack-setup-pre))
 		      resolved-code
 		      (make-compiled-function-postlude funobj function-env
 						       use-stack-frame-p)))))
