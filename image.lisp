@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.15 2004/02/12 11:30:20 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.16 2004/02/13 22:03:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -683,10 +683,12 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
    that function's code-vector."
   (let ((code-vector
 	 (movitz-symbol-value (movitz-read name))))
-    (assert (and code-vector
-		 (not (eq 'muerte::unbound code-vector)))
-	()
-      "Global constant primitive function ~S is not defined!" name)
+    (unless (and code-vector (not (eq 'muerte::unbound code-vector)))
+      (cerror "Install an empty vector instead."
+	      "Global constant primitive function ~S is not defined!" name)
+      (setf code-vector
+	(setf (movitz-symbol-value (movitz-read name))
+	  (movitz-read #()))))
     (check-type code-vector movitz-vector)
     code-vector))
 
