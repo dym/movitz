@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.4 2004/03/18 09:24:23 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.5 2004/06/09 20:18:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -436,3 +436,18 @@
 
   
   
+(defun subsetp (list-1 list-2 &key (key 'identity) (test 'eql) test-not)
+  "=> generalized-boolean"
+  (let ((test (if test-not
+		  (complement test-not)
+		test)))
+    (dolist (x list-1 t)
+      (unless (member x list-2 :key key :test test)
+	(return nil)))))
+
+(defun adjoin (item list &key (key 'identity) (test 'eql) test-not)
+  "=> new-list"
+  (let ((test (if test-not (complement test-not) test)))
+    (if (member (funcall key item) list :test test)
+	list
+      (cons item list))))
