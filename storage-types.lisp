@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.41 2004/09/17 11:06:05 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.42 2004/09/21 13:04:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -383,11 +383,6 @@ integer (native lisp) value."
     object)
    (t (call-next-method))))
     
-(defun vector-type-tag (element-type)
-  (dpb (enum-value 'movitz-vector-element-type element-type)
-       (byte 8 8)
-       (enum-value 'other-type-byte :vector)))
-
 (defun basic-vector-type-tag (element-type)
   (dpb (enum-value 'movitz-vector-element-type element-type)
        (byte 8 8)
