@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:47:19 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: bootblock.lisp,v 1.6 2004/01/19 10:36:12 ffjeld Exp $
+;;;; $Id: bootblock.lisp,v 1.7 2004/04/15 13:03:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -296,7 +296,7 @@
        ;; Data
        welcome         (% format 8 "Loading Movitz ~D..~%"
 			  ,(incf *bootblock-build*))
-       entering        (% format 8 "~%Enter..")
+       entering        (% format 8 ")~%Enter..")
        error           (% format 8 "Failed!)")
        track-start-msg (% format 8 "(")
        track-end-msg   (% format 8 ")")
