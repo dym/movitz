@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.31 2005/02/02 07:51:26 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.32 2005/02/02 10:23:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -148,13 +148,19 @@
 		  (loop while (and (plusp load-ecx-index)
 				   (= #x90 (aref code load-ecx-index))) ; Skip any NOPs
 		      do (decf load-ecx-index))
-		  (cond
-		   ((= #xb1 (aref code (- load-ecx-index 1)))
-		    ;; Assume it's a (:movb x :cl) instruction
-		    (aref code load-ecx-index))
-		   (t ;; now we should search further for where ecx may be set..
-		    (format t "{no ECX at ~D in ~S}" call-site funobj)
-		    nil))))))))))))
+		  (let ((opcode0 (aref code (1- load-ecx-index)))
+			(opcode1 (aref code load-ecx-index)))
+		    (cond
+		     ((= #xb1 opcode0)
+		      ;; Assume it's a (:movb x :cl) instruction
+		      (aref code load-ecx-index))
+		     ((and (= #x33 opcode0) (= #xc9 opcode1))
+		      ;; XORL :ECX :ECX
+		      0)
+		     (t ;; now we should search further for where ecx may be set..
+		      (format *debug-io* "{no ECX at ~D in ~S, opcode #x~X #x~X}"
+			      call-site funobj opcode0 opcode1)
+		      nil)))))))))))))
 
 (defun signed8-index (s8)
   "Convert a 8-bit twos-complement signed integer bitpattern to
