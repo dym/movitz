@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:49:17 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: parse.lisp,v 1.1 2004/01/13 11:04:59 ffjeld Exp $
+;;;; $Id: parse.lisp,v 1.2 2004/01/15 16:13:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -222,11 +222,17 @@ Return the variable, keyword-name, init-form and supplied-p-parameter, if any."
     (null
      (error "Illegal keyword formal: ~S" formal))
     (symbol
-     (values formal (intern (string formal) :keyword) nil nil))
+     (values formal
+	     (intern (string formal) :keyword)
+	     nil
+	     nil))
     (cons
      (if (consp (car formal))
 	 (values (cadar formal) (caar formal) (second formal) (third formal))
-       (values (car formal) (intern (car formal) :keyword) (second formal) (third formal))))))
+       (values (car formal)
+	       (intern (string (car formal)) :keyword)
+	       (second formal)
+	       (third formal))))))
 
 (defun decode-aux-formal (formal)
   "Return variable-name and init-form."
