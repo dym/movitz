@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.8 2004/11/23 16:14:49 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.9 2004/11/24 10:06:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -26,6 +26,8 @@
 	   #:ip4-address
 	   #:ip4-test
 	   #:ip4-free
+	   #:format-ip4-header
+	   #:format-udp-header
 	   #:*ip4-nic*
 	   #:*ip4-ip*))
 
@@ -78,6 +80,37 @@
 (defun ip-header-length (packet &optional (start 14))
   (ldb (byte 4 0)
        (ip4-ref packet start +ip-header-version-header-length+ :unsigned-byte8)))
+
+(defun ip-header-source (packet &optional (start 14))
+  (subseq packet (+ start 12) (+ start 16)))
+
+(defun ip-header-destination (packet &optional (start 14))
+  (subseq packet (+ start 16) (+ start 20)))
+
+(defun format-ip4-header (packet &key (start 14) (payload 0)
+				      (id 0) (ttl 64) (checksum t)
+				      (protocol 0) (flags 0)
+				      (fragment-offset 0)
+				      source destination)
+  (setf (ip4-ref packet start 0 :unsigned-byte16) #x4500
+	(ip4-ref packet start 2 :unsigned-byte16) (+ payload 20)
+	(ip4-ref packet start 4 :unsigned-byte16) id
+	(ip4-ref packet start 6 :unsigned-byte16) (dpb flags (byte 3 13) fragment-offset)
+	(ip4-ref packet start 8 :unsigned-byte8) ttl
+	(ip4-ref packet start 9 :unsigned-byte8) protocol)
+  (when source
+    (replace packet source :start1 (+ start 12)))
+  (when destination
+    (replace packet destination :start1 (+ start 16)))
+  (cond
+   ((eq t checksum)
+    (setf (ip4-ref packet start 10 :unsigned-byte16) 0)
+    (setf (ip4-ref packet start 10 :unsigned-byte16)
+      (logxor #xffff
+	      (checksum-octets packet start (+ start 20)))))
+   ((integerp checksum)
+    (setf (ip4-ref packet start 10 :unsigned-byte16) checksum)))
+  packet)
 
 (defun checksum-ok (x)
   (= #xffff
@@ -272,11 +305,51 @@
 (defun udp-dst-port (packet &optional (start 34))
   (ip4-ref packet start 2 :unsigned-byte16))
 
+(defun (setf udp-dst-port) (value packet &optional (start 34))
+  (setf (ip4-ref packet start 2 :unsigned-byte16)
+    value))
+
 (defun udp-length (packet &optional (start 34))
   (ip4-ref packet start 4 :unsigned-byte16))
 
+(defun (setf udp-length) (value packet &optional (start 34))
+  (setf (ip4-ref packet start 4 :unsigned-byte16)
+    value))
+
 (defun udp-checksum (packet &optional (start 34))
   (ip4-ref packet start 6 :unsigned-byte16))
+
+(defun (setf udp-checksum) (value packet &optional (start 34))
+  (setf (ip4-ref packet start 6 :unsigned-byte16)
+    value))
+
+(defun format-udp-header (packet &key (start 34)
+				      (source *ip4-ip*) (source-port 1024)
+				      destination (destination-port 0)
+				      (payload (- (length packet) start 8))
+				      (checksum t))
+  (let ((udp-length (+ payload 8)))
+    (format-ip4-header packet
+		       :source source
+		       :destination destination
+		       :payload udp-length
+		       :protocol +ip-protocol-udp+)
+    (setf (ip4-ref packet start 0 :unsigned-byte16) source-port
+	  (ip4-ref packet start 2 :unsigned-byte16) destination-port
+	  (ip4-ref packet start 4 :unsigned-byte16) udp-length)
+    (cond
+     ((integerp checksum)
+      (setf (ip4-ref packet start 6 :unsigned-byte16) checksum))
+     ((eq t checksum)
+      (setf (ip4-ref packet start 6 :unsigned-byte16) 0)
+      (setf (ip4-ref packet start 6 :unsigned-byte16)
+	(logxor #xffff
+		(add-u16-ones-complement (checksum-octets source)
+					 (checksum-octets destination)
+					 +ip-protocol-udp+ udp-length
+					 (checksum-octets packet start (+ start udp-length)))))))
+    packet))
+  
 
 (defmethod udp-input ((stack ip4-stack) packet ip-start udp-start)
   (warn "Got UDP packet of length ~D from ~@v/ip4:pprint-ip4/."
