@@ -1,3 +1,10 @@
+2004-07-08  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Migration to the new basic-vector data-structure is completed
+	(though not thoroughly debugged). The los0-gc.lisp example GC is
+	updated to reflect this, and now supports any newspace-size upto
+	2GB.
+
 2004-04-18  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
 
 	* The bootloader no longer initializes the VGA subssystem, since
