@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:41:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: common-lisp.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: common-lisp.lisp,v 1.3 2004/03/29 14:33:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -47,6 +47,7 @@
 (require :muerte/restarts)
 (require :muerte/conditions)
 (require :muerte/read)
+(require :muerte/scavenge)
 (require :muerte/simple-streams)
 
 (require :muerte/io-port)
