@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.3 2004/03/26 01:49:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -168,3 +168,17 @@ after the point that called this stack-frame."
        (when (member :catch types)
 	 (format t "~&catch:   ~Z: ~S" tag tag))))))
 
+
+(defun malloc-words (words)
+  (malloc-clumps (1+ (truncate (1+ words) 2))))
+
+(defun malloc-clumps (clumps)
+  (let ((x (with-inline-assembly (:returns :eax :side-effects t)
+	     (:compile-form (:result-mode :ebx) clumps)
+	     (:shll 1 :ebx)
+	     (:globally (:call (:edi (:edi-offset malloc))))
+	     (:addl #.(movitz::tag :other) :eax))))
+    (dotimes (i clumps)
+      (setf (memref x -6 i :lisp) nil
+	    (memref x -2 i :lisp) nil))
+    x))
