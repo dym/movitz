@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.49 2004/04/16 19:20:46 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.50 2004/04/16 23:38:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5222,25 +5222,9 @@ fifth:  all compiler-values for form1, as a list."
        ((typep binding 'symbol-macro-binding)
 	(compiler-call #'compile-form-unprotected
 	  :forward all
-	  :form (funcall *movitz-macroexpand-hook* (macro-binding-expander (movitz-binding form env)) form env)))
+	  :form (funcall *movitz-macroexpand-hook*
+			 (macro-binding-expander (movitz-binding form env)) form env)))
        (t (compiler-call #'compile-dynamic-variable :forward all))))))
-
-#+old-compiler
-(defun ensure-local-binding (binding funobj env)
-  "Make sure that we have a binding that is local to funobj."
-  (if (eq funobj (binding-funobj binding))
-      binding
-    (let* ((function-env (find-function-env env funobj))
-	   (local-binding (make-instance 
-			      (ecase (function-env-extent function-env)
-				(:indefinite-extent 'indefinite-borrowed-binding)
-				;; XXXX
-				(:dynamic-extent 'indefinite-borrowed-binding)
-				(:lexical-extent 'lexical-borrowed-binding))
-			    :name (binding-name binding)
-			    :target-binding binding)))
-      (movitz-environment-add-binding function-env (binding-name binding) local-binding)
-      local-binding)))
 
 (define-compiler compile-lexical-variable (&form variable &result-mode result-mode &env env)
   (let ((binding (movitz-binding variable env)))
