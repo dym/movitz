@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.2 2004/01/19 11:23:41 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.3 2004/02/02 13:09:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -449,14 +449,15 @@ integer (native lisp) value."
 	      8)))
 
 (defmethod print-object ((obj movitz-vector) stream)
-  (case (movitz-vector-element-type obj)
-    (:character
-     (format stream "#&~S" (map 'string #'identity
+  (print-unreadable-movitz-object (obj stream :type nil :identity t)
+    (case (movitz-vector-element-type obj)
+      (:character
+       (format stream "~S" (map 'string #'identity
 				(movitz-vector-symbolic-data obj))))
-    (t (format stream "#&[[ET:~A,NE:~A]~A]"
-	       (movitz-vector-element-type obj)
-	       (movitz-vector-num-elements obj)
-	       (movitz-vector-symbolic-data obj))))
+      (t (format stream "[ET:~A,NE:~A] ~A"
+		 (movitz-vector-element-type obj)
+		 (movitz-vector-num-elements obj)
+		 (movitz-vector-symbolic-data obj)))))
   obj)
 
 (defmethod movitz-storage-alignment ((obj movitz-vector))
