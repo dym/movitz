@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 19 14:58:12 2003
 ;;;;                
-;;;; $Id: repl.lisp,v 1.4 2004/02/18 11:48:20 ffjeld Exp $
+;;;; $Id: repl.lisp,v 1.5 2004/03/25 00:40:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -23,8 +23,9 @@
 (defparameter *repl-level* -1)
 (defparameter *repl-prompter* 'default-repl-prompter)
 (defparameter *repl-prompt-context* nil)
-(defparameter *repl-print-format* "~{~&~W~}")
+(defparameter *repl-print-format* "~@{~&~W~}")
 (defvar *repl-readline-context*)
+(defvar *repl-consless* nil)
 
 (defun default-repl-prompter ()
   (fresh-line)
@@ -44,37 +45,41 @@
 	  (terpri)
 	  (multiple-value-bind (form buffer-pointer)
 	      (handler-bind
-		  ((muerte::missing-delimiter
-		    (lambda (c)
-		      (declare (ignore c))
-		      (format t "~&> ")
-		      (invoke-restart 'muerte::next-line
-				      (muerte.readline:contextual-readline *repl-readline-context*)))))
+		  (#+ignore (muerte::missing-delimiter
+			     (lambda (c)
+			       (declare (ignore c))
+			       (format t "~&> ")
+			       (invoke-restart 'muerte::next-line
+					       (muerte.readline:contextual-readline *repl-readline-context*)))))
 		(simple-read-from-string buffer-string t t))
-	    (let ((results (multiple-value-list
-			    (if (keywordp form)
-				(apply 'muerte.toplevel:invoke-toplevel-command
-				       form
-				       (loop for arg = (multiple-value-bind (arg x)
-							   (simple-read-from-string
-							    buffer-string nil 'eof
-							    :start buffer-pointer)
-							 (setq buffer-pointer x)
-							 arg)
-					   until (eq arg 'eof)
-					   collect arg))
-			      (eval form)))))
-	      (unless (boundp '*)
-		(warn "* was unbound!")
-		(setf * nil))
-	      (format t *repl-print-format* results)
-	      (psetq +++ ++ ++ + + form)
-	      (psetq *** ** ** * * (first results))
-	      (psetq /// // // / / results))
-	    (unless (packagep *package*)
-	      (warn "Resetting *package*..")
-	      (setf *package* previous-package))))
-	(values-list /))
+	    (multiple-value-call
+		(lambda (form previous-package &rest results)
+		  (declare (dynamic-extent results))
+		  (unless (packagep *package*)
+		    (warn "Resetting *package*")
+		    (setf *package* previous-package))
+		  (unless (boundp '*)
+		    (warn "* was unbound!")
+		    (setf * nil))
+		  (apply #'format t *repl-print-format* results)
+		  (psetq +++ ++ ++ + + form)
+		  (psetq *** ** ** * * (car results))
+		  (psetq /// // // / / (if *repl-consless*
+					   nil
+					 (copy-list results)))
+		  (values-list results))
+	      form previous-package
+	      (if (not (keywordp form))
+		  (eval form)
+		(apply 'muerte.toplevel:invoke-toplevel-command
+		       form
+		       (loop for arg = (multiple-value-bind (arg x)
+					   (simple-read-from-string buffer-string nil 'eof
+								    :start buffer-pointer)
+					 (setq buffer-pointer x)
+					 arg)
+			   until (eq arg 'eof)
+			   collect arg)))))))
     #+ignore (muerte.readline::readline-break (c)
 	       (declare (ignore c))
 	       (values))))
