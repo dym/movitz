@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001, 2002-2004
+;;;;    Copyright (C) 2001, 2002-2005
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 30 15:19:43 2001
 ;;;;                
-;;;; $Id: packages.lisp,v 1.6 2004/11/13 14:50:13 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.7 2005/02/28 23:36:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -105,10 +105,11 @@
 	(dummy (gensym))
 	(package-var (gensym))
 	(package-hash-var (gensym))
-	(state-var (gensym "do-all-symbols-state-"))
 	(next-symbol (gensym))
 	(more-symbols-var (gensym))
-	(symbol-var (gensym)))
+	(symbol-var (gensym))
+	(loop-tag (gensym))
+	(end-tag (gensym)))
     `(with-hash-table-iterator (,next-package (get-global-property :packages))
        (do () (nil)
 	 (multiple-value-bind (,more-packages-var ,dummy ,package-var)
@@ -116,18 +117,22 @@
 	   (declare (ignore ,dummy))
 	   (unless ,more-packages-var
 	     (return ,result-form))
-	   (do ((,state-var '(:externals :internals) (cdr ,state-var))
-		(,package-hash-var (package-object-external-symbols ,package-var)
-				   (package-object-internal-symbols ,package-var)))
-	       ((null ,state-var))
-	     (with-hash-table-iterator (,next-symbol ,package-hash-var)
-	       (do () (nil)
-		 (multiple-value-bind (,more-symbols-var ,dummy ,symbol-var)
-		     (,next-symbol)
-		   (declare (ignore ,dummy))
-		   (unless ,more-symbols-var (return nil))
-		   (let ((,var ,symbol-var))
-		     ,@declarations-and-body))))))))))
+	   (let ((,package-hash-var (package-object-external-symbols ,package-var)))
+	     (tagbody ,loop-tag
+	       (with-hash-table-iterator (,next-symbol ,package-hash-var)
+		 (tagbody ,loop-tag
+		   (multiple-value-bind (,more-symbols-var ,dummy ,symbol-var)
+		       (,next-symbol)
+		     (declare (ignore ,dummy))
+		     (unless ,more-symbols-var (go ,end-tag))
+		     (let ((,var ,symbol-var))
+		       ,@declarations-and-body))
+		   (go ,loop-tag)
+		   ,end-tag))
+	       (let ((internals (package-object-internal-symbols ,package-var)))
+		 (unless (eq ,package-hash-var internals)
+		   (setf ,package-hash-var internals)
+		   (go ,loop-tag))))))))))
 
 (defmacro do-external-symbols ((var &optional (package *package*) result-form) &body declarations-and-body)
   (let ((next-var (gensym))
@@ -185,3 +190,5 @@
 	(do-all-symbols (symbol)
 	  (apropos-symbol symbol string)))))
   (values))
+
+
