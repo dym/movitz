@@ -1,0 +1,40 @@
+###############################################################
+# bochsrc.txt file for DLX Linux disk image.
+###############################################################
+
+# how much memory the emulated machine will have
+megs: 32
+
+# filename of ROM images
+#romimage: file=/usr/local/bochs/1.2.1/BIOS-bochs-latest, address=0xf0000
+#vgaromimage: /usr/local/bochs/1.2.1/VGABIOS-elpin-2.40
+romimage: file=../../tmp/bochs-cvs/bios/BIOS-bochs-latest, address=0xf0000
+vgaromimage: ../../tmp/bochs-cvs/bios/VGABIOS-elpin-2.40
+
+# what disk images will be used 
+floppya: 1_44=los0-image, status=inserted
+#floppya: 1_44=grub, status=inserted
+#floppyb: 1_44=floppyb.img, status=inserted
+#diskc: file=hd10meg.img, cyl=306, heads=4, spt=17
+#newharddrivesupport: enabled=1
+
+# choose the boot disk.
+boot: a
+
+# where do we send log messages?
+log: bochsout.txt
+
+vga_update_interval: 100000
+
+# disable the mouse, since DLX is text only
+mouse: enabled=0
+
+ne2k: ioaddr=0x280, irq=9, mac=00:40:05:18:66:d8, ethmod=fbsd, ethdev=xl0
+ne2k: ioaddr=0x300, irq=3, mac=00:40:05:18:66:d9, ethmod=fbsd, ethdev=xl0
+
+# panic: action=report
+error: action=report
+# debug: action=report
+
+ips: 3000000
+# com1: dev=/dev/ptypv

@@ -1,0 +1,2 @@
+The file grub-bootloader.img is a GRUB bootloader with the menu
+configuration from menu.txt embedded.

@@ -1,0 +1,22 @@
+######################################################################
+## 
+##    Copyright (C) 2003, 
+##    Department of Computer Science, University of Tromsoe, Norway.
+## 
+##    For distribution policy, see the accompanying file COPYING.
+## 
+## Filename:      ideas.txt
+## Description:   
+## Author:        Frode Vatvedt Fjeld <frodef@acm.org>
+## Created at:    Fri Dec 12 19:19:39 2003
+##                
+## $Id: ideas.txt,v 1.1 2004/01/13 11:05:01 ffjeld Exp $
+##                
+######################################################################
+
+** Method dispatch caching
+
+  - Can we make the cache per caller funobj? This should be possible
+    if we add one cache slot to each (caller) funobj. In many cases
+    this would allow for a cache-size of 1 or 2, say. And it'd be
+    possible to determine these cases dynamically.

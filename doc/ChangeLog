@@ -1,0 +1,64 @@
+2004-01-12  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Fixed the floppy bootloader so that it will work with BIOSes
+	whose int13 messes with the GS segment register, like apparently
+	the Compaq and some others do.
+
+2004-01-09  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* A disclaimer has been added to the file COPYING.
+
+2004-01-06  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Rewrote the floppy bootloader so that it is now only limited by
+	the size of floppies rather than the previous about 600 KB
+	real-mode buffer limit. For some time I've been forced to remove
+	some features from los0.img in order to squeeze it into 600 KB,
+	but no more. Bloat is bliss. However, booting with GRUB is always
+	an option, and probably the best one in the long run, and
+	certainly for stable installations (should there ever be
+	such). It's just that the floppy loader is very convenient during
+	development. [BB-ID: 1680]
+
+2003-12-05  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Changed the way method dispatches are cached. It used to be
+	cached with hash-tables, now it's done with alists. The memory
+	usage and lookup-time should be improved for the common case,
+	although later on---when we have really big generic-functions---we
+	might want to be able to revert to hash-tables. [BB-ID: 1328]
+
+2003-12-03  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* :trace and :untrace are now implemented somewhat differently. In
+	particular, :trace takes one function-name, and a keyword argument
+	:callers that is a list of function-names, one of which must be
+	active (on the current call-stack) for trace to occur.
+
+	* There was a bug in the reporting of how much memory was being
+	consumed. That is, room and time would report double the actual
+	amounts. So now (time (cons 1 2)) should report 8 bytes.
+
+2003-12-02  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Added some sort of simple multi-line capability for the
+	repl. It's not true multi-line editing, but at least you're not
+	limited to one screen-length of input any more.
+
+2003-11-18  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Improved the style of interfacing hardware registers in the ne2k
+	driver. So now the driver is quite a bit smaller, and is again
+	included in the los0 image.
+
+2003-11-10  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* The last feature I added to eval was lambda the macro and the
+	keyword for the function special operator. So now lambda works as
+	one expects at the REPL.
+
+	* Started this ChangeLog now, as I hope to distribute Movitz more
+	actively. Not that this changelog will mostly be concerned with
+	user-visible changes. You can /not/ infer much about the level of
+	development activity from looking at this.
+

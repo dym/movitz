@@ -1,0 +1,11 @@
+default 0
+timeout 5
+
+title Movitz/Los0
+kernel 250+2630
+
+title Harddisk
+root (hd0,0)
+makeactive
+chainloader +1
+
