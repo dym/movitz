@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.73 2004/11/02 15:53:30 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.74 2004/11/10 17:34:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -187,6 +187,16 @@
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-type code-vector-word)
    (dynamic-unwind
+    :map-binary-write 'movitz-intern-code-vector
+    :binary-tag :primitive-function
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-type code-vector-word)
+   (dynamic-variable-install
+    :map-binary-write 'movitz-intern-code-vector
+    :binary-tag :primitive-function
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-type code-vector-word)
+   (dynamic-variable-uninstall
     :map-binary-write 'movitz-intern-code-vector
     :binary-tag :primitive-function
     :map-binary-read-delayed 'movitz-word-code-vector
@@ -435,7 +445,7 @@
    (segment-descriptor-shifted-code	; 3: 1 MB shifted flat code segment
     :binary-type segment-descriptor
     :initform (make-segment-descriptor :base (image-cs-segment-base *image*)
-				       :limit #xfff00 :type 10 :dpl 0
+				       :limit #xfff00 :type 14 :dpl 0
 				       :flags '(s p d/b g)))
    (segment-descriptor-shifted-data	; 4: 1 MB shifted flat data segment
     :binary-type segment-descriptor

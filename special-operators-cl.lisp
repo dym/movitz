@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.28 2004/10/21 20:44:52 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.29 2004/11/10 17:34:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -288,15 +288,14 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				   `((:locally (:movl :esp (:edi (:edi-offset dynamic-env))))))
 				 (if (not recompile-body-p)
 				     body-code
-				   (progn #+ignore (warn "recompile..")
+				   (progn #+ignore (warn "recompile..") ; XXX
 					  (compile-body)))
 				 (when (plusp (num-specials local-env))
 				   `((:movl (:esp ,(+ -4 (* 16 (num-specials local-env)))) :edx)
+				     (:locally (:call (:edi ,(bt:slot-offset 'movitz-run-time-context
+									     'dynamic-variable-uninstall))))
 				     (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
-				     (:leal (:esp ,(* 16 (num-specials local-env))) :esp))
-				   #+ignore
-				   `((:leal (:esp ,(+ -4 (* 16 (num-specials local-env)))) :esp)
-				     (:locally (:popl (:edi (:edi-offset dynamic-env)))))))))
+				     (:leal (:esp ,(* 16 (num-specials local-env))) :esp))))))
 		      (compiler-values (body-values)
 			:returns body-returns
 			:producer (default-compiler-values-producer)
@@ -1077,7 +1076,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 							      values-form :eax
 							      funobj env)
 		      (with-labels (progv (no-more-symbols no-more-values loop zero-specials))
-			`((:xorl :ecx :ecx) ; count number of bindings
+			`((:xorl :ecx :ecx) ; count number of bindings (fixnum)
 			  (:locally (:pushl (:edi (:edi-offset dynamic-env)))) ; first tail
 			  (:cmpl :edi :ebx)
 			  (:je '(:sub-program (,zero-specials)
@@ -1086,7 +1085,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				 (:globally (:pushl (:edi (:edi-offset unbound-value)))) ;  [[ binding tag ]]
 				 (:pushl :edi) ; binding name
 				 (:pushl :esp)
-				 (:incl :ecx)
+				 (:addl 4 :ecx)
 				 (:jmp ',no-more-symbols)))
 			  ,loop
 			  (:cmpl :edi :ebx) ; (endp symbols)
@@ -1101,21 +1100,30 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			  (:globally (:pushl (:edi (:edi-offset unbound-value)))) ;  [[ binding tag ]]
 			  (:pushl (:ebx -1)) ; push (car symbols) [[ binding name ]]
 			  (:movl (:ebx 3) :ebx) ; (pop symbols)
-			  (:incw :cx)
-			  (:jc '(:sub-program (too-many-symbols) (:int 71)))
+			  (:addl 4 :ecx)
+			  ;; (:jc '(:sub-program (too-many-symbols) (:int 71)))
 			  (:pushl :esp)	; push next tail
 			  (:jmp ',loop)
 			  ,no-more-symbols
 			  (:popl :eax)	; remove extra pre-pushed tail
 			  (:locally (:movl :esp (:edi (:edi-offset dynamic-env)))) ; install env
-			  ;; ecx = N
-			  (:shll 4 :ecx) ; ecx = 16*N
-			  (:leal (:esp :ecx -4) :eax) ; eax = esp + 16*N - 4
-			  (:pushl :eax))) ; push address of first binding's tail
+			  ;; ecx = N/fixnum
+			  ;; (:shll 4 :ecx) ; ecx = 16*N
+			  ;; (:leal (:esp :ecx -4) :eax) ; eax = esp + 16*N - 4
+			  (:pushl :ecx)	; Save number of bindings.
+			  #+ignore (:pushl :eax))) ; push address of first binding's tail
 		      body-code
 		      (when (eq body-returns :push)
 			`((:popl :eax))) ; glue :push => :eax
-		      `((:popl :esp)	; pop address of first binding's tail
+		      `((:movl (:esp) :edx) ; number of bindings
+			(:movl (:esp (:edx 4)) :edx) ; previous dynamic-env
+			(:locally (:call (:edi ,(bt:slot-offset 'movitz-run-time-context
+								'dynamic-variable-uninstall))))
+			(:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
+			(:popl :edx)	; number of bindings
+			(:leal (:esp (:edx 4)) :esp))
+		      #+ignore
+		      `((:popl :edx)	; pop address of first binding's tail
 			(:locally (:popl (:edi (:edi-offset dynamic-env))))))))))
 
 (define-special-operator labels (&all forward &form form &env env &funobj funobj)

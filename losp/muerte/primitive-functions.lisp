@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.47 2004/10/21 20:34:09 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.48 2004/11/10 17:34:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -111,16 +111,22 @@
 ;;;  -32: car ...
 
 (define-primitive-function dynamic-unwind-next (dynamic-env)
-  "Locate the next unwind-protect entry between here and dynamic-env.
+  "Locate the next unwind-protect entry between here and dynamic-env/EAX.
 If no such entry is found, return (same) dynamic-env in EAX and CF=0.
-Otherwise return the unwind-protect entry in EAX and CF=1. Preserve EDX."
+Otherwise return the unwind-protect entry in EAX and CF=1. Preserve EDX.
+Point is: Return the 'next step' in unwinding towards dynamic-env.
+Note that it's an error if dynamic-env isn't in the current dynamic environment,
+it's supposed to have been found by e.g. dynamic-locate-catch-tag."
+  ;; XXX: Not really sure if there's any point in the CF return value,
+  ;;      because I don't think there's ever any need to know whether
+  ;;      the returned entry is an unwind-protect or the actual target.
   (with-inline-assembly (:returns :nothing)
     (:locally (:bound (:edi (:edi-offset stack-bottom)) :eax))
     (:globally (:movl (:edi (:edi-offset unwind-protect-tag)) :ebx))
     (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
     
    search-loop
-    (:jecxz '(:sub-program () (:halt) (:int 63))) ; XXX don't halt
+    (:jecxz '(:sub-program () (:int 63)))
     (:locally (:bound (:edi (:edi-offset stack-bottom)) :ecx))
 
     (:cmpl :ecx :eax)
@@ -129,6 +135,9 @@ Otherwise return the unwind-protect entry in EAX and CF=1. Preserve EDX."
     (:cmpl :ebx (:ecx 4))		; unwind-protect entry?
     (:je 'found-unwind-protect)
     
+    ;; We don't need to check for and uninstall dynamic binding entries,
+    ;; because uninstall is a NOP under naive deep binding.
+    
     (:movl (:ecx 12) :ecx)		; proceed search
     (:jmp 'search-loop)
    found-unwind-protect
@@ -136,7 +145,20 @@ Otherwise return the unwind-protect entry in EAX and CF=1. Preserve EDX."
     (:stc)
    found-dynamic-env
     (:ret)))
-  
+
+(define-primitive-function dynamic-variable-install ()
+  ""
+  (with-inline-assembly (:returns :nothing)
+    (:ret)))
+
+(define-primitive-function dynamic-variable-uninstall (dynamic-env)
+  "Uninstall each dynamic binding between 'here' (i.e. the current 
+dynamic environment pointer) and the dynamic-env pointer provided in EDX.
+This must be done without affecting 'current values'! (i.e. eax, ebx, ecx, or CF),
+and also EDX must not be affected."
+  (with-inline-assembly (:returns :nothing)
+    ;; Default binding strategy is naive deep binding, so this is a NOP.
+    (:ret)))
 
 (define-primitive-function dynamic-locate-catch-tag (tag)
   "Search the dynamic environment for a catch slot matching <tag> in EAX.
