@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:47:19 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: bootblock.lisp,v 1.9 2004/05/20 18:25:12 ffjeld Exp $
+;;;; $Id: bootblock.lisp,v 1.10 2004/07/07 17:33:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -186,7 +186,6 @@
 
        copy-loop
        (:decl :ecx)
-       foo
        ((:gs-override) :movl (:ebx (:ecx 4)) :edx)
        ((:gs-override) :movl :edx (:esi (:ecx 4)))
        (:jnz 'copy-loop)
@@ -196,9 +195,6 @@
        
        (:jmp 'read-loop)
        
-       ;;
-       ;; Print text to screen telling what we are about to do
-       ;;
        read-done
 
        motor-loop			; Wait for floppy motor
@@ -404,8 +400,11 @@
 							    'new-world)
 				(mkasm-loader image-size load-address call-address))
       (let* ((loader-length (+ (length bios-loader) (length protected-loader)))
-	     (bootblock (make-array 512 :element-type '(unsigned-byte 8)
-				    :fill-pointer loader-length)))
+	     (bootblock (progn
+			  (assert (<= loader-length 510) ()
+			    "Bootblock size of ~D octets is too big, max is 510!" loader-length)
+			  (make-array 512 :element-type '(unsigned-byte 8)
+				      :fill-pointer loader-length))))
 	(setf (subseq bootblock 0) bios-loader
 	      (subseq bootblock (length bios-loader)) protected-loader)
 	(loop until (zerop (mod (fill-pointer bootblock) 4))
@@ -413,9 +412,7 @@
 	(dolist (record include-records)
 	  (let ((*endian* :little-endian))
 	    (with-binary-output-to-vector (stream bootblock)
-	      (write-binary-record record stream))))
-	(assert (<= loader-length 510) ()
-	  "Bootblock size of ~D octets is too big, max is 510!" loader-length)
+	      (write-binary-record record stream))))	
 	(setf (fill-pointer bootblock) 512
 	      (subseq bootblock 510) #(#x55 #xaa)) ; bootblock signature
 	(format t "~&;; Bootblock size is ~D octets.~%" loader-length)
