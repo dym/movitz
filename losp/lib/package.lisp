@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Sep 27 17:24:11 2002
 ;;;;                
-;;;; $Id: package.lisp,v 1.4 2004/07/21 22:29:16 ffjeld Exp $
+;;;; $Id: package.lisp,v 1.5 2004/11/24 10:08:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -46,6 +46,7 @@
 	   
 	   ;; :lib/misc
 	   #:checksum-octets
+	   #:add-u16-ones-complement
 	   #:make-counter-u32
 	   #:u32-add
 	   

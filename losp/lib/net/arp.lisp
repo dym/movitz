@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Mar 20 15:01:15 2003
 ;;;;                
-;;;; $Id: arp.lisp,v 1.6 2004/11/23 16:14:33 ffjeld Exp $
+;;;; $Id: arp.lisp,v 1.7 2004/11/24 10:09:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -79,21 +79,24 @@
 
 (defvar *ne2000* nil)
 
-(defun arp-polling (ip &optional (waiter #'false))
-  (loop with nic = *ip4-nic*
+(defun polling-arp (ip &optional (waiter #'false))
+  (loop with ip = (ip4-address ip) and nic = *ip4-nic* and transmit-time = 0
       for packet = (muerte.ethernet:receive nic)
       until (funcall waiter)
-      do (transmit nic
-		   (format-ethernet-packet (format-arp-request nil +arp-op-request+ *ip4-ip*
-							       (mac-address nic) ip)
-					   (mac-address nic)
-					   muerte.ethernet:+broadcast-address+
-					   muerte.ethernet:+ether-type-arp+))
-	 (when (and packet
+      do (when (and packet
 		    (eq +ether-type-arp+ (ether-type packet))
 		    (eq +arp-op-reply+ (arp-operation packet))
 		    (not (mismatch packet ip :start1 28 :end1 32)))
-	   (return (subseq packet 22 28)))))
+	   (return (subseq packet 22 28)))
+	 (when (< internal-time-units-per-second
+		  (- (get-internal-run-time) transmit-time))
+	   (setf transmit-time (get-internal-run-time))
+	   (transmit nic
+		     (format-ethernet-packet (format-arp-request nil +arp-op-request+ *ip4-ip*
+								 (mac-address nic) ip)
+					     (mac-address nic)
+					     muerte.ethernet:+broadcast-address+
+					     muerte.ethernet:+ether-type-arp+)))))
 	  
 (defun test-arp (&optional (ip #(129 242 16 30)) (my-ip #(129 242 16 173))
 			   (device *ne2000*))
