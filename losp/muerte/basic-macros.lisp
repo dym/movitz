@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.34 2004/07/29 00:13:18 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.35 2004/07/29 01:24:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -70,16 +70,16 @@
 			    ,(cons 'cl:progn body)))
 
 (defmacro defpackage (package-name &rest options)
-  (pushnew '(:use) options :key #'car)
-  (let ((uses (cdr (assoc :use options))))
+  (let ((uses (if (not (assoc :use options))
+		  (list 'muerte.cl)
+		(cdr (assoc :use options)))))
     (setf uses (mapcar (lambda (use)
 			 (if (member use (cons :common-lisp (package-nicknames :common-lisp))
 				     :test #'string=)
 			     :muerte.cl
 			   use))
 		       uses))
-    (when (or (null uses)
-	      (member :muerte.cl uses :test #'string=)
+    (when (or (member :muerte.cl uses :test #'string=)
 	      (member :muerte.common-lisp uses :test #'string=))
       (push '(:shadowing-import-from :common-lisp nil) options))
     (let ((movitz-options (cons (cons :use uses)
