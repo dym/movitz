@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.31 2004/02/20 15:08:51 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.32 2004/02/22 15:55:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2089,7 +2089,8 @@ falling below the label."
 	      (binding-name object)
 	      (unless (eq object (binding-target object))
 		(binding-name (binding-target object)))
-	      (when (and (slot-boundp object 'store-type)
+	      (when (and (slot-exists-p object 'store-type)
+			 (slot-boundp object 'store-type)
 			 (binding-store-type object))
 		(apply #'encoded-type-decode
 		       (binding-store-type object)))))))
@@ -5244,7 +5245,7 @@ fifth:  all compiler-values for form1, as a list."
 
 (define-compiler compile-self-evaluating (&form form &result-mode result-mode &funobj funobj)
   "3.1.2.1.3 Self-Evaluating Objects"
-  (let* ((object (or (quote-form-p form) form))
+  (let* ((object form)
 	 (movitz-obj (image-read-intern-constant *image* object))
 	 (funobj-env (funobj-env funobj))
 	 (binding (or (cdr (assoc movitz-obj (movitz-environment-bindings funobj-env)))
