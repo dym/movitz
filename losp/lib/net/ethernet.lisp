@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:25:31 2002
 ;;;;                
-;;;; $Id: ethernet.lisp,v 1.5 2004/11/23 16:14:40 ffjeld Exp $
+;;;; $Id: ethernet.lisp,v 1.6 2004/11/24 10:07:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -235,7 +235,7 @@ attempts to decode the vendor part of the address using *ether-vendors*."
   (values))
 
 						    
-(defun make-ethernet-packet ()
-  (make-array +max-ethernet-frame-size+
+(defun make-ethernet-packet (&optional (size +max-ethernet-frame-size+))
+  (make-array size
 	      :element-type '(unsigned-byte 8)
 	      :fill-pointer t))
