@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.23 2004/06/29 23:20:56 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.24 2004/07/06 21:11:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -462,10 +462,10 @@ integer (native lisp) value."
 (defmethod write-binary-record ((obj movitz-basic-vector) stream)
   (flet ((write-element (type stream data)
 	   (ecase type
-;;;	     (:u8        (write-binary 'u8 stream data))
-;;;	     (:u16       (write-binary 'u16 stream data))
-;;;	     (:u32       (write-binary 'u32 stream data))
-;;;	     (:character (write-binary 'char8 stream data))
+	     (:u8        (write-binary 'u8 stream data))
+	     (:u16       (write-binary 'u16 stream data))
+	     (:u32       (write-binary 'u32 stream data))
+	     (:character (write-binary 'char8 stream data))
 	     (:any-t     (write-binary 'word stream (movitz-read-and-intern data 'word))))))
     (+ (call-next-method)		; header
        (etypecase (movitz-vector-symbolic-data obj)
@@ -593,7 +593,7 @@ integer (native lisp) value."
 	(make-array size :initial-element (or (and initial-element-p initial-element)
 					      default-element))))
     (cond
-     ((eq et :any-t)
+     ((member et '(:any-t :character :u8 :u32))
       (when flags (break "flags: ~S" flags))
       (when (and alignment-offset (plusp alignment-offset))
 	(break "alignment: ~S" alignment-offset))
@@ -622,7 +622,7 @@ integer (native lisp) value."
 ;; (map 'list #'make-movitz-character string)))
 
 (defun movitz-stringp (x)
-  (and (typep x 'movitz-vector)
+  (and (typep x '(or movitz-basic-vector movitz-vector))
        (eq :character (movitz-vector-element-type x))))
 
 (deftype movitz-string ()
