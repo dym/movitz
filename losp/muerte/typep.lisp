@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.7 2004/04/16 23:34:43 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.8 2004/04/17 00:02:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -293,6 +293,17 @@
 					     movitz:+movitz-fixnum-factor+)
 					 :eax)
 				 not-fixnum)))))))
+		    ((eql)
+		     `(eql ,object ',(cadr type)))
+		    ((cons)
+		     (destructuring-bind (&optional (car t) (cdr t))
+			 (cdr type)
+		       (let ((car (if (eq car '*) t car))
+			     (cdr (if (eq cdr '*) t cdr)))
+			 `(let ((typep-object ,object))
+			    (and (typep typep-object 'cons)
+				 (typep (car typep-object) ',car)
+				 (typep (cdr typep-object) ',cdr))))))
 		    ((not)
 		     (assert (and (cadr type) (not (cddr type))))
 		     `(not (typep ,object ',(cadr type))))
@@ -301,9 +312,12 @@
 			(,(car type)
 			 ,@(loop for subtype in (cdr type)
 			       collect `(typep ,object ',subtype)))))
-		    ((not and or)
-		     (warn "typep compilermacro: ~S" type)))))))
+		    (t (warn "typep ~A" type)))))))
 	    form)))))
+
+#+ignore
+(defun foo (x)
+  (typep x '(cons * symbol)))
 
 (defmacro define-typep (tname lambda &body body)
   (let ((fname (format nil "~A-~A" 'typep tname)))
