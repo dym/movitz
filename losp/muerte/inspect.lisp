@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.27 2004/07/20 23:53:00 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.28 2004/07/21 11:48:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -232,6 +232,13 @@ after the point that called this stack-frame."
 		  (test funobj-num-jumpers)
 		  (dotimes (i (funobj-num-constants x) t)
 		    (unless (test funobj-constant-ref i)))))
+	    (symbol
+	     (and (test memref -7 0 :lisp)
+		  (test memref -7 1 :lisp)
+		  (test memref -7 2 :lisp)
+		  (test memref -7 3 :lisp)
+		  (test memref -7 4 :lisp)
+		  (test memref -7 5 :lisp)))
 	    (vector
 	     (and (typep y 'vector)
 		  (test array-element-type)
