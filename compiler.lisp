@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.76 2004/07/16 00:03:42 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.77 2004/07/18 23:45:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1331,6 +1331,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 		      (second (second i))))))
 	 (negate-branch (branch-type)
 	   (ecase branch-type
+	     (:jb :jnb) (:jnb :jb)
 	     (:jbe :ja) (:ja :jbe)
 	     (:jz :jnz) (:jnz :jz)
 	     (:je :jne) (:jne :je)
@@ -3988,6 +3989,10 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 			   (decf stack-setup-size)
 			   `((:pushl :ebx)
 			     (:xchgl :eax :ebx)))
+			  ((and (eq :ebx location-0)
+				(eq :edx location-1))
+			   `((:movl :ebx :edx)
+			     (:movl :eax :ebx)))
 			  (t (append
 			      (cond
 			       ((eql 1 location-0)
@@ -6144,12 +6149,13 @@ and a list of any intervening unwind-protect environment-slots."
 		(break "check that this is correct..")
 		`((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
 			 (:ebp ,(stack-frame-offset loc1)))))))
-	   (t (warn "ADD: ~S = ~A + ~A, ~A ~A, ~A ~A"
-		    destination loc0 loc1 type0 type1
-		    (type-specifier-singleton type0)
-		    (eq loc1 destination))
-	      (warn "ADDI: ~S" instruction)
-	      (append (cond
+	   (t
+;;;	    (warn "ADD: ~S = ~A + ~A, ~A ~A, ~A ~A"
+;;;		    destination loc0 loc1 type0 type1
+;;;		    (type-specifier-singleton type0)
+;;;		    (eq loc1 destination))
+;;;	     (warn "ADDI: ~S" instruction)
+	    (append (cond
 		       ((and (eq :eax loc0) (eq :ebx loc1))
 			nil)
 		       ((and (eq :ebx loc0) (eq :eax loc1))
