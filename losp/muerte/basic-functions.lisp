@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.11 2004/04/16 19:25:06 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.12 2004/07/11 23:03:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -340,6 +340,16 @@
 (defun object-location (object)
   "The location is the object's address divided by fixnum-factor."
   (object-location object))
+
+(define-compiler-macro object-tag (object)
+  `(with-inline-assembly (:returns :register :type (integer 0 7))
+     (:compile-form (:result-mode :register) ,object)
+     (:leal (((:result-register) ,movitz::+movitz-fixnum-factor+))
+	    (:result-register))
+     (:andl ,(* 7 movitz::+movitz-fixnum-factor+) (:result-register))))
+
+(defun object-tag (object)
+  (object-tag object))
 
 ;;;(define-compiler-macro object-location-offset (object)
 ;;;  "The offset from the object's location to it's true address."
