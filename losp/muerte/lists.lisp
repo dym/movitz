@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.5 2004/06/09 20:18:45 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.6 2004/07/21 13:17:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -451,3 +451,62 @@
     (if (member (funcall key item) list :test test)
 	list
       (cons item list))))
+
+
+(defun ub (x)
+  `(hello world))
+
+(defun un-backquote (expr level)
+  (eval (un-backquote-xxx expr level)))
+
+(defun un-backquote-xxx (form level)
+  "Dont ask.."
+  (declare (notinline un-backquote))
+  (assert (not (minusp level)))
+  (values
+   (typecase form
+     (null nil)
+     (list
+      (case (car form)
+	(backquote-comma
+	 (cadr form))
+	(t (cons 'append
+		 (loop for sub-form-head on form
+		     as sub-form = (and (consp sub-form-head)
+					(car sub-form-head))
+		     collecting
+		       (cond
+			((atom sub-form-head)
+			 (list 'quote sub-form-head))
+			((atom sub-form)
+			 (list 'quote (list sub-form)))
+			(t (case (car sub-form)
+			     (muerte::movitz-backquote
+			      (list 'list
+				    (list 'list (list 'quote 'muerte::movitz-backquote)
+					  (un-backquote-xxx (cadr sub-form) (1+ level)))))
+			     (backquote-comma
+			      (cond
+			       ((= 0 level)
+				(list 'list (cadr sub-form)))
+			       ((and (listp (cadr sub-form))
+				     (eq 'backquote-comma-at (caadr sub-form)))
+				(list 'append
+				      (list 'mapcar
+					    '(lambda (x) (list 'backquote-comma x))
+					    (cadr (cadr sub-form)))))
+			       (t (list 'list
+					(list 'list
+					      (list 'quote 'backquote-comma)
+					      (un-backquote-xxx (cadr sub-form) (1- level)))))))
+			     (backquote-comma-at
+			      (if (= 0 level)
+				  (cadr sub-form)
+				(list 'list
+				      (list 'list
+					    (list 'quote 'backquote-comma-at)
+					    (un-backquote-xxx (cadr sub-form) (1- level))))))
+			     (t (list 'list (un-backquote-xxx sub-form level)))))))))))
+     (array
+      (error "Array backquote not implemented."))
+     (t (list 'quote form)))))
