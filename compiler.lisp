@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.128 2005/01/10 08:18:49 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.129 2005/01/21 22:06:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -34,7 +34,7 @@ incompatible with pre-pentium CPUs.")
   "Make every compiled function check upon entry that the
 stack-pointer is within bounds. Costs 3 code-bytes and a few cycles.")
 
-(defvar *compiler-allow-transients* t
+(defvar *compiler-allow-transients* nil
   "Allow the compiler to keep function arguments solely in registers.
 Hurst debugging, improves performance.")
 
@@ -117,22 +117,19 @@ which enables tracing of recursive functions.")
 				  (+ (ia-x86::assemble-env-current-pc env)
 				     size))))
     (cond
-     ((not (and (ia-x86::instruction-operands instr)
-		(typep (car (ia-x86::instruction-operands instr))
-		       'ia-x86::operand-indirect-register)
-		(eq 'ia-x86::esi
-		    (ia-x86::operand-register (car (ia-x86::instruction-operands instr))))))
+     ((not (typep instr 'ia-x86-instr::call))
       nil)
      ((or (= (tag :even-fixnum) return-pointer-tag)
 	  (= (tag :odd-fixnum) return-pointer-tag))
       ;; Insert a NOP
       '(#x90))
-     ((= 3 return-pointer-tag)
-      ;; Insert two NOPs, 3 -> 5
-      '(#x90 #x90))
+;;;     ((= 3 return-pointer-tag)
+;;;      ;; Insert two NOPs, 3 -> 5
+;;;      '(#x90 #x90))
      ((= (tag :character) return-pointer-tag)
       ;; Insert three NOPs, 2 -> 5
-      '(#x90 #x90 #x90)))))
+      '(#x90 #x90 #x90)
+      '(#x90)))))
 
 (defun make-compiled-primitive (form environment top-level-p docstring)
   "Primitive functions have no funobj, no stack-frame, and no implied
@@ -3858,6 +3855,7 @@ loading borrowed bindings."
 			(append (make-load-constant sub-funobj register funobj frame-map)))
 		       ((typep (movitz-allocation sub-funobj)
 			       'with-dynamic-extent-scope-env)
+			(setf (headers-on-stack-frame-p funobj) t)
 			(let ((dynamic-scope (movitz-allocation sub-funobj)))
 			  (append (make-load-lexical (base-binding dynamic-scope) :edx
 						     funobj nil frame-map)
