@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.12 2004/03/31 16:32:22 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.13 2004/04/06 14:35:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1101,6 +1101,8 @@
 	   print-word
 	   fixnump below
 	   print-unreadable-movitz-object
+	   
+	   #:*print-safely*
 
 	   stack-ref
 	   with-each-dynamic-context
@@ -1287,6 +1289,7 @@
 	   
 	   #:+movitz-fixnum-factor+
 	   #:+movitz-fixnum-shift+
+	   #:+scan-skip-word+
 	   #:constant0
 	   
 	   #:movitz-object-browser-properties
