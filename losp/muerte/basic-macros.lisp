@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.10 2004/04/14 21:59:34 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.11 2004/04/16 18:55:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1040,6 +1040,12 @@ busy-waiting loop on P4."
        (:je 'boundp-done)
        (:stc)
       boundp-done)))
+
+(defmacro define-global-variable (name init-form &optional docstring)
+  "A global variable will be accessed by ignoring local bindings."
+  `(progn
+     (defparameter ,name ,init-form ,docstring)
+     (define-symbol-macro ,name (%symbol-global-value ',name))))
 
 (require :muerte/setf)
 
