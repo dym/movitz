@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.42 2005/01/27 07:46:49 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.43 2005/01/27 09:01:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -199,9 +199,16 @@ at the start-stack-frame location."
      ((match-funobj esi location))
      ((not (typep casf-funobj 'function))
       (break "Unknown funobj/frame-type: ~S" casf-funobj))
+     ((location-in-object-p (%run-time-context-slot 'dynamic-jump-next) location)
+      (%run-time-context-slot 'dynamic-jump-next))
      ((when searchp
 	(%find-code-vector location)))
-     (t (error "Unable to decode EIP #x~X funobj ~S." location casf-funobj)))))
+     (t (with-simple-restart (continue "Try to perform a code-vector-search.")
+	  (error "Unable to decode EIP #x~X funobj ~S, ESI ~S."
+		 (* 4 location) casf-funobj esi))
+	(or (%find-code-vector location)
+	    (error "Code-vector-search for EIP #x~X also failed."
+		   (* 4 location)))))))
 
 (defun map-stack-value (function value frame)
   (if (not (typep value 'pointer))
@@ -305,7 +312,6 @@ at the start-stack-frame location."
 			       (eq x1-tag 3) ; 3 or 7?
 			       (and (oddp x1-location) (eq x1-tag 2))) ; 6?
 			   (location-in-object-p casf-code-vector x1-location))
-		  (warn "X1: ~S ~S" x1-location x1-tag)
 		  (let* ((old-x1-code-vector
 			  (scavenge-find-code-vector (stack-frame-ref nil next-eip-index 0 :location)
 						     casf-funobj interrupted-esi t)))
