@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.52 2004/04/17 14:10:51 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.51 2004/04/17 14:10:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -739,12 +739,11 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 					   have-normalized-ecx-p)))
 		     (let ((optimized-function-code
 			    (optimize-code function-code
-					   :keep-labels (append
-							 (subseq (movitz-funobj-const-list funobj)
-								 0 (movitz-funobj-num-jumpers funobj))
-							 '(entry%1op
-							   entry%2op
-							   entry%3op)))))
+					   :keep-labels (append (subseq (movitz-funobj-const-list funobj)
+									0 (movitz-funobj-num-jumpers funobj))
+								'(entry%1op
+								  entry%2op
+								  entry%3op)))))
 		       (cons numargs optimized-function-code))))))))
     (let ((code1 (cdr (assoc 1 code-specs)))
 	  (code2 (cdr (assoc 2 code-specs)))
