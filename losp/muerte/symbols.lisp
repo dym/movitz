@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.15 2004/07/07 23:22:16 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.16 2004/07/13 14:06:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -195,18 +195,18 @@
      flags)))
 
 (defun symbol-special-variable-p (symbol)
-  (logbitp 0 (symbol-flags symbol)))
+  (logbitp 3 (symbol-flags symbol)))
 
 (defun (setf symbol-special-variable-p) (value symbol)
-  (setf (ldb (byte 1 0) (symbol-flags symbol))
+  (setf (ldb (byte 1 3) (symbol-flags symbol))
     (if value 1 0))
   value)
 
 (defun symbol-constant-variable-p (symbol)
-  (logbitp 1 (symbol-flags symbol)))
+  (logbitp 4 (symbol-flags symbol)))
 
 (defun (setf symbol-constant-variable-p) (value symbol)
-  (setf (ldb (byte 1 1) (symbol-flags symbol))
+  (setf (ldb (byte 1 4) (symbol-flags symbol))
     (if value 1 0))
   value)
 
