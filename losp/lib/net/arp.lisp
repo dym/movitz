@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Mar 20 15:01:15 2003
 ;;;;                
-;;;; $Id: arp.lisp,v 1.8 2004/11/24 17:27:42 ffjeld Exp $
+;;;; $Id: arp.lisp,v 1.9 2004/11/24 22:11:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -79,7 +79,7 @@
 
 (defvar *ne2000* nil)
 
-(defun polling-arp (ip &optional (breaker #'false))
+(defun polling-arp (ip &optional (breaker (constantly nil)))
   (loop with ip = (ip4-address ip) and nic = *ip4-nic* and transmit-time = 0
       for packet = (muerte.ethernet:receive nic)
       until (funcall breaker)
