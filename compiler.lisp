@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.42 2004/04/06 14:34:45 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.43 2004/04/11 18:55:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3847,7 +3847,7 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 	       (append (when (and do-check-stack-p
 				  *compiler-auto-stack-checks-p*
 				  (not (without-check-stack-limit-p env)))
-			 `((,*compiler-global-segment-prefix*
+			 `((,*compiler-local-segment-prefix*
 			    :bound (:edi ,(global-constant-offset 'stack-bottom)) :esp)))
 		       (when use-stack-frame-p
 			`((:pushl :ebp)
