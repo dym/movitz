@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:41:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: common-lisp.lisp,v 1.6 2004/04/19 22:38:11 ffjeld Exp $
+;;;; $Id: common-lisp.lisp,v 1.7 2004/04/23 15:00:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -41,8 +41,8 @@
 (require :muerte/format)
 (require :muerte/error)
 (require :muerte/loop)
-(require :muerte/eval)
 (require :muerte/environment)
+(require :muerte/eval)
 (require :muerte/streams)
 (require :muerte/restarts)
 (require :muerte/conditions)
