@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.10 2004/04/17 14:08:24 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.11 2004/04/19 19:51:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -294,6 +294,11 @@
 				 not-fixnum)))))))
 		    ((eql)
 		     `(eql ,object ',(cadr type)))
+		    ((satisfies)
+		     (destructuring-bind (predicate-name)
+			 (cdr type)
+		       (check-type predicate-name symbol "a satisfies predicate-name")
+		       `(,predicate-name ,object)))
 		    ((cons)
 		     (destructuring-bind (&optional (car t) (cdr t))
 			 (cdr type)
