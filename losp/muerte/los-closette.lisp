@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.17 2004/07/24 01:30:49 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.18 2004/07/28 10:01:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -993,10 +993,10 @@ next-emf as its target for call-next-method."
 (defclass run-time-context (t)
   ()
   (:metaclass built-in-class)
-  (:size #.(bt:sizeof 'movitz::movitz-constant-block))
-  (:slot-map #.(movitz::slot-map 'movitz::movitz-constant-block
-			       (cl:+ (bt:slot-offset 'movitz::movitz-constant-block
-						     'movitz::constant-block-start)
+  (:size #.(bt:sizeof 'movitz::movitz-run-time-context))
+  (:slot-map #.(movitz::slot-map 'movitz::movitz-run-time-context
+			       (cl:+ (bt:slot-offset 'movitz::movitz-run-time-context
+						     'movitz::run-time-context-start)
 				     0))))
 
 (defclass stream () ())

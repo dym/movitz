@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.33 2004/07/27 09:13:36 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.34 2004/07/28 10:00:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -621,7 +621,7 @@ integer (native lisp) value."
   (assert (eq type 'word))
   (cond
    ((eq 'muerte::unbound obj)
-    (binary-slot-value (image-constant-block *image*) 'unbound-function))
+    (binary-slot-value (image-run-time-context *image*) 'unbound-function))
    ((typep obj 'movitz-funobj)
     (movitz-intern obj))
    ((symbolp obj)
@@ -987,7 +987,7 @@ integer (native lisp) value."
    (length
     :binary-type lu16
     :initarg :length
-    :accessor movitz-bignum-length
+    :accessor movitz-struct-length
     :map-binary-write (lambda (x &optional type)
 			(declare (ignore type))
 			(check-type x (unsigned-byte 14))

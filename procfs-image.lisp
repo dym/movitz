@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.11 2004/07/23 15:32:55 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.12 2004/07/28 10:00:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -109,7 +109,7 @@
     (cons (mapcar #'movitz-print expr))
     ((not movitz-object)
      expr)
-    ((or movitz-nil movitz-constant-block) nil)
+    ((or movitz-nil movitz-run-time-context) nil)
     (movitz-std-instance expr)
     (movitz-symbol
      (intern (movitz-print (movitz-symbol-name expr))))
@@ -242,7 +242,7 @@
 
 
 (defun current-dynamic-context ()
-  (slot-value (image-constant-block *image*) 'dynamic-env))
+  (slot-value (image-run-time-context *image*) 'dynamic-env))
 
 (defun stack-ref-p (pointer)
   (let ((top #xa0000)
@@ -265,7 +265,7 @@
   (stack-ref dynamic-context 4 0 :lisp))
 
 (defun load-global-constant (slot-name)
-  (slot-value (image-constant-block *image*) slot-name))
+  (slot-value (image-run-time-context *image*) slot-name))
 
 (defun image-eq (x y)
   (eql (movitz-intern x) (movitz-intern y)))

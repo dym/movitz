@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.16 2004/07/20 23:51:15 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.17 2004/07/28 10:01:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -328,7 +328,8 @@ respect to multiple threads."
 		(equal context '(current-run-time-context))))
       form
     (let ((slot-name (movitz::eval-form slot-name env)))
-      (ecase (bt:binary-slot-type 'movitz::movitz-constant-block (intern (symbol-name slot-name) :movitz))
+      (ecase (bt:binary-slot-type 'movitz::movitz-run-time-context
+				  (intern (symbol-name slot-name) :movitz))
 	(movitz::word
 	 `(with-inline-assembly (:returns :eax)
 	    (:locally (:movl (:edi (:edi-offset ,slot-name)) :eax))))

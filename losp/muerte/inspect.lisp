@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.32 2004/07/27 09:19:14 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.33 2004/07/28 10:01:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -303,7 +303,7 @@ Obviously, this correspondence is not guaranteed to hold e.g. across GC."
       (run-time-context
        (<= object-location
 	   location
-	   (+ -1 object-location #.(movitz::movitz-type-word-size :movitz-constant-block))))
+	   (+ -1 object-location #.(movitz::movitz-type-word-size :movitz-run-time-context))))
       (std-instance
        (<= object-location
 	   location

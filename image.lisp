@@ -9,14 +9,14 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.52 2004/07/27 09:11:44 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.53 2004/07/28 10:00:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (in-package movitz)
 
-(define-binary-class movitz-constant-block (movitz-heap-object)
-  ((constant-block-start :binary-type :label) ; keep this at the top.
+(define-binary-class movitz-run-time-context (movitz-heap-object)
+  ((run-time-context-start :binary-type :label) ; keep this at the top.
    (type
     :binary-type other-type-byte
     :initform :run-time-context)
@@ -168,7 +168,7 @@
     :initarg :null-cons)
    (null-sym
     :binary-type movitz-nil-symbol
-    :reader movitz-constant-block-null-symbol
+    :reader movitz-run-time-context-null-symbol
     :initarg :null-sym)
    ;; primitive functions global constants
    (dynamic-find-binding
@@ -346,28 +346,28 @@
     :map-binary-write 'movitz-intern
     :map-binary-read-delayed 'movitz-word
     :initarg :interrupt-handlers
-    :accessor movitz-constant-block-interrupt-handlers)
+    :accessor movitz-run-time-context-interrupt-handlers)
    (interrupt-descriptor-table
     :binary-type word
-    :accessor movitz-constant-block-interrupt-descriptor-table
+    :accessor movitz-run-time-context-interrupt-descriptor-table
     :initarg :interrupt-descriptor-table
     :map-binary-read-delayed 'movitz-word
     :map-binary-write 'map-idt-to-array)
    (toplevel-funobj
     :binary-type word
     :initform nil
-    :accessor movitz-constant-block-toplevel-funobj
+    :accessor movitz-run-time-context-toplevel-funobj
     :map-binary-write 'movitz-intern
     :map-binary-read-delayed 'movitz-word)
    (global-properties
     :binary-type word
     :initform nil
-    :accessor movitz-constant-block-global-properties
+    :accessor movitz-run-time-context-global-properties
     :map-binary-write 'movitz-intern
     :map-binary-read-delayed 'movitz-word)
    (copy-funobj
     :binary-type word
-    ;; :accessor movitz-constant-block-copy-funobj
+    ;; :accessor movitz-run-time-context-copy-funobj
     :initform 'muerte::copy-funobj
     :map-binary-write (lambda (name type)
 			(declare (ignore type))
@@ -406,8 +406,8 @@
     :initform nil
     :map-binary-write (lambda (x type)
 			(declare (ignore x type))
-			(- (bt:slot-offset 'movitz-constant-block 'non-pointers-end)
-			   (bt:slot-offset 'movitz-constant-block 'non-pointers-start))))
+			(- (bt:slot-offset 'movitz-run-time-context 'non-pointers-end)
+			   (bt:slot-offset 'movitz-run-time-context 'non-pointers-start))))
    (bochs-flags
     :binary-type lu32
     :initform 0)
@@ -491,7 +491,7 @@
 			      (if (not pf-name)
 				  0
 				(truncate (+ (tag :null)
-					     (bt:slot-offset 'movitz-constant-block
+					     (bt:slot-offset 'movitz-run-time-context
 							     (intern (symbol-name pf-name)
 								     :movitz)))
 					  4)))
@@ -507,16 +507,16 @@
 			  (cons :data (truncate jumper 4))
 			  registers))))
 
-(defmethod movitz-object-offset ((obj movitz-constant-block)) 0)
+(defmethod movitz-object-offset ((obj movitz-run-time-context)) 0)
 
 (defun global-constant-offset (slot-name)
   (check-type slot-name symbol)
   
-  (slot-offset 'movitz-constant-block
+  (slot-offset 'movitz-run-time-context
 	       (intern (symbol-name slot-name) :movitz)))
 
-(defun make-movitz-constant-block ()
-  (make-instance 'movitz-constant-block
+(defun make-movitz-run-time-context ()
+  (make-instance 'movitz-run-time-context
     :t-symbol (movitz-read 't)
     :null-cons *movitz-nil*
     :null-sym (movitz-nil-sym *movitz-nil*)))
@@ -577,8 +577,8 @@
     :accessor image-called-functions)
    (toplevel-funobj
     :accessor image-toplevel-funobj)
-   (constant-block
-    :accessor image-constant-block)
+   (run-time-context
+    :accessor image-run-time-context)
    (load-time-funobjs
     :initform ()
     :accessor image-load-time-funobjs)
@@ -622,7 +622,7 @@
 
 (defun unbound-value ()
   (declare (special *image*))
-  (slot-value (image-constant-block *image*)
+  (slot-value (image-run-time-context *image*)
 	      'unbound-value))
 
 (defun edi-offset ()
@@ -707,10 +707,10 @@
 		 (eq :u8 (movitz-vector-element-type code-vector)))
       (error "Not a code-vector at #x~8,'0X: ~S" address code-vector))
     (format t "~&;; Code vector: #x~X" (movitz-intern code-vector))
-    (loop for pf-name in (binary-record-slot-names 'movitz-constant-block
+    (loop for pf-name in (binary-record-slot-names 'movitz-run-time-context
 						   :match-tags :primitive-function)
 	when (= (movitz-intern-code-vector code-vector)
-		(binary-slot-value (image-constant-block *image*) pf-name))
+		(binary-slot-value (image-run-time-context *image*) pf-name))
 	do (format t "~&;; #x~X matches global primitive-function ~W with offset ~D."
 		   address pf-name
 		   (- address (movitz-intern-code-vector code-vector)))
@@ -785,20 +785,20 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		       (copy-hash-table (function-code-sizes *image*))
 		     (make-hash-table :test #'equal)))))
     (setf (image-nil-word *image*)
-      (1+ (- (slot-offset 'movitz-constant-block 'null-cons)
-	     (slot-offset 'movitz-constant-block 'constant-block-start))))
+      (1+ (- (slot-offset 'movitz-run-time-context 'null-cons)
+	     (slot-offset 'movitz-run-time-context 'run-time-context-start))))
     (format t "~&;; NIL value: #x~X.~%" (image-nil-word *image*))
     (assert (eq :null (extract-tag (image-nil-word *image*))) ()
       "NIL value #x~X has tag ~D, but it must be ~D."
       (image-nil-word *image*)
       (ldb (byte 3 0) (image-nil-word *image*))
       (tag :null))
-    (setf (image-constant-block *image*) (make-movitz-constant-block))
-    (unless (= 0 (mod (+ (image-nil-word *image*) (slot-offset 'movitz-constant-block
+    (setf (image-run-time-context *image*) (make-movitz-run-time-context))
+    (unless (= 0 (mod (+ (image-nil-word *image*) (slot-offset 'movitz-run-time-context
 							       'segment-descriptor-table))
 		      16))
       (warn "Segment descriptor table is not aligned on a 16-byte boundary."))
-    (setf (movitz-constant-block-interrupt-descriptor-table (image-constant-block *image*))
+    (setf (movitz-run-time-context-interrupt-descriptor-table (image-run-time-context *image*))
       (movitz-read (make-initial-interrupt-descriptors)))
     (setf (image-t-symbol *image*) (movitz-read t))
     ;; (warn "NIL value: #x~X" (image-nil-word *image*))
@@ -840,7 +840,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
   (setf (movitz-symbol-value (movitz-read 'muerte:*build-number*))
     (1+ *bootblock-build*))
   (let ((handler (movitz-env-symbol-function 'muerte::interrupt-default-handler)))
-    (setf (movitz-constant-block-interrupt-handlers (image-constant-block *image*))
+    (setf (movitz-run-time-context-interrupt-handlers (image-run-time-context *image*))
       (movitz-read (make-array 256 :initial-element handler))))
   (let ((load-address (image-start-address *image*)))
     (setf (image-cons-pointer *image*) (- load-address
@@ -852,7 +852,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 					     :load-address 0
 					     :load-end-address 0
 					     :entry-address 0))
-    (assert (= load-address (+ (image-intern-object *image* (image-constant-block *image*))
+    (assert (= load-address (+ (image-intern-object *image* (image-run-time-context *image*))
 			       (image-ds-segment-base *image*))))
     (when multiboot-p
       (assert (< (+ (image-intern-object *image* (image-multiboot-header *image*))
@@ -866,7 +866,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
       (stable-sort (copy-list (image-load-time-funobjs *image*)) #'> :key #'third))
     (let* ((toplevel-funobj (make-toplevel-funobj *image*)))
       (setf (image-toplevel-funobj *image*) toplevel-funobj
-	    (movitz-constant-block-toplevel-funobj (image-constant-block *image*)) toplevel-funobj)
+	    (movitz-run-time-context-toplevel-funobj (image-run-time-context *image*)) toplevel-funobj)
       (format t "~&;; load-sequence:~%~<~A~>~%" (mapcar #'second (image-load-time-funobjs *image*)))
       (movitz-intern toplevel-funobj)
       (let ((init-code-address (+ (movitz-intern-code-vector (movitz-funobj-code-vector toplevel-funobj))
@@ -884,24 +884,24 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 			     function-value)
 			 #+ignore (warn "fv: ~W" (movitz-macro-expander-function function-value)))))
 		 (movitz-environment-function-cells (image-global-environment *image*)))
-	(let ((constant-block (image-constant-block *image*)))
-	  ;; pull in functions in constant-block
-	  (dolist (gcf-name (binary-record-slot-names 'movitz-constant-block :match-tags :global-function))
+	(let ((run-time-context (image-run-time-context *image*)))
+	  ;; pull in functions in run-time-context
+	  (dolist (gcf-name (binary-record-slot-names 'movitz-run-time-context :match-tags :global-function))
 	    (let* ((gcf-movitz-name (movitz-read (intern (symbol-name gcf-name)
 							 ':muerte)))
 		   (gcf-funobj (movitz-symbol-function-value gcf-movitz-name)))
-	      (setf (slot-value constant-block gcf-name) 0)
+	      (setf (slot-value run-time-context gcf-name) 0)
 	      (cond
 	       ((or (not gcf-funobj)
 		    (eq 'muerte::unbound gcf-funobj))
 		(warn "Global constant function ~S is not defined!" gcf-name))
 	       (t (check-type gcf-funobj movitz-funobj)
-		  (setf (slot-value constant-block gcf-name)
+		  (setf (slot-value run-time-context gcf-name)
 		    gcf-funobj)))))
-	  ;; pull in primitive functions in constant-block
-	  (dolist (pf-name (binary-record-slot-names 'movitz-constant-block
+	  ;; pull in primitive functions in run-time-context
+	  (dolist (pf-name (binary-record-slot-names 'movitz-run-time-context
 						     :match-tags :primitive-function))
-	    (setf (slot-value constant-block pf-name)
+	    (setf (slot-value run-time-context pf-name)
 	      (find-primitive-function (intern (symbol-name pf-name) :muerte))))
 	  #+ignore
 	  (loop for k being the hash-keys of (movitz-environment-setf-function-names *movitz-global-environment*)
@@ -924,7 +924,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	      do (let ((mname (movitz-read var))
 		       (mvalue (movitz-read (symbol-value var))))
 		   (setf (movitz-symbol-value mname) mvalue)))
-	  (setf (movitz-constant-block-global-properties constant-block)
+	  (setf (movitz-run-time-context-global-properties run-time-context)
 	    (movitz-read (list :packages (make-packages-hash)
 			       :setf-namespace (movitz-environment-setf-function-names
 						*movitz-global-environment*)
@@ -1188,7 +1188,7 @@ this image will not be Multiboot compatible."
 		   (setf (gethash lisp-package (image-read-map-hash *image*))
 		     (movitz-read movitz-package)))
 		 lisp-to-movitz-package)
-	(setf (slot-value (movitz-constant-block-null-symbol (image-constant-block *image*))
+	(setf (slot-value (movitz-run-time-context-null-symbol (image-run-time-context *image*))
 			  'package)
 	  (movitz-read (ensure-package (string :common-lisp) :muerte.common-lisp)))
 	(loop for symbol being the hash-key of (image-oblist *image*)
@@ -1204,10 +1204,10 @@ this image will not be Multiboot compatible."
 	movitz-packages))))
 
 
-(defun constant-block-find-slot (offset)
-  "Return the name of the constant-block slot located at offset."
-  (dolist (slot-name (bt:binary-record-slot-names 'movitz-constant-block))
-    (when (= offset (bt:slot-offset 'movitz-constant-block slot-name))
+(defun run-time-context-find-slot (offset)
+  "Return the name of the run-time-context slot located at offset."
+  (dolist (slot-name (bt:binary-record-slot-names 'movitz-run-time-context))
+    (when (= offset (bt:slot-offset 'movitz-run-time-context slot-name))
       (return slot-name))))
 
 (defun comment-instruction (instruction funobj pc)
@@ -1217,10 +1217,10 @@ this image will not be Multiboot compatible."
 		(eq 'ia-x86::edi (ia-x86::operand-register operand))
 		(not (ia-x86::operand-register2 operand))
 		(= 1 (ia-x86::operand-scale operand))
-		(constant-block-find-slot (ia-x86::operand-offset operand))
+		(run-time-context-find-slot (ia-x86::operand-offset operand))
 		(not (typep instruction 'ia-x86-instr::lea)))
       collect (format nil "<Global slot ~A>" 
-		      (constant-block-find-slot (ia-x86::operand-offset operand)))
+		      (run-time-context-find-slot (ia-x86::operand-offset operand)))
       when (and (typep operand 'ia-x86::operand-indirect-register)
 		(eq 'ia-x86::edi (ia-x86::operand-register operand))
 		(typep instruction 'ia-x86-instr::lea)
@@ -1360,8 +1360,8 @@ this image will not be Multiboot compatible."
 
 (defun movitz-disassemble-primitive (name &optional (*image* *image*))
   (let* ((code-vector (cond
-		       ((slot-exists-p (image-constant-block *image*) name)
-			(slot-value (image-constant-block *image*) name))
+		       ((slot-exists-p (image-run-time-context *image*) name)
+			(slot-value (image-run-time-context *image*) name))
 		       (t (movitz-symbol-value (movitz-read name)))))
 	 (code (map 'vector #'identity
 		    (movitz-vector-symbolic-data code-vector)))
@@ -1547,7 +1547,7 @@ this image will not be Multiboot compatible."
     (symbol expr)
     (array expr)
     (cons (mapcar #'movitz-print expr))
-    ((or movitz-nil movitz-constant-block) nil)
+    ((or movitz-nil movitz-run-time-context) nil)
     (movitz-fixnum
      (movitz-fixnum-value expr))
     (movitz-std-instance expr)

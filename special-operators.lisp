@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.32 2004/07/24 01:30:32 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.33 2004/07/28 10:00:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -632,7 +632,7 @@ The valid parameters are~{ ~S~}."
       (cdr form)
     (assert (not argument))
     (compiler-values ()
-      :code `((:call (:edi ,(slot-offset 'movitz-constant-block if-name))))
+      :code `((:call (:edi ,(slot-offset 'movitz-run-time-context if-name))))
       :returns :nothing)))
 
 (define-special-operator inlined-not (&all forward &form form &result-mode result-mode)
