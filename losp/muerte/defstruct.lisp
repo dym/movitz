@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.4 2004/03/26 13:57:12 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.5 2004/03/29 14:53:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,9 +19,22 @@
 
 (in-package muerte)
 
-(defun structure-object-length (obj)
-  (check-type obj structure-object)
-  (movitz-accessor-u16 obj movitz-struct length))
+(defun structure-object-length (object)
+  (check-type object structure-object)
+  (movitz-accessor-u16 object movitz-struct length))
+
+(defun copy-structure (object)
+  (check-type object structure-object)
+  (let* ((length (structure-object-length object))
+	 (copy (malloc-words length)))
+    (setf (memref copy -6 0 :lisp)
+      (memref object -6 0 :lisp))
+    (setf (memref copy -6 1 :unsigned-byte32)
+      (memref object -6 1 :unsigned-byte32))
+    (dotimes (i length)
+      (setf (structure-ref copy i)
+	(structure-ref object i)))
+    copy))
 
 (defun struct-predicate-prototype (obj)
   "Prototype function for predicates of user-defined struct.
