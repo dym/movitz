@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.19 2004/09/23 07:21:38 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.20 2004/09/23 09:11:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1101,10 +1101,21 @@ next-emf as its target for call-next-method."
 
 (defclass structure-slot-definition (slot-definition)
   ((name
-    :initarg :name)
+    :initarg :name
+    :reader structure-slot-name)
    (location
     :initarg :location
-    :reader structure-slot-location)))
+    :reader structure-slot-location)
+   (initarg
+    :initarg :initarg
+    :reader structure-slot-initarg)
+   (initform
+    :initarg :initform
+    :reader structure-slot-initform)
+   (type
+    :initarg type)
+   (readonly
+    :initarg :readonly)))
 
 (defclass structure-object (t) () (:metaclass structure-class))
 
@@ -1137,14 +1148,15 @@ next-emf as its target for call-next-method."
 			     (:jmp 'init-loop)
 			     init-done)))
 		     (do-it))))
-      (do ((p init-args (cddr p)))
-	  ((endp p))
-	(let ((slot-position (position (car p) slots :key #'fifth)))
-	  (assert slot-position ()
-	    "Illegal init-arg ~S for ~S." (car p) class)
-	  (setf (structure-ref struct slot-position) (cadr p))))
+      (dolist (slot slots)
+	(let ((init-value (getf init-args (structure-slot-initarg slot) 'no-initarg)))
+	  (if (not (eq init-value 'no-initarg))
+	      (setf (structure-ref struct (structure-slot-location slot)) init-value)
+	    (let ((initform (structure-slot-initform slot)))
+	      (when initform
+		(setf (structure-ref struct (structure-slot-location slot))
+		  (eval initform)))))))
       struct)))
-
 ;;;;
 
 
