@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.9 2004/10/11 13:46:25 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.10 2004/12/09 14:03:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -248,10 +248,10 @@ the function sets up itself. Its parent env. must be a funobj-env."))
 ;;;	(warn "..with body ~W" macro-function)
 	(let ((expansion (funcall macro-function form environment)))
 	  (cond
-	   #+ignore ((member (if (atom form) form (car form))
-			     '(<= <=%2op <=%3op) :test #'string=)
-		     (warn "Expanded ~S to ~S" form expansion)
-		     expansion)
+;; 	    ((member (if (atom form) form (car form))
+;; 		     '(do) :test #'string=)
+;; 		     (warn "Expanded ~S to ~S" form expansion)
+;; 		     expansion)
 	   (t
 	    ;; (warn "Expanded macro named ~A." (if (atom form) form (car form)))
 	    expansion)))))
@@ -424,7 +424,7 @@ the function sets up itself. Its parent env. must be a funobj-env."))
 					       (environment nil)
 					       (recurse-p t))
   (loop for env = (or environment *movitz-global-environment*)
-      then (and recurse-p (movitz-environment-uplink env))
+      then (when recurse-p (movitz-environment-uplink env))
       for plist = (and env (getf (movitz-environment-plists env) symbol))
       while env
       do (let ((val (getf plist indicator '#0=#:not-found)))
