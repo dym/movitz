@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.91 2004/08/09 14:39:31 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.92 2004/08/10 12:56:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -45,8 +45,15 @@ run-time context.")
 run-time context.")
 
 (defvar *compiler-physical-segment-prefix* '(:gs-override)
-  "Use this instruction prefix when accessing a physical memory location
-(i.e. typically some memory-mapped hardware device).")
+  "Use this instruction prefix when accessing a physical memory location (i.e. typically some memory-mapped hardware device).")
+
+(defvar *compiler-nonlocal-lispval-read-segment-prefix* '(:fs-override)
+  "Use this segment prefix when reading a lispval at (potentially)
+non-local locations.")
+
+(defvar *compiler-nonlocal-lispval-write-segment-prefix* '(:fs-override)
+  "Use this segment prefix when writing a lispval at (potentially)
+non-local locations.")
 
 (defvar *compiler-allow-untagged-word-bits* 0
   "Allow (temporary) untagged values of this bit-size to exist, because
@@ -102,18 +109,20 @@ compile, using the host compiler, the code rather than just using eval.")
 		      :result-mode :ignore))
 	 ;; (ignmore (format t "~{~S~%~}" body-code))
 	 (resolved-code (finalize-code body-code nil nil))
-	 (function-code (ia-x86:read-proglist resolved-code))
-	 (code-vector (ia-x86:proglist-encode :octet-vector
-					      :32-bit
-					      #x00000000
-					      function-code
-					      :symtab-lookup
-					      #'(lambda (label)
-						  (case label
-						    (:nil-value (image-nil-word *image*)))))))
-    (make-movitz-vector (length code-vector)
-			:element-type 'code
-			:initial-contents code-vector)))
+	 (function-code (ia-x86:read-proglist resolved-code)))
+    (multiple-value-bind (code-vector symtab)
+	(ia-x86:proglist-encode :octet-vector
+				:32-bit
+				#x00000000
+				function-code
+				:symtab-lookup
+				#'(lambda (label)
+				    (case label
+				      (:nil-value (image-nil-word *image*)))))
+      (values (make-movitz-vector (length code-vector)
+				  :element-type 'code
+				  :initial-contents code-vector)
+	      symtab))))
 
 (defun register-function-code-size (funobj)
   (let* ((name (movitz-print (movitz-funobj-name funobj)))
