@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.63 2004/07/14 21:58:58 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.64 2004/07/14 23:45:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1440,23 +1440,32 @@ Preserve EAX and EBX."
 	 (cond
 	  ((= number divisor) (values 1 0))
 	  ((< number divisor) (values 0 number))
-	  (t (let* ((msb-pos (1- (* 2 (%bignum-bigits divisor))))
-		    (msb (memref divisor -2 msb-pos :unsigned-byte16)))
-	       (when (= 0 msb)
+	  (t (let* ((msb-pos (1- (* 4 (%bignum-bigits divisor))))
+		    (msb (memref divisor -2 msb-pos :unsigned-byte8)))
+	       (do () ((not (eq 0 msb)))
 		 (decf msb-pos)
-		 (setf msb (memref divisor -2 msb-pos :unsigned-byte16))
-		 (assert (plusp msb)))
-	       (do ((msb+1 (1+ msb))
-		    (q 0) (r number))
-		   ((< r divisor) (values q r))
-		 (let ((guess (truncate r msb+1)))
-		   (dotimes (i msb-pos)
-		     (setf guess (truncate guess #x10000)))
-		   (if (= 0 guess)
-		       (setf q (1+ q)
-			     r (- r divisor))
-		     (setf q (+ q guess)
-			   r (- r (* divisor guess))))))))))
+		 (setf msb (memref divisor -2 msb-pos :unsigned-byte8)))
+	       (decf msb-pos 2)
+	       (setf msb (+ (* #x10000 msb)
+			    (* #x100 (memref divisor -2 (1+ msb-pos) :unsigned-byte8))
+			    (memref divisor -2 msb-pos :unsigned-byte8)))
+	       (multiple-value-bind (long-shift short-shift)
+		   ;; This shifting stuff should be replaced by ash,
+		   ;; when ash is properly implemented.
+		   (truncate msb-pos 3)
+		 (do ((msb+1 (1+ msb))
+		      (q 0) (r number))
+		     ((< r divisor) (values q r))
+		   (let ((guess (truncate r msb+1)))
+		     (dotimes (i long-shift)
+		       (setf guess (truncate guess #x1000000)))
+		     (dotimes (i short-shift)
+		       (setf guess (truncate guess #x100)))
+		     (if (= 0 guess)
+			 (setf q (1+ q)
+			       r (- r divisor))
+		       (setf q (+ q guess)
+			     r (- r (* divisor guess)))))))))))
 	(((integer * -1) (integer 0 *))
 	 (multiple-value-bind (q r)
 	     (truncate (- number) divisor)
