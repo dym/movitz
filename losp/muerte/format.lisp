@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Mar 23 01:18:36 2002
 ;;;;                
-;;;; $Id: format.lisp,v 1.4 2004/04/13 14:21:57 ffjeld Exp $
+;;;; $Id: format.lisp,v 1.5 2004/05/20 17:47:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -30,7 +30,7 @@
   (declare (dynamic-extent args))
   (let ((destination
 	 (case destination
-	   ((nil) (make-array (* 2 (length control))
+	   ((nil) (make-array (* 3 (length control))
 			      :element-type 'character
 			      :fill-pointer 0))
 	   ((t) *standard-output*)
