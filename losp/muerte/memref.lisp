@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.7 2004/03/31 18:33:52 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.8 2004/03/31 21:35:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,18 +18,7 @@
 
 (in-package muerte)
 
-(defun memwrite2 (address value)
-  "Writes the 16-bit VALUE to memory ADDRESS."
-  (with-inline-assembly (:returns :nothing)
-    (:compile-form (:result-mode :eax) address)
-    (:compile-form (:result-mode :ebx) value)
-    (:sarl #.movitz::+movitz-fixnum-shift+ :eax)
-    (:sarl #.movitz::+movitz-fixnum-shift+ :ebx)
-    (:movw :bx (:eax))))
-
 (define-compiler-macro memref (&whole form object offset index type &environment env)
-;;;  (assert (typep offset '(integer 0 0)) (offset)
-;;;    (error "memref offset not supported."))
   (if (not (movitz:movitz-constantp type env))
       form
     (labels ((extract-constant-delta (form)
@@ -104,7 +93,7 @@
 			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
 			    (:leal (:ecx (:ebx 2)) :ecx)
 			    (:load-lexical (:lexical-binding ,object-var) :eax)
-			    (:sarl #.movitz::+movitz-fixnum-shift+ :ecx)
+			    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
 			    (:movzxw (:eax :ecx ,(offset-by 2)) :ecx)))))))
 		(:unsigned-byte29+3
 		 ;; Two values: the 29 upper bits as unsigned integer,
@@ -113,7 +102,7 @@
 		 `(with-inline-assembly (:returns :multiple-values)
 		    (:compile-form (:result-mode :push) ,object)
 		    (:compile-two-forms (:ecx :ebx) ,offset ,index)
-		    (:sarl #.movitz::+movitz-fixnum-shift+ :ecx)
+		    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
 		    (:addl :ebx :ecx)
 		    (:popl :eax)	; object
 		    (:movl (:eax :ecx ,(offset-by 4)) :ecx)
@@ -131,7 +120,7 @@
 		 `(with-inline-assembly (:returns :multiple-values)
 		    (:compile-form (:result-mode :push) ,object)
 		    (:compile-two-forms (:ecx :ebx) ,offset ,index)
-		    (:sarl #.movitz::+movitz-fixnum-shift+ :ecx)
+		    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
 		    (:addl :ebx :ecx)
 		    (:popl :eax)	; object
 		    (:movl (:eax :ecx ,(offset-by 4)) :ecx)
@@ -148,8 +137,8 @@
 		   `(with-inline-assembly (:returns :eax)
 		      (:compile-two-forms (:ecx :ebx) ,object ,index)
 		      (:xorl :eax :eax)
-		      (:movb #.(movitz:tag :character) :al)
-		      (:sarl #.movitz::+movitz-fixnum-shift+ :ebx) ; scale index
+		      (:movb ,(movitz:tag :character) :al)
+		      (:sarl ,movitz::+movitz-fixnum-shift+ :ebx) ; scale index
 		      (:movb (:ecx :ebx ,(offset-by 1)) :ah)))
 		  (t (let ((object-var (gensym "memref-object-")))
 		       `(let ((,object-var ,object))
@@ -157,9 +146,9 @@
 			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
 			    (:addl :ebx :ecx)
 			    (:xorl :eax :eax)
-			    (:movb #.(movitz:tag :character) :al)
+			    (:movb ,(movitz:tag :character) :al)
 			    (:load-lexical (:lexical-binding ,object-var) :ebx)
-			    (:sarl #.movitz::+movitz-fixnum-shift+ :ecx) ; scale offset+index
+			    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale offset+index
 			    (:movb (:ebx :ecx ,(offset-by 1)) :ah)))))))
 		(:unsigned-byte32
 		 (assert (= 4 movitz::+movitz-fixnum-factor+))
@@ -180,7 +169,7 @@
 		       `(let ((,object-var ,object))
 			  (with-inline-assembly (:returns :untagged-fixnum-ecx)
 			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
-			    (:sarl #.movitz::+movitz-fixnum-shift+ :ecx)
+			    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
 			    (:load-lexical (:lexical-binding ,object-var) :eax)
 			    (:addl :ebx :ecx)
 			    (:movl (:eax :ecx ,(offset-by 4)) :ecx)
@@ -260,7 +249,7 @@
 		  (:compile-two-forms (:ecx :eax) ,index ,value)
 		  (:load-lexical (:lexical-binding ,offset-var) :ebx)
 		  (:addl :ebx :ecx)
-		  (:sarl #.movitz::+movitz-fixnum-shift+ :ecx)
+		  (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
 		  (:load-lexical (:lexical-binding ,object-var) :ebx)
 		  (:movb :ah (:ebx :ecx))))))))
       (:unsigned-byte32
@@ -307,8 +296,8 @@
 	      (:compile-form (:result-mode :push) ,offset)
 	      (:compile-two-forms (:ebx :eax) ,index ,value)
 	      (:popl :ecx)		; offset
-	      (:shrl #.movitz::+movitz-fixnum-shift+ :eax)
-	      (:sarl #.movitz::+movitz-fixnum-shift+ :ecx)
+	      (:shrl ,movitz::+movitz-fixnum-shift+ :eax)
+	      (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
 	      (:addl :ebx :ecx)		; index += offset
 	      (:popl :ebx)		; object
 	      (:movl :eax (:ebx :ecx))))))
@@ -502,7 +491,7 @@
 	    (:shll 2 :ecx)
 	    (:addl :ecx :eax)
 	    (:addl :ebx :eax)
-	    (:shrl #.movitz::+movitz-fixnum-shift+ :eax)
+	    (:shrl ,movitz::+movitz-fixnum-shift+ :eax)
 	    (,prefixes :movl (:eax) :eax)))
 	(:unsigned-byte8
 	 `(with-inline-assembly (:returns :untagged-fixnum-eax)
@@ -514,7 +503,7 @@
 	    (:addl :ecx :ebx)		; add index
 	    (:addl :eax :ebx)		; add offset
 	    (:xorl :eax :eax)
-	    (:shrl #.movitz::+movitz-fixnum-shift+ :ebx) ; scale down address
+	    (:shrl ,movitz::+movitz-fixnum-shift+ :ebx) ; scale down address
 	    (,prefixes :movb (:ebx) :al)))
 	(:unsigned-byte32
 	 `(with-inline-assembly (:returns :eax)
@@ -528,7 +517,7 @@
 		    :al)
 	    (:jnz '(:sub-program (unaligned) (:int 63)))
 	    (:addl :ecx :eax)
-	    (:shrl #.movitz::+movitz-fixnum-shift+ :eax) ; scale down address
+	    (:shrl ,movitz::+movitz-fixnum-shift+ :eax) ; scale down address
 	    (,prefixes :movl (:eax) :ecx)
 	    (:cmpl ,movitz::+movitz-most-positive-fixnum+ :ecx)
 	    (:jg '(:sub-program (overflow) (:int 4)))
@@ -541,7 +530,7 @@
 	   `(with-inline-assembly (:returns :untagged-fixnum-eax)
 	      (:compile-form (:result-mode :ebx) ,address)
 	      (:xorl :eax :eax)
-	      (:shrl #.movitz::+movitz-fixnum-shift+ :ebx) ; scale down address
+	      (:shrl ,movitz::+movitz-fixnum-shift+ :ebx) ; scale down address
 	      (,prefixes :movw (:ebx (:ecx 2)) :ax)))
 	  (t `(with-inline-assembly (:returns :untagged-fixnum-eax)
 		(:compile-form (:result-mode :push) ,address)
@@ -549,10 +538,10 @@
 		(:compile-form (:result-mode :ecx) ,index)
 		(:popl :eax)		; offset
 		(:popl :ebx)		; address
-		(:shrl #.movitz::+movitz-fixnum-shift+ :ecx) ; scale index
+		(:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale index
 		(:addl :eax :ebx)	; add offset
 		(:xorl :eax :eax)
-		(:shrl #.movitz::+movitz-fixnum-shift+ :ebx) ; scale down address
+		(:shrl ,movitz::+movitz-fixnum-shift+ :ebx) ; scale down address
 		(,prefixes :movw (:ebx (:ecx 2)) :ax)))))))))
 
 (defun memref-int (address offset index type &optional physicalp)
@@ -599,7 +588,7 @@
 	    (:popl :ebx)		; index
 	    (:popl :ecx)		; address
 	    (:addl :edx :ecx)
-	    (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
+	    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
 	    (,prefixes :movl :eax (:ecx :ebx))))
 	(:unsigned-byte8
 	 `(with-inline-assembly (:returns :untagged-fixnum-eax)
@@ -610,10 +599,10 @@
 	    (:popl :edx)		; offset
 	    (:popl :ebx)		; index
 	    (:popl :ecx)		; address
-	    (:shrl #.movitz::+movitz-fixnum-shift+ :eax)
+	    (:shrl ,movitz::+movitz-fixnum-shift+ :eax)
 	    (:addl :ebx :ecx)
 	    (:addl :edx :ecx)
-	    (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
+	    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
 	    (,prefixes :movb :al (:ecx))))
 	(:unsigned-byte16
 	 (cond
@@ -623,11 +612,11 @@
 	      (:compile-form (:result-mode :push) ,index)
 	      (:compile-form (:result-mode :eax) ,value)
 	      (:popl :ebx)		; index
-	      (:shrl #.movitz::+movitz-fixnum-shift+ :eax) ; scale value
+	      (:shrl ,movitz::+movitz-fixnum-shift+ :eax) ; scale value
 	      (:popl :ecx)		; address
 	      (:shll 1 :ebx)		; scale index
 	      (:addl :ebx :ecx)
-	      (:shrl #.movitz::+movitz-fixnum-shift+ :ecx) ; scale address
+	      (:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale address
 	      (,prefixes :movw :ax (:ecx))))
 	  (t `(with-inline-assembly (:returns :untagged-fixnum-eax)
 		(:compile-form (:result-mode :push) ,address)
@@ -637,10 +626,10 @@
 		(:popl :edx)		; offset
 		(:popl :ebx)		; index
 		(:popl :ecx)		; address
-		(:shrl #.movitz::+movitz-fixnum-shift+ :eax) ; scale value
+		(:shrl ,movitz::+movitz-fixnum-shift+ :eax) ; scale value
 		(:leal (:ecx (:ebx 2)) :ecx)
 		(:addl :edx :ecx)	;
-		(:shrl #.movitz::+movitz-fixnum-shift+ :ecx) ; scale offset+address
+		(:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale offset+address
 		(,prefixes :movw :ax (:ecx))))))))))
 
 (defun (setf memref-int) (value address offset index type &optional physicalp)
@@ -687,29 +676,6 @@
        (:jnz 'loop)
        done))))
 	     
-;;;       (:shrl 4 :ecx)
-;;;       (:jz 'quads-done)
-;;;
-;;;       quad-loop
-;;;       (:movl (:ebx) :edx)
-;;;       (:addl 4 :ebx)
-;;;       (:movl :edx (:eax))
-;;;       (:addl 4 :eax)
-;;;       (:decl :ecx)
-;;;       (:jnz 'quad-loop)
-;;;       
-;;;       quads-done
-;;;       (:compile-form (:result-mode ) count :ecx)
-;;;       (:shrl 2 :ecx)
-;;;       (:andl 3 :ecx)
-;;;       (:jz 'done)
-;;;       loop
-;;;       (:movb (:ebx :ecx) :dl)
-;;;       (:movb :dl (:eax :ecx))
-;;;       (:decl :ecx)
-;;;       (:jnz 'loop)
-;;;       done))))
-
 (define-compiler-macro %copy-words (destination source count &optional (start1 0) (start2 0)
 				    &environment env)
   (assert (= 4 movitz::+movitz-fixnum-factor+))
