@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.48 2004/07/13 02:29:15 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.49 2004/07/13 13:41:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1231,6 +1231,7 @@ Preserve EAX and EBX."
 		    fixnum-done)))
 		(((eql 0) t) 0)
 		(((eql 1) t) y)
+		(((eql -1) t) (- y))
 		((t fixnum) (* y x))
 		((fixnum bignum)
 		 (let (r)
@@ -1304,13 +1305,15 @@ Preserve EAX and EBX."
 		    positive-result
 		     )))
 		((positive-bignum positive-bignum)
-		 (do ((mx (* most-positive-fixnum x))
-		      (f y)
-		      (r 0))
-		     ((typep f 'fixnum) (+ r (* f x)))
-		   (setf r (+ r mx))
-		   (setf f (- f most-positive-fixnum))))
-		)))
+		 (if (< x y)
+		     (* y x)
+		   ;; X is the biggest factor.
+		   (let ((r 0) (f 0))
+		     (dotimes (half-bigit (* 2 (%bignum-bigits y)))
+		       (incf r (ash (* (memref y -2 half-bigit :unsigned-byte16) x)
+				    f))
+		       (incf f 16))
+		     r))))))
 	(do-it)))
    (t (&rest factors)
       (declare (dynamic-extent factors))
