@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.6 2004/04/18 23:17:36 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.7 2004/06/10 12:07:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -79,6 +79,15 @@
   (:report (lambda (c s)
 	     (format s "Undefined function ~S."
 		     (cell-error-name c)))))
+
+(define-condition undefined-function-call (undefined-function)
+  ((arguments
+    :initarg :arguments
+    :reader undefined-function-call-arguments))
+  (:report (lambda (c s)
+	     (format s "Undefined function ~S called with arguments ~:S."
+		     (cell-error-name c)
+		     (undefined-function-call-arguments c)))))
 		  
 (define-condition unbound-variable (cell-error)
   ()
