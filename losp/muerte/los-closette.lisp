@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.24 2004/12/20 13:42:51 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.25 2005/01/04 20:23:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1723,7 +1723,8 @@ in an instance whose metaclass is standard-class."))
   x)
 
 (defmethod print-object ((x illegal-object) stream)
-  (print-unreadable-object (x stream :type t :identity t))
+  (error "Won't print illegal-object ~Z." x)
+  ;; (print-unreadable-object (x stream :type t :identity t))
   x)
 
 ;;;
