@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.3 2004/02/13 22:11:38 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.4 2004/03/24 13:34:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -69,6 +69,7 @@
 (defvar *backtrace-do-fresh-lines* t)
 (defvar *backtrace-print-length* 3)
 (defvar *backtrace-print-level* 2)
+(defvar *backtrace-print-frames* nil)
 
 (defun pointer-in-range (x)
   (with-inline-assembly (:returns :boolean-cf=1)
@@ -443,16 +444,17 @@ be provided for those cases."
 			(or *debugger-invoked-stack-frame*
 			    (current-stack-frame)))
 		       ((:spartan *backtrace-be-spartan-p*))
+		       ((:fresh-lines *backtrace-do-fresh-lines*) *backtrace-do-fresh-lines*)
 		       (conflate *backtrace-do-conflate*)
 		       (length *backtrace-length*)
-		       print-frames)
+		       ((:print-frames *backtrace-print-frames*) *backtrace-print-frames*))
   (let ((*standard-output* *debug-io*)
 	(*print-length* *backtrace-print-length*)
 	(*print-level* *backtrace-print-level*))
     (loop with conflate-count = 0 with count = 0
 	for stack-frame = initial-stack-frame then (stack-frame-uplink stack-frame)
 	as funobj = (stack-frame-funobj stack-frame t)
-	do (flet ((print-leadin (count conflate-count)
+	do (flet ((print-leadin (stack-frame count conflate-count)
 		    (when *backtrace-do-fresh-lines*
 		      (fresh-line))
 		    (cond
@@ -463,8 +465,8 @@ be provided for those cases."
 			(write-string "="))
 		      (write-char #\space))
 		     (t (format t "~& |= ")))
-		    (when print-frames
-		       (format t "#x~X " stack-frame))))
+		    (when *backtrace-print-frames*
+		      (format t "#x~X " stack-frame))))
 	     (typecase funobj
 	       (integer
 		(let* ((int-frame funobj)
@@ -476,7 +478,7 @@ be provided for those cases."
 		      (incf conflate-count)
 		    (progn
 		      (incf count)
-		      (print-leadin count conflate-count)
+		      (print-leadin stack-frame count conflate-count)
 		      (setf conflate-count 0)
 		      (let ((exception (int-frame-ref int-frame :exception :unsigned-byte32))
 			    (eip (int-frame-ref int-frame :eip :unsigned-byte32)))
@@ -504,7 +506,7 @@ be provided for those cases."
 				  (< count length))
 			(write-string " ...")
 			(return))
-		      (print-leadin count conflate-count)
+		      (print-leadin stack-frame count conflate-count)
 		      (setf conflate-count 0)
 		      (write-char #\()
 		      (let* ((numargs (stack-frame-numargs stack-frame))
