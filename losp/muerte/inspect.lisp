@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.7 2004/04/01 02:11:48 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.8 2004/04/16 14:42:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -189,10 +189,9 @@ after the point that called this stack-frame."
     (structure-object
      (copy-structure old))))
 
-(defun malloc-words (words)
-  (malloc-clumps (1+ (truncate (1+ words) 2))))
-
 (defun malloc-clumps (clumps)
+  "Allocate general-purpose memory, i.e. including pointers.
+The unit clump is 8 bytes, or two words."
   (let ((x (with-inline-assembly (:returns :eax :side-effects t)
 	     (:compile-form (:result-mode :ebx) clumps)
 	     (:shll 1 :ebx)
@@ -204,8 +203,15 @@ after the point that called this stack-frame."
     x))
 
 (defun malloc-data-clumps (clumps)
-  "Allocate clumps for non-pointer data (i.e. doesn't require initialization)."
+  "Allocate memory for non-pointer data (i.e. doesn't require initialization)."
+  ;; Never mind, this is the stupid default implementation.
   (malloc-clumps clumps))
+
+(defun malloc-words (words)
+  (malloc-clumps (1+ (truncate (1+ words) 2))))
+
+(defun malloc-data-words (words)
+  (malloc-data-clumps (1+ (truncate (1+ words) 2))))
 
 (defun location-in-object-p (object location)
   "Is location inside object?"
