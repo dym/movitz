@@ -1,3 +1,10 @@
+2005-01-04  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Fixed some support for stack-allocating funobjs and cons-cells
+	of dynamic extent.
+
+	* New years resolution: Update this ChangeLog more often.
+
 2004-07-19  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
 
 	* Bignums are now working to the extent that one can basically
