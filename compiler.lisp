@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.5 2004/02/02 09:59:26 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.6 2004/02/02 13:05:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -910,9 +910,9 @@ a (lexical-extent) sub-function might care about its parent frame-map."
   (values))
 
 (defun movitz-compile-file-internal (path &optional (*default-load-priority*
-						  (and (boundp '*default-load-priority*)
-						       *default-load-priority*
-						       (1+ *default-load-priority*))))
+						     (and (boundp '*default-load-priority*)
+							  *default-load-priority*
+							  (1+ *default-load-priority*))))
   (declare (special *default-load-priority*))
   (with-retries-until-true (retry "Restart Movitz compilation of ~S." path)
     (let* ((muerte.cl::*compile-file-pathname* path)
@@ -921,11 +921,11 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 		     :name (intern (format nil "file-~A" path) :muerte)
 		     :lambda-list (movitz-read nil)))
 	   (funobj-env (make-local-movitz-environment nil funobj
-						   :type 'funobj-env
-						   :declaration-context :funobj))
+						      :type 'funobj-env
+						      :declaration-context :funobj))
 	   (function-env (make-local-movitz-environment funobj-env funobj
-						     :type 'function-env
-						     :declaration-context :funobj))
+							:type 'function-env
+							:declaration-context :funobj))
 	   (file-code
 	    (with-compilation-unit ()
 	      (with-open-file (stream path :direction :input)
@@ -1792,7 +1792,7 @@ falling below the label."
 (defmethod print-object ((object binding) stream)
   (print-unreadable-object (object stream :type t :identity t)
     (when (slot-boundp object 'name)
-      (princ (binding-name object) stream))))
+      (format stream "name: ~S" (binding-name object)))))
 
 (defclass constant-object-binding (binding)
   ((object
@@ -4289,7 +4289,8 @@ preceding code). As secondary value, returns the new :returns value."
 	  :functional-p nil
 	  :modifies arguments-modifies
 	  :code (append arguments-code
-			(if (and t (eq operator (movitz-print (movitz-funobj-name funobj)))) ; recursive?
+			(if (eq (movitz-read operator)
+				(movitz-read (movitz-funobj-name funobj))) ; recursive?
 			    (make-compiled-funcall-by-esi (length arg-forms))
 			  (make-compiled-funcall-by-symbol operator (length arg-forms) funobj))
 			stack-restore-code))))))
@@ -4677,6 +4678,8 @@ fifth:  all compiler-values for form1, as a list."
       (:movb ,value ,(register32-to-low8 destination-register))))
    (t `((:movl ,value ,destination-register)))))
 
+(defparameter *prev-self-eval* nil)
+
 (define-compiler compile-self-evaluating (&form form &result-mode result-mode &funobj funobj)
   "3.1.2.1.3 Self-Evaluating Objects"
   (let* ((object (or (quote-form-p form) form))
@@ -4684,7 +4687,7 @@ fifth:  all compiler-values for form1, as a list."
 	 (funobj-env (funobj-env funobj))
 	 (binding (or (cdr (assoc movitz-obj (movitz-environment-bindings funobj-env)))
 		      (let ((binding (make-instance 'constant-object-binding
-				       :name movitz-obj
+				       :name (gensym "self-eval-")
 				       :object movitz-obj)))
 			(setf (binding-env binding) funobj-env)
 			(push (cons movitz-obj binding)
