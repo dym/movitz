@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.20 2004/11/12 14:41:10 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.21 2004/11/23 16:11:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -72,6 +72,12 @@
 	 (pid (bochs-parameter :pid ,path)))
      (procfs:with-procfs-attached (,procfs-var pid :direction :io)
        (let ((,image-var (make-instance 'bochs-image
+			   :ds-segment-base (if (boundp '*previous-image*)
+						(image-ds-segment-base *previous-image*)
+					      0)
+			   :cs-segment-base (if (boundp '*previous-image*)
+						(image-cs-segment-base *previous-image*)
+					      0)
 			   :pid pid
 			   :procfs ,procfs-var
 			   :stream (procfs:procfs-connection-mem-stream ,procfs-var)
