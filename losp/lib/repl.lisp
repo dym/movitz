@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 19 14:58:12 2003
 ;;;;                
-;;;; $Id: repl.lisp,v 1.12 2004/07/21 22:29:20 ffjeld Exp $
+;;;; $Id: repl.lisp,v 1.13 2004/09/25 15:25:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -35,7 +35,7 @@
 (defparameter *repl-prompter* 'default-repl-prompter)
 (defparameter *repl-prompt-context* nil)
 (defparameter *repl-print-format* "~@{~&~W~}")
-(defvar *repl-readline-context*)
+(defvar *repl-readline-context* nil)
 (defvar *repl-consless* nil)
 
 (defun default-repl-prompter ()
