@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2000-2004,
+;;;;    Copyright (C) 2000-2005,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      typep.lisp
@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.40 2004/12/13 11:25:41 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.41 2005/01/25 13:55:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -261,6 +261,10 @@
 		 (make-basic-vector-typep :u32))
 		(code-vector
 		 (make-basic-vector-typep :code))
+		(unbound-value
+		 `(with-inline-assembly (:returns :boolean-overflow)
+		    (:compile-form (:result-mode :eax) ,object)
+		    (:cmpl -1 :eax)))
 		(run-time-context
 		 (make-other-typep :run-time-context))
 		(structure-object
