@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct 17 21:50:42 2001
 ;;;;                
-;;;; $Id: read.lisp,v 1.9 2004/08/11 09:34:30 ffjeld Exp $
+;;;; $Id: read.lisp,v 1.10 2004/09/21 13:10:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -75,7 +75,7 @@ of string delimited by start and end."
 	 (t (error "There is junk in the string ~S." (substring string start end))))))))
 
 
-(defconstant +simple-token-terminators+ '(#\space #\tab #\newline #\) #\())
+(defconstant +simple-token-terminators+ '(#\space #\tab #\newline #\) #\( #\'))
 
 (defun find-token-end (string &key (start 0) (end (length string)))
   (do ((i start (1+ i)))
