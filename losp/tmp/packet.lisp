@@ -270,11 +270,11 @@ signalled; if ERRORP is nil then the key itself is returned."
 ;;;
 ;;; The read syntax is `#e"ff:00:1:2:3:4'.
 ;;;
-(eval-when (:compile-toplevel :load-toplevel :execute)
+(eval-when (:compile-toplevel #-movitz :load-toplevel #-movitz :execute)
   (defstruct (ethernet-address (:conc-name #:ethernet-address.)
                                (:print-function print-ethernet-address))
     "48-bit Ethernet MAC address."
-    (octets (ext:required-argument) :type (array octet (6))))
+    (octets 0 :type (array octet (6))))
 
   (defun read-ethernet-address (stream &optional c n)
     "Read an ethernet address in colon-separated syntax.
@@ -397,10 +397,10 @@ signalled; if ERRORP is nil then the key itself is returned."
 ;;;
 ;;; IP addresses also have a special read-syntax: `@10.0.0.1'.
 ;;;
-(eval-when (:compile-toplevel :load-toplevel :execute)
+(eval-when (:compile-toplevel #-movitz :load-toplevel #-movitz :execute)
   (defstruct (ipv4-address (:conc-name #:ipv4-address.)
                            (:print-function print-ipv4-address))
-    (octets (ext:required-argument) :type (array octet (4))))
+    (octets 0 :type (array octet (4))))
 
   (defun read-ipv4-address (stream &optional c n)
     "Read an IPv4 address in dotted-quad format.
@@ -826,8 +826,8 @@ SPECS is a list of specifications of what a header should contain."
            (structure-accessors name)))
 
   (defun structure-accessors (name)
-    (mapcar #'pcl::slot-definition-defstruct-accessor-symbol
-            (pcl:class-direct-slots (find-class name))))
+    #+cmu (mapcar #'pcl::slot-definition-defstruct-accessor-symbol
+		  (pcl:class-direct-slots (find-class name))))
 
   (export (structure-exports)))
 
