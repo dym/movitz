@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.21 2004/06/08 22:02:47 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.22 2004/06/09 01:16:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -428,14 +428,13 @@
 	 (movitz:movitz-eval y env)))
    ((movitz:movitz-constantp y env)
     `(eql ,y ,x))
-   ((movitz:movitz-constantp x env)
-    (let ((x (movitz:movitz-eval x env)))
-      (typecase x
-	(number
-	 `(= ,x ,y))
-	(t `(eq ,x ,y)))))
-   (t form)))
-
+   ((and (movitz:movitz-constantp x env)
+	 (not (typep (movitz:movitz-eval x env)
+		     '(and integer (not fixnum)))))
+    `(eq ',x ,y))
+   (t `(with-inline-assembly (:returns :boolean-zf=1)
+	 (:compile-two-forms (:eax :ebx) ,x ,y)
+	 (:call-global-constant fast-eql)))))
 
 (define-compiler-macro values (&rest sub-forms)
   `(inline-values ,@sub-forms))

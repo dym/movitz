@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.36 2004/06/06 03:01:19 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.37 2004/06/09 01:16:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -236,14 +236,6 @@
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)   
-   (malloc
-    :binary-type code-vector-word
-    :map-binary-write 'movitz-intern-code-vector
-    :map-binary-read-delayed 'movitz-word-code-vector
-    :binary-tag :primitive-function)
-   (malloc-buffer
-    :binary-type lu32
-    :initform 0)
    (fast-cdr-car
     :binary-type code-vector-word
     :initform nil
@@ -280,6 +272,12 @@
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
+   (fast-eql
+    :binary-type code-vector-word
+    :initform nil
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)
    (trampoline-cl-dispatch-1or2
     :binary-type code-vector-word
     :initform nil
@@ -290,12 +288,20 @@
     :binary-type word
     :binary-tag :global-function
     :map-binary-read-delayed 'movitz-word
-    :map-binary-write 'movitz-intern)   
+    :map-binary-write 'movitz-intern)
    (num-values
     :binary-type lu32
     :initform 0)
    (values
     :binary-type #.(* 4 +movitz-multiple-values-limit+))
+   (malloc
+    :binary-type code-vector-word
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)
+   (malloc-buffer
+    :binary-type lu32
+    :initform 0)
    (default-interrupt-trampoline
        :map-binary-write 'movitz-intern-code-vector
      :binary-tag :primitive-function
