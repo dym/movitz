@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.14 2004/10/22 12:33:27 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.15 2004/11/18 17:57:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -439,3 +439,8 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 	      (setf (symbol-function name) function))
 	    t nil)))
 
+
+(defun proclaim (declaration)
+  ;; What do do?
+  (warn "Unknown declaration: ~S" declaration)
+  (values))
