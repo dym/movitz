@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.7 2004/02/02 14:53:38 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.8 2004/02/03 10:36:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -444,7 +444,6 @@ a (lexical-extent) sub-function might care about its parent frame-map."
   funobj)
 
 (defun complete-funobj (funobj)
-  ;; (assert (= 1 (length (function-envs funobj))))
   (let ((code-specs
 	 (loop for (numargs . function-env) in (function-envs funobj)
 	     collecting
@@ -456,16 +455,13 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 		 (multiple-value-bind (prelude-code have-normalized-ecx-p)
 		     (make-compiled-function-prelude stack-frame-size function-env use-stack-frame-p
 						     (need-normalized-ecx-p function-env) frame-map
-						     :do-check-stack-p t
-						     :forward-2op-position
-						     (when (forward-2op function-env)
-						       (movitz-funobj-intern-constant funobj
-										   (forward-2op function-env))))
-		   (let ((function-code (install-arg-cmp (append prelude-code
-								 resolved-code
-								 (make-compiled-function-postlude funobj function-env
-												  use-stack-frame-p))
-							 have-normalized-ecx-p)))
+						     :do-check-stack-p t)
+		   (let ((function-code
+			  (install-arg-cmp (append prelude-code
+						   resolved-code
+						   (make-compiled-function-postlude funobj function-env
+										    use-stack-frame-p))
+					   have-normalized-ecx-p)))
 		     (let ((optimized-function-code
 			    (optimize-code function-code
 					   :keep-labels (nconc (subseq (movitz-funobj-const-list funobj)
@@ -577,10 +573,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	(make-compiled-body body-form funobj env top-level-p arg-init-code include-programs)
       (multiple-value-bind (prelude-code have-normalized-ecx-p)
 	  (make-compiled-function-prelude stack-frame-size env use-stack-frame-p
-					  need-normalized-ecx-p frame-map
-					  :forward-2op-position
-					  (when (forward-2op env)
-					    (new-movitz-funobj-intern-constant funobj (forward-2op env))))
+					  need-normalized-ecx-p frame-map)
 	(values (install-arg-cmp (append prelude-code
 					 resolved-code
 					 (make-compiled-function-postlude funobj env use-stack-frame-p))
@@ -880,9 +873,6 @@ a (lexical-extent) sub-function might care about its parent frame-map."
     (2 '((:pushl :edi) (:pushl :edi)))
     (t `((:subl ,(* 4 stack-frame-init) :esp)))))
 
-
-(defvar muerte.cl:*compile-file-pathname* nil)
-
 (defun movitz-compile-file (path &key ((:image *image*) *image*)
 				   load-priority
 				   (delete-file-p nil))
@@ -1010,8 +1000,12 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 (defun optimize-code-unfold-branches (unoptimized-code)
   "This particular optimization should be done before code layout:
    (:jcc 'label) (:jmp 'foo) label  => (:jncc 'foo) label"
-  (flet ((branch-instruction-label (i &optional jmp (branch-types '(:je :jne :jb :jnb :jbe :jz :jl :jnz
-								    :jle :ja :jae :jg :jge :jnc :jc :js :jns)))
+  (flet ((explain (always format &rest args)
+	 (when (or always *explain-peephole-optimizations*)
+	   (warn "Peephole: ~?~&----------------------------" format args)))
+	 (branch-instruction-label (i &optional jmp (branch-types '(:je :jne :jb :jnb :jbe :jz
+								    :jl :jnz :jle :ja :jae :jg
+								    :jge :jnc :jc :js :jns)))
  	   "If i is a branch, return the label."
 	   (when jmp (push :jmp branch-types))
 	   (let ((i (ignore-instruction-prefixes i)))
@@ -1039,10 +1033,10 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 		      (branch-instruction-label i2 t nil)
 		      (symbolp i3)
 		      (eq i3 (branch-instruction-label i1)))
-	     ;; (warn "Got a sit: ~{~&~A~}" (subseq pc 0 3))
 	     (setf p (list `(,(negate-branch (car i1)) ',(branch-instruction-label i2 t nil))
 			   i3)
-		   next-pc (nthcdr 3 pc)))
+		   next-pc (nthcdr 3 pc))
+	     (explain nil "Got a sit: ~{~&~A~} => ~{~&~A~}" (subseq pc 0 3) p))
 	nconc p)))
 
 (defun optimize-code-dirties (unoptimized-code)
@@ -1050,7 +1044,10 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 with other optimizations that track register usage. So this is performed just once,
 initially."
   (labels
-      ((twop-p (c &optional op)
+      ((explain (always format &rest args)
+	 (when (or always *explain-peephole-optimizations*)
+	   (warn "Peephole: ~?~&----------------------------" format args)))
+       (twop-p (c &optional op)
 	 (let ((c (ignore-instruction-prefixes c)))
 	   (and (listp c) (= 3 (length c))
 		(or (not op) (eq op (first c)))
@@ -1086,7 +1083,7 @@ initially."
 		    (eq regy (twop-dst i3 :cmpl))))
 	     (setq p (list `(:cmpl ,(twop-src i2) ,(twop-src i1)))
 		   next-pc (nthcdr 3 pc))
-	     #+ignore (explain nil "4: ~S for ~S" p (subseq pc 0 4))))
+	     (explain nil "4: ~S for ~S" p (subseq pc 0 4))))
 	nconc p)))
 
 (defun optimize-code-internal (unoptimized-code recursive-count &rest key-args
@@ -1387,6 +1384,7 @@ falling below the label."
 					   branch-map
 					 (intersection branch-map (rcode-map rcode) :test #'equal)))))
 		      (when (or full-map branch-map nil)
+			#+ignore
 			(explain nil "Inserting at ~A frame-map ~S branch-map ~S."
 				 label full-map branch-map))
 		      (setq p (list label `(:frame-map ,full-map ,branch-map))
@@ -1731,6 +1729,7 @@ falling below the label."
 				   `(:movl ,(idst i) ,(idst i3)))
 			   next-pc (nthcdr 4 pc))
 		     (explain nil "~S => ~S" (subseq pc 0 4) p))
+		    #+ignore
 		    ((let ((i6 (nth 6 pc)))
 		       (and (global-funcall-p i2 '(fast-car))
 			    (global-funcall-p i6 '(fast-cdr))
@@ -3090,8 +3089,7 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 
 (defun make-compiled-function-prelude (stack-frame-size env use-stack-frame-p
 				       need-normalized-ecx-p frame-map
-				       &key forward-2op-position
-					    do-check-stack-p)
+				       &key do-check-stack-p)
   "The prelude is compiled after the function's body is."
   (when (without-function-prelude-p env)
     (return-from make-compiled-function-prelude
@@ -3243,16 +3241,6 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 	      (append (make-compiled-function-prelude-numarg-check min-args max-args)
 		      '(entry%3op)
 		      stack-frame-init-code))
-	     (forward-2op-position
-	      (append `((:cmpb 2 :cl)
-			(:jne 'not-two-args)
-			entry%2op
-			(:movl (:esi ,forward-2op-position) :edx)
-			(:movl (:edx ,(slot-offset 'movitz-symbol 'function-value)) :esi)
-			(:jmp (:esi ,(slot-offset 'movitz-funobj 'code-vector%2op)))
-			not-two-args)
-		      stack-frame-init-code
-		      (make-compiled-function-prelude-numarg-check min-args max-args)))
 	     (t (append stack-frame-init-code
 			(make-compiled-function-prelude-numarg-check min-args max-args))))
 	    '(start-stack-frame-setup)
