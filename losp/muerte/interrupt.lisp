@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.40 2005/02/03 09:18:55 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.41 2005/03/09 07:20:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -73,6 +73,10 @@
 		(eq nil (movitz:movitz-eval stack env))))
       form
     `(setf (memref ,frame (dit-frame-offset ,reg) :type ,type) ,value)))
+
+(defun (setf dit-frame-ref) (value stack frame reg &optional (type :lisp))
+  (setf (stack-frame-ref stack (+ frame (dit-frame-index reg)) 0 type)
+    value))
 
 (defun dit-frame-casf (stack dit-frame)
   "Compute the `currently active stack-frame' when the interrupt occurred."
