@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.36 2004/03/26 01:34:13 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.37 2004/03/28 15:09:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2618,7 +2618,8 @@ the sub-program options (&optional label) as secondary value."
 				   ((typep binding 'constant-object-binding))
 				   ((typep binding 'forwarding-binding))
 				   ((typep binding 'borrowed-binding))
-				   ((typep binding 'fixed-required-function-argument)
+				   ((and (typep binding 'fixed-required-function-argument)
+					 (plusp (or (car (gethash binding var-counts)) 0)))
 				    (prog1 nil ; may need lending-cons
 				      (setf (new-binding-location binding frame-map)
 					:argument-stack)))
