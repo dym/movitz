@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.48 2005/02/25 07:59:31 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.49 2005/02/28 17:00:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -93,8 +93,8 @@ Otherwise, stack-frame is an absolute location."
     (let ((pos (+ frame index)))
       (assert (< -1 pos (length stack))
 	  () "Index ~S, pos ~S, len ~S" index pos (length stack))
-      (memref stack 2 :index pos :type type)))
-   (t (memref frame 0 :index index :type type))))
+      (memref stack (+ 2 (* 4 pos)) :type type)))
+   (t (memref frame (* 4 index) :type type))))
 
 (defun (setf stack-frame-ref) (value stack frame index &optional (type ':lisp))
   (cond
@@ -428,11 +428,29 @@ Obviously, this correspondence is not guaranteed to hold e.g. across GC."
 	(stack-frame-ref nil start-frame i :unsigned-byte32)))
     (do ((frame start-frame))
 	((eq 0 frame))
-      (let ((uplink (stack-frame-uplink nil frame)))
+      (let ((uplink (stack-frame-uplink nil frame))
+	    (copy-frame (- frame start-frame)))
 	(unless (= 0 uplink)
-	  (setf (stack-frame-ref copy 0 (- frame start-frame) :lisp)
+	  (setf (stack-frame-ref copy copy-frame 0 :lisp)
 	    (- uplink start-frame))
-	  
-	  )
+	  (unless (= 0 copy-frame)	; first frame has only uplink.
+	    ;; Now, make any raw stack-pointers into relative indexes.
+	    ;; XXX TODO: The dynamic-env list.
+	    (case (stack-frame-funobj copy copy-frame)
+	      (0 (let ((ebp (dit-frame-ref nil frame :ebp)))
+		   (setf (dit-frame-ref copy copy-frame :ebp)
+		     (etypecase ebp
+		       (fixnum (- ebp start-frame))
+		       (null nil))))
+		 (let ((ac (dit-frame-ref copy copy-frame
+					  :atomically-continuation
+					  :location)))
+		   (when (and (/= 0 ac)
+			      (= 0 (ldb (byte 2 0)
+					(dit-frame-ref copy copy-frame
+						       :atomically-continuation
+						       :unsigned-byte8))))
+		     (setf (dit-frame-ref copy copy-frame :atomically-continuation)
+		       (- ac start-frame))))))))
 	(setf frame uplink)))
     copy))
