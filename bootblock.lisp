@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:47:19 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: bootblock.lisp,v 1.5 2004/01/16 15:40:35 ffjeld Exp $
+;;;; $Id: bootblock.lisp,v 1.6 2004/01/19 10:36:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -118,7 +118,7 @@
        ;; Read sectors into memory
        ;;
        
-       (:movw ,(+ 1 skip-sectors) (:bp ,+linear-sector+))
+       (:movw ,first-sector (:bp ,+linear-sector+))
        (:movl ,load-address (:bp ,+destination+))
 
        read-loop
@@ -143,6 +143,12 @@
        (:subb :cl :al)			; number of sectors (rest of track)
        (:incb :cl)
        (:addw :ax (:bp ,+linear-sector+)) ; update read pointer
+       (:movw (:bp ,+linear-sector+) :bx) ; subtract some if it's the last track.
+       (:subw ,last-sector :bx)
+       (:jc 'subtract-zero-sectors)
+       (:subw :bx :ax)
+       (:jz 'read-done)
+       subtract-zero-sectors
        (:movb 2 :ah)
 
        (:movw ,read-buffer-segment :bx)
