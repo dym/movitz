@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.42 2004/07/10 14:39:28 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.43 2004/07/11 23:05:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1469,35 +1469,29 @@ Preserve EAX and EBX."
 	 (:btl ,(+ index movitz::+movitz-fixnum-shift+) :eax)))))
 
       
-(defun logand%2op (x y)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) x)
-    (:compile-form (:result-mode :ebx) y)
-    (:testb #.movitz::+movitz-fixnum-zmask+ :al)
-    (:jnz '(:sub-program () (:int 107)))
-    (:testb #.movitz::+movitz-fixnum-zmask+ :bl)
-    (:jnz '(:sub-program () (:movl :ebx :eax) (:int 107)))
-    (:andl :ebx :eax)))
+;;;(defun logand%2op (x y)
+;;;  (with-inline-assembly (:returns :eax)
+;;;    (:compile-form (:result-mode :eax) x)
+;;;    (:compile-form (:result-mode :ebx) y)
+;;;    (:testb #.movitz::+movitz-fixnum-zmask+ :al)
+;;;    (:jnz '(:sub-program () (:int 107)))
+;;;    (:testb #.movitz::+movitz-fixnum-zmask+ :bl)
+;;;    (:jnz '(:sub-program () (:movl :ebx :eax) (:int 107)))
+;;;    (:andl :ebx :eax)))
+;;;
+;;;(define-compiler-macro logand%2op (&whole form x y)
+;;;  (cond
+;;;   ((and (movitz:movitz-constantp x) (movitz:movitz-constantp y))
+;;;    (logand  (movitz::movitz-eval x) (movitz::movitz-eval y)))
+;;;   (t form)))
 
-(define-compiler-macro logand%2op (&whole form x y)
-  (cond
-   ((and (movitz:movitz-constantp x) (movitz:movitz-constantp y))
-    (logand  (movitz::movitz-eval x) (movitz::movitz-eval y)))
-   (t form)))
-
-(defun logand (&rest integers)
-  (declare (dynamic-extent integers))
-  (if (null integers)
-      -1
-    (reduce #'logand%2op integers)))
-
-(define-compiler-macro logand (&whole form &rest integers)
+(define-compiler-macro logand (&whole form &rest integers &environment env)
   (let ((constant-folded-integers (loop for x in integers
 				      with folded-constant = -1
-				      if (and (movitz:movitz-constantp x)
-					      (not (= -1 (movitz::movitz-eval x))))
+				      if (and (movitz:movitz-constantp x env)
+					      (not (= -1 (movitz:movitz-eval x env))))
 				      do (setf folded-constant
-					   (logand folded-constant (movitz::movitz-eval x)))
+					   (logand folded-constant (movitz:movitz-eval x env)))
 				      else collect x into non-constants
 				      finally (return (if (= -1 folded-constant)
 							  non-constants
@@ -1505,9 +1499,58 @@ Preserve EAX and EBX."
     (case (length constant-folded-integers)
       (0 0)
       (1 (first constant-folded-integers))
-      (2 `(logand%2op ,(first constant-folded-integers) ,(second constant-folded-integers)))
-      (t `(logand (logand%2op ,(first constant-folded-integers) ,(second constant-folded-integers))
+      (2 `(no-macro-call logand ,(first constant-folded-integers) ,(second constant-folded-integers)))
+      (t `(logand (logand ,(first constant-folded-integers) ,(second constant-folded-integers))
 		  ,@(cddr constant-folded-integers))))))
+
+(defun logand (&rest integers)
+  (numargs-case
+   (1 (x) x)
+   (2 (x y)
+      (macrolet
+	  ((do-it ()
+	     `(number-double-dispatch (x y)
+		((fixnum fixnum)
+		 (with-inline-assembly (:returns :eax)
+		   (:compile-two-forms (:eax :ebx) x y)
+		   (:andl :ebx :eax)))
+		((positive-bignum positive-fixnum)
+		 (with-inline-assembly (:returns :eax)
+		   (:compile-form (:result-mode :eax) x)
+		   (:call-global-constant unbox-u32)
+		   (:compile-form (:result-mode :eax) y)
+		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :ecx)
+		   (:andl :ecx :eax)))
+		((positive-fixnum positive-bignum)
+		 (with-inline-assembly (:returns :eax)
+		   (:compile-form (:result-mode :eax) y)
+		   (:call-global-constant unbox-u32)
+		   (:compile-form (:result-mode :eax) x)
+		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :ecx)
+		   (:andl :ecx :eax)))
+		((positive-bignum positive-bignum)
+		 (if (< (%bignum-bigits y) (%bignum-bigits x))
+		     (logand y x)
+		   (%bignum-canonicalize
+		    (with-inline-assembly (:returns :eax)
+		      (:compile-two-forms (:eax :ebx) (copy-bignum x) y)
+		      (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+			       :ecx)
+		      (:leal ((:ecx 4) -4) :edx)
+		     pb-pb-and-loop
+		      (:movl (:ebx :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
+			     :ecx)
+		      (:andl :ecx
+			     (:eax :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		      (:subl 4 :edx)
+		      (:jnc 'pb-pb-and-loop)))))
+		)))
+	(do-it)))
+   (t (&rest integers)
+      (declare (dynamic-extent integers))
+      (if (null integers)
+	  -1
+	(reduce #'logand integers)))))
 
 (defun logandc1 (integer1 integer2)
   (number-double-dispatch (integer1 integer2)
@@ -1518,34 +1561,10 @@ Preserve EAX and EBX."
        (:shll #.movitz:+movitz-fixnum-shift+ :ecx)
        (:compile-form (:result-mode :eax) integer2)
        (:notl :ecx)
-       (:andl :ecx :eax)))
-    ((positive-fixnum t)
-     (with-inline-assembly (:returns :eax)
-       (:compile-form (:result-mode :eax) integer2)
-       (:call-global-constant unbox-u32)
-       (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :eax)
-       (:compile-form (:result-mode :ecx) integer1)
-       (:notl :ecx)
        (:andl :ecx :eax)))))
 
 (defun logandc2 (integer1 integer2)
-  (number-double-dispatch (integer1 integer2)
-    ((positive-fixnum t)
-     (with-inline-assembly (:returns :eax)
-       (:compile-form (:result-mode :eax) integer2)
-       (:call-global-constant unbox-u32)
-       (:shll #.movitz:+movitz-fixnum-shift+ :ecx)
-       (:compile-form (:result-mode :eax) integer1)
-       (:notl :ecx)
-       (:andl :ecx :eax)))
-    ((t positive-fixnum)
-     (with-inline-assembly (:returns :eax)
-       (:compile-form (:result-mode :eax) integer1)
-       (:call-global-constant unbox-u32)
-       (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :eax)
-       (:compile-form (:result-mode :ecx) integer2)
-       (:notl :ecx)
-       (:andl :ecx :eax)))))
+  (logandc1 integer2 integer1))
 
 (defun logior (&rest integers)
   (numargs-case
@@ -1633,20 +1652,20 @@ Preserve EAX and EBX."
 	((positive-fixnum positive-bignum)
 	 (macrolet
 	     ((do-it ()
-		`(let ((r (copy-bignum y)))
-		   (with-inline-assembly (:returns :eax)
-		     (:compile-two-forms (:eax :ecx) r x)
-		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
-		     (:xorl (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)) :ecx)))))
+		`(with-inline-assembly (:returns :eax)
+		   (:compile-two-forms (:eax :ecx) (copy-bignum y) x)
+		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   (:xorl :ecx
+			  (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))))
 	   (do-it)))
 	((positive-bignum positive-fixnum)
 	 (macrolet
 	     ((do-it ()
-		`(let ((r (copy-bignum x)))
-		   (with-inline-assembly (:returns :eax)
-		     (:compile-two-forms (:eax :ecx) r y)
-		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
-		     (:xorl :ecx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))))))
+		`(with-inline-assembly (:returns :eax)
+		   (:compile-two-forms (:eax :ecx) (copy-bignum x) y)
+		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   (:xorl :ecx
+			  (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))))
 	   (do-it)))
 	((positive-bignum positive-bignum)
 	 (if (< (%bignum-bigits x) (%bignum-bigits y))
