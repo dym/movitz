@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep 27 18:12:17 2001
 ;;;;                
-;;;; $Id: movitz-mode.el,v 1.3 2004/02/02 13:31:23 ffjeld Exp $
+;;;; $Id: movitz-mode.el,v 1.4 2004/05/19 14:56:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -113,12 +113,11 @@
 
 (defun movitz-compile-file ()
   (interactive)
-  (when (in-movitz-package-p)
-    (save-some-buffers)
-    (message "Movitz compiling \"%s\"..." (buffer-file-name))
-    (fi:eval-in-lisp "(movitz:movitz-compile-file \"%s\")" (buffer-file-name))
-    (message "Movitz compiling \"%s\"...done."
-	     (buffer-file-name))))
+  (save-some-buffers)
+  (message "Movitz compiling \"%s\"..." (buffer-file-name))
+  (fi:eval-in-lisp "(movitz:movitz-compile-file \"%s\")" (buffer-file-name))
+  (message "Movitz compiling \"%s\"...done."
+	   (buffer-file-name)))
 
 (defun movitz-eval-in-acl (string msg)
   (fi::note-background-request nil)
@@ -284,6 +283,11 @@
 	    (when (in-movitz-package-p)
 	      (message "Switching to Movitz keymap.")
 	      (use-local-map (make-movitz-common-lisp-mode-map)))))
+
+(defun movitz-mode ()
+  "Switch on Movitz-mode."
+  (interactive)
+  (use-local-map (make-movitz-common-lisp-mode-map)))
 
 (let ((tag 'fi:common-lisp-indent-hook))
   (put 'compiler-values tag '(like with-open-file))
