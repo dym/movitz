@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.34 2004/06/10 01:51:26 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.35 2004/06/10 02:13:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1422,22 +1422,42 @@ Preserve EAX and EBX."
 		  ,@(cddr constant-folded-integers))))))
 
 (defun logandc1 (integer1 integer2)
-  (check-type integer1 fixnum)
-  (check-type integer2 fixnum)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) integer1)
-    (:compile-form (:result-mode :ebx) integer2)
-    (:notl :eax)
-    (:andl :ebx :eax)))
+  (number-double-dispatch (integer1 integer2)
+    ((t positive-fixnum)
+     (with-inline-assembly (:returns :eax)
+       (:compile-form (:result-mode :eax) integer1)
+       (:call-global-constant unbox-u32)
+       (:shll #.movitz:+movitz-fixnum-shift+ :ecx)
+       (:compile-form (:result-mode :eax) integer2)
+       (:notl :ecx)
+       (:andl :ecx :eax)))
+    ((positive-fixnum t)
+     (with-inline-assembly (:returns :eax)
+       (:compile-form (:result-mode :eax) integer2)
+       (:call-global-constant unbox-u32)
+       (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :eax)
+       (:compile-form (:result-mode :ecx) integer1)
+       (:notl :ecx)
+       (:andl :ecx :eax)))))
 
 (defun logandc2 (integer1 integer2)
-  (check-type integer1 fixnum)
-  (check-type integer2 fixnum)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) integer1)
-    (:compile-form (:result-mode :ebx) integer2)
-    (:notl :ebx)
-    (:andl :ebx :eax)))
+  (number-double-dispatch (integer1 integer2)
+    ((positive-fixnum t)
+     (with-inline-assembly (:returns :eax)
+       (:compile-form (:result-mode :eax) integer2)
+       (:call-global-constant unbox-u32)
+       (:shll #.movitz:+movitz-fixnum-shift+ :ecx)
+       (:compile-form (:result-mode :eax) integer1)
+       (:notl :ecx)
+       (:andl :ecx :eax)))
+    ((t positive-fixnum)
+     (with-inline-assembly (:returns :eax)
+       (:compile-form (:result-mode :eax) integer1)
+       (:call-global-constant unbox-u32)
+       (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :eax)
+       (:compile-form (:result-mode :ecx) integer2)
+       (:notl :ecx)
+       (:andl :ecx :eax)))))
 
 (defun logior%2op (x y)
   (with-inline-assembly (:returns :eax)
