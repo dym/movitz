@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Jun 30 14:33:15 2003
 ;;;;                
-;;;; $Id: streams.lisp,v 1.3 2004/05/20 18:13:55 ffjeld Exp $
+;;;; $Id: streams.lisp,v 1.4 2004/11/24 16:19:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -115,6 +115,10 @@
 (defun read-char (&optional input-stream (eof-error-p t) eof-value recursive-p)
   " => char"
   (%read-char (input-stream-designator input-stream) eof-error-p eof-value recursive-p t))
+
+(defun read-key (&optional input-stream (eof-error-p t) eof-value recursive-p)
+  " => char, symbol, etc."
+  (%read-key (input-stream-designator input-stream) eof-error-p eof-value recursive-p t))
 
 (defun finish-output (&optional stream)
   "finish-output attempts to ensure that any buffered output sent to output-stream has reached its
