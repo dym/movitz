@@ -10,26 +10,12 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 14 18:14:16 2003
 ;;;;                
-;;;; $Id: console.lisp,v 1.1 2004/01/13 11:05:04 ffjeld Exp $
+;;;; $Id: console.lisp,v 1.2 2004/01/15 17:34:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
+(requore :lib/package)
 (provide :lib/console)
-
-(defpackage muerte.lib
-  (:use muerte)
-  (:export console
-	   console-width
-	   console-height
-	   cursor-x
-	   cursor-y
-	   console-char
-	   scroll-down
-	   put-string
-	   clear-line
-	   clear-console
-	   local-echo-p
-	   with-saved-excursion))
 
 (in-package muerte.lib)
 

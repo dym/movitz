@@ -10,17 +10,18 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep  5 15:56:26 2002
 ;;;;                
-;;;; $Id: toplevel.lisp,v 1.1 2004/01/13 11:05:04 ffjeld Exp $
+;;;; $Id: toplevel.lisp,v 1.2 2004/01/15 17:34:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
+(require :lib/package)
 (provide :lib/toplevel)
 
 (defpackage muerte.toplevel
   (:use muerte.cl muerte)
-  (:export define-toplevel-command
-	   invoke-toplevel-command
-	   *toplevel-commands*))
+  (:export #:define-toplevel-command
+	   #:invoke-toplevel-command
+	   #:*toplevel-commands*))
 
 (in-package muerte.toplevel)
 

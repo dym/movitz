@@ -10,16 +10,12 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Mar 20 15:01:15 2003
 ;;;;                
-;;;; $Id: arp.lisp,v 1.1 2004/01/13 11:05:04 ffjeld Exp $
+;;;; $Id: arp.lisp,v 1.2 2004/01/15 17:34:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (require :lib/net/ethernet)
 (provide :lib/net/arp)
-
-(defpackage muerte.ip4
-  (:use muerte.cl muerte muerte.ethernet muerte.lib)
-  (:export ))
 
 (in-package muerte.ip4)
 

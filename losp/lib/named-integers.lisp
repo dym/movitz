@@ -10,23 +10,13 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jan  4 16:13:46 2002
 ;;;;                
-;;;; $Id: named-integers.lisp,v 1.1 2004/01/13 11:05:04 ffjeld Exp $
+;;;; $Id: named-integers.lisp,v 1.2 2004/01/15 17:34:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
-;; (require :common-lisp)
+(require :lib/package)
 (require :lib/malloc-init)
 (provide :lib/named-integers)
-
-(defpackage muerte.lib
-  (:use muerte.cl muerte)
-  (:export define-named-integer
-	   named-integer-case
-	   named-integer
-	   integer-name
-	   name->integer
-	   names->integer
-	   with-named-integers-syntax))
 
 (in-package muerte.lib)
 

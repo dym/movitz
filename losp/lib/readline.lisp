@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2003, 
+;;;;    Copyright (C) 2001-2004, 
 ;;;;    Department of Computer Science, University of Tromsø, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,11 +10,12 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov  2 13:58:58 2001
 ;;;;                
-;;;; $Id: readline.lisp,v 1.1 2004/01/13 11:05:04 ffjeld Exp $
+;;;; $Id: readline.lisp,v 1.2 2004/01/15 17:34:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (require :common-lisp)
+(require :lib/package)
 (provide :lib/readline)
 
 (defpackage muerte.readline

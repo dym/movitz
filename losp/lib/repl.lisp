@@ -10,20 +10,13 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 19 14:58:12 2003
 ;;;;                
-;;;; $Id: repl.lisp,v 1.1 2004/01/13 11:05:04 ffjeld Exp $
+;;;; $Id: repl.lisp,v 1.2 2004/01/15 17:34:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
+(require :lib/package)
 (require :lib/readline)
 (provide :lib/repl)
-
-(defpackage muerte.lib
-  (:export *repl-level*
-	   *repl-prompter*
-	   *repl-prompt-context*
-	   *repl-print-format*
-	   *repl-readline-context*
-	   read-eval-print))
 
 (in-package muerte.lib)
 
