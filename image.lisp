@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.60 2004/08/01 00:37:22 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.61 2004/08/04 12:58:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1288,12 +1288,12 @@ this image will not be Multiboot compatible."
 						 (slot-offset 'movitz-funobj 'constant0))
 					      4)
 				    (movitz-funobj-const-list funobj)))
-      when (and funobj (typep operand 'ia-x86::operand-rel-pointer))
+      when (typep operand 'ia-x86::operand-rel-pointer)
       collect (let* ((x (+ pc
 			   (imagpart (ia-x86::instruction-original-datum instruction))
 			   (length (ia-x86:instruction-prefixes instruction))
 			   (ia-x86::operand-offset operand)))
-		     (label (car (find x (movitz-funobj-symtab funobj) :key #'cdr))))
+		     (label (and funobj (car (find x (movitz-funobj-symtab funobj) :key #'cdr)))))
 		(if label
 		    (format nil "branch to ~S at ~D" label x)
 		  (format nil "branch to ~D" x)))
