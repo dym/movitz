@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.18 2004/05/24 14:58:22 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.19 2004/06/09 17:19:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -157,7 +157,7 @@
 
 (defmethod update-movitz-object ((obj movitz-heap-object) lisp-obj)
   (declare (ignore lisp-obj))
-  (warn "Don't know how to update ~W." obj))
+  (break "Don't know how to update ~W." obj))
 
 (defmethod update-movitz-object ((obj movitz-immediate-object) lisp-obj)
   (declare (ignore lisp-obj))
@@ -1330,3 +1330,7 @@ integer (native lisp) value."
 (defmethod sizeof ((obj movitz-bignum))
   (+ (sizeof 'movitz-bignum)
      (* 4 (ceiling (integer-length (abs (movitz-bignum-value obj))) 32))))
+
+(defmethod update-movitz-object ((object movitz-bignum) lisp-object)
+  (assert (= (movitz-bignum-value object) lisp-object))
+  object)
