@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.70 2004/07/07 17:34:09 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.71 2004/07/09 16:11:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -459,7 +459,7 @@ Side-effects each binding's binding-store-type."
 		   (when (apply #'encoded-type-singleton (type-analysis-encoded-type analysis))
 		     (warn "Singleton: ~A" binding))
 		   #+ignore
-		   (when (or #+ignore (not (apply #'encoded-allp (type-analysis-encoded-type analysis)))
+		   (when (or t #+ignore (not (apply #'encoded-allp (type-analysis-encoded-type analysis)))
 			     #+ignore (multiple-value-call #'encoded-subtypep
 					(values-list (type-analysis-encoded-type analysis))
 					(type-specifier-encode 'list)))
@@ -3023,6 +3023,9 @@ the sub-program options (&optional label) as secondary value."
 					   binding load store call))))
 		   (when x (return t)))))))
     (code-search code binding load store call)))
+
+(defun bindingp (x)
+  (typep x 'binding))
 
 (defun binding-target (binding)
   "Resolve a binding in terms of forwarding."
@@ -5759,7 +5762,7 @@ and a list of any intervening unwind-protect environment-slots."
      `(binding-type ,binding))))
 
 (defun binding-store-subtypep (binding type-specifier)
-  "Is type-specifier a subtype of all values ever stored to binding?
+  "Is type-specifier a supertype of all values ever stored to binding?
    (Assuming analyze-bindings has put this information into binding-store-type.)"
   (if (not (binding-store-type binding))
       nil
@@ -6083,3 +6086,59 @@ and a list of any intervening unwind-protect environment-slots."
   (destructuring-bind (object result-mode &key (op :movl))
       (cdr instruction)
     (make-load-constant object result-mode funobj frame-map :op op)))
+
+;;;;; Add
+
+(define-find-write-binding-and-type :add (instruction)
+  (destructuring-bind (term0 term1 destination)
+      (cdr instruction)
+    (declare (ignore term0 term1))
+    (when (typep destination 'binding)
+      (values destination 'integer))))
+
+(define-find-read-bindings :add (term0 term1 destination)
+  (declare (ignore destination))
+  (remove-if-not #'bindingp (list term0 term1)))
+
+(define-extended-code-expander :add (instruction funobj frame-map)
+  (destructuring-bind (term0 term1 destination)
+      (cdr instruction)
+    (cond
+     ((and (bindingp term0)
+	   (bindingp term1)
+	   (member destination
+		   '(:function :multple-values :eax :ebx :ecx :edx)))
+      #+ignore
+      (when (and (binding-store-subtypep term0 'fixnum)
+		 (binding-store-subtypep term1 'fixnum)
+		 (movitz-subtypep (multiple-value-call #'encoded-integer-types-add
+				    (values-list (binding-store-type term0))
+				    (values-list (binding-store-type term1)))
+				  'fixnum))
+	(warn "add: ~S~%~A => ~A~%~S, ~S"
+	      instruction
+	      (binding-type-specifier term0)
+	      (binding-type-specifier term1)
+	      (binding-store-subtypep term0 'fixnum)
+	      (binding-store-subtypep term1 'fixnum)))
+      (let ((loc0 (new-binding-location term0 frame-map :default nil))
+	    (loc1 (new-binding-location term1 frame-map :default nil)))
+	(append (cond
+		 ((and (eq :eax loc0) (eq :ebx loc1))
+		  nil)
+		 ((and (eq :ebx loc0) (eq :eax loc1))
+		  nil)			; terms order isn't important
+		 ((eq :eax loc1)
+		  (append
+		   (make-load-lexical term0 :ebx funobj nil frame-map)))
+		 (t (append
+		     (make-load-lexical term0 :eax funobj nil frame-map)
+		     (make-load-lexical term1 :ebx funobj nil frame-map))))
+		`((:movl (:edi ,(global-constant-offset '+)) :esi))
+		(make-compiled-funcall-by-esi 2)
+		(ecase destination
+		  ((:function :multple-values :eax))
+		  ((:ebx :ecx :edx)
+		   `((:movl :eax ,destination))))
+		)))
+     (t (error "Unknown add: ~S" instruction)))))
