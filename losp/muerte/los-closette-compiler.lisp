@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.10 2004/02/10 01:03:41 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.11 2004/02/15 13:17:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -281,7 +281,7 @@
 		   ,(canonicalize-direct-superclasses direct-superclasses)
 		   :direct-slots
 		   ,(canonicalize-direct-slots direct-slots name nil)
-		   ,@(canonicalize-defclass-options options nil)))
+		   ,@(canonicalize-defclass-options options nil name)))
 
   (defun canonicalize-direct-slots (direct-slots class-name env)
     `(list ,@(mapcar (lambda (ds) (canonicalize-direct-slot ds class-name env)) direct-slots)))
@@ -345,11 +345,10 @@
 	    (setf (movitz-slot-value s 'object) object)
 	    s))))
   
-  (defun canonicalize-defclass-options (options env)
-    (mapcan (lambda (o) (canonicalize-defclass-option o env)) options))
+  (defun canonicalize-defclass-options (options env class-name)
+    (mapcan (lambda (o) (canonicalize-defclass-option o env class-name)) options))
   
-  (defun canonicalize-defclass-option (option env)
-    (declare (ignore env))
+  (defun canonicalize-defclass-option (option env class-name)
     (case (car option)
       ((:metaclass)
        (list ':metaclass
@@ -357,11 +356,12 @@
       ((:default-initargs)
        (list :default-initargs-function
 	     (list 'quote
-		   (cons (compile-in-lexical-environment nil nil
-							 `(lambda (o)
-							    (case o
-							      ,@(loop for (arg val) on (cdr option) by #'cddr
-								    collect `(,arg ,val)))))
+		   (cons (compile-in-lexical-environment
+			  env (gensym (format nil "default-initargs-~A-" class-name))
+			  `(lambda (o)
+			     (case o
+			       ,@(loop for (arg val) on (cdr option) by #'cddr
+				     collect `(,arg ,val)))))
 			 (loop for arg in (cdr option) by #'cddr collect arg)))))
       (t (list `',(car option) `',(cadr option)))))
 
