@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.3 2004/02/03 09:57:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -269,7 +269,7 @@
     (let ((new-value (gensym))
 	  (indicator-var (gensym))
 	  (default-var (if default (gensym))))
-      (values `(,@temps ,indicator-var ,@(if default (list def-temp)))
+      (values `(,@temps ,indicator-var ,@(if default (list default-var)))
 	      `(,@values ,indicator ,@(if default (list default)))
 	      `(,new-value)
 	      `(let ((,(car stores) (putf ,getter ,indicator-var ,new-value)))
