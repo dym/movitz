@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.21 2004/11/23 16:11:31 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.22 2005/01/04 16:56:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -124,6 +124,8 @@
 	  (movitz-vector-symbolic-data expr)))
     (movitz-fixnum
      (movitz-fixnum-value expr))
+    (movitz-bignum
+     (movitz-bignum-value expr))
     (movitz-basic-vector
      (map 'vector #'movitz-print (movitz-vector-symbolic-data expr)))
     (movitz-cons
