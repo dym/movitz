@@ -47,11 +47,22 @@
 
 ;;;; LOOP Iteration Macro
 
+
+;;; Movitz notes:
+;;;
+;;; - Because much of this file is wrapped in eval-when (:compile-toplevel),
+;;;   (i.e. the host-side macroexpanders), it's probably best to
+;;;   recompile/reload this complete file rather than on a per-toplevel
+;;;   form basis.
+
+#+movitz
+(in-package muerte)
+
 ;;;#+allegro
 ;;;(in-package :excl)
 ;;;#-allegro
 ;;;(in-package :ansi-loop)
-(in-package muerte)
+
 
 (provide :muerte/loop :load-priority 0)
 
@@ -1881,12 +1892,19 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
 		     dummy-predicate-var (loop-when-it-variable))
       (let ((key-var nil)
 	    (val-var nil)
+	    (ignore-vars nil)
 	    (bindings `((,variable nil ,data-type)
 			(,ht-var ,(cadar prep-phrases))
 			,@(and other-p other-var `((,other-var nil))))))
-	(if (eq which 'hash-key)
-	    (setq key-var variable val-var (and other-p other-var))
-	    (setq key-var (and other-p other-var) val-var variable))
+	(ecase which
+	  (hash-key
+	   (setq key-var variable val-var (and other-p other-var))
+	   (when val-var
+	     (pushnew val-var ignore-vars)))
+	  (hash-value			; default?
+	   (setq key-var (and other-p other-var) val-var variable)
+	   (when key-var
+	     (pushnew key-var ignore-vars))))
 	(push `(with-hash-table-iterator (,next-fn ,ht-var)) *loop-wrappers*)
 	(when (consp key-var)
 	  (setq post-steps `(,key-var ,(setq key-var (loop-gentemp 'loop-hash-key-temp-))
@@ -1896,6 +1914,11 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
 	  (setq post-steps `(,val-var ,(setq val-var (loop-gentemp 'loop-hash-val-temp-))
 			     ,@post-steps))
 	  (push `(,val-var nil) bindings))
+	(pushnew dummy-predicate-var ignore-vars)
+	(when ignore-vars
+	  (pushnew `(ignorable ,@ignore-vars)
+		   *loop-declarations*
+		   :test 'equalp))
 	`(,bindings				;bindings
 	  ()					;prologue
 	  ()					;pre-test
