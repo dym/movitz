@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.34 2004/11/13 14:49:51 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.35 2004/11/15 23:10:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1235,15 +1235,9 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	  :returns :multiple-values
 	  :code (append
 		 ;; install default continuation dynamic-env..
-		 `((:locally (:pushl (:edi (:edi-offset dynamic-env)))) ; uplink
-		   (:declare-label-set ,continue-label (,continue))
-		   (:pushl ',continue-label)
-		   (:locally (:pushl (:edi (:edi-offset unbound-value))))
-		   (:pushl :ebp)
-		   (:locally (:movl :esp (:edi (:edi-offset dynamic-env)))))
-		 ;; install unwind-protect dynamic-env..
 		 `((:locally (:pushl (:edi (:edi-offset dynamic-env))))
 		   (:declare-label-set ,cleanup-label (,cleanup-entry))
+		   (:declare-label-set ,continue-label (,continue))
 		   (:pushl ',cleanup-label) ; jumper index
 		   (:globally (:pushl (:edi (:edi-offset unwind-protect-tag)))) ; tag
 		   (:pushl :ebp)	; stack-frame
@@ -1256,13 +1250,14 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		   :result-mode :multiple-values
 		   :form protected-form)
 		 ;; From now on, take care not to touch current-values from protected-form.
-		 `((:leal (:esp 16) :edx) ; default final continuation
-		   (:locally (:movl :edx (:edi (:edi-offset raw-scratch0))))
+		 `((:locally (:movl :esp (:edi (:edi-offset raw-scratch0))))
 		   ,cleanup-entry
-		   (:movl (:esp 12) :edx) ; pop out of unwind-protect
-		   (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
-		   (:popl :ebp)
-		   (:leal (:esp 12) :esp)
+
+		   ;; Modify unwind-protect dyn-env-entry to be normal continuation
+		   (:locally (:movl (:edi (:edi-offset unbound-value)) :edx))
+		   (:movl :edx (:esp 4)) ; not unwind-protect-tag
+		   (:movl ',continue-label (:esp 8)) ; new jumper index
+		   
 		   (:locally (:pushl (:edi (:edi-offset raw-scratch0))))) ; push final-continuation
 		 ;; Execute cleanup-forms.
 		 (compiler-call #'compile-form-unprotected
@@ -1295,7 +1290,6 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		   (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
 		   (:popl :ebp)
 		   (:leal (:esp 12) :esp))))))))
-
 
 (define-special-operator if (&all all &form form &env env &result-mode result-mode)
   (destructuring-bind (test-form then-form &optional else-form)
