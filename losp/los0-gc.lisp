@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.20 2004/07/08 18:49:26 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.21 2004/07/08 18:59:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -35,10 +35,6 @@
 (defmacro space-fresh-pointer (space)
   `(memref ,space -6 2 :lisp))
 
-;;;(defmacro space-last-cons (space)
-;;;  "The location of the last cons-cell that will with in this space."
-;;;  `(memref ,space -6 3 :lisp))
-
 (defmacro space-other (space)
   `(memref ,space -6 3 :lisp))
 
@@ -49,12 +45,8 @@
     space))
 
 (defun initialize-space (space)
-  (setf (space-fresh-pointer space) 2
-;;;	(space-last-cons space) (+ (object-location space)
-;;;				   (array-dimension space 0)))
-	)
+  (setf (space-fresh-pointer space) 2)
   space)
-				   
 
 (defun allocate-duo-space (size)
   (let* ((space1 (allocate-space size))

@@ -1,15 +1,15 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001,2000, 2002-2004,
+;;;;    Copyright (C) 2000-2004,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      los0.lisp
-;;;; Description:   Top-level initialization file.
+;;;; Description:   Top-level initialization and testing.
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.14 2004/05/24 14:58:39 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.15 2004/07/08 18:59:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -79,6 +79,13 @@
 ;;;(defun test-constantly (&rest args)
 ;;;  (declare (dynamic-extent args))
 ;;;  (apply (constantly 'test-value) args))
+
+(defun test-break ()
+  (with-inline-assembly (:returns :multiple-values)
+    (:movl 10 :ecx)
+    (:movl :esi :eax)			; This function should return itself!
+    (:clc)
+    (:break)))
 
 (defun test-upload (x)
   ;; (warn "Test-upload blab la bla!!")
@@ -266,14 +273,68 @@
 (defun test-bignum ()
   123456789123456)
 
-(defun ff32 ()
-  #xffffffff)
+(defun fe32 ()
+  #xfffffffe)
+
+(defun fe64 ()
+  #xfffffffffffffffe)
+
+(defun fe96 ()
+  #xfffffffffffffffffffffffe)
 
 (defun one32 ()
   #x100000000)
 
-(defun test-nbignum ()
-  -123456789123456)
+(defun z (op x y)
+  (let ((foo (cons 1 2))
+	(result (funcall op x y))
+	(bar (cons 3 4)))
+    (if (not (typep result 'pointer))
+	(warn "foo: ~Z result: ~Z, bar: ~Z, diff foo-bar: ~D."
+	      foo result bar
+	      (- (object-location bar) (object-location foo)))
+      (warn "foo: ~Z result: ~Z, bar: ~Z, diff: ~D, ~D."
+	    foo result bar
+	    (- (object-location result) (object-location foo))
+	    (- (object-location bar) (object-location result))))
+    (values foo result bar)))
+
+(defun foo (number &rest more-numbers)
+  (declare (dynamic-extent more-numbers))
+  (do ((p more-numbers (cdr p)))
+      ((not (cdr p)) number)
+    (unless (< (car p) (cadr p))
+      (return nil))))
+
+(defun modx (x)
+  (lambda ()
+    (print x)))
+
+(defun mod30 (x)
+  (ldb (Byte 30 0) x))
+
+(defun mod32-4 (x)
+  (ldb (byte 28 4) x))
+
+(defun mod24-4 (x)
+  (ldb (Byte 24 4) x))
+
+(defun zz (op x y)
+  (let ((foo (vector 1 2))
+	(result (funcall op x y))
+	(bar (vector 3 4)))
+    (if (not (typep result 'pointer))
+	(warn "foo: ~Z result: ~Z, bar: ~Z, diff foo-bar: ~D."
+	      foo result bar
+	      (- (object-location bar) (object-location foo)))
+      (warn "foo: ~Z result: ~Z, bar: ~Z, diff: ~D, ~D."
+	    foo result bar
+	    (- (object-location result) (object-location foo))
+	    (- (object-location bar) (object-location result))))
+    (values foo result bar)))
+
+(defun testb ()
+  #(1 2 3 4))
 
 (defun gt5 (x)
   (<= x 5))
@@ -632,9 +693,6 @@ s#+ignore
 (defun test-nano-sleep (x)
   (time (nano-sleep x)))
 
-(defun test ()
-  (time 123))
-
 (defun mvtest ()
   (multiple-value-call #'list (round 5 2))
   (list (memref-int #x1000000 0 0 :unsigned-byte8)
@@ -730,7 +788,8 @@ s#+ignore
 		(format t " ~~ ~,3F" x)))
 	     (pointer
 	      (format t "~&~Z = ~W" x x))
-	     (t (write x :radix nil :base (case *print-base* (10 16) (t 10)))))
+	     (t (fresh-line)
+		(write x :radix nil :base (case *print-base* (10 16) (t 10)))))
 	   x))
     (if x-list
 	(do-print (eval x-list))
@@ -782,7 +841,8 @@ s#+ignore
 	  (write (cdr condition))))
        (t (format t "~&Error: ~A" condition)))
       (if *debugger-printing-restarts*
-	  (format t "~&[restarts suppressed]")
+	  (progn (format t "~&[restarts suppressed]")
+		 (halt-cpu))
 	(let ((*debugger-printing-restarts* t))
 	  (map-active-restarts (lambda (restart index)
 				 (format t "~&~2D: ~A~%" index restart))
@@ -881,10 +941,11 @@ s#+ignore
   (idt-init)
   (install-los0-consing)
   
+  (setf *debugger-function* #'los0-debugger)
   (let ((*repl-readline-context* (make-readline-context :history-size 16))
 	(*backtrace-stack-frame-barrier* (stack-frame-uplink (current-stack-frame)))
 	#+ignore (*error-no-condition-for-debugger* t)
-	(*debugger-function* #'los0-debugger)
+	#+ignore (*debugger-function* #'los0-debugger)
 	(*package* nil))
     (with-simple-restart (abort "Skip Los0 boot-up initialization.")
       (setf *cpu-features*
