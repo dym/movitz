@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Apr 15 22:47:13 2002
 ;;;;                
-;;;; $Id: cpu-id.lisp,v 1.9 2004/08/14 17:55:29 ffjeld Exp $
+;;;; $Id: cpu-id.lisp,v 1.10 2005/03/09 07:18:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -197,11 +197,12 @@ This is an illegal instruction on lesser CPUs."
     (:rdtsc)				; Read Time-Stamp Counter into EDX:EAX
     (:shldl 5 :eax :edx)
     (:shll #.movitz:+movitz-fixnum-shift+ :eax)
-    (:andl #.(cl:logxor #xffffffff movitz::+movitz-fixnum-zmask+) :edx)
+    (:andl #.(cl:* movitz:+movitz-fixnum-factor+ movitz:+movitz-most-positive-fixnum+)
+	   :edx)
     (:andl #.(cl:* movitz:+movitz-fixnum-factor+ movitz:+movitz-most-positive-fixnum+)
 	   :eax)
-    (:movl :edx :ebx)
     (:cld)
+    (:movl :edx :ebx)
     (:movl 2 :ecx)
     (:stc)))
 		      
