@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.25 2004/09/22 18:00:55 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.26 2004/09/25 15:53:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -553,7 +553,10 @@ be provided for those cases."
 					     exception
 					     primitive-name
 					     (code-vector-offset primitive-vector eip)))))))
-			    (t (format t "DIT Exception ~D with ESI=~Z and EIP=#x~X."
+			    (t ;; This should in principle never happen, but since this
+			     ;; is a debugger, making this an error or break would probably
+			     ;; just be a nuisance.
+			     (format t "DIT Exception ~D. Unable to determine current function (!) with ESI=~Z and EIP=#x~X."
 				       exception funobj eip)))))))))
 	       (function
 		(let ((name (funobj-name funobj)))
