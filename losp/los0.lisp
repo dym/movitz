@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.9 2004/03/31 16:37:13 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.10 2004/04/06 13:36:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -821,7 +821,8 @@ s#+ignore
 	(*repl-prompt-context* #\d)
 	(*repl-readline-context* (or *repl-readline-context*
 				     (make-readline-context :history-size 16))))
-    (invoke-toplevel-command :error)
+    (let ((*print-safely* t))
+      (invoke-toplevel-command :error))
     (loop
       (with-simple-restart (abort "Abort to command level ~D." (1+ *repl-level*))
 	(read-eval-print)))))
@@ -838,7 +839,7 @@ s#+ignore
 
 ;;;  (loop for i from  #x40600 below #x80000
 ;;;      do (setf (memref i 0 0 :unsigned-byte32) #xababe13))
-  
+
   (install-los0-consing)
   
   (let ((*repl-readline-context* (make-readline-context :history-size 16))
