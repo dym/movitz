@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.76 2004/07/19 00:54:29 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.77 2004/07/19 12:50:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -754,11 +754,11 @@ Preserve EAX and EBX."
 		 (%negatef (+ subtrahend (- minuend))
 			   subtrahend minuend))
 ;;;		((positive-fixnum positive-bignum)
-;;;		 (%bignum-canonicalize
+;;;		 (bignum-canonicalize
 ;;;		  (%bignum-negate
 ;;;		   (bignum-subf (copy-bignum subtrahend) minuend))))
 ;;;		((negative-fixnum positive-bignum)
-;;;		 (%bignum-canonicalize
+;;;		 (bignum-canonicalize
 ;;;		  (%negatef (bignum-add-fixnum subtrahend minuend)
 ;;;			    subtrahend minuend)))
 		((positive-bignum positive-bignum)
@@ -768,7 +768,7 @@ Preserve EAX and EBX."
 		  ((< minuend subtrahend)
 		   (let ((x (- subtrahend minuend)))
 		     (%negatef x subtrahend minuend)))
-		  (t (%bignum-canonicalize
+		  (t (bignum-canonicalize
 		      (with-inline-assembly (:returns :eax)
 			(:compile-two-forms (:eax :ebx) (copy-bignum minuend) subtrahend)
 			(:xorl :edx :edx) ; counter
@@ -883,7 +883,7 @@ Preserve EAX and EBX."
 			   (- pos)))))))
 	    (assert (or (plusp (memref result -2 (+ -1 (* 2 (%bignum-bigits result))) :unsigned-byte16))
 			(plusp (memref result -2 (+ -2 (* 2 (%bignum-bigits result))) :unsigned-byte16))))
-	    (%bignum-canonicalize result))))))
+	    (bignum-canonicalize result))))))
    (t (let ((count (- count)))
 	(etypecase integer
 	  (fixnum
@@ -909,7 +909,7 @@ Preserve EAX and EBX."
 			     (if (< src src-max-bigit)
 				 (memref integer -2 src :unsigned-byte16)
 			       0)))))
-		     (%bignum-canonicalize
+		     (bignum-canonicalize
 		      (macrolet
 			  ((do-it ()
 			     `(with-inline-assembly (:returns :ebx)
@@ -1140,10 +1140,10 @@ Preserve EAX and EBX."
 								    32))))
 			(length (integer-length y))
 			(i 0 (+ i 29)))
-		       ((>= i length) (%bignum-canonicalize r))
+		       ((>= i length) (bignum-canonicalize r))
 		     (bignum-set-zerof tmp)
-		     (bignum-addf r (bignum-shift-leftf (bignum-mulf-fixnum (bignum-addf tmp x)
-									    (ldb (byte 29 i) y))
+		     (bignum-addf r (bignum-shift-leftf (bignum-mulf (bignum-addf tmp x)
+								     (ldb (byte 29 i) y))
 							i)))
 		   #+movitz-reference-code
 		   (do ((r 0)
@@ -1481,7 +1481,7 @@ Preserve EAX and EBX."
 		((positive-bignum positive-bignum)
 		 (if (< (%bignum-bigits y) (%bignum-bigits x))
 		     (logand y x)
-		   (%bignum-canonicalize
+		   (bignum-canonicalize
 		    (with-inline-assembly (:returns :eax)
 		      (:compile-two-forms (:eax :ebx) (copy-bignum x) y)
 		      (:movzxw (:eax (:offset movitz-bignum length))
@@ -1517,14 +1517,14 @@ Preserve EAX and EBX."
 	    (((eql 0) t) integer2)
 	    (((eql -1) t) 0)
 	    ((positive-fixnum positive-bignum)
-	     (%bignum-canonicalize
+	     (bignum-canonicalize
 	      (with-inline-assembly (:returns :eax)
 		(:compile-two-forms (:eax :ecx) (copy-bignum integer2) integer1)
 		(:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 		(:notl :ecx)
 		(:andl :ecx (:eax (:offset movitz-bignum bigit0))))))
 	    ((positive-bignum positive-bignum)
-	     (%bignum-canonicalize
+	     (bignum-canonicalize
 	      (with-inline-assembly (:returns :eax)
 		(:compile-two-forms (:eax :ebx) (copy-bignum integer2) integer1)
 		(:movzxw (:eax (:offset movitz-bignum length))
@@ -1629,7 +1629,7 @@ Preserve EAX and EBX."
 	   (let ((r (copy-bignum x)))
 	     (macrolet
 		 ((do-it ()
-		    `(%bignum-canonicalize
+		    `(bignum-canonicalize
 		      (with-inline-assembly (:returns :eax)
 			(:compile-two-forms (:eax :ebx) r y)
 			(:movzxw (:ebx (:offset movitz-bignum length))
@@ -1921,7 +1921,7 @@ Preserve EAX and EBX."
 		     (:movl #xffffffff (:ebx :ecx (:offset movitz-bignum bigit0)))
 		     (:cmpw :cx (:eax (:offset movitz-bignum length)))
 		     (:jc '(:sub-program (result-too-big-shouldnt-happen)
-			    (:break)))
+			    (:int 4)))
 		     (:jne 'tail-tmp-ok)
 		     ;; Sizes was equal, so set tail-tmp to zero.
 		     (:movl 0 (:ebx :ecx (:offset movitz-bignum bigit0)))
@@ -1964,6 +1964,13 @@ Preserve EAX and EBX."
 		     (:movzxw (:ebx (:offset movitz-bignum length))
 			      :edx)
 		     (:popl :ecx)	; (new) bytespec size
+		     (:load-lexical (:lexical-binding size) :ecx)
+		     (:shrl 5 :ecx)
+		     (:andl -4 :ecx)	; ECX = index of (conceptual) MSB
+		     (:cmpl :ecx :edx)
+		     (:jbe 'mask-done)
+		     
+		     (:load-lexical (:lexical-binding size) :ecx)
 		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 		     (:andl 31 :ecx)
 		     (:jz 'mask-done)
