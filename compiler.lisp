@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.89 2004/08/07 11:10:19 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.90 2004/08/09 13:38:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -715,10 +715,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	 (stack-frame-size (frame-map-size (frame-map function-env)))
 	 (use-stack-frame-p (or (plusp stack-frame-size)
 				(tree-search resolved-code
-					     '(:ebp :esp :call :leave))))
-	 (optional-stack-frame-p (tree-search resolved-optional-code
-					      '(:ebp :esp :call :leave))))
-    (assert (not optional-stack-frame-p))
+					     '(:pushl :popl :ebp :esp :call :leave)))))
     (let* ((function-code
 	    (let* ((req-binding (movitz-binding (first (required-vars function-env))
 						function-env nil))
@@ -735,13 +732,13 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 		      (unless (eql nil opt-location)
 			resolved-optional-code)
 		      (when optp-location
-			`((:movl :edi :ecx)
-			  (:jmp 'optp-into-ecx-ok)))
+			`((:movl :edi :edx)
+			  (:jmp 'optp-into-edx-ok)))
 		      '(entry%2op)
 		      (when optp-location
 			`((,*compiler-global-segment-prefix*
-			   :movl (:edi ,(global-constant-offset 't-symbol)) :ecx)
-			  optp-into-ecx-ok))
+			   :movl (:edi ,(global-constant-offset 't-symbol)) :edx)
+			  optp-into-edx-ok))
 		      (when use-stack-frame-p
 			+enter-stack-frame-code+)
 		      '(start-stack-frame-setup)
@@ -769,7 +766,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 			())
 		       ((= optp-location (1+ stack-setup-pre))
 			(incf stack-setup-pre 1)
-			`((:pushl :ecx)))
+			`((:pushl :edx)))
 		       (t (error "Can't deal with optional-p at ~S, after (~S ~S)."
 				 optp-location req-location opt-location)))
 		      (make-stack-setup-code (- stack-frame-size stack-setup-pre))
@@ -1824,6 +1821,16 @@ falling below the label."
 						     (explain nil "load ~S already in ~S."
 							      i old-reg)
 						     `(:movl ,old-reg ,(twop-dst i))))
+						  ((and (instruction-is i :pushl)
+							(stack-frame-operand (idst i))
+							(assoc (stack-frame-operand (idst i))
+							       frame-map))
+						   (let ((old-reg
+							  (cdr (assoc (stack-frame-operand (idst i))
+								      frame-map))))
+						     (explain nil "push ~S already in ~S."
+							      i old-reg)
+						     `(:pushl ,old-reg)))
 						  (t i))))
 				      (unless (eq new-i i)
 					(setf mod-p t))
