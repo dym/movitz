@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.23 2004/04/15 13:04:51 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.24 2004/04/16 08:57:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -890,7 +890,9 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 			(warn "Multiboot load-address #x~x is below the 1MB mark."
 			      load-address))
 		      (when (> (+ mb-file-position (sizeof mb)) 8192)
-			(warn "Multiboot header at position ~D is above the 8KB mark."))
+			(warn "Multiboot header at position ~D is above the 8KB mark, ~
+this image will not be Multiboot compatible."
+			      (+ mb-file-position (sizeof mb))))
 		      (assert (file-position stream mb-file-position) ()
 			"Couldn't set file-position for ~W to ~W."
 			(pathname stream)
