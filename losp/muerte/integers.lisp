@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.14 2004/06/02 20:34:04 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.15 2004/06/02 23:20:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -132,7 +132,7 @@
   `(+ ,number 1))
 
 (defun 1- (number)
-  (+ -1 number))
+  (- number 1))
 
 (define-compiler-macro 1- (number)
   `(- ,number 1))
@@ -156,6 +156,7 @@
 			  (:call-global-constant box-u32-ecx)
 			  (:jmp 'fix-fix-ok)
 			  fix-fix-negative
+			  (:jz 'fix-double-negative)
 			  (:negl :ecx)
 			  (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 			  (:call-global-constant box-u32-ecx)
@@ -163,25 +164,13 @@
 				   (movitz:tag :bignum #xff))
 			   (:eax ,movitz:+other-type-offset+))
 			  (:jmp 'fix-fix-ok)
-			  ))
+			  fix-double-negative
+			  (:compile-form (:result-mode :eax)
+			   ,(* 2 movitz:+movitz-most-negative-fixnum+))
+			  (:jmp 'fix-fix-ok)))
 		  fix-fix-ok
 		   )))))
 	(do-it)))
-   (3 (x y z)
-      (with-inline-assembly (:returns :eax)
-	(:compile-form (:result-mode :eax) x)
-	(:compile-form (:result-mode :ebx) y)
-	(:movl :eax :ecx)
-	(:compile-form (:result-mode :edx) z)
-	(:orl :ebx :ecx)
-	(:orl :edx :ecx)
-	(:testb #.movitz::+movitz-fixnum-zmask+ :cl)
-	(:jnz '(:sub-program (not-integer)
-		(:int 107)))
-	(:addl :ebx :eax)
-	(:into)
-	(:addl :edx :eax)
-	(:into)))
    (t (&rest terms)
       (declare (dynamic-extent terms))
       (if (null terms)
@@ -198,7 +187,10 @@
 (define-compiler-macro - (&whole form &rest operands &environment env)
   (case (length operands)
     (0 0)
-    (1 `(- 0 ,(first operands)))
+    (1 (let ((x (first operands)))
+	 (if (movitz:movitz-constantp x env)
+	     (- (movitz:movitz-eval x env))
+	   form)))
     (2 (let ((minuend (first operands))
 	     (subtrahend (second operands)))
 	 (cond
@@ -210,13 +202,53 @@
 (defun - (minuend &rest subtrahends)
   (declare (dynamic-extent subtrahends))
   (numargs-case
+   (1 (x)
+      (macrolet
+	  ((do-it ()
+	     `(with-inline-assembly (:returns :eax)
+		(:compile-form (:result-mode :eax) x)
+		(:testb ,movitz:+movitz-fixnum-zmask+ :al)
+		(:jnz '(:sub-program (not-fixnum)
+			(:leal (:eax ,(- (movitz:tag :other))) :ecx)
+			(:testb 7 :cl)
+			(:jnz '(:sub-program (not-a-number)
+				(:compile-form (:result-mode :ignore)
+				 (error 'type-error :expected-type 'number :datum x))))
+			(:movl (:eax ,movitz:+other-type-offset+) :ecx)
+			(:cmpb ,(movitz:tag :bignum) :cl)
+			(:jne 'not-a-number)
+			(:cmpl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0)) :ecx)
+			(:jne 'not-most-negative-fixnum)
+			(:cmpl ,(- most-negative-fixnum)
+			 (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+			(:jne 'not-most-negative-fixnum)
+			(:movl ,(ldb (byte 32 0)
+				 (* most-negative-fixnum movitz::+movitz-fixnum-factor+))
+			 :eax)
+			(:jmp 'fix-ok)
+			not-most-negative-fixnum
+			(:compile-form (:result-mode :eax)
+			 (copy-bignum x))
+			(:notb (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::sign)))
+			(:jmp 'fix-ok)))
+		(:negl :eax)
+		(:jo '(:sub-program (fix-overflow)
+		       (:compile-form (:result-mode :eax)
+			,(1+ movitz:+movitz-most-positive-fixnum+))
+		       (:jmp 'fix-ok)))
+	       fix-ok
+		)))
+	(do-it)))
    (2 (minuend subtrahend)
-      (check-type minuend fixnum)
-      (check-type subtrahend fixnum)
-      (with-inline-assembly (:returns :eax :side-effects nil)
-	(:compile-two-forms (:eax :ebx) minuend subtrahend)
-	(:subl :ebx :eax)
-	(:into)))
+      (cond
+       ((eq 0 minuend)
+	(- subtrahend))
+       (t (check-type minuend fixnum)
+	  (check-type subtrahend fixnum)
+	  (with-inline-assembly (:returns :eax :side-effects nil)
+	    (:compile-two-forms (:eax :ebx) minuend subtrahend)
+	    (:subl :ebx :eax)
+	    (:into)))))
    (t (minuend &rest subtrahends)
       (declare (dynamic-extent subtrahends))
       (if subtrahends
@@ -1262,3 +1294,23 @@
 	 (t (values (1- q) (+ r divisor))))))
    (t (n &optional (divisor 1))
       (floor n divisor))))
+
+(defun copy-bignum (old)
+  (check-type old bignum)
+  (let* ((length (with-inline-assembly (:returns :eax)
+		   (:compile-form (:result-mode :eax) old)
+		   (:movzxw (:eax #.(bt:slot-offset 'movitz::movitz-bignum
+						    'movitz::length))
+			    :ecx)
+		   (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)
+			   #.movitz:+movitz-fixnum-factor+)
+			  :eax)))
+	 (new (malloc-data-clumps length)))
+    (with-inline-assembly (:returns :eax)
+      (:compile-two-forms (:eax :ebx) new old)
+      (:compile-form (:result-mode :edx) length)
+     copy-bignum-loop
+      (:subl #.movitz:+movitz-fixnum-factor+ :edx)
+      (:movl (:ebx :edx #.movitz:+other-type-offset+) :ecx)
+      (:movl :ecx (:eax :edx #.movitz:+other-type-offset+))
+      (:jnz 'copy-bignum-loop))))
