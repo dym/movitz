@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.111 2004/11/19 23:06:58 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.112 2004/11/19 23:56:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -6234,13 +6234,13 @@ and a list of any intervening unwind-protect environment-slots."
       (let* ((binding (binding-target (ensure-local-binding (binding-target cell) funobj)))
 	     (location (new-binding-location (binding-target binding) frame-map))
 	     (binding-is-list-p (binding-store-subtypep binding 'list)))
-;;;	 (warn "car of loc ~A bind ~A"
-;;;	       location binding)
+	#+ignore (warn "car of loc ~A bind ~A"
+		       location binding)
 	(cond
 	 ((and binding-is-list-p
 	       (member location '(:eax :ebx :ecx :edx)))
-	  `(,*compiler-nonlocal-lispval-read-segment-prefix*
-	    (:movl (,location ,op-offset) ,dst)))
+	  `((,*compiler-nonlocal-lispval-read-segment-prefix*
+	    :movl (,location ,op-offset) ,dst)))
 	 (binding-is-list-p
 	  `(,@(make-load-lexical binding dst funobj nil frame-map)
 	      (,*compiler-nonlocal-lispval-read-segment-prefix*
