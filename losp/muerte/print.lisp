@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.7 2004/04/13 15:15:55 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.8 2004/04/21 15:07:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -202,8 +202,7 @@
 	    (null
 	     (write-string (symbol-name nil) stream))
 	    ((or cons tag5)
-	     (let ((level *print-level*)
-		   (length *print-length*))
+	     (let ((level *print-level*))
 	       (cond
 		((and level (minusp level))
 		 (write-char #\# stream))
@@ -227,7 +226,7 @@
 				     (write (cdr c))
 				     (write-char #\) stream)))))))
 		     (write-char #\( stream)
-		     (write-cons object stream length))))))
+		     (write-cons object stream *print-length*))))))
 	    (integer
 	     (write-integer object stream *print-base* *print-radix*))
 	    (string
