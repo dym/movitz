@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.40 2004/04/01 02:09:26 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.41 2004/04/01 17:27:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2433,7 +2433,7 @@ the sub-program options (&optional label) as secondary value."
 	    pos)))))
 
 (defun compute-free-registers (pc distance funobj frame-map
-			       &key (free-registers '(:eax :ebx :ecx :edx)))
+			       &key (free-registers '(:ecx :eax :ebx :edx)))
   "Return set of free register, and whether there may be more registers
    free later, with a more specified frame-map."
   (loop with free-so-far = free-registers
@@ -2518,22 +2518,35 @@ the sub-program options (&optional label) as secondary value."
 	       (distance (position load-instruction (cdr init-pc))))
 	  (multiple-value-bind (free-registers more-later-p)
 	      (and distance (compute-free-registers (cdr init-pc) distance funobj frame-map))
-	    (if (and (member :ecx free-registers)
+	    (let ((free-registers-no-ecx (remove :ecx free-registers)))
+	      (cond
+	       ((member binding-destination free-registers-no-ecx)
+		binding-destination)
+	       ((and (not (typep binding '(or fixed-required-function-argument
+					   register-required-function-argument)))
+		     (member binding-destination free-registers))
+		binding-destination)
+	       ((member init-with-register free-registers)
+		init-with-register)
+	       ((and (member :ecx free-registers)
 		     (not (typep binding 'function-argument))
 		     (or (eq :untagged-fixnum-ecx binding-destination)
 			 (eq :untagged-fixnum-ecx init-with-register)))
-		:untagged-fixnum-ecx
-	      (let ((free-registers (remove :ecx free-registers)))
-		(cond
-		 ((member binding-destination free-registers)
-		  binding-destination)
-		 ((member init-with-register free-registers)
-		  init-with-register)
-		 ((not (null free-registers))
-		  (first free-registers))
-		 (more-later-p
-		  (values nil :not-now))
-		 (t (values nil :never)))))))))
+		:untagged-fixnum-ecx)
+	       ((and (binding-store-type binding)
+		     (member :ecx free-registers)
+		     (not (typep binding '(or fixed-required-function-argument
+					   register-required-function-argument)))
+		     (multiple-value-call #'encoded-subtypep
+		       (values-list (binding-store-type binding))
+		       (type-specifier-encode '(or integer character))))
+		(warn "for ecX: ~S" binding)
+		:ecx)
+	       ((not (null free-registers-no-ecx))
+		(first free-registers-no-ecx))
+	       (more-later-p
+		(values nil :not-now))
+	       (t (values nil :never))))))))
      (t (values nil :never)))))
 
 (defun discover-variables (code function-env)
@@ -3050,7 +3063,7 @@ loading borrowed bindings."
 		      ((:eax :single-value) nil)
 		      (:untagged-fixnum-ecx
 		       `((:movl :eax :ecx)
-			 (:sarl ,movitz:+movitz-fixnum-factor+ :ecx)))))
+			 (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)))))
 		   ((:ebx :ecx :edx)
 		    (assert (not indirect-p))
 		    (unless (eq result-mode lexb-location)
@@ -3059,7 +3072,7 @@ loading borrowed bindings."
 			((:ebx :ecx :edx :esi) `((:movl ,lexb-location ,result-mode)))
 			(:untagged-fixnum-ecx
 			 `((:movl ,lexb-location :ecx)
-			   (:sarl ,movitz:+movitz-fixnum-factor+ :ecx))))))
+			   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx))))))
 		   (:argument-stack
 		    (assert (<= 2 (function-argument-argnum lexb)) ()
 		      "lexical :argument-stack argnum can't be ~A." (function-argument-argnum lexb))
@@ -3132,8 +3145,6 @@ loading borrowed bindings."
 		    `((:movl (:ebp ,(stack-frame-offset binding-location)) :eax)
 		      (:pushl (:eax -1)))
 		  (ecase binding-location
-;;;		  (:eax '((:pushl :eax)))
-;;;		  (:ebx '((:pushl :ebx)))
 		    (:argument-stack
 		     (assert (<= 2 (function-argument-argnum binding)) ()
 		       ":load-lexical argnum can't be ~A." (function-argument-argnum binding))
@@ -3150,8 +3161,8 @@ loading borrowed bindings."
 		  (if (integerp binding-location)
 		      `((:pushl (:ebp ,(stack-frame-offset binding-location))))
 		    (ecase binding-location
-		      (:eax '((:pushl :eax)))
-		      (:ebx '((:pushl :ebx)))
+		      ((:eax :ebx :ecx :edx)
+		       `((:pushl ,binding-location)))
 		      (:argument-stack
 		       (assert (<= 2 (function-argument-argnum binding)) ()
 			 ":load-lexical argnum can't be ~A." (function-argument-argnum binding))
@@ -3254,7 +3265,7 @@ loading borrowed bindings."
 	  (if (integerp location)
 	      `((:movl ,source (:ebp ,(stack-frame-offset location))))
 	    (ecase location
-	      ((:eax :ebx :edx)
+	      ((:eax :ebx :ecx :edx)
 	       (unless (eq source location)
 		 `((:movl ,source ,location))))
 	      (:argument-stack
