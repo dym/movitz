@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.18 2004/07/29 00:13:22 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.19 2004/09/22 18:49:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -143,17 +143,31 @@
 				      (flags 0))
   (eval-when (:compile-toplevel)
     (assert (= 1 (- (movitz:tag :symbol) (movitz:tag :other)))))
-  (let ((symbol (%word-offset (malloc-pointer-words 6) 1)))
-    (setf-movitz-accessor (symbol movitz-symbol package) package)
-    (setf-movitz-accessor (symbol movitz-symbol name) name)
-    (setf (memref symbol #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::hash-key)
-		  0 :unsigned-byte16)
-      (sxhash name))
-    (setf (symbol-flags symbol) flags
-	  (symbol-plist symbol) plist
-	  (symbol-function symbol) function
-	  (symbol-value symbol) value)
-    symbol))
+  (let ((sxhash (sxhash name)))
+    (macrolet
+	((do-it ()
+	   `(with-non-pointer-allocation-assembly (6 :fixed-size-p t
+						     :object-register :eax)
+	      (:addl ,(- (movitz:tag :symbol) (movitz:tag :other)) :eax)
+	      (:load-lexical (:lexical-binding package) :ebx)
+	      (:movl :ebx (:eax (:offset movitz-symbol package)))
+	      (:load-lexical (:lexical-binding name) :ebx)
+	      (:movl :ebx (:eax (:offset movitz-symbol name)))
+	      (:load-lexical (:lexical-binding function) :ebx)
+	      (:movl :ebx (:eax (:offset movitz-symbol function-value)))
+	      (:load-lexical (:lexical-binding plist) :ebx)
+	      (:movl :ebx (:eax (:offset movitz-symbol plist)))
+	      (:load-lexical (:lexical-binding value) :ebx)
+	      (:movl :ebx (:eax (:offset movitz-symbol value)))
+
+	      (:load-lexical (:lexical-binding flags) :ecx)
+	      (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	      (:load-lexical (:lexical-binding sxhash) :ebx)
+	      (:shll ,(- 16 movitz:+movitz-fixnum-shift+) :ebx)
+	      (:orl :ebx :ecx)
+	      (:movl :ecx (:eax (:offset movitz-symbol flags)))
+	      )))
+      (do-it))))
 
 (defun make-symbol (name)
   (check-type name string "a symbol name")
@@ -166,11 +180,29 @@
   (if (or (eq nil symbol)
 	  (not copy-properties))
       (%create-symbol (symbol-name symbol))
-    (let ((x (%word-offset (malloc-pointer-words 6) 1)))
-      (dotimes (i 6)
-	(setf (memref x #.(cl:- (movitz:tag :symbol)) i :lisp)
-	  (memref symbol #.(cl:- (movitz:tag :symbol)) i :lisp)))
-      x)))
+    (with-allocation-assembly (6 :object-register :eax
+				 :fixed-size-p t)
+      (:addl 1 :eax)
+      (:load-lexical (:lexical-binding symbol) :ebx)
+      ;; 0
+      (:movl (:ebx #.(cl:- (movitz:tag :symbol)) 0) :ecx)
+      (:movl :ecx (:eax #.(cl:- (movitz:tag :symbol)) 0))
+      ;; 1
+      (:movl (:ebx #.(cl:- (movitz:tag :symbol)) 4) :ecx)
+      (:movl :ecx (:eax #.(cl:- (movitz:tag :symbol)) 4))
+      ;; 2
+      (:movl (:ebx #.(cl:- (movitz:tag :symbol)) 8) :ecx)
+      (:movl :ecx (:eax #.(cl:- (movitz:tag :symbol)) 8))
+      ;; 3
+      (:movl (:ebx #.(cl:- (movitz:tag :symbol)) 12) :ecx)
+      (:movl :ecx (:eax #.(cl:- (movitz:tag :symbol)) 12))
+      ;; 4
+      (:movl (:ebx #.(cl:- (movitz:tag :symbol)) 16) :ecx)
+      (:movl :ecx (:eax #.(cl:- (movitz:tag :symbol)) 16))
+      ;; 5
+      (:movl (:ebx #.(cl:- (movitz:tag :symbol)) 20) :ecx)
+      (:movl :ecx (:eax #.(cl:- (movitz:tag :symbol)) 20)))))
+
 
 (defun symbol-flags (symbol)
   (etypecase symbol
