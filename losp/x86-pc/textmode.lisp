@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  9 15:38:56 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: textmode.lisp,v 1.6 2004/04/21 16:24:10 ffjeld Exp $
+;;;; $Id: textmode.lisp,v 1.7 2004/07/12 07:57:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -69,12 +69,12 @@
 (defun textmode-write-char (c)
   (case c
     (#\newline
-     (setf *cursor-x* 0)
      (cond
       ((>= (1+ *cursor-y*) *screen-height*)
        (textmode-scroll-down)
        (setf *cursor-y* (1- *screen-height*)))
       (t (incf *cursor-y*)))
+     (setf *cursor-x* 0)
      (move-vga-cursor 0 *cursor-y*))
     (#\backspace
      (if (/= 0 *cursor-x*)
@@ -125,6 +125,7 @@
 
 (defun textmode-scroll-down ()
   (declare (special muerte.lib::*scroll-offset*))
+  (signal 'newline)
   (incf muerte.lib::*scroll-offset*)
   (loop with stride = (* 2 *screen-stride*)
       for y below *screen-height*
