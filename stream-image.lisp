@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Aug 27 14:46:50 2001
 ;;;;                
-;;;; $Id: stream-image.lisp,v 1.6 2004/06/01 15:16:59 ffjeld Exp $
+;;;; $Id: stream-image.lisp,v 1.7 2004/06/29 23:15:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -87,6 +87,8 @@
 		     (case type-tag
 		       (:funobj
 			(read-binary 'movitz-funobj (image-stream image)))
+		       (:basic-vector
+			(read-binary 'movitz-basic-vector (image-stream image)))
 		       (:vector
 			(read-binary 'movitz-vector (image-stream image)))
 		       (:defstruct

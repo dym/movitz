@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.7 2004/06/06 03:02:45 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.8 2004/06/29 23:15:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -110,6 +110,7 @@
     ((not movitz-object)
      expr)
     ((or movitz-nil movitz-constant-block) nil)
+    (movitz-std-instance expr)
     (movitz-symbol
      (intern (movitz-print (movitz-symbol-name expr))))
     (movitz-string
@@ -117,7 +118,7 @@
 	  (movitz-vector-symbolic-data expr)))
     (movitz-fixnum
      (movitz-fixnum-value expr))
-    (movitz-vector
+    ((or movitz-vector movitz-basic-vector)
      (map 'vector #'movitz-print (movitz-vector-symbolic-data expr)))
     (movitz-cons
      (cons (movitz-print (movitz-car expr))
