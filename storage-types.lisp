@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.35 2004/07/29 00:13:13 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.36 2004/07/29 02:14:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -990,8 +990,8 @@ integer (native lisp) value."
 	 (incf result result)
 	 (incf result
 	       (if (evenp i)
-		   (char-code (aref object i))
-		 (* 7 (char-code (aref object i))))))
+		   (char-code (char-upcase (aref object i)))
+		 (* 7 (char-code (char-upcase (aref object i)))))))
        (ldb (byte 16 0)
 	    (+ (* #x10ad (length object))
 	       result))))
