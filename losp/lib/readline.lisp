@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov  2 13:58:58 2001
 ;;;;                
-;;;; $Id: readline.lisp,v 1.3 2004/01/19 11:23:44 ffjeld Exp $
+;;;; $Id: readline.lisp,v 1.4 2004/02/13 22:11:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,16 +19,16 @@
 (provide :lib/readline)
 
 (defpackage muerte.readline
-  (:use muerte.cl muerte.lib)
-  (:export readline
-	   readline-buffer
-	   make-readline-buffer
-	   readline-buffer-string
-	   readline-buffer-cursor-position
-	   readline-buffer-cursor-end
-	   make-readline-context
-	   contextual-readline
-	   complete-symbol-name))
+  (:use #:muerte.cl #:muerte.lib)
+  (:export #:readline
+	   #:readline-buffer
+	   #:make-readline-buffer
+	   #:readline-buffer-string
+	   #:readline-buffer-cursor-position
+	   #:readline-buffer-cursor-end
+	   #:make-readline-context
+	   #:contextual-readline
+	   #:complete-symbol-name))
 
 (in-package muerte.readline)
 

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.3 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.4 2004/02/13 22:11:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,10 +20,10 @@
 (provide :lib/net/ip4)
 
 (defpackage muerte.ip4
-  (:use muerte.cl muerte muerte.ethernet muerte.lib)
-  (:export pprint-ip4
-	   ip4-test
-	   ip4-free))
+  (:use #:muerte.cl #:muerte #:muerte.ethernet #:muerte.lib)
+  (:export #:pprint-ip4
+	   #:ip4-test
+	   #:ip4-free))
 
 (require :lib/net/arp)
 

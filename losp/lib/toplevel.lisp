@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep  5 15:56:26 2002
 ;;;;                
-;;;; $Id: toplevel.lisp,v 1.3 2004/01/19 11:23:44 ffjeld Exp $
+;;;; $Id: toplevel.lisp,v 1.4 2004/02/13 22:11:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,7 +18,7 @@
 (provide :lib/toplevel)
 
 (defpackage muerte.toplevel
-  (:use muerte.cl muerte)
+  (:use #:muerte.cl #:muerte)
   (:export #:define-toplevel-command
 	   #:invoke-toplevel-command
 	   #:*toplevel-commands*))

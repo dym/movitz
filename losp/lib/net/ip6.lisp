@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 14 17:25:31 2001
 ;;;;                
-;;;; $Id: ip6.lisp,v 1.3 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: ip6.lisp,v 1.4 2004/02/13 22:11:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -23,7 +23,7 @@
 (provide :lib/net/ip6)
 
 (defpackage muerte.ip6
-  (:use muerte.cl muerte.lib muerte.x86-pc muerte.ethernet)
+  (:use #:muerte.cl #:muerte.lib #:muerte.x86-pc #:muerte.ethernet)
   (:export #:packet-version
 	   #:packet-source
 	   #:packet-destination
