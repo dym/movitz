@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.134 2005/02/02 07:48:58 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.135 2005/02/27 02:30:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5704,7 +5704,8 @@ fifth:  all compiler-values for form1, as a list."
     (check-type binding lexical-binding)
     (case (operator result-mode)
       (:ignore
-       (compiler-values ()))
+       (compiler-values ()
+	 :final-form binding))
       (t (let ((returns (ecase (result-mode-type result-mode)
 			  ((:function :multiple-values :eax)
 			   :eax)
