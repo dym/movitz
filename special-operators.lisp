@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.3 2004/01/16 19:25:04 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.4 2004/02/02 14:54:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -442,7 +442,7 @@ The valid parameters are~{ ~S~}."
 			    (translate-program ,expansion-var :cl :muerte.cl)))))))
 	      (setf (movitz-compiler-macro-function operator-name nil)
 		(movitz-macro-expander-make-function expander
-						     :name (gensym (format nil "~A-compiler-macro-" name))
+						     :name name
 						     :type :compiler-macro))))))))
   (compiler-values ()))
 
