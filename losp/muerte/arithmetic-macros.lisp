@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.6 2004/08/04 12:59:18 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.7 2004/09/21 13:09:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -47,23 +47,21 @@
     (2 `(let ((x ,(first operands))
 	      (y ,(second operands)))
 	  (++%2op x y)))
-    (t (let ((operands
-	      (loop for operand in operands
-		  if (movitz:movitz-constantp operand env)
-		  sum (movitz:movitz-eval operand env)
-		  into constant-term
-		  else collect operand
-		  into non-constant-operands
-		  finally (return (if (zerop constant-term)
-				      non-constant-operands
-				    (cons constant-term non-constant-operands))))))
+    (t (multiple-value-bind (constant-term non-constants)
+	   (loop for operand in operands
+	       if (movitz:movitz-constantp operand env)
+	       sum (movitz:movitz-eval operand env) into constant-term
+	       else collect operand into non-constant-operands
+	       finally (return (values constant-term non-constant-operands)))
 	 (cond
-	  ((null operands)
-	   0)
-	  ((not (cdr operands))
-	   (check-type (car operands) integer)
-	   (car operands))
-	  (t `(+ (+ ,(first operands) ,(second operands)) ,@(cddr operands))))))))
+	  ((null non-constants)
+	   constant-term)
+	  ((and (= 0 constant-term)
+		(not (cdr non-constants)))
+	   (car non-constants))
+	  ((= 0 constant-term)
+	   `(+ (+ ,(first non-constants) ,(second non-constants)) ,@(cddr non-constants)))
+	  (t `(+ (+ ,constant-term ,(first non-constants)) ,@(cdr non-constants))))))))
 
 (define-compiler-macro 1+ (number)
   `(+ 1 ,number))
