@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.3 2004/03/24 19:33:40 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.4 2004/03/25 00:52:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -67,60 +67,52 @@
        ((equal name 'eval)
 	(return nil))))))
 
-(defun trace-wrapper (&edx function-name-symbol &rest args)
-  (declare (dynamic-extent args))
-  (check-type function-name-symbol symbol)
-  (let ((map (assoc function-name-symbol *trace-map*
-		    :key #'function-name-symbol)))
-    (assert map ()
-      "~S is not traced!?" function-name-symbol)
-    (let ((function-name (car map))
-	  (function (cadr map))
-	  (callers (caddr map)))
-      (cond
-       ((or *trace-escape*
-	    (and (not (eq t callers))
-		 (notany 'match-caller callers)))
-	(apply function args))
-       (t (let ((*trace-escape* t))
-	    (fresh-line *trace-output*)
-	    (dotimes (i *trace-level*)
-	      (write-string "  " *trace-output*))
-	    (format *trace-output* "~D: (~S~{ ~S~})~%"
-		    *trace-level* function-name args))
-	  (multiple-value-call
-	      (lambda (&rest results)
-		(declare (dynamic-extent results))
-		(let ((*trace-escape* t))
-		  (fresh-line *trace-output*)
-		  (dotimes (i *trace-level*)
-		    (write-string "  " *trace-output*))
-		  (format *trace-output* "~&~D: =>~{ ~W~^,~}.~%" *trace-level* results)
-		  (values-list results)))
-	    (apply function args)))))))
-
 (defun do-trace (function-name &key (callers t))
   (when (assoc function-name *trace-map* :test #'equal)
     (do-untrace function-name))
   (let ((function-symbol (function-name-symbol function-name)))
     (assert (fboundp function-symbol) (function-name)
       "Can't trace undefined function ~S." function-name)
-    (push (list function-name
-		(symbol-function function-symbol)
-		callers)
-	  *trace-map*)
-    (setf (symbol-function function-symbol)
-      #'trace-wrapper))
+    (let* ((real-function (symbol-function function-symbol))
+	   (wrapper (lambda (&rest args)
+		      (declare (dynamic-extent args))
+		      (if *trace-escape*
+			  (apply real-function args)
+			(let ((*trace-escape* t))
+			  (cond
+			   ((and (not (eq t callers))
+				 (notany 'match-caller callers))
+			    (apply real-function args))
+			   (t (let ((*trace-escape* t))
+				(fresh-line *trace-output*)
+				(dotimes (i *trace-level*)
+				  (write-string "  " *trace-output*))
+				(format *trace-output* "~D: (~S~{ ~S~})~%"
+					*trace-level* function-name args))
+			      (multiple-value-call
+				  (lambda (&rest results)
+				    (declare (dynamic-extent results))
+				    (let ((*trace-escape* t))
+				      (fresh-line *trace-output*)
+				      (dotimes (i *trace-level*)
+					(write-string "  " *trace-output*))
+				      (format *trace-output* "~&~D: =>~{ ~W~^,~}.~%" *trace-level* results)
+				      (values-list results)))
+				(let ((*trace-level* (1+ *trace-level*))
+				      (*trace-escape* nil))
+				  (apply real-function args))))))))))
+      (push (cons function-name
+		  real-function)
+	    *trace-map*)
+      (setf (symbol-function function-symbol)
+	wrapper)))
   (values))
 
 (defun do-untrace (name)
   (let ((map (assoc name *trace-map*)))
     (assert map () "~S is not traced." name)
     (let ((function-name-symbol (function-name-symbol name))
-	  (function (cadr map)))
-      (unless (eq (symbol-function function-name-symbol)
-		  #'trace-wrapper)
-	(warn "~S was traced, but not fbound to trace-wrapper." name))
+	  (function (cdr map)))
       (setf (symbol-function function-name-symbol)
 	function)
       (setf *trace-map*
