@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.60 2004/05/24 14:58:00 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.61 2004/05/24 19:10:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -4788,7 +4788,7 @@ Return arg-init-code, need-normalized-ecx-p."
 	   (case (result-mode-type desired-result)
 	     ((:eax :single-value)
 	      (values (append code
-			      `((:call (:edi ,(global-constant-offset 'normalize-u32-ecx)))))
+			      `((:call (:edi ,(global-constant-offset 'box-u32-ecx)))))
 		      desired-result))
 	     (t (make-result-and-returns-glue desired-result :eax
 					      (make-result-and-returns-glue :eax :untagged-fixnum-ecx code
