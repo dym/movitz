@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue May  6 10:50:36 2003
 ;;;;                
-;;;; $Id: io-space.lisp,v 1.2 2004/01/19 11:23:52 ffjeld Exp $
+;;;; $Id: io-space.lisp,v 1.3 2004/03/22 17:08:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -79,8 +79,10 @@
 (defmethod print-object ((device io-space-device) stream)
   (print-unreadable-object (device stream :type t)
     (format stream "~@[ ~A~]~@[ @ I/O #x~X~]"
-	    (device-name device)
-	    (io-range-start (first (io-space device)))))
+	    (when (slot-boundp device 'device-name)
+	      (device-name device))
+	    (when (slot-boundp device 'allocated-io-space)
+	      (io-range-start (first (io-space device))))))
   device)
 
 (defvar *io-space-register* nil)	; a list of io-space devices.
