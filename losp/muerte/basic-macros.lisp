@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.55 2005/02/25 07:59:04 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.56 2005/02/28 23:38:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1059,8 +1059,8 @@ busy-waiting loop on P4."
   `(with-inline-assembly-case ()
      (do-case (t :boolean-zf=0 :labels (boundp-done))
        (:compile-form (:result-mode :ebx) ,symbol)
-       (:leal (:ebx ,(- (movitz:tag :symbol))) :ecx)
-       (:testb 7 :cl)
+       (:leal (:ebx ,(- (movitz:tag :null))) :ecx)
+       (:testb 5 :cl)
        (:jne '(:sub-program () (:int 66)))
        (:call-local-pf dynamic-variable-lookup)
        (:globally (:cmpl (:edi (:edi-offset new-unbound-value)) :eax)))))
