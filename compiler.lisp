@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.19 2004/02/10 00:25:28 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.20 2004/02/10 00:28:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -110,8 +110,6 @@ compile, using the host compiler, the code rather than just using eval.")
 	(warn "~S shrunk from ~D to ~D bytes" name old-size new-size))))
     (setf (gethash hash-name (function-code-sizes *image*)) new-size))
   funobj)
-
-(defconstant +code-vector-entry-factor+ 1)
 
 (defclass movitz-funobj-pass1 ()
   ((name
