@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.36 2005/01/25 13:50:16 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.37 2005/01/28 08:49:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -82,20 +82,17 @@
   (let ((ebp (dit-frame-ref stack dit-frame :ebp))
 	(esp (dit-frame-esp stack dit-frame)))
     (cond
-     ((null ebp)			; special mode
+     ((null ebp)			; special dynamic control-transfer mode
       (stack-frame-ref stack (dit-frame-ref stack dit-frame :dynamic-env) 0))
      ((< esp ebp)
       ebp)
-     ((> esp ebp)
-      ;; A throw situation
+     ((eq esp ebp)
       (let ((next-ebp (stack-frame-ref stack esp 0)))
 	(check-type next-ebp fixnum)
 	(assert (< esp next-ebp))
 	next-ebp))
-     (t (let ((next-ebp (stack-frame-ref stack esp 0)))
-	  (check-type next-ebp fixnum)
-	  (assert (< esp next-ebp))
-	  next-ebp)))))
+     (t (error "Undefined CASF for dit-frame ~S with EBP #x~X and ESP #x~X."
+	       dit-frame ebp esp)))))
 
 (define-primitive-function (default-interrupt-trampoline :symtab-property t) ()
   "Default first-stage/trampoline interrupt handler. Assumes the IF flag in EFLAGS
