@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct 17 21:50:42 2001
 ;;;;                
-;;;; $Id: read.lisp,v 1.3 2004/04/13 14:21:14 ffjeld Exp $
+;;;; $Id: read.lisp,v 1.4 2004/04/23 15:01:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -188,9 +188,7 @@ of string delimited by start and end."
 		      (setf string next-string
 			    end next-string-end))
 		    (setf i (1- element-end))
-		    (if (match-caller 'eval-time)
-			(time (push element list))
-		      (push element list)))))))))
+		    (push element list))))))))
     (simple-read-delimited-list delimiter next-string next-start next-end
 				:tail-delimiter tail-delimiter
 				:list list)))
