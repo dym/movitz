@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.2 2004/03/18 09:23:01 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.3 2004/03/30 09:12:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -56,7 +56,7 @@
       (word
        (memref context -6 (third slot) :lisp))
       (code-vector-word
-       (memref context -6 (third slot) :lisp-code-vector))
+       (%word-offset (memref context -6 (third slot) :lisp) -2))
       (lu32
        (memref context -6 (third slot) :unsigned-byte32)))))
 
