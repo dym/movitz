@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 21 22:14:08 2001
 ;;;;                
-;;;; $Id: io-port.lisp,v 1.5 2004/01/20 21:53:11 ffjeld Exp $
+;;;; $Id: io-port.lisp,v 1.6 2004/02/01 22:16:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -222,11 +222,40 @@ that reads from <io-base-form> plus some offset."
 		   io-read-loop
 		    (:cmpl :ecx (:esp))
 		    (:jbe 'end-io-read-loop)
-		    (:inl :dx :eax)
 		    (:addl 4 :ecx)
+		    (:inl :dx :eax)
 		    (:movl :eax (:ebx ,(+ offset -4) :ecx))
 		    (:jmp 'io-read-loop)
 		    (:popl :eax)	; increment :esp, and put a lispval in :eax.
+		   end-io-read-loop))))
+	    (:16-bit
+	     (assert (= 4 movitz:+movitz-fixnum-factor+))
+	     (if (and t (<= 1 count 20))
+		 `(with-inline-assembly-case ()
+		    (do-case (t :ebx)
+		      (:compile-two-forms (:edx :ebx) ,port ,object)
+		      (:andl ,(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		      (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+		      (:xorl :eax :eax)
+		      ,@(loop for i from start below end
+			    appending
+			      `((:inw :dx :ax)
+				(:movw :ax (:ebx ,(+ offset (* 2 i))))))))
+	       `(with-inline-assembly-case ()
+		  (do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
+		    (:compile-two-forms (:edx :ebx) ,port ,object)
+		    (:andl ,(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+		    ;; (:pushl ,(cl:* movitz::+movitz-fixnum-factor+ end)) ; keep end in (:esp)
+		    (:movl ,(cl:* 1 start) :ecx)
+		    (:xorl :eax :eax)
+		   io-read-loop
+		    (:cmpl ,end :ecx)
+		    (:ja 'end-io-read-loop)
+		    (:addl 1 :ecx)
+		    (:inw :dx :ax)
+		    (:movw :ax (:ebx ,(+ offset -2) (:ecx 2)))
+		    (:jmp 'io-read-loop)
 		   end-io-read-loop))))
 	    (t (error "~S byte-size ~S not implemented." (car form) byte-size)))))
        ((and (movitz:movitz-constantp offset env))
