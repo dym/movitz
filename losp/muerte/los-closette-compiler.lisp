@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.9 2004/02/10 00:43:43 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.10 2004/02/10 01:03:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1111,7 +1111,7 @@
 	    (generic-function-lambda-list gf) lambda-list
 	    (generic-function-methods gf) ()
 	    (generic-function-method-class gf) method-class
-	    (generic-function-method-combination gf) *the-standard-method-combination*)
+	    (generic-function-method-combination gf) (symbol-value '*the-standard-method-combination*))
       (finalize-generic-function gf)
       gf))
 
