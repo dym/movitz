@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.96 2004/09/21 13:06:20 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.97 2004/09/22 17:40:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1020,8 +1020,7 @@
 		     (:cld)
 		     (:store-lexical (:lexical-binding d0) :eax :type fixnum)
 		     (:store-lexical (:lexical-binding d1) :edx :type fixnum)
-		     (:compile-form (:result-mode :eax)
-				    (malloc-non-pointer-words 3))
+		     (:compile-form (:result-mode :eax) (%make-bignum 2))
 		     (:movl ,(dpb (* 2 movitz:+movitz-fixnum-factor+)
 				  (byte 16 16) (movitz:tag :bignum 0))
 			    (:eax ,movitz:+other-type-offset+))
