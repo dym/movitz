@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.28 2004/07/15 21:06:33 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.29 2004/07/17 01:56:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,6 +19,7 @@
 (in-package muerte.init)
 
 (defvar *gc-quiet* nil)
+(defvar *gc-running* nil)
     
 (defun make-space (location size)
   "Make a space vector at a fixed location."
@@ -246,15 +247,19 @@ duo-space where each space is KB-SIZE kilobytes."
   (setf (exception-handler 113)
     (lambda (exception interrupt-frame)
       (declare (ignore exception interrupt-frame))
-      (unless *gc-quiet*
-	(format t "~&;; GC.. "))
-      (stop-and-copy)
-      (loop				; This is  a nice opportunity to poll the keyboard..
-	(case (muerte.x86-pc.keyboard:poll-char)
-	  ((#\esc)
-	   (break "Los0 GC keyboard poll."))
-	  ((nil)
-	   (return))))))
+      (when *gc-running*
+	(let ((muerte::*error-no-condition-for-debugger* t))
+	  (error "Recursive GC triggered.")))
+      (let ((*gc-running t))
+	(unless *gc-quiet*
+	  (format t "~&;; GC.. "))
+	(stop-and-copy)
+	(loop				; This is  a nice opportunity to poll the keyboard..
+	  (case (muerte.x86-pc.keyboard:poll-char)
+	    ((#\esc)
+	     (break "Los0 GC keyboard poll."))
+	    ((nil)
+	     (return)))))))
   (let* ((actual-duo-space (or duo-space
 			       (allocate-duo-space (* kb-size #x100))))
 	 (last-location (object-location (cons 1 2))))
@@ -351,15 +356,14 @@ duo-space where each space is KB-SIZE kilobytes."
 		   (cond
 		    ((not (object-in-space-p oldspace x))
 		     x)
-		    #+ignore
-		    ((typep x 'muerte::tag6)
-		     (let ((fwi (position (object-location x) *x* :test #'eq)))
-		       (if fwi
-			   (muerte::%word-offset (aref *x* (1+ fwi)) 6)
-			 (let ((fw (shallow-copy x)))
-			   (vector-push (object-location x) *x*)
-			   (vector-push (object-location fw) *x*)
-			   fw))))
+		    #+ignore ((typep x 'muerte::bignum)
+			      (let ((fwi (position (object-location x) *x* :test #'eq)))
+				(if fwi
+				    (muerte::%word-offset (aref *x* (1+ fwi)) 6)
+				  (let ((fw (shallow-copy x)))
+				    (vector-push (object-location x) *x*)
+				    (vector-push (object-location fw) *x*)
+				    fw))))
 		    (t (let ((forwarded-x (memref (object-location x) 0 0 :lisp)))
 			 (if (object-in-space-p newspace forwarded-x)
 			     (progn
@@ -385,16 +389,15 @@ duo-space where each space is KB-SIZE kilobytes."
 			       (+ newspace-location (space-fresh-pointer newspace)))
 	       (setf scan-pointer fresh-pointer))
 
-	#+ignore
-	(dotimes (i (truncate (length *x*) 2))
-	  (let ((x (muerte::%word-offset (aref *x* (* i 2)) 6))
-		(y (muerte::%word-offset (aref *x* (1+ (* i 2))) 6)))
-	    (assert (and (object-in-space-p newspace y)
-			 (object-in-space-p oldspace x)
-			 (or (typep x 'muerte::std-instance)
-			     (equalp x y)))
-		()
-	      "Fail: i=~D, x: ~S/~Z, y: ~S/~Z, o: ~Z, n: ~Z" i x x y y oldspace newspace)))
+	#+ignore (dotimes (i (truncate (length *x*) 2))
+		   (let ((x (muerte::%word-offset (aref *x* (* i 2)) 6))
+			 (y (muerte::%word-offset (aref *x* (1+ (* i 2))) 6)))
+		     (assert (and (object-in-space-p newspace y)
+				  (object-in-space-p oldspace x)
+				  (or (typep x 'muerte::std-instance)
+				      (equalp x y)))
+			 ()
+		       "Fail: i=~D, x: ~S/~Z, y: ~S/~Z, o: ~Z, n: ~Z" i x x y y oldspace newspace)))
 
 	;; GC completed, oldspace is evacuated.
 	(unless *gc-quiet*
