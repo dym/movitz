@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.82 2004/07/21 22:30:51 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.83 2004/07/27 13:47:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -681,6 +681,14 @@ Preserve EAX and EBX."
 		 (- x (- y)))
 		(((integer * -1) (integer * -1))
 		 (%negatef (+ (- x) (- y)) x y))
+		((ratio t)
+		 (make-rational (+ (* (ratio-numerator x) (denominator y))
+				   (* (numerator y) (ratio-denominator x)))
+				(* (ratio-denominator x) (denominator y))))
+		((integer ratio)
+		 (make-rational (+ (* x (denominator y))
+				   (* (ratio-numerator y) x))
+				(denominator y)))
 		)))
 	(do-it)))
    (t (&rest terms)
@@ -1165,6 +1173,15 @@ Preserve EAX and EBX."
 			(i 0 (+ i 29)))
 		       ((>= i length) r)
 		     (incf r (ash (* x (ldb (byte 29 i) y)) i)))))
+		((ratio ratio)
+		 (make-rational (* (ratio-numerator x) (ratio-numerator y))
+				(* (ratio-denominator x) (ratio-denominator x))))
+		((ratio t)
+		 (make-rational (* y (ratio-numerator x))
+				(ratio-denominator x)))
+		((t ratio)
+		 (make-rational (* x (ratio-numerator y))
+				(ratio-denominator y)))
 		((t (integer * -1))
 		 (%negatef (* x (- y)) x y))
 		(((integer * -1) t)
