@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.15 2004/07/12 11:10:40 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.16 2004/07/15 00:28:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -58,8 +58,7 @@
 (defun pointer-in-range (x)
   (with-inline-assembly (:returns :boolean-cf=1)
     (:compile-form (:result-mode :eax) x)
-    ;; (:subl #x100000 :eax)
-    (:cmpl #x1000000 :eax)))
+    (:cmpl #x10000000 :eax)))
 
     
 (defun code-vector-offset (code-vector address)
