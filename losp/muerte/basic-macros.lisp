@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.36 2004/08/01 00:37:26 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.37 2004/08/14 17:53:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -159,15 +159,18 @@
 	   (push ',name (movitz::image-compile-time-variables movitz::*image*))))
        (defvar ,name 'uninitialized-compile-time-variable))))
 
-(defmacro let* (var-list &body body)
-  (labels ((expand (rest-vars body)
-	     (if (null rest-vars)
-		 body
-	       `((let (,(car rest-vars))
-		   ,@(expand (cdr rest-vars) body))))))
-    (if (endp var-list)
-	`(let () ,@body)
-      (car (expand var-list body)))))
+(defmacro let* (var-list &body declarations-and-body)
+  (multiple-value-bind (body declarations)
+      (movitz::parse-declarations-and-body declarations-and-body 'cl:declare)
+    (labels ((expand (rest-vars body)
+	       (if (null rest-vars)
+		   body
+		 `((let (,(car rest-vars))
+		     (declare ,@declarations)
+		     ,@(expand (cdr rest-vars) body))))))
+      (if (endp var-list)
+	  `(let () ,@body)
+	(car (expand var-list body))))))
 
 (defmacro or (&rest forms)
   (cond
