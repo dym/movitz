@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.75 2004/07/13 22:41:06 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.76 2004/07/16 00:03:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2347,6 +2347,9 @@ falling below the label."
    (shadowing-variable
     :initarg :shadowing-variable
     :reader shadowing-variable)))
+
+(defmethod binding-store-type ((binding dynamic-binding))
+  (multiple-value-list (type-specifier-encode t)))
 
 (defun stack-frame-offset (stack-frame-position)
   (* -4 (1+ stack-frame-position)))
