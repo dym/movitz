@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.34 2004/06/02 10:39:48 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.35 2004/06/04 13:35:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -457,13 +457,11 @@
 		     :restart-primitive-function 1 ; data = slot-offset of pf.
 		     :restart-jumper 2)	; data = ESI-relative jumper number.
 		    ((:bits) :reset-status-p 8
-			     :eax 9
-			     :ebx 10
-			     :ecx 11
-			     :edx 12)
+			     :esp 9
+			     :ebp 10)
 		    ((:numeric :data 16 16))))
     :initform '(:inactive))
-   (atomically-registers
+   (atomically-esp
     :binary-type lu32
     :initform 0)
    (bochs-flags

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.15 2004/06/02 10:39:54 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.16 2004/06/04 13:35:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -54,6 +54,13 @@
 (defun space-cons-pointer ()
   (aref (%run-time-context-slot 'nursery-space) 0))
 
+(define-primitive-function los0-cons-pointer ()
+  ""
+  (with-inline-assembly (:returns :multiple-values)
+    (:locally (:movl (:edi (:edi-offset nursery-space)) :eax))
+    (:movl (:edx 2) :ecx)))
+    
+    
 (define-primitive-function los0-fast-cons ()
   "Allocate a cons cell from nursery-space."
   (macrolet
@@ -84,6 +91,7 @@
 	    (:ret))))
     (do-it)))
 
+
 (define-primitive-function los0-box-u32-ecx ()
   "Make u32 in ECX into a fixnum or bignum."
   (macrolet
@@ -95,7 +103,7 @@
 	    (:ret)
 	   not-fixnum
 	   retry-cons
-	    (:locally (:movl ,(movitz::atomically-status-simple-pf 'fast-cons t)
+	    (:locally (:movl ,(movitz::atomically-status-simple-pf 'box-u32-ecx t)
 			     (:edi (:edi-offset atomically-status))))
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :eax)
@@ -125,7 +133,7 @@
 	   retry
 	    (:compile-form (:result-mode :ebx) clumps)
 	    (:declare-label-set retry-jumper (retry))
-	    (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t)
+	    (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
 			       'retry-jumper)
 			     (:edi (:edi-offset atomically-status))))
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
@@ -133,11 +141,7 @@
 	    (:leal ((:ebx 2) :ecx) :eax)
 	    (:cmpl #x3fff4 :eax)
 	    (:jge '(:sub-program ()
-		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-			       (:edi (:edi-offset atomically-status))))
-		    (:compile-form (:result-mode :ignore)
-		     (stop-and-copy))
-		    (:jmp 'retry)))
+		    (:int 113)))
 	    (:movl :eax (:edx 2))
 	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 			     (:edi (:edi-offset atomically-status))))
@@ -168,11 +172,7 @@
 	    (:leal ((:ebx 2) :ecx) :eax)
 	    (:cmpl #x3fff4 :eax)
 	    (:jge '(:sub-program ()
-		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-			       (:edi (:edi-offset atomically-status))))
-		    (:compile-form (:result-mode :ignore)
-		     (stop-and-copy))
-		    (:jmp 'retry)))
+		    (:int 113)))
 	    (:movl :eax (:edx 2))
 	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 			     (:edi (:edi-offset atomically-status))))
@@ -180,11 +180,6 @@
 	    (:movl #.(movitz:tag :infant-object) (:edx :ecx 6))
 	    (:leal (:edx :ecx 8) :eax))))
     (do-it)))
-
-(defun los0-handle-out-of-memory (exception interrupt-frame)
-  (declare (ignore exception interrupt-frame))
-  (format t "~&;; Handling out-of-memory exception..")
-  (stop-and-copy))
 
 (defun install-los0-consing ()
   (setf (%run-time-context-slot 'nursery-space)
