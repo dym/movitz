@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.16 2005/01/17 10:54:38 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.17 2005/01/17 11:02:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -253,13 +253,15 @@
 		      (let ((name (symbol-name symbol)))
 			(if (and (plusp (length name))
 				 (every (lambda (c)
-					  (and (or (upper-case-p c)
-						   (member c '(#\+ #\- #\% #\$ #\* #\@ #\. #\&
-							       #\/ #\< #\> #\=))
-						   (digit-char-p c))
-					       (not (or (digit-char-p c *read-base*)
-							(member c '(#\.))))))
-					name))
+					  (or (upper-case-p c)
+					      (member c '(#\+ #\- #\% #\$ #\* #\@ #\. #\&
+							  #\/ #\< #\> #\=))
+					      (digit-char-p c)))
+					name)
+				 (not (every (lambda (c)
+					       (or (digit-char-p c *read-base*)
+						   (member c '(#\.))))
+					     name)))
 			    (write-string name stream)
 			  (stream-write-escaped-string stream name #\|)))))
 	       (cond
