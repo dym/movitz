@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.6 2004/04/07 00:17:19 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.7 2004/04/16 23:34:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -239,17 +239,70 @@
 		     (when deriver-function
 		       `(typep ,object ',(funcall deriver-function)))))))
 	     ((consp type)
-	      (case (car type)
-		((not)
-		 (assert (and (cadr type) (not (cddr type))))
-		 `(not (typep ,object ',(cadr type))))
-		((or and)
-		 `(let ((typep-object ,object))
-		    (,(car type)
-		     ,@(loop for subtype in (cdr type)
-			   collect `(typep ,object ',subtype)))))
-		((not and or)
-		 (warn "typep compilermacro: ~S" type)))))
+	      (let ((deriver-function (gethash (car type) *compiler-derived-typespecs*)))
+		(if deriver-function
+		    `(typep ,object ',(apply deriver-function (cdr type)))
+		  (case (car type)
+		    ((integer)
+		     (destructuring-bind (&optional (lower-limit '*) (upper-limit '*))
+			 (cdr type)
+		       (let* ((min movitz:+movitz-most-negative-fixnum+)
+			      (max movitz:+movitz-most-positive-fixnum+)
+			      (lower-limit (if (eq lower-limit '*) min lower-limit))
+			      (upper-limit (if (eq upper-limit '*) max upper-limit)))
+			 (assert (<= lower-limit upper-limit) ()
+			   "The lower limit of an integer type must be smaller than the upper limit.")
+			 (cond
+			  ((and (= lower-limit min) (= upper-limit max))
+			   `(typep ,object 'integer))
+			  ((= lower-limit upper-limit)
+			   `(eql ,object ,lower-limit))
+			  ((and (= lower-limit 0)
+				(= 1 (logcount (1+ upper-limit))))
+			   `(with-inline-assembly (:returns :boolean-zf=1)
+			      (:compile-form (:result-mode :eax) ,object)
+			      (:testl ,(logxor #xffffffff
+					       (* movitz:+movitz-fixnum-factor+ upper-limit))
+				      :eax)))
+			  ((= 1 (logcount (1+ (- upper-limit lower-limit))))
+			   `(with-inline-assembly (:returns :boolean-zf=1)
+			      (:compile-form (:result-mode :eax) ,object)
+			      (:leal (:eax ,(* movitz:+movitz-fixnum-factor+
+					       (- lower-limit)))
+				     :ecx)
+			      (:testl ,(logxor #xffffffff
+					       (* movitz:+movitz-fixnum-factor+
+						  (- upper-limit lower-limit)))
+				      :ecx)))
+			  ((= lower-limit 0)
+			   `(with-inline-assembly-case ()
+			      (do-case (t :boolean-cf=1 :labels (not-fixnum))
+				(:compile-form (:result-mode :eax) ,object)
+				(:testb ,movitz:+movitz-fixnum-zmask+ :al) ; CF<=0
+				(:jnz 'not-fixnum)
+				(:cmpl ,(* (1+ upper-limit) movitz:+movitz-fixnum-factor+)
+				       :eax)
+			       not-fixnum)))
+			  (t `(with-inline-assembly-case ()
+				(do-case (t :boolean-cf=1 :labels (not-fixnum))
+				  (:compile-form (:result-mode :eax) ,object)
+				  (:testb ,movitz:+movitz-fixnum-zmask+ :al) ; CF<=0
+				  (:jnz 'not-fixnum)
+				  (:subl ,(* lower-limit movitz:+movitz-fixnum-factor+) :eax)
+				  (:cmpl ,(* (- upper-limit lower-limit -1)
+					     movitz:+movitz-fixnum-factor+)
+					 :eax)
+				 not-fixnum)))))))
+		    ((not)
+		     (assert (and (cadr type) (not (cddr type))))
+		     `(not (typep ,object ',(cadr type))))
+		    ((or and)
+		     `(let ((typep-object ,object))
+			(,(car type)
+			 ,@(loop for subtype in (cdr type)
+			       collect `(typep ,object ',subtype)))))
+		    ((not and or)
+		     (warn "typep compilermacro: ~S" type)))))))
 	    form)))))
 
 (defmacro define-typep (tname lambda &body body)
