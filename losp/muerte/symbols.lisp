@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.20 2004/10/11 13:53:28 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.21 2004/10/12 14:45:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -211,19 +211,16 @@
   (etypecase symbol
     (null #.(bt:enum-value 'movitz::movitz-symbol-flags '(:constant-variable)))
     (symbol
-     (with-inline-assembly (:returns :untagged-fixnum-eax)
-       (:compile-form (:result-mode :eax) symbol)
-       (:movzxw (:eax #.(bt:slot-offset 'movitz::movitz-symbol 'movitz::flags)) :eax)))))
+     (memref symbol (movitz-type-slot-offset 'movitz-symbol 'flags)
+	     :type :unsigned-byte16))))
 
 (defun (setf symbol-flags) (flags symbol)
   (etypecase symbol
     (null (error "Can't set NIL's flags."))
     (symbol
-     (with-inline-assembly (:returns :nothing)
-       (:compile-form (:result-mode :ebx) symbol)
-       (:compile-form (:result-mode :untagged-fixnum-eax) flags)
-       (:movw :ax (:ebx #.(bt:slot-offset 'movitz::movitz-symbol 'movitz::flags))))
-     flags)))
+     (setf (memref symbol (movitz-type-slot-offset 'movitz-symbol 'flags)
+		   :type :unsigned-byte16)
+       flags))))
 
 (defun symbol-special-variable-p (symbol)
   (logbitp 3 (symbol-flags symbol)))
