@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.24 2004/07/08 18:54:01 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.25 2004/07/08 21:50:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -260,15 +260,20 @@
 		    `(typep ,object ',(apply deriver-function (cdr type)))
 		  (case (car type)
 		    ((simple-array)
-		     (let ((et (cadr type)))
-		       (cond
-			((movitz:movitz-subtypep et '(unsigned-byte 8))
-			 (make-basic-vector-typep :u8))
-			((movitz:movitz-subtypep et '(unsigned-byte 32))
-			 (make-basic-vector-typep :u32))
-			((movitz:movitz-subtypep et 'character)
-			 (make-basic-vector-typep :character))
-			(t (make-basic-vector-typep :any-t)))))
+		     (let ((et (second type))
+			   (dim (if (listp (third type))
+				    (length (third type))
+				  (or (third type) '*))))
+		       (if (not (eql dim 1))
+			   form
+			 (cond
+			  ((movitz:movitz-subtypep et '(unsigned-byte 8))
+			   (make-basic-vector-typep :u8))
+			  ((movitz:movitz-subtypep et '(unsigned-byte 32))
+			   (make-basic-vector-typep :u32))
+			  ((movitz:movitz-subtypep et 'character)
+			   (make-basic-vector-typep :character))
+			  (t (make-basic-vector-typep :any-t))))))
 		    ((integer)
 		     (destructuring-bind (&optional (lower-limit '*) (upper-limit '*))
 			 (cdr type)
