@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.13 2004/03/30 19:36:15 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.14 2004/03/30 21:33:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -704,6 +704,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			  `((:xorl :ebx :ebx)
 			    (:globally (:call (:edi (:edi-offset dynamic-locate-catch-tag))))
 			    (:jnc '(:sub-program () (:int 108)))
+			    (:locally (:bound (:edi (:edi-offset stack-bottom)) :eax))
 			    (:movl :eax :esp)
 			    (:movl (:esp) :ebp)
 			    (:movl (:ebp -4) :esi)
