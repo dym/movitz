@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.52 2004/11/12 14:52:16 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.53 2004/11/13 16:10:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -160,21 +160,6 @@ This must be done without affecting 'current values'! (i.e. eax, ebx, ecx, or CF
 and also EDX must be preserved."
   (with-inline-assembly (:returns :nothing)
     ;; Default binding strategy is naive deep binding, so this is a NOP.
-    (:ret)))
-    
-(define-primitive-function dynamic-unwind ()
-  "Unwind ECX dynamic environment slots. Scratch EAX."
-  (with-inline-assembly (:returns :nothing)
-    (:jecxz 'done)
-   loop
-    (:locally (:movl (:edi (:edi-offset dynamic-env)) :eax))
-    (:testl :eax :eax)
-    (:jz '(:sub-program () (:int 255)))	; end of dynamic environment???
-    (:movl (:eax 12) :eax)		; get parent
-    (:locally (:movl :eax (:edi (:edi-offset dynamic-env))))
-    (:decl :ecx)
-    (:jnz 'loop)
-   done
     (:ret)))
     
 (define-primitive-function dynamic-load (symbol)

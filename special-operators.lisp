@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.43 2004/11/12 14:51:44 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.44 2004/11/13 16:10:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -993,16 +993,6 @@ on the current result."
 				cloaked-code
 				;; pop the result back
 				`((:popl ,protected-register)))))))))))))
-
-(define-special-operator muerte::dynamic-unwind (&form form)
-  (let ((unwind-count (second form)))
-    (check-type unwind-count (integer 0 *))
-    (if (zerop unwind-count)
-	(compiler-values ())
-      (compiler-values ()
-	:returns :nothing
-	:code (append (make-immediate-move unwind-count :ecx)
-		      `((:globally (:call (:edi (:edi-offset dynamic-unwind))))))))))
 
 (define-special-operator muerte::with-local-env (&all all &form form)
   (destructuring-bind ((local-env) sub-form)
