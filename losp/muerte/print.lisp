@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.15 2004/10/11 13:53:09 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.16 2005/01/17 10:54:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -32,6 +32,7 @@
 (defvar *print-level* 3)
 (defvar *print-pretty* t)
 (defvar *print-circle* nil)
+(defvar *print-case* :upcase)
 
 (defvar *print-safely* nil)
 
@@ -252,15 +253,13 @@
 		      (let ((name (symbol-name symbol)))
 			(if (and (plusp (length name))
 				 (every (lambda (c)
-					  (or (upper-case-p c)
-					      (member c '(#\+ #\- #\% #\$ #\* #\@ #\. #\&
-							  #\/ #\< #\> #\=))
-					      (digit-char-p c)))
-					name)
-				 (not (every (lambda (c)
-					       (or (digit-char-p c *read-base*)
-						   (member c '(#\.))))
-					     name)))
+					  (and (or (upper-case-p c)
+						   (member c '(#\+ #\- #\% #\$ #\* #\@ #\. #\&
+							       #\/ #\< #\> #\=))
+						   (digit-char-p c))
+					       (not (or (digit-char-p c *read-base*)
+							(member c '(#\.))))))
+					name))
 			    (write-string name stream)
 			  (stream-write-escaped-string stream name #\|)))))
 	       (cond
