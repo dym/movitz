@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:16:00 2002
 ;;;;                
-;;;; $Id: ne2k.lisp,v 1.7 2004/02/02 21:59:27 ffjeld Exp $
+;;;; $Id: ne2k.lisp,v 1.8 2004/02/22 15:19:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -118,7 +118,7 @@
 	  (asic-io (asic-io-base device))
 	  (bnry (cached-bnry device))
 	  (packet (or packet (make-array +max-ethernet-frame-size+ :element-type 'muerte::u8))))
-      (check-type packet 'vector-u8)
+      (check-type packet vector-u8)
       (with-dp8390 (dp8390 (io-base device))
 	(multiple-value-bind (packet-status next-bnry packet-length)
 	    (with-dp8390-dma (dp8390 remote-read 4 (* 256 bnry))
