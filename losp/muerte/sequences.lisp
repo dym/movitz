@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.15 2004/07/11 22:47:10 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.16 2004/08/12 17:01:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,6 +18,9 @@
 (provide :muerte/sequences)
   
 (in-package muerte)
+
+(deftype index ()
+  '(integer 0 #x1ffffffe))
 
 (defun sequencep (x)
   (or (typep x 'vector)
@@ -691,6 +694,7 @@
        (with-subvector-accessor (sequence-ref sequence start end)
 	 (do ((i start (1+ i)))
 	     ((>= i end))
+	   (declare (index i))
 	   (setf (sequence-ref i) item))))))
   sequence)
 
@@ -712,6 +716,7 @@
 		 (i (+ start1 length -1) (1- i))
 		 (j (+ start2 length -1) (1- j)))
 	       ((< i start1) sequence-1)
+	     (declare (index i j length))
 	     (setf (sequence-1-ref i)
 	       (sequence-1-ref j)))))
 	(list
