@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.19 2004/05/24 19:34:34 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.20 2004/06/07 22:16:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -516,23 +516,20 @@ Returns list in EAX and preserves numargs in ECX."
     (:int 107)))			; not implemented by default!
 
 (define-primitive-function unbox-u32 ()
-  "Coerce EAX into a u32 in ECX, or signal type error.
-Preserve EAX, EBX, and EDX."
+  "Load (ldb (byte 32 0) EAX) into ECX."
   (macrolet
       ((do-it ()
 	 `(with-inline-assembly (:returns :multiple-values)
-	    (:testl ,(logior #x80000000 movitz:+movitz-fixnum-zmask+)
-		    :eax)
+	    (:testb 3 :al)
 	    (:jnz 'not-fixnum)
 	    (:movl :eax :ecx)
-	    (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	    (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
 	    (:ret)
 	   not-fixnum
 	    (:leal (:eax ,(- (movitz:tag :other))) :ecx)
 	    (:testb 7 :cl)
 	    (:jnz 'fail)
-	    (:cmpl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0))
-		   (:eax ,movitz:+other-type-offset+))
+	    (:cmpb ,(movitz:tag :bignum) (:eax ,movitz:+other-type-offset+))
 	    (:jne 'fail)
 	    (:movl (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
 		   :ecx)
