@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.9 2004/02/05 14:46:13 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.10 2004/02/09 23:41:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1005,16 +1005,15 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 				       :name package-name
 				       :shadowing-symbols-list (package-shadowing-symbols lisp-package)
 				       :external-symbols (make-hash-table :test #'equal)
-				       :internal-symbols (make-hash-table :test #'equal))))
+				       :internal-symbols (make-hash-table :test #'equal)
+				       :use-list (mapcar #'(lambda (up) 
+							     (ensure-package (movitz-package-name (package-name up)) up))
+							 (package-use-list lisp-package)))))
 		       (setf (gethash package-name packages-hash) p)
-		       (setf (slot-value p 'muerte::use-list)
-			 (mapcar #'(lambda (up) 
-				     (ensure-package (movitz-package-name (package-name up)) up))
-				 (package-use-list lisp-package)))
 		       p)))))
-      (let ((cl-package (ensure-package (symbol-name :common-lisp)
-					(find-package :muerte.common-lisp))))
-	(setf (gethash "NIL" (slot-value cl-package 'muerte::external-symbols))
+      (let ((movitz-cl-package (ensure-package (symbol-name :common-lisp)
+					       (find-package :muerte.common-lisp))))
+	(setf (gethash "NIL" (funcall 'muerte:package-object-external-symbols movitz-cl-package))
 	  nil))
       (loop for symbol being the hash-key of (image-oblist *image*)
 	  as lisp-package = (symbol-package symbol)
@@ -1027,12 +1026,12 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		 (ecase status
 		   (:internal
 		    (setf (gethash (symbol-name symbol)
-				   (slot-value movitz-package 'muerte::internal-symbols))
+				   (funcall 'muerte:package-object-internal-symbols movitz-package))
 		      symbol))
 		   (:external
 		    ;; (warn "putting external ~S in ~S" symbol package-name)
 		    (setf (gethash (symbol-name symbol)
-				   (slot-value movitz-package 'muerte::external-symbols))
+				   (funcall 'muerte:package-object-external-symbols movitz-package))
 		      symbol))
 		   (:inherited
 		    (warn "inherited symbol: ~S" symbol))))))
