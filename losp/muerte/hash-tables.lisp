@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb 19 19:09:05 2001
 ;;;;                
-;;;; $Id: hash-tables.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: hash-tables.lisp,v 1.3 2004/06/29 23:19:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -58,7 +58,7 @@
 
 (defun hash-table-iterator (bucket index)
   (when index
-    (do ((length (vector-dimension bucket)))
+    (do ((length (array-dimension bucket 0)))
 	((>= index length) nil)
       (unless (eq (svref bucket index)
 		  '#.movitz::+undefined-hash-key+)
@@ -127,7 +127,7 @@
 (defun gethash (key hash-table &optional default)
   (let* ((test (hash-table-test hash-table))
 	 (bucket (hash-table-bucket hash-table))
-	 (bucket-length (vector-dimension bucket))
+	 (bucket-length (length bucket))
 	 (start-i2 (rem (ash (funcall (hash-table-sxhash hash-table) key) 1) bucket-length))
 	 (i2 start-i2))
     (do () (nil)
@@ -144,7 +144,7 @@
   "Assuming hash-tables keys are lists whose elements compare by EQ,
 look up key0 as if it was in a singleton list (key0)."
   (let* ((bucket (hash-table-bucket hash-table))
-	 (bucket-length (vector-dimension bucket))
+	 (bucket-length (array-dimension bucket 0))
 	 (start-i2 (rem (ash (sxhash-eq key0) 1) bucket-length))
 	 (i2 start-i2))
     (do () (nil)
@@ -161,7 +161,7 @@ look up key0 as if it was in a singleton list (key0)."
   "Assuming hash-tables keys are lists whose elements compare by EQ,
 look up key0 and key1 as if they were in a doubleton list (key0 key1)."
   (let* ((bucket (hash-table-bucket hash-table))
-	 (bucket-length (vector-dimension bucket))
+	 (bucket-length (array-dimension bucket 0))
 	 (start-i2 (rem (ash (logxor (sxhash-eq key0) (sxhash-eq key1)) 1)
 			bucket-length))
 	 (i2 start-i2))
@@ -204,7 +204,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 	       (svref%unsafe bucket index2))
 	   (values default nil))
 	(when ;; (string= key-string (svref bucket index2) :start1 start :end1 end))
-	    (let* ((bs (svref%unsafe bucket index2))
+	    (let* ((bs (svref bucket index2))
 		   (bs-length (length bs)))
 	      (and (= bs-length (- end start))
 		   (do ((bs-index 0 (1+ bs-index))
