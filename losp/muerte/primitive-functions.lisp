@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.5 2004/03/18 09:21:17 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.6 2004/03/29 01:09:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -577,22 +577,12 @@ Returns list in EAX and preserves numargs in ECX."
      (movitz-accessor object movitz-std-instance class))
     (standard-gf-instance
      (movitz-accessor object movitz-funobj-standard-gf standard-gf-class))
-    (null
-     (find-class 'null))
-    (cons
-     (find-class 'cons))
-    (symbol
-     (find-class 'symbol))
-    (fixnum
-     (find-class 'fixnum))
+    (string
+     (find-class 'string))
     (vector
      (find-class 'vector))
     (compiled-function
      (find-class 'function))
-;;;    (hash-table
-;;;     (find-class 'hash-table))
-;;;    (package
-;;;     (find-class 'package))
     (structure-object
      (find-class (structure-object-name object)))
     (character
@@ -601,6 +591,14 @@ Returns list in EAX and preserves numargs in ECX."
      (find-class 'basic-restart))
     (run-time-context
      (find-class 'run-time-context))
+    (null
+     (find-class 'null))
+    (cons
+     (find-class 'cons))
+    (symbol
+     (find-class 'symbol))
+    (fixnum
+     (find-class 'fixnum))
     (tag6
      (error "Don't know the class of ~Z with other-type #x~X."
 	    object (with-inline-assembly (:returns :untagged-fixnum-ecx)
