@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.72 2004/10/21 20:40:32 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.73 2004/11/02 15:53:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -430,28 +430,31 @@
    (segment-descriptor-global-data	; 2: true flat data segment
     :binary-type segment-descriptor
     :initform (make-segment-descriptor :base 0 :limit #xfffff ; data segment
-				       :type 2 :dpl 0
+				       :type 2 :dpl 3
 				       :flags '(s p d/b g)))
    (segment-descriptor-shifted-code	; 3: 1 MB shifted flat code segment
     :binary-type segment-descriptor
-    :initform (make-segment-descriptor :base (image-start-address *image*)
+    :initform (make-segment-descriptor :base (image-cs-segment-base *image*)
 				       :limit #xfff00 :type 10 :dpl 0
 				       :flags '(s p d/b g)))
    (segment-descriptor-shifted-data	; 4: 1 MB shifted flat data segment
     :binary-type segment-descriptor
-    :initform (make-segment-descriptor :base (image-start-address *image*)
+    :initform (make-segment-descriptor :base (image-ds-segment-base *image*)
 				       :limit #xfff00 ; data segment
-				       :type 2 :dpl 0
+				       :type 2 :dpl 3
 				       :flags '(s p d/b g)))
    (segment-descriptor-thread-context	; 5: same as normal shifted-data for initial context.
     :binary-type segment-descriptor
-    :initform (make-segment-descriptor :base (image-start-address *image*)
+    :initform (make-segment-descriptor :base (image-ds-segment-base *image*)
 				       :limit #xfff00 ; data segment
 				       :type 2 :dpl 0
 				       :flags '(s p d/b g)))
-   (segment-descriptor-6
+   (segment-descriptor-stack		; 6: same as normal shifted-data, DPL=0
     :binary-type segment-descriptor
-    :initform (make-segment-descriptor))
+    :initform (make-segment-descriptor :base (image-ds-segment-base *image*)
+				       :limit #xfff00 ; data segment
+				       :type 2 :dpl 0
+				       :flags '(s p d/b g)))
    (segment-descriptor-7
     :binary-type segment-descriptor
     :initform (make-segment-descriptor))
@@ -520,9 +523,11 @@
 
 (defclass movitz-image ()
   ((ds-segment-base
+    :initarg :ds-segment-base
     :initform #x100000
     :accessor image-ds-segment-base)
    (cs-segment-base
+    :initarg :cs-segment-base
     :initform #x100000
     :accessor image-cs-segment-base)))
 
@@ -776,18 +781,21 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	     x)
     y))
 
-(defun make-movitz-image (start-address)
-  (let ((*image* (make-instance 'symbolic-image
-		   :nil-object (make-movitz-nil)
-		   :start-address start-address
-		   :movitz-features '(:movitz)
-		   :function-code-sizes
-		   (if (boundp '*image*)
-		       (copy-hash-table (function-code-sizes *image*))
-		     (make-hash-table :test #'equal)))))
+(defun make-movitz-image (&rest init-args &key start-address &allow-other-keys)
+  (let ((*image* (apply #'make-instance 'symbolic-image
+			:nil-object (make-movitz-nil)
+			:start-address start-address
+			:movitz-features '(:movitz)
+			:function-code-sizes
+			(if (boundp '*image*)
+			    (copy-hash-table (function-code-sizes *image*))
+			  (make-hash-table :test #'equal))
+			init-args)))
     (setf (image-nil-word *image*)
       (+ 5 (- (slot-offset 'movitz-run-time-context 'null-symbol)
-	      (slot-offset 'movitz-run-time-context 'run-time-context-start))))
+	      (slot-offset 'movitz-run-time-context 'run-time-context-start))
+	 (- start-address
+	    (image-ds-segment-base *image*))))
     (format t "~&;; NIL value: #x~X.~%" (image-nil-word *image*))
     (assert (eq :null (extract-tag (image-nil-word *image*))) ()
       "NIL value #x~X has tag ~D, but it must be ~D."
@@ -817,9 +825,13 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
     (check-type code-vector movitz-basic-vector)
     code-vector))
 
-(defun create-image (&key (init-file *default-image-init-file*)
-			  (start-address #x100000))
-  (psetq *image* (let ((*image* (make-movitz-image start-address)))
+(defun create-image (&rest init-args
+		     &key (init-file *default-image-init-file*)
+			  ;; (start-address #x100000)
+			  &allow-other-keys)
+  (psetq *image* (let ((*image* (apply #'make-movitz-image
+				       :start-address #x100000
+				       init-args)))
 		   (when init-file
 		     (movitz-compile-file init-file))
 		   *image*)
@@ -1048,12 +1060,16 @@ this image will not be Multiboot compatible."
 	summing
 	  (let ((obj (image-memref image p nil)))
 	    (cond
-	     ((not obj) 0)
+	     ((not obj) 0)		; (+ 1mb (- 1mb)) vs. (+ 0 (- 1mb 1mb))
 	     (t (let ((new-pos (+ p file-start-position
-				  (- (image-start-address image)
-				     (image-ds-segment-base image)))))
-		  (incf pad-size (- new-pos (file-position stream)))
-		  (file-position stream new-pos))
+				  (- (image-ds-segment-base image)
+				     (image-start-address image)))))
+		  (let ((pad-delta (- new-pos (file-position stream))))
+		    (with-simple-restart (continue "Never mind.")
+		      (assert (<= 0 pad-delta 31) ()
+			"pad-delta ~S for ~S, p: ~S, new-pos: ~S" pad-delta obj p new-pos))
+		    (incf pad-size pad-delta))
+		  (assert (file-position stream new-pos)))
 		;; (warn "Dump at address #x~X, filepos #x~X: ~A" p (file-position stream) obj)
 		(let ((old-pos (file-position stream))
 		      (write-size (write-binary-record obj stream)))
@@ -1590,11 +1606,12 @@ this image will not be Multiboot compatible."
 			       (:movw ,(* 4 8) :cx)
 			       (:movw :cx :ds)
 			       (:movw :cx :es)
-			       (:movw :cx :ss)
 			       (:movw ,(* 2 8) :cx)
 			       (:movw :cx :gs) ; global context segment
 			       (:movw ,(* 5 8) :cx)
 			       (:movw :cx :fs) ; thread context segment
+			       (:movw ,(* 6 8) :cx)
+			       (:movw :cx :ss) ; stack segment
 
 			       (:movl ,(image-nil-word *image*) :edi)
 			       (:globally (:movl (:edi (:edi-offset stack-top)) :esp))
