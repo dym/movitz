@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.26 2004/02/14 15:44:32 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.27 2004/02/16 17:22:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -102,6 +102,7 @@ compile, using the host compiler, the code rather than just using eval.")
   (let* ((name (movitz-print (movitz-funobj-name funobj)))
 	 (hash-name name)
 	 (new-size (length (movitz-vector-symbolic-data (movitz-funobj-code-vector funobj)))))
+    (assert name)
     (let ((old-size (gethash hash-name (function-code-sizes *image*))))
       (cond
        ((not old-size))
@@ -441,11 +442,11 @@ Side-effects each binding's binding-store-type."
 		     (type-analysis-binding-types analysis))
 		   (setf (binding-store-type binding)
 		     (type-analysis-encoded-type analysis))
+		   #+ignore
 		   (when (or #+ignore (not (apply #'encoded-allp (type-analysis-encoded-type analysis)))
-			     (multiple-value-call #'encoded-subtypep
-			       (values-list (type-analysis-encoded-type analysis))
-			       (type-specifier-encode 'list)))
-		     #+ignore
+			     #+ignore (multiple-value-call #'encoded-subtypep
+					(values-list (type-analysis-encoded-type analysis))
+					(type-specifier-encode 'list)))
 		     (warn "Type: ~S => ~A (~A)"
 			   binding
 			   (apply #'encoded-type-decode (type-analysis-encoded-type analysis))
@@ -2067,7 +2068,13 @@ falling below the label."
 (defmethod print-object ((object binding) stream)
   (print-unreadable-object (object stream :type t :identity t)
     (when (slot-boundp object 'name)
-      (format stream "name: ~S" (binding-name object)))))
+      (format stream "name: ~S~@[->~S~]~@[ stype: ~A~]"
+	      (binding-name object)
+	      (unless (eq object (binding-target object))
+		(binding-name (binding-target object)))
+	      (when (binding-store-type object)
+		(apply #'encoded-type-decode
+		       (binding-store-type object)))))))
 
 (defclass constant-object-binding (binding)
   ((object
@@ -2304,10 +2311,12 @@ the sub-program options (&optional label) as secondary value."
 
 (defun instruction-is (instruction &optional operator)
   (and (listp instruction)
-       (let ((instruction (ignore-instruction-prefixes instruction)))
-	 (if operator
-	     (eq operator (car instruction))
-	   (car instruction)))))
+       (if (member (car instruction) '(:globally :locally))
+	   (instruction-is (second instruction) operator)
+	 (let ((instruction (ignore-instruction-prefixes instruction)))
+	   (if operator
+	       (eq operator (car instruction))
+	     (car instruction))))))
 
 (defun instruction-uncontinues-p (instruction)
   "Is it impossible for control to return after instruction?"
@@ -2395,33 +2404,58 @@ the sub-program options (&optional label) as secondary value."
 	      obj funobj (movitz-funobj-const-list funobj))
 	    pos)))))
 
+(defun compute-free-registers (pc distance funobj frame-map
+			       &key (free-registers '(:eax :ebx :edx)))
+  (loop with free-so-far = free-registers
+      repeat distance for i in pc
+      doing
+	(cond
+	 ((instruction-is i :load-lexical)
+	  (destructuring-bind (source dest
+			       &key shared-reference-p
+				    tmp-register
+				    protect-registers)
+	      (cdr i)
+	    (declare (ignore shared-reference-p
+			     tmp-register
+			     protect-registers))
+	    (unless (and (new-binding-located-p (binding-target source)
+						frame-map)
+			 (or (not (typep dest 'binding))
+			     (new-binding-located-p (binding-target dest)
+						    frame-map)))
+	      (return nil))
+	    (let ((exp (expand-extended-code i funobj frame-map)))
+	      (setf free-so-far
+		(remove-if (lambda (r)
+			     (tree-search exp r))
+			   free-so-far)))))
+	 (t (setf free-so-far nil)))
+      finally (return free-so-far)))
+
 (defun discover-variables (code function-env)
   "Iterate over CODE, and take note in the hash-table VAR-COUNTER which ~
-   variables CODE references that are lexically bound in ENV.
-   Also return the set of borrowed-bindings discovered."
+   variables CODE references that are lexically bound in ENV."
   (check-type function-env function-env)
   ;; (format t "~{~&~S~}" code)
-  (let ((var-counter (make-hash-table :test #'eq :size 40))
-	#+ignore (funobj (movitz-environment-funobj function-env)))
-    (labels ((take-note-of-binding (binding &optional storep)
-	       ;; (check-type binding lexical-binding)
-	       (if storep
-		   (setf (gethash binding var-counter)
-		     (or (gethash binding var-counter) 0))
-		 (incf (gethash binding var-counter 0)))
+  (let ((var-counter (make-hash-table :test #'eq :size 40)))
+    (labels ((take-note-of-binding (binding &optional storep init-pc)
+	       (let ((count-init-pc (or (gethash binding var-counter)
+					(setf (gethash binding var-counter)
+					  (cons 0 nil)))))
+		 (when init-pc
+		   (assert (not (cdr count-init-pc)))
+		   (setf (cdr count-init-pc) init-pc))
+		 (unless storep
+		   (incf (car count-init-pc))))
 	       (when (typep binding 'forwarding-binding)
 		 (take-note-of-binding (forwarding-binding-target binding))))
-	     (ensure-local-binding (binding)
-	       "If binding is borrowed from another funobj, we must replace it with a borrowing-binding."
-	       #+ignore (assert (eq funobj (binding-funobj binding)) ()
-			  "Not local: ~S" binding)
-	       binding)
 	     (do-discover-variables (code env)
-	       (loop for instruction in code
+	       (loop for pc on code as instruction in code
 		   when (listp instruction)
 		   do (flet ((lend-lexical (borrowing-binding dynamic-extent-p)
 			       (let ((lended-binding
-				      (ensure-local-binding (borrowed-binding-target borrowing-binding))))
+				      (borrowed-binding-target borrowing-binding)))
 				 (when (typep lended-binding 'forwarding-binding)
 				   (setf lended-binding
 				     (change-class lended-binding 'located-binding)))
@@ -2432,11 +2466,6 @@ the sub-program options (&optional label) as secondary value."
 				   (incf (getf p :lended-count 0))
 				   (setf (getf p :dynamic-extent-p) (and (getf p :dynamic-extent-p t)
 									 dynamic-extent-p))))))
-			(mapcar #'take-note-of-binding 
-				(find-read-bindings instruction))
-			(let ((store-binding (find-written-binding-and-type instruction)))
-			  (when store-binding
-			    (take-note-of-binding store-binding t)))
 			(case (instruction-is instruction)
 			  ((:local-function-init :load-lambda)
 			   (let ((function-binding (second instruction)))
@@ -2450,15 +2479,22 @@ the sub-program options (&optional label) as secondary value."
 			     (declare (ignore num-args))
 			     (etypecase binding
 			       (function-binding
-				(take-note-of-binding (ensure-local-binding binding)))
+				(take-note-of-binding binding))
 			       (funobj-binding))))
-			  (t (do-discover-variables (instruction-sub-program instruction) env)))))))
+			  (:init-lexvar
+			   (destructuring-bind (binding &key init-with-register init-with-type
+							     protect-registers protect-carry)
+			       (cdr instruction)
+			     (declare (ignore protect-registers protect-carry init-with-type))
+			     (when init-with-register
+			       (take-note-of-binding binding t pc))))
+			  (t (mapcar #'take-note-of-binding 
+				     (find-read-bindings instruction))
+			     (let ((store-binding (find-written-binding-and-type instruction)))
+			       (when store-binding
+				 (take-note-of-binding store-binding t)))
+			     (do-discover-variables (instruction-sub-program instruction) env)))))))
       (do-discover-variables code function-env))
-    ;; any hidden-rest is always used..
-    (loop for (nil . binding) in (movitz-environment-bindings function-env)
-	do (when (typep binding 'hidden-rest-function-argument)
-	     (incf (gethash binding var-counter 0))))
-    ;; (setf (movitz-funobj-borrowed-bindings funobj) borrowed-bindings)
     (values var-counter)))
 
 (defun assign-bindings (code function-env &optional (initial-stack-frame-position 1)
@@ -2474,73 +2510,147 @@ the sub-program options (&optional label) as secondary value."
   (let* ((env-roof-map nil)		; memoize result of assign-env-bindings
 	 (flat-program code)
 	 (var-counts (discover-variables flat-program function-env)))
-    (labels ((env-floor (env)
-	       (cond
-		((eq env function-env)
-		 initial-stack-frame-position)
-		((typep env 'function-env)
-		 (error "SEFEW: ~S" function-env))
-		;; The floor of this env is the roof of its extent-uplink.
-		(t (assign-env-bindings (movitz-environment-extent-uplink env)))))
-	     (assign-env-bindings (env)
-	       (or (getf env-roof-map env nil)
-		   (let ((stack-frame-position (env-floor env))
-			 (bindings-to-locate
-			  (loop for (variable . binding) in (movitz-environment-bindings env)
-			      unless (cond
-				      ((not (typep binding 'lexical-binding)))
-				      ((typep binding 'lambda-binding))
-				      ((not (plusp (gethash binding var-counts 0)))
-				       (prog1 t
-					 (unless (or (movitz-env-get variable 'ignore nil env nil)
-						     (movitz-env-get variable 'ignorable nil env nil))
-					   (warn "Unused variable: ~S" variable)))))
-			      collect binding)))
-		     (when (eq env function-env)
-		       (setf bindings-to-locate
-			 (sort bindings-to-locate #'<
-			       :key (lambda (binding)
-				      (etypecase binding
-					(edx-function-argument 3)
-					(positional-function-argument
-					 (* 2 (function-argument-argnum binding)))
-					(binding 100000)))))
-		       ;; (warn "btl: ~S" bindings-to-locate)
-		       (loop for binding in bindings-to-locate
-			   while (or (typep binding 'register-required-function-argument)
-				     (typep binding 'floating-required-function-argument)
-				     (and (typep binding 'positional-function-argument)
-					  (< (function-argument-argnum binding)
-					     2)))
-			   do (unless (new-binding-located-p binding frame-map)
-				(setf (new-binding-location binding frame-map)
-				  (post-incf stack-frame-position)))))
-		     (dolist (binding bindings-to-locate)
-		       (when (and (binding-lended-p binding)
-				  (not (typep binding 'borrowed-binding))
-				  (not (getf (binding-lended-p binding) :stack-cons-location)))
-			 ;; (warn "assigning lending-cons for ~W at ~D" binding stack-frame-position)
-			 (let ((cons-pos (post-incf stack-frame-position 2)))
-			   (setf (new-binding-location (cons :lended-cons binding) frame-map)
-			     (1+ cons-pos))
-			   (setf (getf (binding-lended-p binding) :stack-cons-location)
-			     cons-pos)))
-		       (unless (new-binding-located-p binding frame-map)
-			 (etypecase binding
-			   (constant-object-binding) ; no location needed.
-			   (forwarding-binding) ; will use the location of destination binding.
-			   (borrowed-binding) ; location is predetermined
-			   (fixed-required-function-argument
-			    (setf (new-binding-location binding frame-map) :argument-stack))
-			   (located-binding
-			    ;; don't think twice, it's alright..
-			    ;; (i.e. this is where we should be clever about assigning bindings
-			    ;;  to registers and whatnot..)
-			    ;; (warn "assign ~W to ~D" binding stack-frame-position)
+    (labels
+	((env-floor (env)
+	   (cond
+	    ((eq env function-env)
+	     initial-stack-frame-position)
+	    ((typep env 'function-env)
+	     (error "SEFEW: ~S" function-env))
+	    ;; The floor of this env is the roof of its extent-uplink.
+	    (t (assign-env-bindings (movitz-environment-extent-uplink env)))))
+	 (assign-env-bindings (env)
+	   (or (getf env-roof-map env nil)
+	       (let ((stack-frame-position (env-floor env))
+		     (bindings-to-locate
+		      (loop for (variable . binding) in (movitz-environment-bindings env)
+			  unless (cond
+				  ((not (typep binding 'lexical-binding)))
+				  ((typep binding 'lambda-binding))
+				  ((not (plusp (or (car (gethash binding var-counts)) 0)))
+				   (prog1 t
+				     (unless (or (movitz-env-get variable 'ignore nil env nil)
+						 (movitz-env-get variable 'ignorable nil env nil)
+						 (typep binding 'hidden-rest-function-argument))
+				       (warn "Unused variable: ~S" variable)))))
+			  collect binding)))
+		 (when (eq env function-env)
+		   (setf bindings-to-locate
+		     (sort bindings-to-locate #'<
+			   :key (lambda (binding)
+				  (etypecase binding
+				    (edx-function-argument 3)
+				    (positional-function-argument
+				     (* 2 (function-argument-argnum binding)))
+				    (binding 100000)))))
+		   ;; (warn "btl: ~S" bindings-to-locate)
+		   (loop for binding in bindings-to-locate
+		       while (or (typep binding 'register-required-function-argument)
+				 (typep binding 'floating-required-function-argument)
+				 (and (typep binding 'positional-function-argument)
+				      (< (function-argument-argnum binding)
+					 2)))
+		       do (unless (new-binding-located-p binding frame-map)
 			    (setf (new-binding-location binding frame-map)
-			      (post-incf stack-frame-position))))))
-		     (setf (getf env-roof-map env)
-		       stack-frame-position)))))
+			      (post-incf stack-frame-position)))))
+		 (dolist (binding (sort (copy-list bindings-to-locate) #'>
+					;; Sort so as to make the least likely
+					;; candidates for locating to registers
+					;; be assigned last.
+					:key (lambda (b)
+					       (etypecase b
+						 ((or constant-object-binding
+						   forwarding-binding
+						   borrowed-binding)
+						  1000)
+						 (fixed-required-function-argument
+						  (+ 100 (function-argument-argnum b)))
+						 (located-binding
+						  (let* ((count-init (gethash b var-counts))
+							 (count (car count-init))
+							 (init-pc (cdr count-init)))
+						    (if (not (and count init-pc))
+							50
+						      (truncate
+						       (or (position-if (lambda (i)
+									  (member b (find-read-bindings i)))
+									(cdr init-pc)
+									:end 5)
+							   10)
+						       count))))))))
+		   (when (and (binding-lended-p binding)
+			      (not (typep binding 'borrowed-binding))
+			      (not (getf (binding-lended-p binding) :stack-cons-location)))
+		     ;; (warn "assigning lending-cons for ~W at ~D" binding stack-frame-position)
+		     (let ((cons-pos (post-incf stack-frame-position 2)))
+		       (setf (new-binding-location (cons :lended-cons binding) frame-map)
+			 (1+ cons-pos))
+		       (setf (getf (binding-lended-p binding) :stack-cons-location)
+			 cons-pos)))
+		   (unless (new-binding-located-p binding frame-map)
+		     (etypecase binding
+		       (constant-object-binding) ; no location needed.
+		       (forwarding-binding) ; will use the location of target binding.
+		       (borrowed-binding) ; location is predetermined
+		       (fixed-required-function-argument
+			(setf (new-binding-location binding frame-map)
+			  :argument-stack))
+		       (located-binding
+;;;			(when (and (binding-store-type binding)
+;;;				   (apply #'encoded-type-singleton
+;;;					  (binding-store-type binding)))
+;;;			  (warn "Locating constant binding: ~S" binding))
+;;;			(warn "binding: ~S type ~S, count: ~S"
+;;;			      binding
+;;;			      (apply #'encoded-type-decode 
+;;;				     (binding-store-type binding))
+;;;			      (gethash binding var-counts))
+;;;			    (print-code 'foo code)
+			(let* ((count-init-pc (gethash binding var-counts))
+			       (count (car count-init-pc))
+			       (init-pc (cdr count-init-pc)))
+			  (cond
+			   ((binding-lended-p binding)
+			    (setf (new-binding-location binding frame-map)
+			      (post-incf stack-frame-position)))
+			   ((and (= 1 count)
+				 init-pc)
+			    (assert (instruction-is (first init-pc) :init-lexvar))
+			    (destructuring-bind (init-binding &key init-with-register init-with-type
+								   protect-registers protect-carry)
+				(cdr (first init-pc))
+			      (declare (ignore protect-registers protect-carry init-with-type))
+			      (assert (eq binding init-binding))
+			      (let* ((load-instruction
+				      (find-if (lambda (i)
+						 (member binding (find-read-bindings i)))
+					       (cdr init-pc)
+					       :end 7))
+				     (binding-destination (third load-instruction))
+				     (distance (position load-instruction (cdr init-pc)))
+				     (free-registers
+				      (and distance
+					   (compute-free-registers (cdr init-pc) distance
+								   (movitz-environment-funobj function-env)
+								   frame-map))))
+				(let ((location (cond
+						 ((member binding-destination free-registers)
+						  binding-destination)
+						 ((member init-with-register free-registers)
+						  init-with-register)
+						 ((first free-registers))
+						 (t (post-incf stack-frame-position)))))
+;;;				  (when (and (symbolp location) (< 2 distance))
+;;;				    (warn "Assigning ~A to ~A dist ~S."
+;;;					  (binding-name binding)
+;;;					  location
+;;;					  distance)
+;;;				    (print-code 'middle (subseq init-pc 0 (+ 2 distance))))
+				  (setf (new-binding-location binding frame-map) location)))))
+			   (t (setf (new-binding-location binding frame-map)
+				(post-incf stack-frame-position)))))))))
+		 (setf (getf env-roof-map env)
+		   stack-frame-position)))))
       (loop ;; with funobj = (movitz-environment-funobj function-env)
 	  for binding being the hash-keys of var-counts
 	  as env = (binding-env binding)
@@ -2767,147 +2877,148 @@ loading borrowed bindings."
   (when (movitz-env-get (binding-name binding) 'ignore nil (binding-env binding))
     (warn "The variable ~S is used even if it was declared ignored."
 	  (binding-name binding)))
-  (flet ((chose-tmp-register (&optional preferred)
-	   (or tmp-register
-	       (unless (member preferred protect-registers)
-		 preferred)
-	       (first (set-difference '(:eax :ebx :ecx :edx)
-				      protect-registers))
-	       (error "Unable to chose a temporary register.")))
-	 (install-for-single-value (lexb lexb-location result-mode indirect-p)
-	   (if (integerp lexb-location)
-	       (append `((:movl ,(make-indirect-reference :ebp (stack-frame-offset lexb-location))
-				,(single-value-register result-mode)))
-		       (when indirect-p
-			 `((:movl (-1 ,(single-value-register result-mode))
-				  ,(single-value-register result-mode)))))
-	     (ecase lexb-location
-	       (:eax
-		(assert (not indirect-p))
-		(ecase result-mode
-		  ((:ecx :edx) `((:movl :eax ,result-mode)))
-		  ((:eax :single-value) nil)))
-	       ((:ebx :ecx :edx)
-		(assert (not indirect-p))
-		(unless (eq result-mode lexb-location)
+  (let ((protect-registers (cons :edx protect-registers)))
+    (flet ((chose-tmp-register (&optional preferred)
+	     (or tmp-register
+		 (unless (member preferred protect-registers)
+		   preferred)
+		 (first (set-difference '(:eax :ebx :ecx :edx)
+					protect-registers))
+		 (error "Unable to chose a temporary register.")))
+	   (install-for-single-value (lexb lexb-location result-mode indirect-p)
+	     (if (integerp lexb-location)
+		 (append `((:movl ,(make-indirect-reference :ebp (stack-frame-offset lexb-location))
+				  ,(single-value-register result-mode)))
+			 (when indirect-p
+			   `((:movl (-1 ,(single-value-register result-mode))
+				    ,(single-value-register result-mode)))))
+	       (ecase lexb-location
+		 (:eax
+		  (assert (not indirect-p))
 		  (ecase result-mode
-		    ((:eax :single-value) `((:movl :ebx :eax)))
-		    ((:ebx :ecx :ecx) `((:movl ,lexb-location ,result-mode))))))
-	       (:argument-stack
-		(assert (<= 2 (function-argument-argnum lexb)) ()
-		  "lexical :argument-stack argnum can't be ~A." (function-argument-argnum lexb))
-		(append `((:movl (:ebp ,(argument-stack-offset lexb))
-				 ,(single-value-register result-mode)))
-			(when indirect-p
-			  `((:movl (-1 ,(single-value-register result-mode))
-				   ,(single-value-register result-mode))))))))))
-    (etypecase binding
-      (forwarding-binding
-       (assert (not (binding-lended-p binding)) (binding)
-	 "Can't lend a forwarding-binding ~S." binding)
-       (make-load-lexical (forwarding-binding-target binding)
-			  result-mode funobj shared-reference-p frame-map))
-      (constant-object-binding
-       (assert (not (binding-lended-p binding)) (binding)
-	 "Can't lend a constant-reference-binding ~S." binding)
-       (make-load-constant (constant-object binding)
-			   result-mode
-			   funobj frame-map))
-      (borrowed-binding
-       (let ((slot (borrowed-binding-reference-slot binding)))
-	 (cond
-	  (shared-reference-p
-	   (ecase (result-mode-type result-mode)
-	     ((:eax :ebx :ecx :edx)
-	      `((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
-		       ,(result-mode-type result-mode))))))
-	  ((not shared-reference-p)
-	   (case result-mode
-	     ((:single-value :eax :ebx :ecx :edx :esi)
-	      (let ((tmp-register (chose-tmp-register (single-value-register result-mode))))
+		    ((:ebx :ecx :edx) `((:movl :eax ,result-mode)))
+		    ((:eax :single-value) nil)))
+		 ((:ebx :ecx :edx)
+		  (assert (not indirect-p))
+		  (unless (eq result-mode lexb-location)
+		    (ecase result-mode
+		      ((:eax :single-value) `((:movl ,lexb-location :eax)))
+		      ((:ebx :ecx :ecx :esi) `((:movl ,lexb-location ,result-mode))))))
+		 (:argument-stack
+		  (assert (<= 2 (function-argument-argnum lexb)) ()
+		    "lexical :argument-stack argnum can't be ~A." (function-argument-argnum lexb))
+		  (append `((:movl (:ebp ,(argument-stack-offset lexb))
+				   ,(single-value-register result-mode)))
+			  (when indirect-p
+			    `((:movl (-1 ,(single-value-register result-mode))
+				     ,(single-value-register result-mode))))))))))
+      (etypecase binding
+	(forwarding-binding
+	 (assert (not (binding-lended-p binding)) (binding)
+	   "Can't lend a forwarding-binding ~S." binding)
+	 (make-load-lexical (forwarding-binding-target binding)
+			    result-mode funobj shared-reference-p frame-map))
+	(constant-object-binding
+	 (assert (not (binding-lended-p binding)) (binding)
+	   "Can't lend a constant-reference-binding ~S." binding)
+	 (make-load-constant (constant-object binding)
+			     result-mode
+			     funobj frame-map))
+	(borrowed-binding
+	 (let ((slot (borrowed-binding-reference-slot binding)))
+	   (cond
+	    (shared-reference-p
+	     (ecase (result-mode-type result-mode)
+	       ((:eax :ebx :ecx :edx)
 		`((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
-			 ,tmp-register)
-		  (:movl (,tmp-register -1)
-			 ,(single-value-register result-mode)))))
-	     (:push
-	      (let ((tmp-register (chose-tmp-register :eax)))
-		`((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
-			 ,tmp-register)
-		  (:pushl (,tmp-register -1)))))
-	     (t (let ((tmp-register (chose-tmp-register :eax)))
-		  (make-result-and-returns-glue
-		   result-mode tmp-register
-		   `((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
-			    ,tmp-register)
-		     (:movl (,tmp-register -1) ,tmp-register))))))))))
-      (located-binding
-       (let ((binding-location (new-binding-location binding frame-map)))
-	 (cond
-	  ((and (binding-lended-p binding)
-		(not shared-reference-p))
-	   (case result-mode
-	     ((:single-value :eax :ebx :ecx :edx :esi :esp)
-	      (install-for-single-value binding binding-location
-					(single-value-register result-mode) t))
-	     (:push
-	      (if (integerp binding-location)
-		  `((:movl (:ebp ,(stack-frame-offset binding-location)) :eax)
-		    (:pushl (:eax -1)))
-		(ecase binding-location
-;;;		  (:eax '((:pushl :eax)))
-;;;		  (:ebx '((:pushl :ebx)))
-		  (:argument-stack
-		   (assert (<= 2 (function-argument-argnum binding)) ()
-		     ":load-lexical argnum can't be ~A." (function-argument-argnum binding))
-		   `((:movl (:ebp ,(argument-stack-offset binding)) :eax)
-		     (:pushl (:eax -1)))))))
-	     (t (make-result-and-returns-glue
-		 result-mode :eax
-		 (install-for-single-value binding binding-location :eax t)))))
-	  (t (case (operator result-mode)
+			 ,(result-mode-type result-mode))))))
+	    ((not shared-reference-p)
+	     (case result-mode
+	       ((:single-value :eax :ebx :ecx :edx :esi)
+		(let ((tmp-register (chose-tmp-register (single-value-register result-mode))))
+		  `((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
+			   ,tmp-register)
+		    (:movl (,tmp-register -1)
+			   ,(single-value-register result-mode)))))
+	       (:push
+		(let ((tmp-register (chose-tmp-register :eax)))
+		  `((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
+			   ,tmp-register)
+		    (:pushl (,tmp-register -1)))))
+	       (t (let ((tmp-register (chose-tmp-register :eax)))
+		    (make-result-and-returns-glue
+		     result-mode tmp-register
+		     `((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
+			      ,tmp-register)
+		       (:movl (,tmp-register -1) ,tmp-register))))))))))
+	(located-binding
+	 (let ((binding-location (new-binding-location binding frame-map)))
+	   (cond
+	    ((and (binding-lended-p binding)
+		  (not shared-reference-p))
+	     (case result-mode
 	       ((:single-value :eax :ebx :ecx :edx :esi :esp)
 		(install-for-single-value binding binding-location
-					  (single-value-register result-mode) nil))
+					  (single-value-register result-mode) t))
 	       (:push
 		(if (integerp binding-location)
-		    `((:pushl (:ebp ,(stack-frame-offset binding-location))))
+		    `((:movl (:ebp ,(stack-frame-offset binding-location)) :eax)
+		      (:pushl (:eax -1)))
 		  (ecase binding-location
-		    (:eax '((:pushl :eax)))
-		    (:ebx '((:pushl :ebx)))
+;;;		  (:eax '((:pushl :eax)))
+;;;		  (:ebx '((:pushl :ebx)))
 		    (:argument-stack
 		     (assert (<= 2 (function-argument-argnum binding)) ()
 		       ":load-lexical argnum can't be ~A." (function-argument-argnum binding))
-		     `((:pushl (:ebp ,(argument-stack-offset binding))))))))
-	       (:boolean-branch-on-true
-		(if (integerp binding-location)
-		    `((:cmpl :edi (:ebp ,(stack-frame-offset binding-location)))
-		      (:jne ',(operands result-mode)))
-		  (ecase binding-location
-		    ((:eax :ebx)
-		     `((:cmpl :edi ,binding-location)
-		       (:jne ',(operands result-mode))))
-		    (:argument-stack
-		     `((:cmpl :edi (:ebp ,(argument-stack-offset binding)))
-		       (:jne ',(operands result-mode)))))))
-	       (:boolean-branch-on-false
-		(if (integerp binding-location)
-		    `((:cmpl :edi (:ebp ,(stack-frame-offset binding-location)))
-		      (:je ',(operands result-mode)))
-		  (ecase binding-location
-		    ((:eax :ebx)
-		     `((:cmpl :edi ,binding-location)
-		       (:je ',(operands result-mode))))
-		    (:argument-stack
-		     `((:cmpl :edi (:ebp ,(argument-stack-offset binding)))
-		       (:je ',(operands result-mode)))))))
-	       (:untagged-fixnum-ecx
-		(make-result-and-returns-glue
-		 result-mode :ecx
-		 (install-for-single-value binding binding-location :ecx nil)))
+		     `((:movl (:ebp ,(argument-stack-offset binding)) :eax)
+		       (:pushl (:eax -1)))))))
 	       (t (make-result-and-returns-glue
 		   result-mode :eax
-		   (install-for-single-value binding binding-location :eax nil)))
-	       ))))))))
+		   (install-for-single-value binding binding-location :eax t)))))
+	    (t (case (operator result-mode)
+		 ((:single-value :eax :ebx :ecx :edx :esi :esp)
+		  (install-for-single-value binding binding-location
+					    (single-value-register result-mode) nil))
+		 (:push
+		  (if (integerp binding-location)
+		      `((:pushl (:ebp ,(stack-frame-offset binding-location))))
+		    (ecase binding-location
+		      (:eax '((:pushl :eax)))
+		      (:ebx '((:pushl :ebx)))
+		      (:argument-stack
+		       (assert (<= 2 (function-argument-argnum binding)) ()
+			 ":load-lexical argnum can't be ~A." (function-argument-argnum binding))
+		       `((:pushl (:ebp ,(argument-stack-offset binding))))))))
+		 (:boolean-branch-on-true
+		  (if (integerp binding-location)
+		      `((:cmpl :edi (:ebp ,(stack-frame-offset binding-location)))
+			(:jne ',(operands result-mode)))
+		    (ecase binding-location
+		      ((:eax :ebx)
+		       `((:cmpl :edi ,binding-location)
+			 (:jne ',(operands result-mode))))
+		      (:argument-stack
+		       `((:cmpl :edi (:ebp ,(argument-stack-offset binding)))
+			 (:jne ',(operands result-mode)))))))
+		 (:boolean-branch-on-false
+		  (if (integerp binding-location)
+		      `((:cmpl :edi (:ebp ,(stack-frame-offset binding-location)))
+			(:je ',(operands result-mode)))
+		    (ecase binding-location
+		      ((:eax :ebx)
+		       `((:cmpl :edi ,binding-location)
+			 (:je ',(operands result-mode))))
+		      (:argument-stack
+		       `((:cmpl :edi (:ebp ,(argument-stack-offset binding)))
+			 (:je ',(operands result-mode)))))))
+		 (:untagged-fixnum-ecx
+		  (make-result-and-returns-glue
+		   result-mode :ecx
+		   (install-for-single-value binding binding-location :ecx nil)))
+		 (t (make-result-and-returns-glue
+		     result-mode :eax
+		     (install-for-single-value binding binding-location :eax nil)))
+		 )))))))))
 
 (defun make-store-lexical (binding source shared-reference-p frame-map
 			   &key protect-registers)
@@ -2960,6 +3071,7 @@ loading borrowed bindings."
 	       `((:movl ,source (:ebp ,(argument-stack-offset binding))))))))))))
 
 (defun finalize-code (code funobj frame-map)
+  ;; (print-code 'to-be-finalized code)
   (labels ((actual-binding (b)
 	     (if (typep b 'borrowed-binding)
 		 (borrowed-binding-target b)
@@ -5363,7 +5475,6 @@ and a list of any intervening unwind-protect environment-slots."
     (list x)))
 
 (define-extended-code-expander :car (instruction funobj frame-map)
-  (warn "CAR: ~S" instruction)
   (destructuring-bind (x dst)
       (cdr instruction)
     (assert (member dst '(:eax :ebx :ecx :edx)))
@@ -5372,9 +5483,10 @@ and a list of any intervening unwind-protect environment-slots."
        (let* ((binding (ensure-local-binding (binding-target x) funobj)))
 	 (cond
 	  ((binding-store-subtypep binding 'list)
+	   ;; (warn "Inlined CAR for ~S" binding)
 	   `(,@(make-load-lexical binding dst funobj nil frame-map)
 	       (:movl (,dst -1) ,dst)))
-	  (t `(,@(make-load-lexical binding dst funobj nil frame-map)
+	  (t `(,@(make-load-lexical binding :eax funobj nil frame-map)
 		 (:call (:edi ,(global-constant-offset 'fast-car)))
 		 ,@(when (not (eq dst :eax))
 		     `((:movl :eax ,dst))))))))
