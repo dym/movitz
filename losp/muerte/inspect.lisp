@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.39 2004/09/21 13:05:55 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.40 2004/09/22 17:39:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -167,22 +167,9 @@ Otherwise, stack-frame is an absolute location."
 				   :object-register :eax
 				   :size-register :ecx)
     (:load-lexical (:lexical-binding words) :ecx)
-    (:leal (:eax :ecx #.movitz:+other-type-offset+) :edx)
-    (:testb 3 :dl)
-    (:jnz '(:sub-program () (:int 63)))
-    (:movl :edi (:eax :ecx #.movitz:+other-type-offset+))))
-    
-    
-
-(defun malloc-non-pointer-words (words)
-  (check-type words (integer 2 *))
-  (with-non-pointer-allocation-assembly (words :fixed-size-p t
-					       :object-register :eax
-					       :size-register :ecx)
-    (:load-lexical (:lexical-binding words) :ecx)
-    (:leal (:eax :ecx #.movitz:+other-type-offset+) :edx)
-    (:testb 3 :dl)
-    (:jnz '(:sub-program () (:int 63)))
+;;;    (:leal (:eax :ecx #.movitz:+other-type-offset+) :edx)
+;;;    (:testb 3 :dl)
+;;;    (:jnz '(:sub-program () (:int 63)))
     (:movl :edi (:eax :ecx #.movitz:+other-type-offset+))))
 
 (defun %shallow-copy-object (object word-count)
