@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Apr 15 22:47:13 2002
 ;;;;                
-;;;; $Id: cpu-id.lisp,v 1.8 2004/08/12 15:42:59 ffjeld Exp $
+;;;; $Id: cpu-id.lisp,v 1.9 2004/08/14 17:55:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -215,11 +215,10 @@ This is an illegal instruction on lesser CPUs, and a no-op on some, such as boch
     (:wrmsr)))
 
 (define-compiler-macro eflags ()
-  `(with-inline-assembly (:returns :register)
-     ;; XXXXX Breaks stack and register disciplines!
+  `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+     (:clc)				; Ensure lower 2 bits are zero..
      (:pushfl)
-     (:popl (:result-register))
-     (:shll 2 (:result-register))))
+     (:popl :ecx)))
 
 (defun eflags ()
   (eflags))
