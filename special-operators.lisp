@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.28 2004/07/15 21:06:28 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.29 2004/07/17 01:49:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -521,6 +521,16 @@ The valid parameters are~{ ~S~}."
 				   (setq side-effects t))
 				 (setf modifies (modifies-union modifies sub-modifies))
 				 sub-code))))
+		       (setf (assembly-macro-expander :offset amenv)
+			 #'(lambda (expr)
+			     (destructuring-bind (type slot &optional (extra 0))
+				 (cdr expr)
+			       (let ((mtype (find-symbol (symbol-name type) :movitz))
+				     (mslot (find-symbol (symbol-name slot) :movitz)))
+				 (assert mtype (mtype) "Type not a Movitz symbol: ~A" type)
+				 (assert mslot (mslot) "Slot not a Movitz symbol: ~A" slot)
+				 (list (+ (slot-offset mtype mslot)
+					  (eval extra)))))))
 		       (setf (assembly-macro-expander :returns-mode amenv)
 			 #'(lambda (expr)
 			     (assert (= 1 (length expr)))
