@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.39 2004/06/10 19:31:06 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.40 2004/06/29 23:16:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -730,8 +730,8 @@
   (assert (eq type 'word))
   (movitz-word-by-image *image* word))
 
-(defun movitz-word-and-print (word)
-  (movitz-print (movitz-word word)))
+(defun movitz-word-and-print (word &optional (type 'word))
+  (movitz-print (movitz-word word type)))
 
 (defmethod movitz-word-by-image ((image symbolic-image) word)
   (case (extract-tag word)
