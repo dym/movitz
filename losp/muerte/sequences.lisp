@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.6 2004/03/31 12:17:14 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.7 2004/04/23 15:02:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -591,8 +591,7 @@
 		 (mapf (first-sequence-ref i) (second-sequence-ref j))))))
 	  )))
    (t (function first-sequence &rest more-sequences)
-      (declare (dynamic-extent more-sequences)
-	       (ignore function first-sequence more-sequences))
+      (declare (ignore function first-sequence more-sequences))
       (error "MAP not implemented."))))
 
 (defun map-for-list (function first-sequence &rest more-sequences)

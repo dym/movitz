@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.17 2004/04/16 14:42:51 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.18 2004/04/23 14:59:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -250,8 +250,7 @@
 
        done))
    (t (vector &rest subscripts)
-      (declare (dynamic-extent subscripts)
-	       (ignore vector subscripts))
+      (declare (ignore vector subscripts))
       (error "Multi-dimensional arrays not implemented."))))
 
 (defun (setf aref) (value vector &rest subscripts)
@@ -334,8 +333,7 @@
 	(:compile-form (:result-mode :ignore) (error "Not a vector: ~S" vector))
        done))
    (t (value vector &rest subscripts)
-      (declare (dynamic-extent subscripts)
-	       (ignore value vector subscripts))
+      (declare (ignore value vector subscripts))
       (error "Multi-dimensional arrays not implemented."))))
 
 
