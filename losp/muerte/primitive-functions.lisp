@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.27 2004/07/13 02:26:28 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.28 2004/07/15 11:18:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -443,6 +443,48 @@ Returns list in EAX and preserves numargs in ECX."
     (:leal (:eax :ecx) :eax)
     (:ret)))
 
+(define-primitive-function muerte::get-cons-pointer ()
+  "Return in EAX the next object location with space for EAX words, with tag 6.
+Preserve ECX."
+  (macrolet
+      ((do-it ()
+	 ;; Here we just call malloc, and don't care if the allocation
+	 ;; is never comitted.
+	 `(with-inline-assembly (:returns :multiple-values)
+	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:movl :eax :ebx)
+	    (:call-global-constant malloc)
+	    (:locally (:movl (:edi (:edi-offset scratch0)) :ecx))
+	    (:leal (:eax 6) :eax)
+	    (:ret))
+	 #+ignore
+	 `(with-inline-assembly (:returns :multiple-values)
+	    (:locally (:movl (:edi (:edi-offset malloc-buffer)) :eax))
+	    (:movl (:eax 4) :ecx)	; cons pointer to ECX
+	    (:leal (:eax :ecx 6) :eax)
+	    (:ret))))
+    (do-it)))
+
+(define-primitive-function muerte::cons-commit ()
+  "Commit allocation of ECX/fixnum words.
+Preserve EAX and EBX."
+  (macrolet
+      ((do-it ()
+	 ;; Since get-cons-pointer is implemented as an (already committed)
+	 ;; malloc, this is a NOP
+	 `(with-inline-assembly (:returns :multiple-values)
+	    (:ret))
+	 #+ignore
+	 `(with-inline-assembly (:returns :multiple-values)
+	    (:pushl :eax)
+	    (:pushl :ebx)
+	    (:movl :ecx :ebx)
+	    (:call-global-constant malloc)
+	    (:popl :ebx)
+	    (:popl :eax)
+	    (:ret))))
+    (do-it)))
+
 (defun malloc-initialize (buffer-start buffer-size)
   "BUFFER-START: the (fixnum) 4K address. BUFFER-SIZE: The size in 4K units."
   (check-type buffer-start fixnum)
@@ -494,7 +536,7 @@ Returns list in EAX and preserves numargs in ECX."
     (:leal (:eax :edx) :eax)
     (:movl :ecx (:eax))
     (:movl :ebx (:eax 4))
-    (:incl :eax)
+    (:addl 1 :eax)
     (:ret)))
 
 (define-primitive-function ensure-heap-cons-variable ()
@@ -517,16 +559,28 @@ Returns list in EAX and preserves numargs in ECX."
     return-ok
     (:ret)))
 
-
 (define-primitive-function box-u32-ecx ()
   "Make u32 in ECX into a fixnum or bignum in EAX."
-  (with-inline-assembly (:returns :multiple-values)
-    (:cmpl #.movitz:+movitz-most-positive-fixnum+ :ecx)
-    (:ja 'not-fixnum)
-    (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :eax)
-    (:ret)
-   not-fixnum
-    (:int 107)))			; not implemented by default!
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :multiple-values)
+	    (:cmpl ,movitz:+movitz-most-positive-fixnum+ :ecx)
+	    (:ja 'not-fixnum)
+	    (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
+	    (:ret)
+	   not-fixnum
+	    (:locally (:movl :ecx (:edi (:edi-offset scratch0)))) ; Save value for later
+	    (:call-global-constant malloc)
+	    (:movl ,(dpb movitz:+movitz-fixnum-factor+
+			 (byte 16 16)
+			 (movitz:tag :bignum 0))
+		   (:eax))
+	    (:locally (:movl (:edi (:edi-offset scratch0)) :ecx)) ; Restore value
+	    (:movl :ecx (:eax 4))
+	    (:leal (:eax 6) :eax)
+	    (:ret))))
+    (do-it)))
+	    
 
 (define-primitive-function unbox-u32 ()
   "Load (ldb (byte 32 0) EAX) into ECX."
@@ -550,6 +604,8 @@ Returns list in EAX and preserves numargs in ECX."
 	   fail
 	    (:int 107))))
     (do-it)))
+
+	    
 
 ;;;;
 
