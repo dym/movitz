@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.41 2004/11/23 16:10:51 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.42 2004/11/24 16:22:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1097,6 +1097,7 @@
 	   numargs-case
 	   movitz-accessor
 	   simple-read-from-string
+	   #:read-key
 	   print-word
 	   fixnump below
 	   print-unreadable-movitz-object

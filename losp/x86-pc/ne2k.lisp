@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:16:00 2002
 ;;;;                
-;;;; $Id: ne2k.lisp,v 1.12 2004/11/24 13:12:02 ffjeld Exp $
+;;;; $Id: ne2k.lisp,v 1.13 2004/11/24 16:20:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -47,7 +47,7 @@
   (let ((io-space (make-io-space :range io-base #x20)))
     (with-io-space-lock ()
       (when (null (io-space-occupants io-space))
-	(format t "Probing for ne2k NIC at #x~X.." io-base)
+	(format *query-io* "~&Probing for ne2k NIC at #x~X.." io-base)
 	(with-dp8390 (dp8390 io-base)
 	  (let ((tmp (dp8390 #x1f)))
 	    (io-delay 5000)
