@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.45 2004/09/25 15:51:22 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.46 2004/10/07 12:44:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -113,11 +113,10 @@
 (define-primitive-function dynamic-unwind-next (dynamic-env)
   "Locate the next unwind-protect entry between here and dynamic-env.
 If no such entry is found, return (same) dynamic-env in EAX and CF=0.
-Otherwise return the unwind-protect entry in EAX and CF=1."
+Otherwise return the unwind-protect entry in EAX and CF=1. Preserve EDX."
   (with-inline-assembly (:returns :nothing)
     (:locally (:bound (:edi (:edi-offset stack-bottom)) :eax))
-
-    (:globally (:movl (:edi (:edi-offset unwind-protect-tag)) :edx))
+    (:globally (:movl (:edi (:edi-offset unwind-protect-tag)) :ebx))
     (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
     
    search-loop
@@ -127,7 +126,7 @@ Otherwise return the unwind-protect entry in EAX and CF=1."
     (:cmpl :ecx :eax)
     (:je 'found-dynamic-env)
     
-    (:cmpl :edx (:ecx 4))		; unwind-protect entry?
+    (:cmpl :ebx (:ecx 4))		; unwind-protect entry?
     (:je 'found-unwind-protect)
     
     (:movl (:ecx 12) :ecx)		; proceed search
