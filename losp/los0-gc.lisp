@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.30 2004/07/20 23:47:50 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.31 2004/07/23 15:26:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,6 +20,10 @@
 
 (defvar *gc-quiet* nil)
 (defvar *gc-running* nil)
+(defvar *gc-break* nil)
+(defvar *gc-trigger* nil)
+(defvar *gc-consitency-check* t) 
+
     
 (defun make-space (location size)
   "Make a space vector at a fixed location."
@@ -99,6 +103,39 @@
 	    (:leal (:edx :ecx -5) :eax)
 	    (:ret))))
     (do-it)))
+
+
+(defun trigger-full-newspace (free-space)
+  "Make it so that there's only free-space words left before newspace is full."
+  (let ((trigger (if (consp *gc-trigger*)
+		     (pop *gc-trigger*)
+		   *gc-trigger*)))
+    (when trigger
+      (macrolet
+	  ((do-it ()
+	     `(with-inline-assembly (:returns :nothing)
+		(:compile-form (:result-mode :eax) (+ free-space trigger))
+		(:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
+		(:testl ,(logxor #xffffffff
+				 (* #xfff movitz:+movitz-fixnum-factor+))
+			:eax)
+		(:jnz '(:sub-program () (:int 64)))
+		(:addl 4 :eax)
+		(:andl -8 :eax)
+		(:movl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+		       :ecx)
+		(:subl :eax :ecx)
+		(:movl (:edx 2) :ebx)
+		(:movl :ecx (:edx 2))
+		(:addl 8 :ebx)
+	       fill-loop
+		(:movl :edi (:edx :ebx -6))
+		(:addl 4 :ebx)
+		(:cmpl :ebx :ecx)
+		(:ja 'fill-loop)
+		)))
+	(do-it)))))
+  
 
 (define-primitive-function los0-get-cons-pointer ()
   "Return in EAX the next object location with space for EAX words, with tag 6.
@@ -252,16 +289,18 @@ duo-space where each space is KB-SIZE kilobytes."
 	(when *gc-running*
 	  (let ((muerte::*error-no-condition-for-debugger* t))
 	    (error "Recursive GC triggered.")))
-	(let ((*gc-running t))
+	(let ((*gc-running* t))
 	  (unless *gc-quiet*
 	    (format t "~&;; GC.. "))
 	  (stop-and-copy)
-	  (loop				; This is  a nice opportunity to poll the keyboard..
-	    (case (muerte.x86-pc.keyboard:poll-char)
-	      ((#\esc)
-	       (break "Los0 GC keyboard poll."))
-	      ((nil)
-	       (return))))))))
+	  (if *gc-break*
+	      (break "GC break.")
+	    (loop			; This is  a nice opportunity to poll the keyboard..
+	      (case (muerte.x86-pc.keyboard:poll-char)
+		((#\esc)
+		 (break "Los0 GC keyboard poll."))
+		((nil)
+		 (return)))))))))
   (let* ((actual-duo-space (or duo-space
 			       (allocate-duo-space (* kb-size #x100))))
 	 (last-location (object-location (cons 1 2))))
@@ -289,12 +328,12 @@ duo-space where each space is KB-SIZE kilobytes."
   (values))
 
 (defun object-in-space-p (space object)
-  (check-type space vector-u32)
+  (check-type space (simple-array (unsigned-byte 32) 1))
   (and (typep object 'pointer)
-       (< (object-location space)
-	  (object-location object)
-	  (+ (object-location space)
-	     (array-dimension space 0)))))
+       (<= (+ 2 (object-location space))
+	   (object-location object)
+	   (+ 1 (object-location space)
+	      (array-dimension space 0)))))
 
 (defun tenure ()
   (install-old-consing)
@@ -359,14 +398,6 @@ duo-space where each space is KB-SIZE kilobytes."
 		   (cond
 		    ((not (object-in-space-p oldspace x))
 		     x)
-		    #+ignore ((typep x 'bignum)
-			      (let ((fwi (position (object-location x) *x* :test #'eq)))
-				(if fwi
-				    (muerte::%word-offset (aref *x* (1+ fwi)) 6)
-				  (let ((fw (shallow-copy x)))
-				    (vector-push (object-location x) *x*)
-				    (vector-push (object-location fw) *x*)
-				    fw))))
 		    (t (let ((forwarded-x (memref (object-location x) 0 0 :lisp)))
 			 (if (object-in-space-p newspace forwarded-x)
 			     (progn
@@ -374,8 +405,9 @@ duo-space where each space is KB-SIZE kilobytes."
 					   (object-tag x)))
 			       forwarded-x)
 			   (let ((forward-x (shallow-copy x)))
-			     (let ((a *x*))
-			       (when (typep x 'muerte::pointer)
+			     (when (and (typep x 'muerte::pointer)
+					*gc-consitency-check*)
+			       (let ((a *x*))
 				 (vector-push (%object-lispval x) a)
 				 (vector-push (memref (object-location x) 0 0 :unsigned-byte32) a)
 				 (assert (vector-push (%object-lispval forward-x) a))))
@@ -397,30 +429,32 @@ duo-space where each space is KB-SIZE kilobytes."
 	       (setf scan-pointer fresh-pointer))
 
 	;; Consistency check..
-	(let ((a *x*))
-	  ;; First, restore the state of old-space
-	  (do ((i 0 (+ i 3)))
-	      ((>= i (length a)))
-	    (let ((old (%lispval-object (aref a i)))
-		  (old-class (aref a (+ i 1))))
-	      (setf (memref (object-location old) 0 0 :unsigned-byte32) old-class)))
-	  ;; Then, check that each migrated object is equalp to its new self.
-	  (do ((i 0 (+ i 3)))
-	      ((>= i (length a)))
-	    (let ((old (%lispval-object (aref a i)))
-		  (new (%lispval-object (aref a (+ i 2)))))
-	      (unless (and (object-in-space-p newspace new)
-			   (object-in-space-p oldspace old)
-			   (objects-equalp old new))
-		(let ((*old* old)
-		      (*new* new)
-		      (*old-class* (aref a (+ i 1))))
-		  (declare (special *old* *new* *old-class*))
-		  (error "GC consistency check failed:
+	(when *gc-consitency-check*
+	  (let ((a *x*))
+	    ;; First, restore the state of old-space
+	    (do ((i 0 (+ i 3)))
+		((>= i (length a)))
+	      (let ((old (%lispval-object (aref a i)))
+		    (old-class (aref a (+ i 1))))
+		(setf (memref (object-location old) 0 0 :unsigned-byte32) old-class)))
+	    ;; Then, check that each migrated object is equalp to its new self.
+	    (do ((i 0 (+ i 3)))
+		((>= i (length a)))
+	      (let ((old (%lispval-object (aref a i)))
+		    (new (%lispval-object (aref a (+ i 2)))))
+		(unless (and (object-in-space-p newspace new)
+			     (object-in-space-p oldspace old)
+			     (objects-equalp old new))
+		  (let ((*old* old)
+			(*new* new)
+			(*old-class* (aref a (+ i 1))))
+		    (declare (special *old* *new* *old-class*))
+		    (with-simple-restart (continue "Ignore failed GC consistency check.")
+		      (error "GC consistency check failed:
 old object: ~Z: ~S
 new object: ~Z: ~S
 oldspace: ~Z, newspace: ~Z, i: ~D"
-			 old old new new oldspace newspace i))))))
+			     old old new new oldspace newspace i))))))))
 
 	;; GC completed, oldspace is evacuated.
 	(unless *gc-quiet*
@@ -429,5 +463,6 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
 	    (format t "Old space: ~/muerte:pprint-clumps/, new space: ~
 ~/muerte:pprint-clumps/, freed: ~/muerte:pprint-clumps/.~%"
 		    old-size new-size (- old-size new-size))))
-	(initialize-space oldspace))))
+	(initialize-space oldspace)
+	(fill oldspace #x3 :start 2))))
   (values))
