@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.22 2004/07/16 00:02:03 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.23 2004/07/16 10:43:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -265,12 +265,15 @@ after the point that called this stack-frame."
   "Assuming x is a bignum, return the canonical integer value. That is,
 either return a fixnum, or destructively modify the bignum's length so
 that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
+  (check-type x bignum)
   (macrolet
       ((do-it ()
 	 `(with-inline-assembly (:returns :eax)
 	    (:load-lexical (:lexical-binding x) :eax)
 	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
 	    (:shrl 16 :ecx)
+	    (:jz '(:sub-program (should-never-happen)
+		   (:int 107)))
 	   shrink-loop
 	    (:cmpl ,movitz:+movitz-fixnum-factor+ :ecx)
 	    (:je 'shrink-no-more)
@@ -308,6 +311,7 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
       (:jnc 'copy-bignum-loop))))
 
 (defun %make-bignum (bigits)
+  (assert (plusp bigits))
   (macrolet
       ((do-it ()
 	 `(with-inline-assembly (:returns :eax)
