@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.39 2004/09/17 11:12:49 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.40 2004/09/21 13:01:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1211,8 +1211,6 @@ on the current result."
 			;; *  8 target jumper number
 			;; *  4 target catch tag
 			;; *  0 target EBP
-;;;			`((:load-lexical ,dynamic-slot-binding :edx)
-;;;			  ())
 			`((:load-lexical ,dynamic-slot-binding :edx)
 			  (:locally (:movl :edx (:edi (:edi-offset raw-scratch0)))) ; final continuation
 			  (:load-lexical ,next-continuation-step-binding :edx) ; next continuation-step

@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.69 2004/09/17 11:12:55 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.70 2004/09/21 13:01:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -453,23 +453,12 @@
    (raw-scratch0			; A non-GC-root scratch register
     :binary-type lu32
     :initform 0)
+   (atomically-continuation
+    :binary-type lu32
+    :initform 0)
    (non-pointers-end :binary-type :label) ; ========= NON-POINTER-END =======
    (scratch1
     :binary-type word
-    :initform 0)
-   (atomically-status
-    :binary-type (define-bitfield atomically-status (lu32)
-		   (((:enum :byte (3 2))
-		     :inactive 0
-		     :restart-primitive-function 1 ; data = slot-offset of pf.
-		     :restart-jumper 2)	; data = ESI-relative jumper number.
-		    ((:bits) :reset-status-p 8
-			     :esp 9
-			     :ebp 10)
-		    ((:numeric :data 16 16))))
-    :initform '(:inactive))
-   (atomically-esp
-    :binary-type lu32
     :initform 0)
    (dynamic-unwind-next
     :map-binary-write 'movitz-intern-code-vector
@@ -478,7 +467,9 @@
     :binary-type code-vector-word))
   (:slot-align null-symbol -5))
 
-(defun atomically-status-simple-pf (pf-name reset-status-p &rest registers)
+(defun atomically-continuation-simple-pf (pf-name)
+  (global-constant-offset pf-name)
+  #+ignore
   (bt:enum-value 'movitz::atomically-status
 		 (list* :restart-primitive-function
 			(cons :reset-status-p
@@ -494,6 +485,8 @@
 			registers)))
 
 (defun atomically-status-jumper-fn (reset-status-p &rest registers)
+  (assert (not reset-status-p))
+  (assert (null registers))
   (lambda (jumper)
     (assert (= 0 (mod jumper 4)))
     (bt:enum-value 'movitz::atomically-status
