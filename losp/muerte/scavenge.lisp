@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.1 2004/03/29 14:30:22 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.2 2004/03/30 08:50:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -87,7 +87,8 @@ start-location and end-location."
 	 ((typep x 'pointer)
 	  (let ((new (funcall function x)))
 	    (check-type new pointer)
-	    (setf (memref i 0 0 :lisp) new)))))))
+	    (unless (eq x new)
+	      (setf (memref i 0 0 :lisp) new))))))))
   (values))
 
 (defun map-stack-words (function start-stack-frame)
