@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.14 2004/06/09 17:21:47 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.15 2004/06/09 20:13:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -564,28 +564,11 @@
 
 (defun type-of (x)
   (class-name (class-of x)))
-;;;  (typecase x
-;;;    (null 'null)
-;;;    (cons 'cons)
-;;;    (symbol 'symbol)
-;;;    (integer 'integer)
-;;;    (structure-object
-;;;     (structure-object-name x))
-;;;    (t t)))
 
+(defun coerce (object result-type)
+  "=> result"
+  (cond
+   ((typep object result-type)
+    object)
+   (t (error "Don't know how to coerce ~S to ~S." object result-type))))
 
-
-;;;(defun subtypep (type-1 type-2)
-;;;  (cond
-;;;   ((eq type-1 type-2)
-;;;    t)
-;;;   ((or (atom type-1) (atom type-2))
-;;;    nil)
-;;;   ((equal type-1 type-2)
-;;;    t)
-;;;   (t (case (car type-2)
-;;;	(integer
-;;;	 (let ((low2 (second type-2))
-;;;	       (hi2 (third type-2)))
-;;;	   (case (car type-1)
-	     
