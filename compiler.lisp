@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.132 2005/01/31 11:19:23 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.133 2005/01/31 14:11:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -34,7 +34,7 @@ incompatible with pre-pentium CPUs.")
   "Make every compiled function check upon entry that the
 stack-pointer is within bounds. Costs 3 code-bytes and a few cycles.")
 
-(defvar *compiler-allow-transients* nil
+(defvar *compiler-allow-transients* t
   "Allow the compiler to keep function arguments solely in registers.
 Hurst debugging, improves performance.")
 
@@ -796,7 +796,11 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	 (stack-frame-size (frame-map-size (frame-map function-env)))
 	 (use-stack-frame-p (or (plusp stack-frame-size)
 				(tree-search resolved-code
-					     '(:pushl :popl :ebp :esp :call :leave)))))
+					     '(:pushl :popl :ebp :esp :call :leave))
+				(some (lambda (x)
+					(and (not (equal '(:movl (:ebp -4) :esi) x))
+					     (tree-search x ':esi)))
+				      resolved-code))))
     (let* ((function-code
 	    (let* ((req-binding (movitz-binding (first (required-vars function-env))
 						function-env nil))
@@ -884,7 +888,12 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 		      (resolved-code (finalize-code (extended-code function-env) funobj frame-map))
 		      (stack-frame-size (frame-map-size (frame-map function-env)))
 		      (use-stack-frame-p (or (plusp stack-frame-size)
-					     (tree-search resolved-code '(:ebp :esp :call :leave)))))
+					     (tree-search resolved-code
+							  '(:push :pop :ebp :esp :call :leave))
+					     (some (lambda (x)
+						     (and (not (equal '(:movl (:ebp -4) :esi) x))
+							  (tree-search x ':esi)))
+						   resolved-code))))
 		 (multiple-value-bind (prelude-code have-normalized-ecx-p)
 		     (make-compiled-function-prelude stack-frame-size function-env use-stack-frame-p
 						     (need-normalized-ecx-p function-env) frame-map
