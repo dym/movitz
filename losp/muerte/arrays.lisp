@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.21 2004/05/24 14:59:15 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.22 2004/05/24 21:51:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -240,10 +240,7 @@
 		(:cmpl ,(movitz:vector-type-tag :u32) :ecx)
 		(:jne 'not-u32)
 		(:movl (:eax (:ebx 4) 2) :ecx) ; u32
-		(:cmpl ,movitz:+movitz-most-positive-fixnum+ :ecx)
-		(:jg '(:sub-program (:overflowing-u32)
-		       (:int 107)))
-		(:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
+		(:call-global-constant box-u32-ecx)
 		(:jmp 'done)
 
 	       not-u32
@@ -329,15 +326,13 @@
 	       not-u16
 		(:cmpl ,(movitz:vector-type-tag :u32) :edx)
 		(:jnz 'not-u32)
-		(:testl ,(ldb (byte 32 0)
-			      (- -1 (* #xffffffff movitz:+movitz-fixnum-factor+)))
-			:ebx)
-		(:jnz '(:sub-program (not-u32-value)
-			(:compile-form (:result-mode :ignore)
-			 (error "Value not (unsigned-byte 32): ~S" value))))
-		(:shrl ,movitz:+movitz-fixnum-shift+ :ebx)
-		(:movl :ebx (:eax (:ecx 4) ,(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
-		(:leal ((:ebx ,movitz:+movitz-fixnum-factor+)) :ebx)
+		;; EBX=value, EAX=vector, ECX=index
+		(:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :edx)
+		(:xchgl :eax :ebx)
+		;; EAX=value, EBX=vector, EDX=index
+		(:call-global-constant unbox-u32)
+		(:movl :ecx (:ebx (:edx 1) ,(bt:slot-offset 'movitz:movitz-vector 'movitz::data)))
+		(:movl :eax :ebx)
 		(:jmp 'done)
 
 	       not-u32
