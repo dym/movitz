@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.17 2004/06/03 09:14:25 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.18 2004/06/04 13:33:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -115,8 +115,25 @@
 			  (:compile-form (:result-mode :eax)
 			   ,(* 2 movitz:+movitz-most-negative-fixnum+))
 			  (:jmp 'fix-fix-ok)))
-		  fix-fix-ok
-		   )))))
+		  fix-fix-ok))
+		((positive-fixnum positive-bignum)
+		 (with-inline-assembly (:returns :eax)
+		   (:compile-form (:result-mode :eax) y)
+		   (:jecxz 'pfix-pbig-done)
+		   (:movzxw (:eax #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
+		   (:cmpl 1 :ecx)
+		   (:jne 'not-size1)
+		   (:compile-form (:result-mode :ecx) x)
+		   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   (:addl (:eax #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)) :ecx)
+		   (:jc '(:sub-program ()
+			  (:break)))
+		   (:call-global-constant box-u32-ecx)
+		   (:jmp 'pfix-pbig-done)
+		  not-size1
+		   (:break)
+		  pfix-pbig-done))
+		)))
 	(do-it)))
    (t (&rest terms)
       (declare (dynamic-extent terms))
@@ -128,13 +145,13 @@
   (+ 1 number))
 
 (define-compiler-macro 1+ (number)
-  `(+ ,number 1))
+  `(+ 1 ,number))
 
 (defun 1- (number)
-  (- number 1))
+  (+ -1 number))
 
 (define-compiler-macro 1- (number)
-  `(- ,number 1))
+  `(+ -1 ,number))
 
 (define-modify-macro incf (&optional (delta-form 1)) +)
 
