@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.21 2004/04/15 13:06:18 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.22 2004/04/16 10:24:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -686,6 +686,7 @@ The valid parameters are~{ ~S~}."
 			       `((:cmpl :edi ,(single-value-register not-returns))))
 		 :returns :boolean-zf=1)) ; TRUE iff result equal to :edi/NIL.
 	      (otherwise
+	       #+ignore
 	       (warn "unable to deal intelligently with inlined-NOT not-returns: ~S for ~S from ~S"
 		     not-returns not-result-mode (not-values :producer))
 	       (let ((label (make-symbol "not-label")))
@@ -716,7 +717,7 @@ The valid parameters are~{ ~S~}."
 				     result-mode
 				   (car sub-form-result-mode))
 	as last-form-p = (endp (cdr sub-form))
-				 ;; do (warn "progn rm: ~S" (car sub-form-result-mode))
+			 ;; do (warn "progn rm: ~S" (car sub-form-result-mode))
 	appending
 	  (compiler-values-bind (&code code &returns sub-returns-mode
 				 &functional-p no-sub-side-effects-p
