@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.10 2004/04/14 17:54:51 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.11 2004/04/14 20:10:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -246,10 +246,10 @@ with EAX still holding the tag."
     (:jecxz 'no-stack-binding)
     (:cmpl :eax (:ecx))
     (:je 'success)
-    (:locally (:movl (:edi (:edi-offset stack-top)) :edx))
+;;;    (:locally (:movl (:edi (:edi-offset stack-top)) :edx))
    search-loop
-    (:cmpl :edx (:ecx 12))
-    (:jnc '(:sub-program () (:int 97)))
+;;;    (:cmpl :edx (:ecx 12))
+;;;    (:jnc '(:sub-program () (:int 97)))
     (:movl (:ecx 12) :ecx)		; parent
     (:jecxz 'no-stack-binding)
     (:cmpl :eax (:ecx))			; compare name
@@ -276,10 +276,10 @@ with EAX still holding the tag."
     (:jecxz 'no-binding)
     (:cmpl :eax (:ecx))
     (:je 'success)
-    (:locally (:movl (:edi (:edi-offset stack-top)) :edx))
+;;;    (:locally (:movl (:edi (:edi-offset stack-top)) :edx))
    search-loop
-    (:cmpl :edx (:ecx 12))
-    (:jnc '(:sub-program () (:int 97)))
+;;;    (:cmpl :edx (:ecx 12))
+;;;    (:jnc '(:sub-program () (:int 97)))
     (:movl (:ecx 12) :ecx)		; parent
     (:jecxz 'no-binding)
     (:cmpl :eax (:ecx))			; compare name
