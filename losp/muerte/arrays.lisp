@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.16 2004/04/01 02:09:58 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.17 2004/04/16 14:42:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -548,7 +548,7 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 	   (replace array initial-contents)))
 	 array))
       ((member element-type '(u32 (unsigned-byte 32)) :test #'equal)
-       (let ((array (malloc-words dimensions)))
+       (let ((array (malloc-data-words dimensions)))
 	 (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
 		       0 :unsigned-byte16)
 	   0)
