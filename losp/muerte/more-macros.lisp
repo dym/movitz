@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.8 2004/06/04 13:32:16 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.9 2004/06/09 17:22:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -311,3 +311,13 @@ respect to multiple threads."
        (let ((,object-var ,instance-form))
 	 ,@declarations-and-forms))))
 
+
+;;; Some macros that aren't implemented, and we want to give compiler errors.
+
+(defmacro define-unimplemented-macro (name)
+  `(defmacro ,name (&rest args)
+     (declare (ignore args))
+     (error ,(format nil "Macro ~A is not implemented yet." name))))
+
+(define-unimplemented-macro with-open-file)
+(define-unimplemented-macro restart-case)
