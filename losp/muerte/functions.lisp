@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.7 2004/03/28 17:31:41 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.8 2004/04/14 12:25:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -84,14 +84,13 @@
 
 (defun funobj-code-vector (funobj)
   (check-type funobj compiled-function)
-  (%word-offset (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::code-vector) 0 :lisp)
-		-2))
+  (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::code-vector) 0 :code-vector))
 
 (defun (setf funobj-code-vector) (code-vector funobj)
   (check-type funobj compiled-function)
   (check-type code-vector vector-u8)
-  (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::code-vector) 0 :lisp)
-    (%word-offset code-vector 2)))
+  (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::code-vector) 0 :code-vector)
+    code-vector))
 
 (defun funobj-code-vector%1op (funobj)
   "This slot is not a lisp value, it is a direct address to code entry point. In practice it is either
@@ -274,16 +273,18 @@ as that vector."
     "Index ~D out of range, ~S has ~D constants." index funobj (funobj-num-constants funobj))
   (if (>= index (funobj-num-jumpers funobj))
       (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:constant0) index :lisp)
-    (without-gc
-     (with-inline-assembly (:returns :eax)
-       (:compile-two-forms (:eax :untagged-fixnum-ecx) funobj index)
-       (:movl (:eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:code-vector))
-	      :ebx)
-       (:negl :ebx)
-       (:addl ((:ecx 4) :eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:constant0))
-	      :ebx)
-       (:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :eax)
-       (:xorl :ebx :ebx)))))
+    ;; For a jumper, return its offset relative to the code-vector.
+    ;; This is tricky wrt. to potential GC interrupts, because we're doing
+    ;; pointer arithmetics.
+    (with-inline-assembly (:returns :eax)
+      (:compile-two-forms (:eax :ecx) funobj index)
+      (:movl #.movitz:+code-vector-transient-word+ :ebx)
+      (:addl (:eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:code-vector))
+	     :ebx)			; code-vector (word) into ebx
+      (:subl (:eax :ecx #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:constant0))
+	     :ebx)
+      (:negl :ebx)
+      (:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :eax))))
 
 (defun (setf funobj-constant-ref) (value funobj index)
   (check-type funobj compiled-function)
@@ -297,10 +298,10 @@ as that vector."
       (assert (below value (length (funobj-code-vector funobj))) (value)
 	"The jumper value ~D is invalid because the code-vector's size is ~D."
 	value (length (funobj-code-vector funobj)))
-      (without-gc
+      (progn ;; without-gc
        (with-inline-assembly (:returns :nothing)
-	 (:compile-two-forms (:eax :untagged-fixnum-ecx) funobj index)
-	 (:leal ((:ecx 4) :eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:constant0))
+	 (:compile-two-forms (:eax :ecx) funobj index)
+	 (:leal (:ecx :eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:constant0))
 		:ebx)			; dest. address into ebx.
 	 (:compile-form (:result-mode :untagged-fixnum-ecx) value)
 	 (:addl (:eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:code-vector))
