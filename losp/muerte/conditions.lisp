@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.7 2004/06/10 12:07:02 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.8 2004/07/12 07:54:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -303,3 +303,5 @@ Return the condition object, if there was one."
 	     (or format-control "Break was invoked.")
 	     format-arguments)))
   nil)
+
+(define-condition newline () ())
