@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:49:17 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: parse.lisp,v 1.3 2004/01/19 11:23:41 ffjeld Exp $
+;;;; $Id: parse.lisp,v 1.4 2004/11/24 10:02:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -122,24 +122,24 @@ Doubly quoted forms are copied verbatim (sans the quotes)."
        ((and (symbolp (car program))
 	     (eq (symbol-package (car program)) from-package))
 	(cons (translate-symbol (car program))
-	      (muerte::translate-program (rest program) from-package to-package
-						:when when
-						:remove-double-quotes-p remove-double-quotes-p
-						:quote-symbol quote-symbol)))
+	      (muerte::translate-program (cdr program) from-package to-package
+					 :when when
+					 :remove-double-quotes-p remove-double-quotes-p
+					 :quote-symbol quote-symbol)))
        ((consp (car program))
 	(cons (muerte::translate-program (car program) from-package to-package
-						:when when
-						:remove-double-quotes-p remove-double-quotes-p
-						:quote-symbol quote-symbol)
+					 :when when
+					 :remove-double-quotes-p remove-double-quotes-p
+					 :quote-symbol quote-symbol)
 	      (muerte::translate-program (cdr program) from-package to-package
-						:when when
-						:remove-double-quotes-p remove-double-quotes-p
-						:quote-symbol quote-symbol)))
+					 :when when
+					 :remove-double-quotes-p remove-double-quotes-p
+					 :quote-symbol quote-symbol)))
        (t (cons (car program)
 		(muerte::translate-program (cdr program) from-package to-package
-						  :when when
-						  :remove-double-quotes-p remove-double-quotes-p
-						  :quote-symbol quote-symbol)))))))
+					   :when when
+					   :remove-double-quotes-p remove-double-quotes-p
+					   :quote-symbol quote-symbol)))))))
 
 (defun decode-normal-lambda-list (lambda-list &optional host-symbols-p)
   "3.4.1 Ordinary Lambda Lists.
