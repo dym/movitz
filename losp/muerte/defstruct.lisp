@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.6 2004/04/18 23:16:49 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.7 2004/04/19 22:38:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -294,7 +294,11 @@ Parameters: struct-name."
 			   (slot-number ,slot-number)))
 		(defclass ,struct-name (structure-object) ()
 			  (:metaclass structure-class)
-			  (:slots ,canonical-slot-descriptions))
+			  (:slots ,(loop for (name) in canonical-slot-descriptions
+				       as location upfrom 0
+				       collect (movitz-make-instance 'structure-slot-definition
+								     :name name
+								     :location location))))
 		',struct-name))
 	    (list
 	     `(progn
@@ -332,10 +336,3 @@ Parameters: struct-name."
 (defun structure-object-name (x)
   (movitz-accessor x movitz-struct name))
 
-(defmacro with-accessors (slot-entries instance-form &body declarations-and-forms)
-  (let ((instance-variable (gensym "with-accessors-instance-")))
-    `(let ((,instance-variable ,instance-form))
-       (declare (ignorable ,instance-variable))
-       (symbol-macrolet ,(loop for (variable-name accessor-name) in slot-entries
-			     collecting `(,variable-name (,accessor-name ,instance-variable)))
-	 ,@declarations-and-forms))))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.8 2004/04/19 15:06:32 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.9 2004/04/19 22:38:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1129,7 +1129,14 @@ next-emf as its target for call-next-method."
 (defclass structure-class (class)
   ((slots
     :initarg :slots
-    :accessor structure-slots)))
+    :reader class-slots)))
+
+(defclass structure-slot-definition (slot-definition)
+  ((name
+    :initarg :name)
+   (location
+    :initarg :location
+    :reader structure-slot-location)))
 
 (defclass structure-object (t) () (:metaclass structure-class))
 
@@ -1303,14 +1310,14 @@ next-emf as its target for call-next-method."
 	(values (slot-missing class object slot-name 'slot-value))
       (slot-value-using-class class object slot))))
 
-(defmethod slot-value-using-class ((class standard-class) object (slot standard-effective-slot-definition))
+(defmethod slot-value-using-class ((class standard-class) object
+				   (slot standard-effective-slot-definition))
   (let ((x (standard-instance-access object (slot-definition-location slot))))
     (if (eq x (load-global-constant unbound-value))
 	(slot-unbound class object (slot-definition-name slot))
       x)))
 
-(defmethod slot-value-using-class ((class funcallable-standard-class)
-				   object
+(defmethod slot-value-using-class ((class funcallable-standard-class) object
 				   (slot standard-effective-slot-definition))
   (let* ((location (slot-definition-location slot))
          (slots (std-gf-instance-slots object))
@@ -1318,6 +1325,9 @@ next-emf as its target for call-next-method."
     (if (eq (load-global-constant unbound-value) val)
 	(slot-unbound class object (slot-definition-name slot))        
       val)))
+
+(defmethod slot-value-using-class ((class structure-class) object slot)
+  (structure-ref object (structure-slot-location slot)))
 
 (defun (setf slot-value) (new-value object slot-name)
   (let* ((class (class-of object))
@@ -1338,6 +1348,9 @@ next-emf as its target for call-next-method."
   (let ((location (slot-definition-location slot))
 	(slots (std-gf-instance-slots object)))
     (setf (svref slots location) new-value)))
+
+(defmethod (setf slot-value-using-class) (new-value (class structure-class) object slot)
+  (setf (structure-ref object (structure-slot-location slot)) new-value))
 
 (defun slot-boundp (object slot-name)
   (let* ((class (class-of object))
@@ -1676,13 +1689,12 @@ in an instance whose metaclass is standard-class."))
   object)
 
 (defmethod print-object ((object structure-object) stream)
-  (let* ((class (class-of object))
-	 (slots (mapcar #'car (slot-value class 'slots)))
-	 (position 0))
+  (let* ((class (class-of object)))
     (format stream "#S(~S" (class-name class))
-    (dolist (slot slots)
-      (format stream " :~A ~S" slot (structure-ref object position))
-      (incf position))
+    (dolist (slot (class-slots class))
+      (format stream " :~A ~S"
+	      (symbol-name (slot-definition-name slot))
+	      (structure-ref object (structure-slot-location slot))))
     (write-string ")" stream))
   object)
 

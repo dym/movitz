@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.11 2004/02/15 13:17:55 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.12 2004/04/19 22:38:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -611,13 +611,13 @@
 					    :direct-superclasses direct-superclasses)
       class))
 
-  (defun movitz-make-instance (metaclass &rest all-keys)
-    ;; (warn "movitz-make-instance: ~S ~S" metaclass all-keys)
-    (when (symbolp metaclass)
-      (setf metaclass (movitz-find-class metaclass)))
-    (if (eq metaclass (movitz-find-class 'funcallable-standard-class nil))
-	(apply 'movitz-make-instance-funcallable metaclass all-keys)
-      (let ((instance (std-allocate-instance metaclass)))
+  (defun movitz-make-instance (class &rest all-keys)
+    ;; (warn "movitz-make-instance: ~S ~S" class all-keys)
+    (when (symbolp class)
+      (setf class (movitz-find-class class)))
+    (if (eq class (movitz-find-class 'funcallable-standard-class nil))
+	(apply 'movitz-make-instance-funcallable class all-keys)
+      (let ((instance (std-allocate-instance class)))
 	(dolist (slot (class-slots (movitz-class-of instance)))
 	  (let ((slot-name (slot-definition-name slot)))
 	    (multiple-value-bind (init-key init-value foundp)

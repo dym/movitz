@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:41:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: common-lisp.lisp,v 1.5 2004/04/18 23:17:04 ffjeld Exp $
+;;;; $Id: common-lisp.lisp,v 1.6 2004/04/19 22:38:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -34,6 +34,7 @@
 (require :muerte/inspect)
 (require :muerte/strings)
 (require :muerte/print)
+(require :muerte/los-closette)
 (require :muerte/defstruct)
 (require :muerte/hash-tables)
 (require :muerte/packages)
@@ -41,7 +42,6 @@
 (require :muerte/error)
 (require :muerte/loop)
 (require :muerte/eval)
-(require :muerte/los-closette)
 (require :muerte/environment)
 (require :muerte/streams)
 (require :muerte/restarts)
