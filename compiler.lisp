@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.119 2004/12/10 12:46:30 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.120 2004/12/13 11:21:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -86,7 +86,7 @@ compile, using the host compiler, the code rather than just using eval.")
 
 (defvar *compiler-trust-user-type-declarations-p* t)
 
-(defvar *compiling-function-name*)
+(defvar *compiling-function-name* nil)
 (defvar muerte.cl:*compile-file-pathname* nil)
 
 (defvar *extended-code-expanders*
@@ -933,8 +933,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
       (let ((ia-x86:*instruction-compute-extra-prefix-map*
 	     '((:call . compute-call-extra-prefix))))
 	(ia-x86:proglist-encode :octet-vector :32-bit #x00000000
-				(ia-x86:read-proglist (append combined-code
-							      #+ignore `((% bytes 8 0 0 0))))
+				(ia-x86:read-proglist combined-code)
 				:symtab-lookup
 				(lambda (label)
 				  (case label
@@ -951,8 +950,6 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 					     (* 4 pos)))))))))
     (setf (movitz-funobj-symtab funobj) code-symtab)
     (let ((code-length (- (length code-vector) 3 -3)))
-;;;      (assert (not (mismatch #(0 0 0) code-vector :start2 code-length)) ()
-;;;	"No space in code-vector was allocated for entry-points.")
       (setf (fill-pointer code-vector) code-length)
       ;; debug info
       (setf (ldb (byte 1 5) (slot-value funobj 'debug-info))
@@ -991,11 +988,15 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 		     (mapcar #'car rest))
 	       (vector-push 0 code-vector))))
       (setf (movitz-funobj-code-vector funobj)
-	(make-movitz-vector (length code-vector)
-			    :fill-pointer code-length
-			    :element-type 'code
-			    :initial-contents code-vector
-			    ))))
+	    (make-movitz-vector (length code-vector)
+				:fill-pointer code-length
+				:element-type 'code
+				:initial-contents code-vector)
+	    #+ignore
+	    (make-movitz-code-vector code-vector
+				     (car (slot-value funobj 'code-vector%1op))
+				     (car (slot-value funobj 'code-vector%2op))
+				     (car (slot-value funobj 'code-vector%3op))))))
   funobj)
 
 #+ignore
@@ -2809,8 +2810,7 @@ the sub-program options (&optional label) as secondary value."
 			   (and (not (instruction-is i :init-lexvar))
 				(member binding (find-read-bindings i)
 					:test #'binding-eql)))
-			 (cdr init-pc)
-			 #-sbcl :end #-sbcl 15))
+			 (cdr init-pc)))
 	       (binding-destination (third load-instruction))
 	       (distance (position load-instruction (cdr init-pc))))
 	  (multiple-value-bind (free-registers more-later-p)
@@ -3020,8 +3020,7 @@ the sub-program options (&optional label) as secondary value."
 					   (truncate
 					    (or (position-if (lambda (i)
 							       (member b (find-read-bindings i)))
-							     (cdr init-pc)
-							     #-sbcl :end #-sbcl 10)
+							     (cdr init-pc))
 						15)
 					    count)))))))))
 		 ;; First, make several passes while trying to locate bindings
