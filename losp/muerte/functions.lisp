@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.3 2004/03/22 16:38:05 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.4 2004/03/24 13:33:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -86,20 +86,14 @@
 
 (defun funobj-code-vector (funobj)
   (check-type funobj compiled-function)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) funobj)
-    (:movl (:eax #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector)) :eax)
-    (:subl 2 :eax)))			; this cell stores word+2
+  (%word-offset (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::code-vector) 0 :lisp)
+		-2))
 
 (defun (setf funobj-code-vector) (code-vector funobj)
   (check-type funobj compiled-function)
   (check-type code-vector vector-u8)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :ebx) funobj)
-    (:compile-form (:result-mode :eax) code-vector)
-    (:addl 2 :eax)			; this cell stores word+2
-    (:movl :eax (:ebx #.(bt::slot-offset 'movitz:movitz-funobj 'movitz:code-vector)))
-    (:subl 2 :eax)))
+  (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::code-vector) 0 :lisp)
+    (%word-offset code-vector 2)))
 
 (defun funobj-code-vector%1op (funobj)
   "This slot is not a lisp value, it is a direct address to code entry point. In practice it is either
