@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 2000-2004,
-;;;;    Department of Computer Science, University of Tromsø, Norway
+;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      storage-types.lisp
 ;;;; Description:   Physical storage structures for Movitz objects.
@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.1 2004/01/13 11:04:59 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.2 2004/01/19 11:23:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 

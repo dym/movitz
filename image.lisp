@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 2001,2000, 2002-2004,
-;;;;    Department of Computer Science, University of Tromsø, Norway.
+;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;; Filename:      image.lisp
 ;;;; Description:   Construction of LispOS images.
@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.2 2004/01/15 17:36:19 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.3 2004/01/19 11:23:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 

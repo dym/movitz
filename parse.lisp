@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 20012000, 2002-2004,
-;;;;    Department of Computer Science, University of Tromsø, Norway
+;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      parse.lisp
 ;;;; Description:   
@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:49:17 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: parse.lisp,v 1.2 2004/01/15 16:13:00 ffjeld Exp $
+;;;; $Id: parse.lisp,v 1.3 2004/01/19 11:23:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 

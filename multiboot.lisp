@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 2001-2002, 2004, 
-;;;;    Department of Computer Science, University of Tromsø, Norway.
+;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
 ;;;; 
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Jun 12 12:14:12 2002
 ;;;;                
-;;;; $Id: multiboot.lisp,v 1.1 2004/01/13 11:04:59 ffjeld Exp $
+;;;; $Id: multiboot.lisp,v 1.2 2004/01/19 11:23:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 

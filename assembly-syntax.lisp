@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 20012000, 2004,
-;;;;    Department of Computer Science, University of Tromsø, Norway
+;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      assembly-syntax.lisp
 ;;;; Description:   
@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  9 17:34:37 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: assembly-syntax.lisp,v 1.1 2004/01/13 11:04:59 ffjeld Exp $
+;;;; $Id: assembly-syntax.lisp,v 1.2 2004/01/19 11:23:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 

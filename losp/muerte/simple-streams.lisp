@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 2001, 2003-2004, 
-;;;;    Department of Computer Science, University of Tromsø, Norway.
+;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
 ;;;; 
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 29 13:39:43 2003
 ;;;;                
-;;;; $Id: simple-streams.lisp,v 1.1 2004/01/13 11:05:06 ffjeld Exp $
+;;;; $Id: simple-streams.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 

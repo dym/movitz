@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 20012000, 2002-2004,
-;;;;    Department of Computer Science, University of Tromsø, Norway
+;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      cons.lisp
 ;;;; Description:   
@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.1 2004/01/13 11:05:05 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 

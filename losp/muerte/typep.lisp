@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 20012000, 2002-2004,
-;;;;    Department of Computer Science, University of Tromsø, Norway
+;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      typep.lisp
 ;;;; Description:   Implements TYPEP and TYPECASE.
@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.1 2004/01/13 11:05:06 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 

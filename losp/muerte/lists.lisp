@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 20012000, 2002-2004,
-;;;;    Department of Computer Science, University of Tromsø, Norway
+;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      lists.lisp
 ;;;; Description:   
@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.1 2004/01/13 11:05:05 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 

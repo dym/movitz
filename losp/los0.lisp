@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 2001,2000, 2002-2004,
-;;;;    Department of Computer Science, University of Tromsø, Norway
+;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      los0.lisp
 ;;;; Description:   Top-level initialization file.
@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.1 2004/01/13 11:05:04 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.2 2004/01/19 11:23:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,6 +19,8 @@
 (require :x86-pc/all)
 (require :x86-pc/io-space)
 (require :x86-pc/ne2k)
+(require :x86-pc/floppy)
+
 (require :lib/readline)
 (require :lib/toplevel)
 (require :lib/net/ip6)
@@ -37,6 +39,12 @@
 (in-package muerte.init)
 
 (declaim (special muerte::*multiboot-data*))
+
+(defun test-floppy ()
+  (muerte.x86-pc::fd-start-disk)	; to initialize the controller and spin the drive up.
+  (muerte.x86-pc::fd-cmd-seek 70)	; to seek to track 70.
+  (setf (muerte.x86-pc::fd-motor) nil))	; to turn the drive and controller off.
+
 
 (defun alist-get-expand (alist key)
   (let (cons)

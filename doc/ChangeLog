@@ -1,3 +1,7 @@
+2004-01-19  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Fixed the bootloader slightly so it should now work with VMWare.
+
 2004-01-12  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
 
 	* Fixed the floppy bootloader so that it will work with BIOSes

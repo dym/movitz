@@ -1,16 +1,16 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 2001-2002, 2004, 
-;;;;    Department of Computer Science, University of Tromsø, Norway.
+;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
 ;;;; 
 ;;;; Filename:      browser.lisp
-;;;; Description:   
+;;;; Description:   A CLIM browser/inspector of Movitz images.
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Jun 14 15:14:35 2001
 ;;;;                
-;;;; $Id: browser.lisp,v 1.1 2004/01/13 11:04:59 ffjeld Exp $
+;;;; $Id: browser.lisp,v 1.2 2004/01/19 11:23:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 

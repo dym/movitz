@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 2001-2004, 
-;;;;    Department of Computer Science, University of Tromsø, Norway.
+;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
 ;;;; 
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb  5 19:05:01 2001
 ;;;;                
-;;;; $Id: characters.lisp,v 1.1 2004/01/13 11:05:05 ffjeld Exp $
+;;;; $Id: characters.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 

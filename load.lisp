@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 2003-2004, 
-;;;;    Department of Computer Science, University of Tromsoe, Norway.
+;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
 ;;;; 
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Jan 15 18:40:58 2004
 ;;;;                
-;;;; $Id: load.lisp,v 1.5 2004/01/16 18:22:37 ffjeld Exp $
+;;;; $Id: load.lisp,v 1.6 2004/01/19 11:23:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -38,6 +38,22 @@
 	    (setf (system::gsgc-parameter :generation-spread) 12)
 	    (sys:resize-areas :new (* 16 1024 1024)))
 
+#+clisp (load "packages")
+#+clisp (defconstant movitz::&all 'movitz::&all) ; CLisp has this wonderful bug..
+#+clisp (defconstant movitz::&code 'movitz::&code)
+#+clisp (defconstant movitz::&form 'movitz::&form)
+#+clisp (defconstant movitz::&returns 'movitz::&returns)
+#+clisp (defconstant movitz::&functional-p 'movitz::&functional-p)
+#+clisp (defconstant movitz::&modifies 'movitz::&modifies)
+#+clisp (defconstant movitz::&type 'movitz::&type)
+#+clisp (defconstant movitz::&final-form 'movitz::&final-form)
+#+clisp (defconstant movitz::&funobj 'movitz::&funobj)
+#+clisp (defconstant movitz::&top-level-p 'movitz::&top-level-p)
+#+clisp (defconstant movitz::&result-mode 'movitz::&result-mode)
+#+clisp (defconstant movitz::&env 'movitz::&env)
+#+clisp (defconstant movitz::&producer 'movitz::&producer)
+
+
 #-allegro (do () (nil)
 	    (with-simple-restart (retry "Retry loading Movitz")
 	      (return
@@ -47,8 +63,8 @@
 			    (do () (nil)
 			      (with-simple-restart (retry "Retry loading ~S" path)
 				(return
-				  (load (compile-file (make-pathname :name path :type "lisp")
-						      :print nil))))))
+				  (load (or (compile-file path :print nil)
+					    (error "Compile-file of ~S failed?" path)))))))
 			  '("packages"
 			    "movitz"
 			    "parse"
