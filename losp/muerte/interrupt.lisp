@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.30 2004/11/11 10:08:44 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.31 2004/11/11 19:28:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,7 +28,7 @@
       :atomically-continuation
       :raw-scratch0      
       :ecx :eax :edx :ebx :esi
-      :scratch1
+      :scratch1 :scratch2
       :debug0
       :debug1
       :tail-marker))
@@ -125,6 +125,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 				     :key #'dit-frame-index)
 		  collect `(:pushl ,reg))
 	    (:locally (:pushl (:edi (:edi-offset scratch1))))
+	    (:locally (:pushl (:edi (:edi-offset scratch2))))
  	    
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :eax))
 	    (:pushl :eax)		; debug0: nursery-space
@@ -209,6 +210,8 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0))))
 	    (:movl (:ebp ,(dit-frame-offset :scratch1)) :eax)
 	    (:locally (:movl :eax (:edi (:edi-offset scratch1))))
+	    (:movl (:ebp ,(dit-frame-offset :scratch2)) :eax)
+	    (:locally (:movl :eax (:edi (:edi-offset scratch2))))
 
 	    ;; Load the DF flag from the interruptee before we restore
 	    ;; its register contents.
@@ -266,9 +269,6 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:int 63)
 	    )))
     (do-it)))
-
-
-
 
 (defun interrupt-default-handler (vector dit-frame)
   (declare (without-check-stack-limit))
