@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 19:42:57 2004
 ;;;;                
-;;;; $Id: bignums.lisp,v 1.3 2004/07/19 00:54:25 ffjeld Exp $
+;;;; $Id: bignums.lisp,v 1.4 2004/07/19 14:44:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -466,7 +466,7 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 
 (defun bignum-set-zerof (bignum)
   (check-type bignum bignum)
-  (dotimes (i (logior 1 (%bignum-bigits bignum)))
+  (dotimes (i (%bignum-bigits bignum))
     (setf (memref bignum -2 i :lisp) 0))
   bignum)
 

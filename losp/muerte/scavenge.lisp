@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.19 2004/07/15 00:27:34 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.20 2004/07/19 14:44:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -48,8 +48,9 @@ start-location and end-location."
 	       "If x is a bignum header word, return the number of bigits."
 	       `(with-inline-assembly (:returns :eax)
 		  (:compile-form (:result-mode :eax) ,x)
-		  (:andl #xfffc0000 :eax)
-		  (:shrl 16 :eax))))
+		  (:shrl 16 :eax)
+		  (:testb ,movitz:+movitz-fixnum-zmask+ :al)
+		  (:jnz '(:sub-program () (:int 107))))))
     (do ((*scan-last* nil)		; Last scanned object, for debugging.
 	 (scan start-location (1+ scan)))
 	((>= scan end-location))
@@ -66,7 +67,7 @@ start-location and end-location."
 	    "Scanned ~Z at odd address #x~X." x scan)
 	  ;; Just skip the bigits
 	  (let* ((bigits (word-bigits x))
-		 (delta (1+ (logand bigits -2))))
+		 (delta (logior bigits 1)))
 	    (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
 	    (incf scan delta)))
 	 ((scavenge-typep x :funobj)
