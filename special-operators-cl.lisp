@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.8 2004/02/12 17:54:31 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.9 2004/02/12 21:57:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -150,14 +150,24 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			 (second (first body-code)))
 		     (eq (third (first body-code)) ; same register?
 			 (third (second body-code))))
-		(let ((tmp-binding (second (first body-code)))
-		      (dest-binding (second (second body-code))))
+		(let ((dest-binding (second (second body-code))))
 		  (check-type dest-binding lexical-binding)
-;;;		  (warn "HIT: tmp: ~A, desT: ~A" tmp-binding dest-binding)
 		  (compiler-call #'compile-form
 		    :forward all
 		    :result-mode dest-binding
 		    :form (second (first binding-var-codes)))))
+	       #+ignore
+	       ((and (= 1 (length binding-var-codes))
+		     (typep (movitz-binding (caar binding-var-codes) local-env nil)
+			    'lexical-binding)
+		     (instruction-is (first body-code) :load-lexical)
+		     (not (code-uses-binding-p (rest body-code) (second (first body-code))
+					       :load t :store nil))
+		     (eq (movitz-binding (caar binding-var-codes) local-env nil) ; same binding?
+			 (second (first body-code))))
+		(let ((tmp-binding (second (first body-code))))
+		  (print-code 'body body-code)
+		  (break "Yuhu: tmp ~S" tmp-binding)))
 	       (t (let ((code (append
 			       (loop
 				   for ((var init-form init-code functional-p type init-register)

@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.9 2004/02/12 17:54:37 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.10 2004/02/12 21:57:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -979,12 +979,10 @@ on the current result."
 ;;;		 (warn "t2-type: ~S, t2-ret: ~S, rm: ~S"
 ;;;		       term2-type term2-returns result-mode)
 		 (cond
-		  #+ignore
 		  ((and (eq 'binding-type (operator term2-type))
 			(eq (second term2-type) result-mode))
 		   (let ((binding result-mode))
 		     (check-type binding lexical-binding)
-		     (warn "yes, for ~S" binding)
 		     (compiler-values ()
 		       :returns binding
 		       :type (binding-type-specifier binding)
