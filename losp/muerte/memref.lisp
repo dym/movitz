@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.10 2004/04/06 14:25:44 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.11 2004/04/07 00:15:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -182,15 +182,19 @@
 			    (:jg '(:sub-program () (:int 4)))))))))
 		(:lisp
 		 (cond
-		  ((and (eq 0 index) (eq 0 offset))
+		  ((and (eql 0 index) (eql 0 offset))
 		   `(with-inline-assembly (:returns :register)
 		      (:compile-form (:result-mode :register) ,object)
 		      (:movl ((:result-register) ,(offset-by 4)) (:result-register))))
-		  ((eq 0 offset)
+		  ((eql 0 offset)
 		   `(with-inline-assembly (:returns :eax)
 		      (:compile-two-forms (:eax :ecx) ,object ,index)
 		      ,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
 			  `((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ecx))
+		      (:movl (:eax :ecx ,(offset-by 4)) :eax)))
+		  ((eql 0 index)
+		   `(with-inline-assembly (:returns :eax)
+		      (:compile-two-forms (:eax :untagged-fixnum-ecx) ,object ,offset)
 		      (:movl (:eax :ecx ,(offset-by 4)) :eax)))
 		  (t (assert (not (movitz:movitz-constantp offset env)))
 		     (assert (not (movitz:movitz-constantp index env)))
