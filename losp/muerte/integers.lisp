@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.92 2004/08/16 15:26:36 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.93 2004/08/18 09:50:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -333,6 +333,7 @@
 
 (define-compiler-macro =%2op (n1 n2 &environment env)
   (cond
+   #+ignore
    ((movitz:movitz-constantp n1 env)
     (let ((n1 (movitz:movitz-eval n1 env)))
       (etypecase n1
@@ -353,6 +354,7 @@
 	 `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
 	    (:compile-two-forms (:eax :ebx) ,n1 ,n2)
 	    (:call-global-pf fast-compare-two-reals))))))
+   #+ignore
    ((movitz:movitz-constantp n2 env)
     `(=%2op ,n2 ,n1))
    (t `(eql ,n1 ,n2))))
@@ -1137,39 +1139,39 @@
 		     (:store-lexical (:lexical-binding r) :eax :type bignum)
 
 		     (:movl :eax :ebx)	; r into ebx
-		     (:xorl :ecx :ecx)	; counter
+		     (:xorl :esi :esi)	; counter
 		     (:xorl :edx :edx)	; initial carry
 		     (:std)		; Make EAX, EDX, ESI non-GC-roots.
-		     (:compile-form (:result-mode :esi) x)
-		     (:sarl ,movitz:+movitz-fixnum-shift+ :esi)
+		     (:compile-form (:result-mode :ecx) x)
+		     (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
 		     (:jns 'multiply-loop)
-		     (:negl :esi)	; can't overflow
+		     (:negl :ecx)	; can't overflow
 		    multiply-loop
-		     (:movl :edx (:ebx (:ecx 1) ; new
+		     (:movl :edx (:ebx (:esi 1) ; new
 				       (:offset movitz-bignum bigit0)))
 		     (:compile-form (:result-mode :ebx) y)
-		     (:movl (:ebx (:ecx 1) (:offset movitz-bignum bigit0))
+		     (:movl (:ebx (:esi 1) (:offset movitz-bignum bigit0))
 			    :eax)
 		     
-		     (:mull :esi :eax :edx)
+		     (:mull :ecx :eax :edx)
 		     (:compile-form (:result-mode :ebx) r)
-		     (:addl :eax (:ebx :ecx (:offset movitz-bignum bigit0)))
+		     (:addl :eax (:ebx :esi (:offset movitz-bignum bigit0)))
 		     (:adcl 0 :edx)
-		     (:addl 4 :ecx)
-		     (:cmpw :cx (:ebx (:offset movitz-bignum length)))
+		     (:addl 4 :esi)
+		     (:cmpw :si (:ebx (:offset movitz-bignum length)))
 		     (:ja 'multiply-loop)
 		     (:testl :edx :edx)
 		     (:jz 'no-carry-expansion)
-		     (:movl :edx (:ebx :ecx (:offset movitz-bignum bigit0)))
-		     (:addl 4 :ecx)
-		     (:movw :cx (:ebx (:offset movitz-bignum length)))
+		     (:movl :edx (:ebx :esi (:offset movitz-bignum bigit0)))
+		     (:addl 4 :esi)
+		     (:movw :si (:ebx (:offset movitz-bignum length)))
 		    no-carry-expansion
+		     (:leal (:esi ,movitz:+movitz-fixnum-factor+)
+			    :ecx)	; Put bignum length into ECX
 		     (:movl (:ebp -4) :esi)
 		     (:movl :ebx :eax)
 		     (:movl :edi :edx)
 		     (:cld)		; EAX, EDX, and ESI are GC roots again.
-		     (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
-			    :ecx)
 		     (:call-local-pf cons-commit)
 		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 				      (:edi (:edi-offset atomically-status))))
