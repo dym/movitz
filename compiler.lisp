@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.66 2004/06/09 22:55:37 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.67 2004/06/10 12:05:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -723,6 +723,21 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 		       (t (error "Can't deal with optional-p at ~S, after (~S ~S)."
 				 optp-location req-location opt-location)))
 		      (make-stack-setup-code (- stack-frame-size stack-setup-pre))
+		      (when (binding-lended-p req-binding)
+			(let ((lended-cons-position (getf (binding-lended-p req-binding)
+							  :stack-cons-location)))
+			  (etypecase req-location
+			    (integer
+			     `((:movl (:ebp ,(stack-frame-offset req-location)) :edx)
+			       (:movl :edi (:ebp ,(stack-frame-offset lended-cons-position))) ; cdr 
+			       (:movl :edx (:ebp ,(stack-frame-offset (1+ lended-cons-position)))) ; car
+			       (:leal (:ebp 1 ,(stack-frame-offset (1+ lended-cons-position)))
+				      :edx)
+			       (:movl :edx (:ebp ,(stack-frame-offset req-location))))))))
+		      (when (binding-lended-p opt-binding)
+			(error "Can't deal with lending optional right now."))
+		      (when (and optp-binding (binding-lended-p optp-binding))
+			(error "Can't deal with lending optionalp right now."))
 		      resolved-code
 		      (make-compiled-function-postlude funobj function-env
 						       use-stack-frame-p)))))
@@ -798,7 +813,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 				       (and code2 (eq x 'entry%2op))
 				       (and code3 (eq x 'entry%3op))))
 				 codet)))))
-	;; (warn "opt code: ~{~&~A~}" optimized-function-code)
+	;; (print-code funobj combined-code)
 	(assemble-funobj funobj combined-code))))
   funobj)
 
@@ -5839,6 +5854,8 @@ and a list of any intervening unwind-protect environment-slots."
 				    init-with-register init-with-type)
       (cdr instruction)
     (declare (ignore protect-carry))	; nothing modifies carry anyway.
+    (when (string= (binding-name binding) 'reader-function)
+      (break "init: ~S" instruction))
     ;; (assert (eq binding (ensure-local-binding binding funobj)))
     (assert (eq funobj (binding-funobj binding)))
     (cond
@@ -5854,6 +5871,7 @@ and a list of any intervening unwind-protect environment-slots."
 	(warn "Unused variable: ~S." binding)))
      ((typep binding 'forwarding-binding)
       ;; No need to do any initialization because the target will be initialized.
+      (assert (not (binding-lended-p binding)))
       nil)
      (t (when (movitz-env-get (binding-name binding) 'ignore nil (binding-env binding))
 	  (warn "Variable ~S used while declared ignored." (binding-name binding)))
