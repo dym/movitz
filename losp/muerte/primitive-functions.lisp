@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.7 2004/04/07 00:15:44 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.8 2004/04/13 13:02:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -97,7 +97,7 @@
 
 ;;; Catch exit-point:
 ;;;   12: parent (no parent == #x0)
-;;;    8: eip
+;;;    8: jumper index (=> eip)
 ;;;    4: catch tag object/word
 ;;;    0: ebp/stack-frame
 
@@ -109,7 +109,7 @@
 
 ;;; Basic-restart entry:
 ;;;   12: parent
-;;;    8: eip
+;;;    8: jumper index (=> eip)
 ;;;    4: tag = #:basic-restart-tag
 ;;;    0: ebp/stack-frame
 ;;;   -4: name
