@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.8 2004/04/23 13:02:22 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.9 2004/05/19 15:09:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1103,3 +1103,32 @@
 (defun minus-if (x y)
   (if (integerp x) (- x y) x))
 
+(defun gcd (&rest numbers)
+  (numargs-case
+   (1 (u) u)
+   (2 (u v)
+      ;; Code borrowed from CMUCL.
+      (do ((k 0 (1+ k))
+	   (u (abs u) (ash u -1))
+	   (v (abs v) (ash v -1)))
+	  ((oddp (logior u v))
+	   (do ((temp (if (oddp u) (- v) (ash u -1))
+		      (ash temp -1)))
+	       (nil)
+	     (declare (fixnum temp))
+	     (when (oddp temp)
+	       (if (plusp temp)
+		   (setq u temp)
+		 (setq v (- temp)))
+	       (setq temp (- u v))
+	       (when (zerop temp)
+		 (let ((res (ash u k)))
+		   (declare (type (signed-byte 31) res)
+			    (optimize (inhibit-warnings 3)))
+		   (return res))))))))
+   (t (&rest numbers)
+      (declare (dynamic-extent numbers))
+      (do ((gcd (car numbers)
+		(gcd gcd (car rest)))
+	   (rest (cdr numbers) (cdr rest)))
+	  ((null rest) gcd)))))
