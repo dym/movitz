@@ -10,11 +10,12 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:16:00 2002
 ;;;;                
-;;;; $Id: ne2k.lisp,v 1.2 2004/01/15 17:13:53 ffjeld Exp $
+;;;; $Id: ne2k.lisp,v 1.3 2004/01/15 17:43:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (require :x86-pc/package)
+(require :lib/net/ethernet)
 
 (defpackage muerte.x86-pc.ne2k
   (:use muerte.cl muerte muerte.lib muerte.x86-pc muerte.ethernet)
