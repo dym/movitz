@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.44 2004/07/12 09:13:12 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.45 2004/07/12 11:09:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -137,7 +137,7 @@
 		   (:testl :ebx :ebx)
 		   (:jz 'pfix-pbig-done)
 		   (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
-		   (:cmpl 1 :ecx)
+		   (:cmpl ,movitz:+movitz-fixnum-factor+ :ecx)
 		   (:jne 'not-size1)
 		   (:compile-form (:result-mode :ecx) x)
 		   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
@@ -154,12 +154,12 @@
 		   (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
 				      'retry-jumper)
 				    (:edi (:edi-offset atomically-status))))
-		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,(* 2 movitz:+movitz-fixnum-factor+))
+		   (:leal ((:ecx 1) ,(* 2 movitz:+movitz-fixnum-factor+))
 			  :eax)		; Number of words
 		   (:call-global-constant get-cons-pointer)
 		   (:load-lexical (:lexical-binding y) :ebx) ; bignum
 		   (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
-		   (:leal ((:ecx #.movitz:+movitz-fixnum-factor+) ,movitz:+movitz-fixnum-factor+)
+		   (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
 			  :edx)
 		   (:movl 0 (:eax :edx ,movitz:+other-type-offset+)) ; MSB
 		  copy-bignum-loop
@@ -180,11 +180,11 @@
 		  add-bignum-done
 		   (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
 			    :ecx)
-		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,movitz:+movitz-fixnum-factor+)
+		   (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
 			  :ecx)
 		   (:cmpl 0 (:eax :ecx ,(+ -4 (bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))))
 		   (:je 'no-expansion)
-		   (:addl #x10000 (:eax ,movitz:+other-type-offset+))
+		   (:addl #x40000 (:eax ,movitz:+other-type-offset+))
 		   (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
 		  no-expansion
 		   (:call-global-constant cons-commit)
@@ -202,7 +202,7 @@
 							       pfix-pbig-done))
 		   (:compile-two-forms (:eax :ebx) y x)
 		   (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
-		   (:cmpl 1 :ecx)
+		   (:cmpl 4 :ecx)
 		   (:jne 'not-size1)
 		   (:compile-form (:result-mode :ecx) x)
 		   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
@@ -218,12 +218,12 @@
 		   (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
 				      'retry-jumper)
 				    (:edi (:edi-offset atomically-status))))
-		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,(* 1 movitz:+movitz-fixnum-factor+))
+		   (:leal ((:ecx 1) ,(* 1 movitz:+movitz-fixnum-factor+))
 			  :eax)		; Number of words
 		   (:call-global-constant get-cons-pointer)
 		   (:load-lexical (:lexical-binding y) :ebx) ; bignum
 		   (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
-		   (:leal ((:ecx #.movitz:+movitz-fixnum-factor+) ,movitz:+movitz-fixnum-factor+)
+		   (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
 			  :edx)
 		  copy-bignum-loop
 		   (:subl ,movitz:+movitz-fixnum-factor+ :edx)
@@ -244,11 +244,11 @@
 		  add-bignum-done
 		   (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
 			    :ecx)
-		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,movitz:+movitz-fixnum-factor+)
+		   (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
 			  :ecx)		; result bignum word-size
 		   (:cmpl 0 (:eax :ecx ,(+ -8 (bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))))
 		   (:jne 'no-expansion)
-		   (:subl #x10000 (:eax ,movitz:+other-type-offset+))
+		   (:subl #x40000 (:eax ,movitz:+other-type-offset+))
 		   (:subl ,movitz:+movitz-fixnum-factor+ :ecx)
 		  no-expansion
 		   (:call-global-constant cons-commit)
@@ -256,6 +256,63 @@
 				    (:edi (:edi-offset atomically-status))))
 		   
 		  pfix-pbig-done))
+		#+ignore
+		((positive-bignum positive-bignum)
+		 (if (< (%bignum-bigits y) (%bignum-bigits x))
+		     (+ y x)
+		   ;; Assume x is smallest.
+		   (with-inline-assembly (:returns :eax :labels (retry-copy
+								 copy-bignum-loop
+								 add-bignum-loop
+								 add-bignum-done
+								 no-expansion
+								 pfix-pbig-done))
+		    retry-copy
+		     (:compile-form (:result-mode :eax) y)
+		     (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
+		     (:declare-label-set retry-jumper (retry-copy))
+		     (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
+		     (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
+					'retry-jumper)
+				      (:edi (:edi-offset atomically-status))))
+		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,(* 2 movitz:+movitz-fixnum-factor+))
+			    :eax)	; Number of words
+		     (:call-global-constant get-cons-pointer)
+		     (:load-lexical (:lexical-binding y) :ebx) ; bignum
+		     (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
+		     (:leal ((:ecx #.movitz:+movitz-fixnum-factor+) ,movitz:+movitz-fixnum-factor+)
+			    :edx)
+		     (:movl 0 (:eax :edx ,movitz:+other-type-offset+)) ; MSB
+		    copy-bignum-loop
+		     (:subl ,movitz:+movitz-fixnum-factor+ :edx)
+		     (:movl (:ebx :edx ,movitz:+other-type-offset+) :ecx)
+		     (:movl :ecx (:eax :edx ,movitz:+other-type-offset+))
+		     (:jnz 'copy-bignum-loop)
+		     ;; We now have a copy of Y in EAX.
+		     (:load-lexical (:lexical-binding x) :ebx)
+
+		     (:xorl :ebx :ebx)
+		     (:addl :ecx (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		     (:jnc 'add-bignum-done)
+		    add-bignum-loop
+		     (:addl 4 :ebx)
+		     (:addl 1 (:eax :ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		     (:jc 'add-bignum-loop)
+		    add-bignum-done
+		     (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+			      :ecx)
+		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,movitz:+movitz-fixnum-factor+)
+			    :ecx)
+		     (:cmpl 0 (:eax :ecx ,(+ -4 (bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))))
+		     (:je 'no-expansion)
+		     (:addl #x10000 (:eax ,movitz:+other-type-offset+))
+		     (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
+		    no-expansion
+		     (:call-global-constant cons-commit)
+		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
+				      (:edi (:edi-offset atomically-status))))
+		   
+		    pfix-pbig-done)))
 		)))
 	(do-it)))
    (t (&rest terms)
@@ -409,8 +466,7 @@
 		    (:ret)))
 
 	    ;; Both n1 and n2 are positive bignums of the same size, namely ECX.
-	    (:leal ((:ecx ,movitz:+movitz-fixnum-factor+))
-		   :edx)		; counter
+	    (:movl :ecx :edx)		; counter
 	   positive-compare-loop
 	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
 	    (:jz 'positive-compare-lsb)
@@ -436,8 +492,7 @@
 		    (:ret)))
 
 	    ;; Both n1 and n2 are negative bignums of the same size, namely ECX.
-	    (:leal ((:ecx ,movitz:+movitz-fixnum-factor+))
-		   :edx)		; counter
+	    (:movl :ecx :edx)		; counter
 	   negative-compare-loop
 	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
 	    (:jz 'negative-compare-lsb)
@@ -476,8 +531,7 @@ Preserve EAX and EBX."
 	    (:jne 'done)
 	    ;; Ok.. we have two bignums of identical sign and size.
 	    (:shrl 16 :ecx)
-	    (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,movitz:+movitz-fixnum-factor+)
-		   :edx)		; counter
+	    (:movl :ecx :edx)		; counter
 	   compare-loop
 	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
 	    (:jz 'done)
@@ -998,7 +1052,7 @@ Preserve EAX and EBX."
 	       (:compile-form (:result-mode :ebx) integer)
 	       (:movzxw (:ebx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length))
 			:ecx)
-	       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,(* -1 movitz:+movitz-fixnum-factor+))
+	       (:leal ((:ecx 1) ,(* -1 movitz:+movitz-fixnum-factor+))
 		      :eax)		; bigits-1
 	       (:bsrl (:ebx (:ecx 4) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
 		      :ecx)
@@ -1069,7 +1123,8 @@ Preserve EAX and EBX."
 		     (:store-lexical (:lexical-binding d1) :edx :type fixnum)
 		     (:compile-form (:result-mode :eax)
 				    (malloc-data-words 3))
-		     (:movl ,(dpb 2 (byte 16 16) (movitz:tag :bignum 0))
+		     (:movl ,(dpb (* 2 movitz:+movitz-fixnum-factor+)
+				  (byte 16 16) (movitz:tag :bignum 0))
 			    (:eax ,movitz:+other-type-offset+))
 		     (:load-lexical (:lexical-binding d0) :ecx)
 		     (:movl :ecx (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
@@ -1128,8 +1183,7 @@ Preserve EAX and EBX."
 		     (:compile-form (:result-mode :eax) y)
 		     (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
 			      :ecx)
-		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
-			     ,(* 2 movitz:+movitz-fixnum-factor+))
+		     (:leal ((:ecx 1) ,(* 2 movitz:+movitz-fixnum-factor+))
 			    :eax)
 		     (:call-global-constant get-cons-pointer) ; New bignum into EAX
 
@@ -1139,7 +1193,7 @@ Preserve EAX and EBX."
 		     (:store-lexical (:lexical-binding r) :eax :type bignum)
 
 		     (:movl :eax :ebx)	; r into ebx
-		     (:xorl :ecx :ecx)
+		     (:xorl :ecx :ecx)	; counter
 		     (:xorl :edx :edx)	; initial carry
 		     (:std)		; Make EAX, EDX, ESI non-GC-roots.
 		     (:compile-form (:result-mode :esi) x)
@@ -1147,36 +1201,35 @@ Preserve EAX and EBX."
 		     (:jns 'multiply-loop)
 		     (:negl :esi)	; can't overflow
 		    multiply-loop
-		     (:movl :edx (:ebx (:ecx 4) ; new
+		     (:movl :edx (:ebx (:ecx 1) ; new
 				       ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
 		     (:compile-form (:result-mode :ebx) y)
-		     (:movl (:ebx (:ecx 4) ; old
+		     (:movl (:ebx (:ecx 1) ; old
 				  ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
 			    :eax)
 		     
 		     (:mull :esi :eax :edx)
 		     (:compile-form (:result-mode :ebx) r)
 		     (:addl :eax
-			    (:ebx (:ecx 4)
+			    (:ebx (:ecx 1)
 				  ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
 		     (:adcl 0 :edx)
-		     (:addl 1 :ecx)
+		     (:addl 4 :ecx)
 		     (:cmpw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
 		     (:ja 'multiply-loop)
 		     (:testl :edx :edx)
 		     (:jz 'no-carry-expansion)
 		     (:movl :edx
-			    (:ebx (:ecx 4)
+			    (:ebx (:ecx 1)
 				  ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
-		     (:addl 1 :ecx)
+		     (:addl 4 :ecx)
 		     (:movw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
 		    no-carry-expansion
 		     (:movl (:ebp -4) :esi)
 		     (:movl :ebx :eax)
 		     (:movl :edi :edx)
 		     (:cld)		; EAX, EDX, and ESI are GC roots again.
-		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
-			     ,movitz:+movitz-fixnum-factor+)
+		     (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
 			    :ecx)
 		     (:call-global-constant cons-commit)
 		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
@@ -1262,7 +1315,8 @@ Preserve EAX and EBX."
 		`(let (r n)
 		   (with-inline-assembly (:returns :multiple-values)
 		     (:compile-form (:result-mode :ebx) number)
-		     (:cmpw 1 (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+		     (:cmpw ,movitz:+movitz-fixnum-factor+
+			    (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
 		     (:jne 'not-size1)
 		     (:compile-form (:result-mode :ecx) divisor)
 		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
@@ -1289,7 +1343,7 @@ Preserve EAX and EBX."
 					'retry-jumper)
 				      (:edi (:edi-offset atomically-status))))
 
-		     (:leal ((:ecx 4) 4) :eax) ; Number of words
+		     (:leal ((:ecx 1) 4) :eax) ; Number of words
 		     (:call-global-constant get-cons-pointer) ; New bignum into EAX
 		     
 
@@ -1308,13 +1362,13 @@ Preserve EAX and EBX."
 		    divide-loop
 		     (:load-lexical (:lexical-binding number) :ebx)
 		     (:movl (:ebx #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)
-				  -4 (:ecx 4))
+				  -4 (:ecx 1))
 			    :eax)
 		     (:divl :esi :eax :edx)
 		     (:load-lexical (:lexical-binding r) :ebx)
 		     (:movl :eax (:ebx #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)
-				       -4 (:ecx 4)))
-		     (:subl 1 :ecx)
+				       -4 (:ecx 1)))
+		     (:subl 4 :ecx)
 		     (:jnz 'divide-loop)
 		     (:movl :edi :eax)	; safe value
 		     (:leal ((:edx ,movitz:+movitz-fixnum-factor+)) :edx)
@@ -1323,14 +1377,14 @@ Preserve EAX and EBX."
 		     (:movl :ebx :eax)
 		     (:movl :edx :ebx)
 
-		     (:movzxw (:eax #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+		     (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
 			      :ecx)
-		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) #.movitz:+movitz-fixnum-factor+)
+		     (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
 			    :ecx)
 		     (:cmpl 0 (:eax :ecx ,(+ -8 (bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))))
 		     (:jne 'no-more-shrinkage)
 		     
-		     (:subw 1 (:eax #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+		     (:subw 4 (:eax #.(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
 		     (:subl ,movitz:+movitz-fixnum-factor+ :ecx)
 		     (:cmpl ,(* 2 movitz:+movitz-fixnum-factor+) :ecx)
 		     (:jne 'no-more-shrinkage)
@@ -1536,7 +1590,7 @@ Preserve EAX and EBX."
 		      (:compile-two-forms (:eax :ebx) (copy-bignum x) y)
 		      (:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
 			       :ecx)
-		      (:leal ((:ecx 4) -4) :edx)
+		      (:leal ((:ecx 1) -4) :edx)
 		     pb-pb-and-loop
 		      (:movl (:ebx :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
 			     :ecx)
@@ -1580,7 +1634,7 @@ Preserve EAX and EBX."
 		(:compile-two-forms (:eax :ebx) (copy-bignum integer2) integer1)
 		(:movzxw (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
 			 :ecx)
-		(:leal ((:ecx 4) -4) :edx)
+		(:leal ((:ecx 1) -4) :edx)
 	       pb-pb-andc1-loop
 		(:movl (:ebx :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
 		       :ecx)
@@ -1632,8 +1686,7 @@ Preserve EAX and EBX."
 		       (:compile-two-forms (:eax :ebx) r y)
 		       (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
 				:ecx)
-		       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
-			       ,(* -1 movitz:+movitz-fixnum-factor+))
+		       (:leal ((:ecx 1) ,(* -1 movitz:+movitz-fixnum-factor+))
 			      :edx)	; EDX is loop counter
 		      or-loop
 		       (:movl (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
@@ -1707,8 +1760,7 @@ Preserve EAX and EBX."
 			(:compile-two-forms (:eax :ebx) r y)
 			(:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
 				 :ecx)
-			(:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
-				,(* -1 movitz:+movitz-fixnum-factor+))
+			(:leal ((:ecx 1),(* -1 movitz:+movitz-fixnum-factor+))
 			       :edx)	; EDX is loop counter
 		       xor-loop
 			(:movl (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
@@ -1717,9 +1769,7 @@ Preserve EAX and EBX."
 			       (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
 			(:subl 4 :edx)
 			(:jnc 'xor-loop)
-		       
-			(:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
-				 :ecx)))))
+			))))
 	       (do-it)))))))
    (t (&rest integers)
       (declare (dynamic-extent integers))
@@ -1793,8 +1843,8 @@ Preserve EAX and EBX."
 	       (:xorl :ecx :ecx)	; counter
 	      fill-ones-loop
 	       (:movl #xffffffff
-		      (:eax (:ecx 4) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
-	       (:addl 1 :ecx)
+		      (:eax (:ecx 1) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+	       (:addl 4 :ecx)
 	       (:cmpw :cx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length)))
 	       (:jne 'fill-ones-loop)
 	       
@@ -1816,7 +1866,7 @@ Preserve EAX and EBX."
 	       (:movzxw (:ebx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length))
 			:ecx)
 	       (:andl :edx		; And EDX with the MSB bigit.
-		      (:ebx (:ecx 4) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
+		      (:ebx (:ecx 1) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
 	       (:movl :edi :edx)
 	       (:movl :edi :eax)
 	       (:cld)			; =================> CLD
@@ -1843,9 +1893,10 @@ Preserve EAX and EBX."
 		 (:compile-form (:result-mode :ebx) integer)
 		 (:compile-form (:result-mode :eax) position)
 		 (:movl :eax :ecx)	; compute bigit-number in ecx
-		 (:sarl ,(+ 5 movitz:+movitz-fixnum-shift+) :ecx)
-		 (:addl 1 :ecx)
-		 (:cmpl #x10000 :ecx)
+		 (:sarl 5 :ecx)
+		 (:andl -4 :ecx)
+		 (:addl 4 :ecx)
+		 (:cmpl #x4000 :ecx)
 		 (:jae 'position-outside-integer)
 		 (:cmpw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
 		 (:jc '(:sub-program (position-outside-integer)
@@ -1853,11 +1904,11 @@ Preserve EAX and EBX."
 			(:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
 			(:jmp 'done-u32)))
 		 (:std)
-		 (:movl (:ebx (:ecx 4) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		 (:movl (:ebx (:ecx 1) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
 			:eax)
 		 (:movl 0 :edx)		; If position was in last bigit.. (don't touch EFLAGS)
 		 (:je 'no-top-bigit)	; ..we must zero-extend rather than read top bigit.
-		 (:movl (:ebx (:ecx 4) ,(+ 0 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		 (:movl (:ebx (:ecx 1) ,(+ 0 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
 			:edx)		; Read top bigit into EDX
 		no-top-bigit
 		 (:testl #xff00 (:ebx ,movitz:+other-type-offset+))
@@ -1885,7 +1936,8 @@ Preserve EAX and EBX."
 		 (:movl :edi :edx)
 		 (:cld)
 		 ;; See if we can return same bignum..
-		 (:cmpl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0))
+		 (:cmpl ,(dpb movitz:+movitz-fixnum-factor+
+			      (byte 16 16) (movitz:tag :bignum 0))
 			(:ebx ,movitz:+other-type-offset+))			     
 		 (:jne 'cant-return-same)
 		 (:cmpl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
@@ -1903,8 +1955,8 @@ Preserve EAX and EBX."
 		   (with-inline-assembly (:returns :eax)
 		     (:compile-form (:result-mode :ebx) integer)
 		     (:compile-form (:result-mode :ecx) position)
-		     (:shrl ,(+ 5 movitz:+movitz-fixnum-shift+) :ecx) ; compute bigit-number in ecx
-		     (:cmpl #x10000 :ecx)
+		     (:shrl 5 :ecx) ; compute fixnum bigit-number in ecx
+		     (:cmpl #x4000 :ecx)
 		     (:jnc 'position-outside-integer)
 		     (:cmpw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
 		     (:jbe '(:sub-program (position-outside-integer)
@@ -1916,8 +1968,8 @@ Preserve EAX and EBX."
 		     (:movl :ecx :eax)	; keep size/fixnum in EAX.
 		     (:addl :edx :ecx)
 		     (:into)		; just to make sure
-		     (:shrl ,(+ 5 movitz:+movitz-fixnum-shift+) :ecx) ; compute msb bigit index in ecx
-		     (:addl 1 :ecx)
+		     (:shrl 5 :ecx)	; compute msb bigit index/fixnum in ecx
+		     (:addl 4 :ecx)
 		     (:cmpw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
 		     (je '(:sub-program (equal-size-maybe-return-same)
 			   (:testl :edx :edx) ; Can only return same if (zerop position).
@@ -1932,7 +1984,7 @@ Preserve EAX and EBX."
 			   (:shll :cl :edx)
 			   (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
 			    :ecx)
-			   (:cmpl :edx (:ebx (:ecx 4)
+			   (:cmpl :edx (:ebx (:ecx 1)
 					,(+ -4 (bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))))
 			   (:movl 0 :edx) ; Safe value, and correct if we need to go to adjust-size.
 			   (:cld)	; =================>
@@ -1952,7 +2004,7 @@ Preserve EAX and EBX."
 		     ;; size smaller before proceeding. new-size = (- source-int-length position)
 		     (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
 			      :ecx)	; length of source-integer
-		     (:shll ,(+ 5 movitz:+movitz-fixnum-shift+) :ecx) ; fixnum bit-position
+		     (:shll 5 :ecx)	; fixnum bit-position
 		     (:xorl :eax :eax)	; In case the new size is zero.
 		     (:subl :edx :ecx)	; subtract position
 		     (:js '(:sub-program (should-not-happen)
@@ -1981,7 +2033,7 @@ Preserve EAX and EBX."
 		     ;; (:store-lexical (:lexical-binding r) :eax :type t)
 		     (:popl :ecx)
 		     (:subl ,(* 2 movitz:+movitz-fixnum-factor+) :ecx) ; for tmp storage and header.
-		     (:shll ,(- 16 movitz:+movitz-fixnum-shift+) :ecx)
+		     (:shll 16 :ecx)
 		     (:orl ,(movitz:tag :bignum 0) :ecx)
 		     (:movl :ecx (:eax ,movitz:+other-type-offset+))
 		     (:compile-form (:result-mode :ebx) integer)
@@ -1995,13 +2047,13 @@ Preserve EAX and EBX."
 			      :ecx)	; length of source-integer
 		     ;; Initialize tail-tmp to #xffffffff, meaning copy from source-integer.
 		     (:movl #xffffffff
-			    (:ebx (:ecx 4) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+			    (:ebx (:ecx 1) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
 		     (:cmpw :cx (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
 		     (:jc '(:sub-program (result-too-big-shouldnt-happen)
 			    (:break)))
 		     (:jne 'tail-tmp-ok)
 		     ;; Sizes was equal, so set tail-tmp to zero.
-		     (:movl 0 (:ebx (:ecx 4) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     (:movl 0 (:ebx (:ecx 1) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
 		    tail-tmp-ok
 		     ;; Now copy the relevant part of the integer
 		     (:std)
@@ -2014,14 +2066,14 @@ Preserve EAX and EBX."
 		    copy-integer
 		     (:movl (:eax) :edx)
 		     (:addl 4 :eax)
-		     (:movl :edx (:ebx (:ecx 4) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
-		     (:addl 1 :ecx)
+		     (:movl :edx (:ebx (:ecx 1) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     (:addl 4 :ecx)
 		     (:cmpw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
 		     (:jne 'copy-integer)
 		     ;; Copy one more than the length, namely the tmp at the end.
 		     ;; Tail-tmp was initialized to a bit-mask above.
 		     (:movl (:eax) :edx)
-		     (:andl :edx (:ebx (:ecx 4) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     (:andl :edx (:ebx (:ecx 1) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
 		     ;; Copy done, now shift
 		     (:compile-form (:result-mode :ecx) position)
 		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
@@ -2029,11 +2081,11 @@ Preserve EAX and EBX."
 		     (:jz 'shift-done)	; if (zerop (mod position 32)), no shift needed.
 		     (:xorl :edx :edx)	; counter
 		    shift-loop
-		     (:movl (:ebx (:edx 4) ,(+ 4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     (:movl (:ebx (:edx 1) ,(+ 4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
 			    :eax)	; Next bigit into eax
 		     (:shrdl :cl :eax	; Now shift bigit, with msbs from eax.
-			     (:ebx (:edx 4) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
-		     (:addl 1 :edx)
+			     (:ebx (:edx 1) ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		     (:addl 4 :edx)
 		     (:cmpw :dx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
 		     (:jne 'shift-loop)
 		    shift-done
@@ -2048,25 +2100,25 @@ Preserve EAX and EBX."
 		     (:shll :cl :eax)
 		     (:subl 1 :eax)
 		     (:andl :eax
-			    (:ebx (:edx 4) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
+			    (:ebx (:edx 1) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
 		    mask-done
-		     (:movl :edi :edx)	; safe EDX
+		     ;; (:movl :edi :edx)	; safe EDX
 		     (:movl :edi :eax)	; safe EAX
 		     (:cld)
 		     ;; Now we must zero-truncate the result bignum in EBX.
 		     (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
 			      :ecx)
 		    zero-truncate-loop
-		     (:cmpl 0 (:ebx (:ecx 4)
+		     (:cmpl 0 (:ebx (:ecx 1)
 				    ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
 		     (:jne 'zero-truncate-done)
-		     (:subl 1 :ecx)
+		     (:subl 4 :ecx)
 		     (:jnz 'zero-truncate-loop)
 		     ;; Zero bigits means the entire result collapsed to zero.
 		     (:xorl :eax :eax)
 		     (:jmp 'return-fixnum) ; don't commit the bignum allocation.
 		    zero-truncate-done
-		     (:cmpl 1 :ecx)	; If result size is 1, the result might have..
+		     (:cmpl 4 :ecx)	; If result size is 1, the result might have..
 		     (:jne 'complete-bignum-allocation) ; ..collapsed to a fixnum.
 		     (:cmpl ,movitz:+movitz-most-positive-fixnum+
 			    (:ebx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
@@ -2078,7 +2130,7 @@ Preserve EAX and EBX."
 		    complete-bignum-allocation
 		     (:movw :cx (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
 		     (:movl :ebx :eax)
-		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,movitz:+movitz-fixnum-factor+)
+		     (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
 			    :ecx)
 		     (:call-global-constant cons-commit)
 		    return-fixnum
@@ -2126,14 +2178,14 @@ Preserve EAX and EBX."
 		 `((:leal (:eax ,(- (movitz:tag :other))) :ecx)
 		   (:testb 7 :cl)
 		   (:jnz 'nix)
-		   (:cmpl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0))
+		   (:cmpl ,(dpb 4 (byte 16 16) (movitz:tag :bignum 0))
 			  (:eax ,movitz:+other-type-offset+))
 		   (:je 'done)))
 		((and (= 0 position) (<= (- 32 movitz:+movitz-fixnum-shift+) size ))
 		 `((:leal (:eax ,(- (movitz:tag :other))) :ecx)
 		   (:testb 7 :cl)
 		   (:jnz 'nix)
-		   (:cmpl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0))
+		   (:cmpl ,(dpb 4 (byte 16 16) (movitz:tag :bignum 0))
 			  (:eax ,movitz:+other-type-offset+))
 		   (:jne 'nix)
 		   (:movl (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))

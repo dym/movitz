@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.14 2004/07/12 07:56:45 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.15 2004/07/12 11:09:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -44,12 +44,12 @@ start-location and end-location."
 		 `(with-inline-assembly (:returns :boolean-zf=1)
 		    (:compile-form (:result-mode :eax) ,x)
 		    (:cmpw ,code :ax))))
-	     (word-upper16 (x)
-	       "Consider x as a 32-bit integer, and return the upper 16 bits (as a fixnum)."
+	     (word-bigits (x)
+	       "If x is a bignum header word, return the number of bigits."
 	       `(with-inline-assembly (:returns :eax)
 		  (:compile-form (:result-mode :eax) ,x)
-		  (:andl #xffff0000 :eax)
-		  (:shrl ,(- 16 movitz:+movitz-fixnum-shift+) :eax))))
+		  (:andl #xfffc0000 :eax)
+		  (:shrl 16 :eax))))
     (do ((*scan-last* nil)		; Last scanned object, for debugging.
 	 (scan start-location (1+ scan)))
 	((>= scan end-location))
@@ -65,7 +65,7 @@ start-location and end-location."
 	  (assert (evenp scan) ()
 	    "Scanned #x~Z at odd address #x~X." x scan)
 	  ;; Just skip the bigits
-	  (let* ((bigits (word-upper16 x))
+	  (let* ((bigits (word-bigits x))
 		 (delta (1+ (logand bigits -2))))
 	    (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
 	    (incf scan delta)))

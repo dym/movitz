@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.26 2004/07/08 12:01:51 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.27 2004/07/12 11:09:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1243,7 +1243,15 @@ integer (native lisp) value."
    (length
     :binary-type lu16
     :initarg :length
-    :accessor movitz-bignum-length)
+    :accessor movitz-bignum-length
+    :map-binary-write (lambda (x &optional type)
+			(declare (ignore type))
+			(check-type x (unsigned-byte 14))
+			(* x 4))
+    :map-binary-read (lambda (x &optional type)
+		       (declare (ignore type))
+		       (assert (zerop (mod x 4)))
+		       (truncate x 4)))
    (bigit0 :binary-type :label)
    (value
     :initarg :value

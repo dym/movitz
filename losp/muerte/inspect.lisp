@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.16 2004/07/08 21:48:58 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.17 2004/07/12 11:09:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -284,11 +284,11 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
 	    (:shrl 16 :ecx)
 	   shrink-loop
-	    (:cmpl 1 :ecx)
+	    (:cmpl ,movitz:+movitz-fixnum-factor+ :ecx)
 	    (:je 'shrink-no-more)
-	    (:cmpl 0 (:eax (:ecx 4) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
+	    (:cmpl 0 (:eax :ecx ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))))
 	    (:jnz 'shrink-done)
-	    (:subl 1 :ecx)
+	    (:subl ,movitz:+movitz-fixnum-factor+ :ecx)
 	    (:jmp 'shrink-loop)
 	   shrink-no-more
 	    (:cmpl ,(1+ movitz:+movitz-most-positive-fixnum+)
@@ -299,6 +299,8 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
 		   (:jmp 'done)))
 	   shrink-done
+	    (:testb 3 :cl)
+	    (:jnz '(:sub-program () (:int 59)))
 	    (:movw :cx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length)))
 	   done
 	    )))
