@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.52 2004/11/25 18:05:32 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.53 2004/12/09 14:20:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -70,14 +70,16 @@
 			    ,(cons 'cl:progn body)))
 
 (defmacro defpackage (package-name &rest options)
-  (let ((uses (if (not (assoc :use options))
-		  (list 'muerte.cl)
-		(cdr (assoc :use options)))))
+  (let ((uses (union (if (not (assoc :use options))
+			 (list 'muerte.cl)
+			 (cdr (assoc :use options)))
+		     (when (find-package package-name)
+		       (mapcar #'package-name (package-use-list package-name))))))
     (setf uses (mapcar (lambda (use)
 			 (if (member use (cons :common-lisp (package-nicknames :common-lisp))
 				     :test #'string=)
 			     :muerte.cl
-			   use))
+			     use))
 		       uses))
     (when (or (member :muerte.cl uses :test #'string=)
 	      (member :muerte.common-lisp uses :test #'string=))
@@ -85,7 +87,7 @@
     (let ((movitz-options (cons (cons :use uses)
 				(remove :use options :key #'car))))
       `(eval-when (:compile-toplevel)
-	 (defpackage ,package-name ,@movitz-options)))))
+	(defpackage ,package-name ,@movitz-options)))))
 
 (defmacro cond (&rest clauses)
   (if (null clauses)
@@ -873,16 +875,19 @@
   (if (not (movitz:movitz-constantp symbol env))
       form
     (let* ((type (movitz:movitz-eval symbol env))
-	   (cl-type (movitz::translate-program type :muerte.cl :cl)))
+	   (movitz-type (movitz-program type))
+	   (cl-type (host-program type)))
       (cond
        ((eq t cl-type)
 	`(load-global-constant the-class-t))
-       ((member type (movitz::image-classes-map movitz:*image*))
+       ((member movitz-type (movitz::image-classes-map movitz:*image*))
 	`(with-inline-assembly (:returns :register)
 	   (:globally (:movl (:edi (:edi-offset classes)) (:result-register)))
-	   (:movl ((:result-register) ,(movitz::class-object-offset type))
+	   (:movl ((:result-register) ,(movitz::class-object-offset movitz-type))
 		  (:result-register))))
-       (t (warn "unknown find-class: ~A" cl-type)
+       (t (warn "unknown find-class: ~S [~S] [~S]" cl-type
+		(and (symbolp cl-type) (symbol-package cl-type))
+		(and (symbolp movitz-type) (symbol-package movitz-type)))
 	  form))
       #+ignore
       (case cl-type
