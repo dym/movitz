@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.46 2004/12/13 11:24:09 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.47 2004/12/20 10:53:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -69,7 +69,6 @@
   :other 6
   :symbol 7
   
-  :code-vector #x1a
   :basic-vector #x22
   :defstruct #x2a
   :funobj #x3a
@@ -333,41 +332,6 @@ integer (native lisp) value."
 
 ;;; movitz-vectors
 
-(define-binary-class movitz-code-vector (movitz-heap-object-other)
-  ((type
-    :binary-type other-type-byte
-    :reader movitz-vector-type
-    :initform :code-vector)
-   (entry1
-    :binary-type u8
-    :initarg :entry1)
-   (num-elements
-    :binary-type lu16
-    :initarg :num-elements
-    :reader movitz-vector-num-elements)
-   (entry2
-    :binary-type lu16
-    :initarg :num-elements
-    :map-binary-write (lambda (x &optional type)
-			(declare (ignore type))
-			(check-type x (unsigned-byte 14))
-			(* x 4))
-    :map-binary-read (lambda (x &optional type)
-		       (declare (ignore type))
-		       (assert (zerop (mod x 4)))
-		       (truncate x 4)))
-   (entry3
-    :binary-type lu16
-    :initarg :num-elements)
-   (data
-    :binary-lisp-type :label)		; data follows physically here
-   (symbolic-data
-    :initarg :symbolic-data
-    :initform nil
-    :accessor movitz-vector-symbolic-data))
-  (:slot-align type #.+other-type-offset+))
-
-
 (define-binary-class movitz-basic-vector (movitz-heap-object-other)
   ((type
     :binary-type other-type-byte
@@ -553,19 +517,6 @@ integer (native lisp) value."
       :fill-pointer (if (integerp fill-pointer)
 			fill-pointer
 		      size))))
-
-(defun make-movitz-code-vector (code entry1 entry2 entry3)
-  (make-instance 'movitz-code-vector
-		 :symbolic-data code
-		 :num-elements (1- (ceiling (length code) 8))
-		 :entry1 entry1
-		 :entry2 entry2
-		 :entry3 entry3))
-
-(defmethod write-binary-record ((obj movitz-code-vector) stream)
-  (+ (call-next-method)			; header
-     (loop for data across (movitz-vector-symbolic-data obj)
-	summing (write-binary 'u8 stream data))))
 
 (defun make-movitz-string (string)
   (make-movitz-vector (length string)
