@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.3 2004/01/19 11:23:41 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.4 2004/02/02 13:04:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1262,6 +1262,9 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
   (setf (gethash movitz-object (image-inverse-read-map-hash image)) lisp-object
 	(gethash lisp-object (image-read-map-hash image)) movitz-object))
 
+(defmethod image-movitz-to-lisp-object ((image symbolic-image) movitz-object)
+  (gethash movitz-object (image-inverse-read-map-hash image)))
+
 (defmacro with-movitz-read-context (options &body body)
   (declare (ignore options))
   `(let ((*movitz-reader-clean-map* (if (boundp '*movitz-reader-clean-map*)
@@ -1292,7 +1295,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	 (integer (make-movitz-fixnum expr))
 	 (character (make-movitz-character expr))
 	 (vector (make-movitz-vector (length expr)
-				  :initial-contents (map 'vector #'movitz-read expr)))
+				     :initial-contents (map 'vector #'movitz-read expr)))
 	 (cons
 	  (image-read-intern-constant *image* expr)
 	  #+ignore (if (eq '#0=#:error (ignore-errors (when (not (list-length expr)) '#0#)))
@@ -1387,25 +1390,17 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 ;;; "Printer"
 
 (defun movitz-print (expr)
+  "Find the host lisp object equivalent to the Movitz object expr."
   (etypecase expr
     (integer expr)
     (symbol expr)
     (cons (mapcar #'movitz-print expr))
     ((or movitz-nil movitz-constant-block) nil)
-    (movitz-symbol
-     (intern (movitz-print (movitz-symbol-name expr))))
-    (movitz-string
-     (map 'string #'identity
-	  (movitz-vector-symbolic-data expr)))
     (movitz-fixnum
      (movitz-fixnum-value expr))
-    (movitz-vector
-     (map 'vector #'movitz-print (movitz-vector-symbolic-data expr)))
-    (movitz-cons
-     (cons (movitz-print (movitz-car expr))
-	   (movitz-print (movitz-cdr expr))))))
-
-;;;
+    (movitz-heap-object
+     (or (image-movitz-to-lisp-object *image* expr)
+	 (error "Unknown Movitz object: ~S" expr)))))
 
 (defmethod make-toplevel-funobj ((*image* symbolic-image))
   (let ((toplevel-code (loop for (funobj) in (image-load-time-funobjs *image*)
