@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  2 17:45:05 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: eval.lisp,v 1.4 2004/03/31 16:31:44 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.5 2004/04/13 16:30:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -63,6 +63,7 @@
       (number t)
       (keyword t)
       (character t)
+      (string t)
       (symbol (or (movitz-env-get form 'constantp nil environment)
 		  (typep (movitz-binding form environment) 'constant-object-binding)))
       (cons (case (car form)
