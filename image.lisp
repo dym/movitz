@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.49 2004/07/22 00:27:17 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.50 2004/07/23 15:32:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -937,7 +937,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	  (assert (file-position stream 512) () ; leave room for bootblock.
 	    "Couldn't set file-position for ~W." (pathname stream))
 	  (let* ((stack-vector (make-instance 'movitz-basic-vector
-				 :num-elements #xffff
+				 :num-elements #x1ffe
 				 :fill-pointer 0
 				 :symbolic-data nil
 				 :element-type :u32))
@@ -1311,9 +1311,10 @@ this image will not be Multiboot compatible."
 	 (code-position 0)
 	 (entry-points (map 'list #'identity (subseq code (movitz-vector-fill-pointer code-vector)))))
     (format t "~&;; Movitz Disassembly of ~A:~@[
-;;  Constants: ~A~]
+;;  ~D Constants: ~A~]
 ~:{~4D: ~16<~{ ~2,'0X~}~;~> ~A~@[ ;~{ ~A~}~]~%~}"
 	    (movitz-print (or (movitz-funobj-name funobj) name))
+	    (length (movitz-funobj-const-list funobj))
 	    (movitz-funobj-const-list funobj)
 	    (loop
 		for pc = 0 then code-position
