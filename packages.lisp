@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.31 2004/07/15 11:16:14 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.32 2004/07/15 12:26:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1197,6 +1197,7 @@
 	   #:basic-restart
 	   #:illegal-object
 	   #:run-time-context
+	   #:current-run-time-context
 	   
 	   make-funobj
 	   funobj-type
