@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.5 2004/04/01 20:25:07 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.6 2004/04/15 13:16:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -323,13 +323,14 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
        ((lambda)
 	(let ((lambda-list (cadr function-name))
 	      (lambda-body (cddr function-name)))
-	  (lambda (&rest args)
-	    (declare (dynamic-extent args))
-	    (eval-progn lambda-body
-			(make-destructuring-env lambda-list args env
-						:environment-p nil
-						:recursive-p nil
-						:whole-p nil)))))))))
+	  (install-funobj-name :anonymous-lambda
+			       (lambda (&rest args)
+				 (declare (dynamic-extent args))
+				 (eval-progn lambda-body
+					     (make-destructuring-env lambda-list args env
+								     :environment-p nil
+								     :recursive-p nil
+								     :whole-p nil))))))))))
   
 (defun lookup-setf-function (name)
   (let ((setf-name (gethash name (get-global-property :setf-namespace))))
