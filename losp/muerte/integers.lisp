@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.101 2004/11/21 00:10:11 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.102 2004/11/23 16:05:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2119,8 +2119,12 @@
 	 
 
 (defun dpb (newbyte bytespec integer)
-  (logior (mask-field bytespec (ash newbyte (byte-position bytespec)))
-	  (logandc2 integer (mask-field bytespec -1))))
+  (logior (if (= 0 newbyte)
+	      0
+	    (mask-field bytespec (ash newbyte (byte-position bytespec))))
+	  (if (= 0 integer)
+	      0
+	    (logandc2 integer (mask-field bytespec -1)))))
 
 (defun mask-field (bytespec integer)
   (ash (ldb bytespec integer) (byte-position bytespec)))
