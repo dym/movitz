@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.5 2004/04/15 15:11:44 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.6 2004/04/18 23:17:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -94,7 +94,11 @@
     :reader type-error-expected-type)
    (datum
     :initarg :datum
-    :reader type-error-datum)))
+    :reader type-error-datum))
+  (:report (lambda (c s)
+	     (format s "The object ~S is not of type ~S."
+		     (type-error-datum c)
+		     (type-error-expected-type c)))))
 
 (define-condition control-error (error) ())
 
