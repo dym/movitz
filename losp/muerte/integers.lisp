@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.12 2004/05/24 22:38:03 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.13 2004/06/01 13:38:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -32,15 +32,28 @@
   (typep x 'fixnum))
 
 (defun evenp (x)
-  (with-inline-assembly (:returns :ebx)
-    (:compile-form (:result-mode :eax) x)
-    (:globally (:movl (:edi (:edi-offset t-symbol)) :ebx))
-    (:testb #.(cl:1+ (cl:* 2 movitz::+movitz-fixnum-zmask+)) :al)
-    (:jz 'done)
-    (:movl :edi :ebx)
-    (:testb #.movitz::+movitz-fixnum-zmask+ :al)
-    (:jnz '(:sub-program (not-fixnum) (:int 107) (:jmp (:pc+ -4))))
-    done))
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :ebx)
+	    (:compile-form (:result-mode :eax) x)
+	    (:movl :eax :ecx)
+	    (:andl 7 :ecx)
+	    (:globally (:movl (:edi (:edi-offset t-symbol)) :ebx))
+	    (:cmpl ,(movitz:tag :even-fixnum) :ecx)
+	    (:je 'done)
+	    (:movl :edi :ebx)
+	    (:cmpl ,(movitz:tag :odd-fixnum) :ecx)
+	    (:je 'done)
+	    (:cmpl ,(movitz:tag :other) :ecx)
+	    (:jnz '(:sub-program (not-integer)
+		    (:int 107)))
+	    (:cmpb ,(movitz:tag :bignum) (:eax ,movitz:+other-type-offset+))
+	    (:jne 'not-integer)
+	    (:testb 1 (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+	    (:jnz 'done)
+	    (:globally (:movl (:edi (:edi-offset t-symbol)) :ebx))
+	   done)))
+    (do-it)))
 
 (defun oddp (x)
   (not (evenp x)))
@@ -64,6 +77,7 @@
 				    (cons constant-term non-constant-operands))))))
 	 `(+ (+%2op ,(first operands) ,(second operands)) ,@(cddr operands))))))
 
+#+ignore
 (defun +%2op (term1 term2)
   (check-type term1 fixnum)
   (check-type term2 fixnum)
@@ -73,37 +87,36 @@
     (:addl :ebx :eax)
     (:into)))
 
-#+ignore
-(define-compiler-macro +%2op (&whole form term1 term2)
-  (cond
-   ((and (movitz:movitz-constantp term1)	; first operand zero?
-	 (zerop (movitz:movitz-eval term1)))
-    term2)				; (+ 0 x) => x
-   ((and (movitz:movitz-constantp term2)	; second operand zero?
-	 (zerop (movitz:movitz-eval term2)))
-    term1)				; (+ x 0) => x
-   ((and (movitz:movitz-constantp term1)
-	 (movitz:movitz-constantp term2))
-    (+ (movitz:movitz-eval term1)
-       (movitz:movitz-eval term2)))	; compile-time constant folding.
-   ((movitz:movitz-constantp term1)
-    (let ((constant-term1 (movitz:movitz-eval term1)))
-      (check-type constant-term1 (signed-byte 30))
-      `(with-inline-assembly (:returns :register :side-effects nil) ; inline
-	 (:compile-form (:result-mode :register) ,term2)
-	 (:addl ,(* movitz::+movitz-fixnum-factor+ constant-term1) (:result-register))
-	 (:into))))
-   ((movitz:movitz-constantp term2)
-    (let ((constant-term2 (movitz:movitz-eval term2)))
-      (check-type constant-term2 (signed-byte 30))
-      `(with-inline-assembly (:returns :register :side-effects nil) ; inline
-	 (:compile-form (:result-mode :register) ,term1)
-	 (:addl ,(* movitz::+movitz-fixnum-factor+ constant-term2) (:result-register))
-	 (:into))))
-   (t `(with-inline-assembly (:returns :eax :side-effects nil)
-	 (:compile-two-forms (:ebx :eax) ,term1 ,term2)
-	 (:addl :ebx :eax)
-	 (:into)))))
+;;;(define-compiler-macro +%2op (&whole form term1 term2)
+;;;  (cond
+;;;   ((and (movitz:movitz-constantp term1)	; first operand zero?
+;;;	 (zerop (movitz:movitz-eval term1)))
+;;;    term2)				; (+ 0 x) => x
+;;;   ((and (movitz:movitz-constantp term2)	; second operand zero?
+;;;	 (zerop (movitz:movitz-eval term2)))
+;;;    term1)				; (+ x 0) => x
+;;;   ((and (movitz:movitz-constantp term1)
+;;;	 (movitz:movitz-constantp term2))
+;;;    (+ (movitz:movitz-eval term1)
+;;;       (movitz:movitz-eval term2)))	; compile-time constant folding.
+;;;   ((movitz:movitz-constantp term1)
+;;;    (let ((constant-term1 (movitz:movitz-eval term1)))
+;;;      (check-type constant-term1 (signed-byte 30))
+;;;      `(with-inline-assembly (:returns :register :side-effects nil) ; inline
+;;;	 (:compile-form (:result-mode :register) ,term2)
+;;;	 (:addl ,(* movitz::+movitz-fixnum-factor+ constant-term1) (:result-register))
+;;;	 (:into))))
+;;;   ((movitz:movitz-constantp term2)
+;;;    (let ((constant-term2 (movitz:movitz-eval term2)))
+;;;      (check-type constant-term2 (signed-byte 30))
+;;;      `(with-inline-assembly (:returns :register :side-effects nil) ; inline
+;;;	 (:compile-form (:result-mode :register) ,term1)
+;;;	 (:addl ,(* movitz::+movitz-fixnum-factor+ constant-term2) (:result-register))
+;;;	 (:into))))
+;;;   (t `(with-inline-assembly (:returns :eax :side-effects nil)
+;;;	 (:compile-two-forms (:ebx :eax) ,term1 ,term2)
+;;;	 (:addl :ebx :eax)
+;;;	 (:into)))))
 
 (defun 1+ (number)
   (+ 1 number))
@@ -194,7 +207,7 @@
    ((movitz:movitz-constantp subtrahend)
     (let ((constant-subtrahend (movitz:movitz-eval subtrahend)))
       (check-type constant-subtrahend (signed-byte 30))
-      `(+%2op ,minuend ,(- constant-subtrahend))))
+      `(+ ,minuend ,(- constant-subtrahend))))
    (t `(with-inline-assembly (:returns :eax :side-effects nil)
 	 (:compile-two-forms (:eax :ebx) ,minuend ,subtrahend)
 	 (:subl :ebx :eax)
