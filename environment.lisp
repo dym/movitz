@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.8 2004/10/07 12:41:41 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.9 2004/10/11 13:46:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -229,11 +229,15 @@ the function sets up itself. Its parent env. must be a funobj-env."))
 (defclass tagbody-env (lexical-exit-point-env) ())
 
 (defclass unwind-protect-env (movitz-environment)
-  ())
+  ((cleanup-form
+    :initarg :cleanup-form
+    :reader unwind-protect-env-cleanup-form)))
 
 (defmethod num-dynamic-slots ((x unwind-protect-env)) 1)
 
-(defclass simple-dynamic-env (with-things-on-stack-env) ()
+(defclass simple-dynamic-env (with-things-on-stack-env)
+  ((stack-used
+    :initform 4))
   (:documentation "An environment that installs one dynamic-env."))
 
 (defmethod num-dynamic-slots ((x simple-dynamic-env)) 1)
