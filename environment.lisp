@@ -1,7 +1,7 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001,2000, 2002-2004
-;;;;    Department of Computer Science, University of Tromsø, Norway
+;;;;    Copyright (C) 2000-2004
+;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      environment.lisp
 ;;;; Description:   Compiler environment.
@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.1 2004/01/13 11:04:59 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.2 2004/01/16 19:45:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -230,22 +230,11 @@ the function sets up itself. Its parent env. must be a funobj-env."))
 
 (defmethod num-dynamic-slots ((x unwind-protect-env)) 1)
 
-(defclass simple-dynamic-env (with-things-on-stack-env)
-  ()
+(defclass simple-dynamic-env (with-things-on-stack-env) ()
   (:documentation "An environment that installs one dynamic-env."))
 
 (defmethod num-dynamic-slots ((x simple-dynamic-env)) 1)
   
-
-;;;(defmethod print-object ((object movitz-environment) stream)
-;;;  (print-unreadable-object (object stream)
-;;;    (maphash #'(lambda (name binding)
-;;;		 (format stream " [~A: ~A]"
-;;;			 name
-;;;			 (and (slot-boundp binding 'location)
-;;;			      (slot-value binding 'location))))
-;;;	     (movitz-environment-bindings object))))
-
 (defparameter *movitz-macroexpand-hook*
     #'(lambda (macro-function form environment)
 ;;;	(warn "Expanding form ~W" form)
@@ -293,23 +282,6 @@ the function sets up itself. Its parent env. must be a funobj-env."))
 
 (define-symbol-macro *movitz-global-environment*
     (image-global-environment *image*))
-
-;;;(defun movitz-environment-add-binding (environment variable binding &key replace)
-;;;  (warn "deprecated movitz-environment-add-binding called for ~S => ~S." variable binding)
-;;;  (assert (or (not (slot-boundp binding 'env))
-;;;	      (eq (binding-env binding) environment))
-;;;      (binding)
-;;;    "Can't move a binding between environments!")
-;;;  (let ((bindings (movitz-environment-bindings environment)))
-;;;    (cond
-;;;     ((assoc variable bindings)
-;;;      (assert replace ()
-;;;        (error "Variable ~S is multiple bound." variable))
-;;;      (setf (cdr (assoc variable bindings)) binding))
-;;;     (t (push (cons variable binding)
-;;;              (movitz-environment-bindings environment)))))
-;;;  (setf (binding-env binding) environment)
-;;;  (values))
 
 (defun movitz-env-add-binding (env binding &optional (variable (binding-name binding)))
   (check-type binding binding)
@@ -443,9 +415,10 @@ the function sets up itself. Its parent env. must be a funobj-env."))
 (defun movitz-env-get (symbol indicator &optional (default nil)
 					       (environment nil)
 					       (recurse-p t))
-  (loop for env = (or environment *movitz-global-environment*) then (and recurse-p (movitz-environment-uplink env))
+  (loop for env = (or environment *movitz-global-environment*)
+      then (and recurse-p (movitz-environment-uplink env))
+      for plist = (and env (getf (movitz-environment-plists env) symbol))
       while env
-      for plist = (getf (movitz-environment-plists env) symbol)
       do (let ((val (getf plist indicator '#0=#:not-found)))
 	   (unless (eq val '#0#)
 	     (return (values val env))))
@@ -523,8 +496,8 @@ the function sets up itself. Its parent env. must be a funobj-env."))
 	     (macro-binding-expander binding)))
       (loop for env = (or environment *movitz-global-environment*)
 	  then (movitz-environment-uplink env)
+	  for val = (and env (gethash symbol (movitz-environment-function-cells env)))
 	  while env
-	  for val = (gethash symbol (movitz-environment-function-cells env))
 	  when val
 	  do (return (and (typep val 'movitz-macro)
 			  (movitz-macro-expander-function val))))))
@@ -544,10 +517,9 @@ the function sets up itself. Its parent env. must be a funobj-env."))
 (defun movitz-compiler-macro-function (name &optional environment)
   (loop for env = (or environment *movitz-global-environment*)
       then (movitz-environment-uplink env)
+      for val = (and env (getf (movitz-environment-compiler-macros env) name))
       while env
-      for val = (getf (movitz-environment-compiler-macros env) name)
-      when val
-      do (return val)))
+      when val do (return val)))
 
 (defun (setf movitz-compiler-macro-function) (fun name &optional environment)
   (setf (getf (movitz-environment-compiler-macros (or environment
