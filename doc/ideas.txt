@@ -1,6 +1,6 @@
 ######################################################################
 ## 
-##    Copyright (C) 2003, 
+##    Copyright (C) 2003-2004, 
 ##    Department of Computer Science, University of Tromsoe, Norway.
 ## 
 ##    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ## Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ## Created at:    Fri Dec 12 19:19:39 2003
 ##                
-## $Id: ideas.txt,v 1.1 2004/01/13 11:05:01 ffjeld Exp $
+## $Id: ideas.txt,v 1.2 2004/01/15 10:47:57 ffjeld Exp $
 ##                
 ######################################################################
 
@@ -20,3 +20,27 @@
     if we add one cache slot to each (caller) funobj. In many cases
     this would allow for a cache-size of 1 or 2, say. And it'd be
     possible to determine these cases dynamically.
+
+
+** Function calls via symbols
+
+  - It's a CPU-cache utilization problem that whenever a function is
+    called via a symbol, the entire symbol is likely to be loaded into
+    the cache (cache-lines are 32 bytes or more), whereas only the
+    function-value cell is likely to be used. If symbols are assigned
+    a small structure, like a cons cell, for holding their
+    function-value, then funcalls can go via this cell rather than the
+    symbol. If suchs cells are located cleverly wrt. CPU caching, a
+    substantial improvement in cache performance might be feasible.
+
+  - The above idea can be taken one step further. Observe that a cons
+    cell such as described above will represent a mapping from a
+    symbol S to a function F. Now, we can represent this same mapping
+    by a funobj FS which is a copy of the funobj F, and with the same
+    code-vectors. This way, the entire indirect reference to get a
+    symbol's function-value can be eliminated in the normal case. The
+    cost is the space overhead of the funobj copies, and a somewhat
+    more complicated (setf symbol-function). I.e. it would have to
+    install in the old FS a code-vector that updates the caller
+    function's references to the new FS, before trampolining to the
+    new FS. The performance gain could be substantial.
