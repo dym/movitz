@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.14 2004/04/17 15:33:57 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.15 2004/04/18 21:27:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -384,11 +384,11 @@
 (define-compiler-macro eq (&whole form &environment env x y)
   (cond
    ((movitz:movitz-constantp y env)
-    (let ((y (movitz::eval-form y env)))
+    (let ((y (movitz:movitz-eval y env)))
       (cond
        ((movitz:movitz-constantp x env)
 	(warn "constant eq!: ~S" form)
-	(eq y (movitz::eval-form x env)))
+	(eq y (movitz:movitz-eval x env)))
        ((eq y nil)
 	`(muerte::inlined-not ,x))
        ((eql y 0)
@@ -407,15 +407,13 @@
        (t `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
 	     (:compile-two-forms (:eax :ebx) ,x ,y)
 	     (:cmpl :eax :ebx))))))
-   ((and (movitz:movitz-constantp x env)
-	 (typep (movitz::eval-form x env)
-		'(or symbol (unsigned-byte 30))))
-    `(eq ,y ,x))
+   ((movitz:movitz-constantp x env)
+    `(eq ,y ',(movitz:movitz-eval x env)))
    (t `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
 	 (:compile-two-forms (:eax :ebx) ,x ,y)
 	 (:cmpl :eax :ebx)))))
 
-(define-compiler-macro eql (&whole form x y)
+(define-compiler-macro eql (x y)
   `(eq ,x ,y))
 
 (define-compiler-macro values (&rest sub-forms)
