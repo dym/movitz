@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.61 2004/05/24 19:10:12 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.62 2004/06/07 22:18:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2227,13 +2227,8 @@ falling below the label."
 (defclass closure-binding (function-binding located-binding) ())
 (defclass lambda-binding (function-binding) ())
 
-#+ignore
 (defclass temporary-name (located-binding)
-  ;; Is the value that this binding is bound to dynamic-extent?
-  (#+ignore
-   (stack-frame-allocated-p		; also a property-list
-    :initform nil
-    :accessor stack-frame-allocated-p)))
+  ())
 
 (defclass borrowed-binding (located-binding)
   ((reference-slot
@@ -2518,6 +2513,7 @@ the sub-program options (&optional label) as secondary value."
    free later, with a more specified frame-map."
   (loop with free-so-far = free-registers
       repeat distance for i in pc
+      while (not (null free-so-far))
       doing
 	(cond
 	 ((and (instruction-is i :init-lexvar)
@@ -2534,20 +2530,34 @@ the sub-program options (&optional label) as secondary value."
 						   (member x protect-registers))))
 					   free-so-far)))))
 	 (t (case (instruction-is i)
-	      ((nil :call)
-	       (return nil))
+	      ((nil)
+	       (return nil))		; a label, most likely
+	      ((:call)
+	       (setf free-so-far
+		 (remove-if (lambda (r)
+			      (not (eq r :push)))
+			    free-so-far)))
 	      ((:into :clc :stc :cld :std))
-	      ((:jnz :je :jne :jz))
+	      ((:jnz :je :jne :jz :jge)
+	       (setf free-so-far
+		 (remove :push free-so-far)))
+	      ((:pushl :popl)
+	       (setf free-so-far
+		 (remove-if (lambda (r)
+			      (or (eq r :push)
+				  (tree-search i r)))
+			    free-so-far)))
 	      ((:outb)
 	       (setf free-so-far
 		 (set-difference free-so-far '(:eax :edx))))
 	      ((:movb :testb :andb :cmpb)
 	       (setf free-so-far
 		 (remove-if (lambda (r)
-			      (or (tree-search i r)
-				  (tree-search i (register32-to-low8 r))))
+			      (and (not (eq r :push))
+				   (or (tree-search i r)
+				       (tree-search i (register32-to-low8 r)))))
 			    free-so-far)))
-	      ((:shrl :cmpl :pushl :popl :leal :movl :testl :andl :addl :subl :imull)
+	      ((:sarl :shrl :cmpl :leal :movl :testl :andl :addl :subl :imull)
 	       (setf free-so-far
 		 (remove-if (lambda (r)
 			      (tree-search i r))
@@ -2558,11 +2568,15 @@ the sub-program options (&optional label) as secondary value."
 		 (return (values nil t)))
 	       (let ((exp (expand-extended-code i funobj frame-map)))
 		 (when (tree-search exp '(:call :local-function-init))
-		   (return nil))
+		   (setf free-so-far
+		     (remove-if (lambda (r)
+				  (not (eq r :push)))
+				free-so-far)))
 		 (setf free-so-far
 		   (remove-if (lambda (r)
-				(or (tree-search exp r)
-				    (tree-search exp (register32-to-low8 r))))
+				(and (not (eq r :push))
+				     (or (tree-search exp r)
+					 (tree-search exp (register32-to-low8 r)))))
 			      free-so-far))))
 	      ((:local-function-init)
 	       (destructuring-bind (binding)
@@ -2572,6 +2586,7 @@ the sub-program options (&optional label) as secondary value."
 	      (t (warn "Dist ~D stopped by ~A"
 		       distance i)
 		 (return nil)))))
+      ;; do (warn "after ~A: ~A" i free-so-far)
       finally (return free-so-far)))
 
 (defun try-locate-in-register (binding var-counts funobj frame-map)
@@ -2581,7 +2596,7 @@ the sub-program options (&optional label) as secondary value."
   (let* ((count-init-pc (gethash binding var-counts))
 	 (count (car count-init-pc))
 	 (init-pc (cdr count-init-pc)))
-    ;; (warn "count: ~D, init-pc: ~{~&~A~}" count init-pc)
+    ;; (warn "b ~S: count: ~D, init-pc: ~{~&~A~}" binding count init-pc)
     (cond
      ((binding-lended-p binding)
       ;; We can't lend a register.
@@ -2599,7 +2614,7 @@ the sub-program options (&optional label) as secondary value."
 			   (member binding (find-read-bindings i)
 				   :test #'binding-eql))
 			 (cdr init-pc)
-			 :end 7))
+			 :end 15))
 	       (binding-destination (third load-instruction))
 	       (distance (position load-instruction (cdr init-pc))))
 	  (multiple-value-bind (free-registers more-later-p)
@@ -2631,6 +2646,18 @@ the sub-program options (&optional label) as secondary value."
 		(first free-registers-no-ecx))
 	       (more-later-p
 		(values nil :not-now))
+	       ((and distance (typep binding 'temporary-name))
+		;; We might push/pop this variable
+		(multiple-value-bind (push-available-p maybe-later)
+		    (compute-free-registers (cdr init-pc) distance funobj frame-map
+					    :free-registers '(:push))
+		  ;; (warn "pushing.. ~S ~A ~A" binding push-available-p maybe-later)
+		  (cond
+		   (push-available-p
+		    (values :push))
+		   (maybe-later
+		    (values nil :not-now))
+		   (t (values nil :never)))))
 	       (t (values nil :never))))))))
      (t (values nil :never)))))
 
@@ -2826,13 +2853,20 @@ the sub-program options (&optional label) as secondary value."
 				 (t (assert (eq status :never))))))))
 		     do (when (and try-again (not did-assign))
 			  (let ((binding (or (find-if (lambda (b)
+							(and (typep b 'positional-function-argument)
+							     (= 0 (function-argument-argnum b))
+							     (not (new-binding-located-p b frame-map))))
+						      bindings-fun-arg-sorted)
+					     (find-if (lambda (b)
+							(and (typep b 'positional-function-argument)
+							     (= 1 (function-argument-argnum b))
+							     (not (new-binding-located-p b frame-map))))
+						      bindings-fun-arg-sorted)
+					     (find-if (lambda (b)
 							(and (not (new-binding-located-p b frame-map))
 							     (not (typep b 'function-argument))))
 						      bindings-register-goodness-sort
-						      :from-end t)
-					     (find-if (lambda (b)
-							(not (new-binding-located-p b frame-map)))
-						      bindings-fun-arg-sorted))))
+						      :from-end t))))
 			    (when binding
 			      (setf (new-binding-location binding frame-map)
 				(post-incf stack-frame-position))
@@ -3142,6 +3176,10 @@ loading borrowed bindings."
 			 `((:movl (-1 ,(single-value-register result-mode))
 				  ,(single-value-register result-mode))))))
 	      (t (ecase lexb-location
+		   (:push
+		    (assert (member result-mode '(:eax :ebx :ecx :edx)))
+		    (assert (not indirect-p))
+		    `((:popl ,result-mode)))
 		   (:eax
 		    (assert (not indirect-p))
 		    (ecase result-mode
@@ -3354,6 +3392,8 @@ loading borrowed bindings."
 	  (if (integerp location)
 	      `((:movl ,source (:ebp ,(stack-frame-offset location))))
 	    (ecase location
+	      ((:push)
+	       `((:pushl ,source)))
 	      ((:eax :ebx :ecx :edx)
 	       (unless (eq source location)
 		 `((:movl ,source ,location))))
@@ -5267,14 +5307,22 @@ fifth:  all compiler-values for form1, as a list."
 	       (t #+ignore (when (and (not (tree-search code1 reg0))
 				      (not (tree-search code1 :call)))
 			     (warn "got b: ~S ~S for ~S: ~{~&~A~}" form0 form1 reg0 code1))
-		  (append (compile-form form0 funobj env nil :push)
-			  (compiler-call #'compile-form
-			    :form form1
-			    :funobj funobj
-			    :env env
-			    :result-mode reg1
-			    :with-stack-used 1)
-			  `((:popl ,reg0)))))
+		  (let ((binding (make-instance 'temporary-name :name (gensym "tmp-")))
+			(xenv (make-local-movitz-environment env funobj)))
+		    (movitz-env-add-binding xenv binding)
+		    (append (compiler-call #'compile-form
+			      :form form0
+			      :funobj funobj
+			      :env env
+			      :result-mode reg0)
+			    `((:init-lexvar ,binding :init-with-register ,reg0
+					    :init-with-type ,(type-specifier-primary type0)))
+			    (compiler-call #'compile-form
+			      :form form1
+			      :funobj funobj
+			      :env xenv
+			      :result-mode reg1)
+			    `((:load-lexical ,binding ,reg0))))))
 	      (and functional0 functional1)
 	      t
 	      (compiler-values-list (all0))
@@ -5624,7 +5672,8 @@ and a list of any intervening unwind-protect environment-slots."
 (defun can-expand-extended-p (extended-instruction frame-map)
   "Given frame-map, can we expand i at this point?"
   (and (every (lambda (b)
-		(new-binding-located-p (binding-target b) frame-map))
+		(or (typep (binding-target b) 'constant-object-binding)
+		    (new-binding-located-p (binding-target b) frame-map)))
 	      (find-read-bindings extended-instruction))
        (let ((written-binding (find-written-binding-and-type extended-instruction)))
 	 (or (not written-binding)
