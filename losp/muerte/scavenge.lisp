@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.47 2005/02/03 09:13:20 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.48 2005/02/15 22:22:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -98,7 +98,7 @@ start-location and end-location."
 	      (let ((new-code-vector (funcall function code-vector scan)))
 		(check-type new-code-vector code-vector)
 		(unless (eq code-vector new-code-vector)
-		  (error "Code-vector migration is not implemented.")
+		  (error "Code-vector migration is not implemented (~S)." funobj)
 		  (setf (memref scan 0 :index -1) (%word-offset new-code-vector 2))
 		  ;; Do more stuff here to update code-vectors and jumpers
 		  ))
@@ -195,24 +195,22 @@ at the start-stack-frame location."
 		    (location-in-object-p x location)
 		    x))))))
     (cond
+     ((location-in-object-p (symbol-value 'ret-trampoline) location)
+      (symbol-value 'ret-trampoline))
+     ((location-in-object-p (%run-time-context-slot 'dynamic-jump-next) location)
+      (%run-time-context-slot 'dynamic-jump-next))
      ((eq 0 casf-funobj)
       (let ((dit-code-vector (symbol-value 'default-interrupt-trampoline)))
 	(cond
 	 ((location-in-object-p dit-code-vector location)
 	  dit-code-vector)
 	 ((match-funobj esi location))
-	 ((location-in-object-p (symbol-value 'ret-trampoline) location)
-	  (symbol-value 'ret-trampoline))
 	 (t (break "DIT returns outside DIT??")))))
      ((match-funobj casf-funobj location))
      ((match-funobj esi location))      
      ((match-funobj edx location))
      ((not (typep casf-funobj 'function))
       (break "Unknown funobj/frame-type: ~S" casf-funobj))
-     ((location-in-object-p (symbol-value 'ret-trampoline) location)
-      (symbol-value 'ret-trampoline))
-     ((location-in-object-p (%run-time-context-slot 'dynamic-jump-next) location)
-      (%run-time-context-slot 'dynamic-jump-next))
      ((when primitive-function-p
 	(scavenge-find-pf location)
 	#+ignore
@@ -247,7 +245,7 @@ and whose return instruction-pointer is at location eip-index."
 	      (t (let* ((old-code-vector
 			 (scavenge-find-code-vector (stack-frame-ref nil eip-index 0 :location)
 						    frame-funobj nil nil)))
-		   (map-stack-instruction-pointer function eip-index old-code-vector))
+		   (map-instruction-pointer function eip-index old-code-vector))
 		 (let ((raw-locals (funobj-frame-raw-locals frame-funobj)))
 		   (if (= 0 raw-locals)
 		       (map-region function frame-bottom frame)
@@ -306,7 +304,7 @@ and whose return instruction-pointer is at location eip-index."
 	      (scavenge-find-code-vector (stack-frame-ref nil eip-index 0 :location)
 					 0 interrupted-esi
 					 nil))
-	     (new-code-vector (map-stack-instruction-pointer function eip-index old-code-vector)))
+	     (new-code-vector (map-instruction-pointer function eip-index old-code-vector)))
 	;; (when atomically (we should be more clever about the stack..))
 	(multiple-value-bind (x0-location x0-tag)
 	    (stack-frame-ref nil next-frame-bottom 0 :signed-byte30+2)
@@ -324,7 +322,7 @@ and whose return instruction-pointer is at location eip-index."
 					       casf-funobj interrupted-esi t
 					       (unless secondary-register-mode-p
 						 (dit-frame-ref nil dit-frame :edx)))))
-	      (map-stack-instruction-pointer function next-eip-index old-x0-code-vector))
+	      (map-instruction-pointer function next-eip-index old-x0-code-vector))
 	    (setf next-eip-index next-frame-bottom
 		  next-frame-bottom (1+ next-frame-bottom)))
 	   (t (multiple-value-bind (x1-location x1-tag)
@@ -339,19 +337,21 @@ and whose return instruction-pointer is at location eip-index."
 						     (unless secondary-register-mode-p
 						       interrupted-esi)
 						     t)))
-		    (map-stack-instruction-pointer function next-eip-index old-x1-code-vector))
+		    (map-instruction-pointer function next-eip-index old-x1-code-vector))
 		  (setf next-eip-index (+ 1 next-frame-bottom)
 			next-frame-bottom (+ 2 next-frame-bottom)))))))
 	;; proceed
 	(map-stack function casf-frame next-frame-bottom next-eip-index map-region)))))
 
-(defun map-stack-instruction-pointer (function index old-code-vector)
-  "Update the (raw) instruction-pointer in stack at index,
+(defun map-instruction-pointer (function location
+				&optional (old-code-vector (memref location 0 :type :code-vector)))
+  "Update the (raw) instruction-pointer at location,
 assuming the pointer refers to old-code-vector."
-  (assert (location-in-object-p old-code-vector (stack-frame-ref nil index 0 :location)))
+  (check-type old-code-vector code-vector)
+  (assert (location-in-object-p old-code-vector (memref location 0 :type :location)))
   (let ((new-code-vector (funcall function old-code-vector nil)))
     (when (not (eq old-code-vector new-code-vector))
-      (break "Code-vector for stack instruction-pointer moved. [index: ~S]" index))
+      (break "Code-vector for stack instruction-pointer moved at location ~S" location))
     new-code-vector))
 
 
