@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.9 2004/04/13 13:28:31 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.10 2004/04/14 17:54:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -214,7 +214,8 @@ with EAX still holding the tag."
 (define-primitive-function dynamic-find-binding (symbol)
   "Search the stack for a dynamic binding of SYMBOL.
    On success, return Carry=1, and the address of the
-   binding in EAX. On failure, return Carry=0 and EAX unmodified."
+   binding in EAX. On failure, return Carry=0 and EAX unmodified.
+   Preserves EBX."
   (with-inline-assembly (:returns :eax)
     (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
     (:jecxz 'fail)
@@ -241,16 +242,29 @@ with EAX still holding the tag."
 (define-primitive-function dynamic-load (symbol)
   "Load the dynamic value of SYMBOL into EAX."
   (with-inline-assembly (:returns :multiple-values)
-    (:call-global-constant dynamic-find-binding)
-    (:movl :eax :edx)
-    (:jnc 'no-binding)
-    (:movl (:eax) :eax)
+    (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
+    (:jecxz 'no-stack-binding)
+    (:cmpl :eax (:ecx))
+    (:je 'success)
+    (:locally (:movl (:edi (:edi-offset stack-top)) :edx))
+   search-loop
+    (:cmpl :edx (:ecx 12))
+    (:jnc '(:sub-program () (:int 97)))
+    (:movl (:ecx 12) :ecx)		; parent
+    (:jecxz 'no-stack-binding)
+    (:cmpl :eax (:ecx))			; compare name
+    (:jne 'search-loop)
+    ;; fall through on success
+   success
+    (:movl :eax :edx)			; Keep symbol in case it's unbound.
+    (:movl (:ecx 8) :eax)
     (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax))
     (:je '(:sub-program (unbound) (:int 99)))
     (:ret)
-   no-binding
-    ;; take the global value of SYMBOL.
-    (:movl (:eax #.(bt:slot-offset 'movitz::movitz-symbol 'movitz::value)) :eax)
+   no-stack-binding
+    ;; take the global value of SYMBOL, compare it against unbond-value
+    (:movl :eax :edx)			; Keep symbol in case it's unbound.
+    (:movl (:eax #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::value)) :eax)
     (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax))
     (:je '(:sub-program (unbound) (:int 99)))
     (:ret)))
@@ -258,26 +272,25 @@ with EAX still holding the tag."
 (define-primitive-function dynamic-store (symbol value)
   "Store VALUE (ebx) in the dynamic binding of SYMBOL (eax)."
   (with-inline-assembly (:returns :multiple-values)
-    (:pushl :ebx)			; Save VALUE for later.
-    (:call-global-constant dynamic-find-binding)
-    (:jnc 'no-binding)
-    (:popl :ebx)			; Load back VALUE from stack.
+    (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
+    (:jecxz 'no-binding)
+    (:cmpl :eax (:ecx))
+    (:je 'success)
+    (:locally (:movl (:edi (:edi-offset stack-top)) :edx))
+   search-loop
+    (:cmpl :edx (:ecx 12))
+    (:jnc '(:sub-program () (:int 97)))
+    (:movl (:ecx 12) :ecx)		; parent
+    (:jecxz 'no-binding)
+    (:cmpl :eax (:ecx))			; compare name
+    (:jne 'search-loop)
+    ;; fall through on success
+   success
+    (:leal (:ecx 8) :eax)		; location of binding value cell
     (:movl :ebx (:eax))			; Store VALUE in binding.
     (:ret)
    no-binding
-    (:popl :ebx)			; Load back VALUE from stack.
     (:movl :ebx (:eax #.(bt:slot-offset 'movitz::movitz-symbol 'movitz::value)))
-    (:ret)))
-
-(define-primitive-function dynamic-boundp (symbol)
-  "Return NIL iff SYMBOL is not dynamically bound."
-  (with-inline-assembly (:returns :multiple-values)
-    (:call-global-constant dynamic-find-binding)
-    (:jnc 'no-binding)
-    (:globally (:movl (:edi (:edi-offset t-symbol)) :eax))
-    (:ret)
-   no-binding
-    (:movl :edi :eax)
     (:ret)))
 
 (define-primitive-function keyword-search ()
