@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.30 2004/07/22 00:27:22 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.31 2004/07/23 15:34:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -77,9 +77,6 @@
   :illegal #x13
   :infant-object #x23
 
-  ;; :simple-vector #x20
-  ;; :character-vector 
-  
   :basic-restart #x32
   )
 
@@ -847,10 +844,8 @@ integer (native lisp) value."
 				   (+ x (movitz-intern-code-vector (movitz-funobj-code-vector obj)))))))))
 
 (defmethod print-object ((object movitz-funobj) stream)
-  (if (not (slot-boundp object 'name))
-      (call-next-method)
-    (print-unreadable-object (object stream :type t :identity t)
-      (write (movitz-print (movitz-funobj-name object)) :stream stream))))
+  (print-unreadable-object (object stream :type t :identity t)
+    (write (movitz-print (movitz-funobj-name object)) :stream stream)))
 
 (defmethod sizeof ((obj movitz-funobj))
   (+ (sizeof (find-binary-type 'movitz-funobj))
@@ -1298,3 +1293,13 @@ integer (native lisp) value."
 (defmethod update-movitz-object ((object movitz-bignum) lisp-object)
   (assert (= (movitz-bignum-value object) lisp-object))
   object)
+
+(defmethod read-binary-record ((type-name (eql 'movitz-bignum)) stream &key)
+  (let* ((header (call-next-method))
+	 (x (loop for i from 0 below (movitz-bignum-length header)
+		summing (ash (read-binary 'u32 stream) (* i 32)))))
+    (setf (movitz-bignum-value header)
+      (ecase (movitz-bignum-sign header)
+	(#x00 x)
+	(#xff (- x))))
+    header))

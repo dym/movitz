@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Aug 27 14:46:50 2001
 ;;;;                
-;;;; $Id: stream-image.lisp,v 1.8 2004/07/08 18:53:38 ffjeld Exp $
+;;;; $Id: stream-image.lisp,v 1.9 2004/07/23 15:34:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -93,6 +93,8 @@
 			   (read-binary 'movitz-struct (image-stream image)))
 		       (:std-instance
 			(read-binary 'movitz-std-instance (image-stream image)))
+		       (:bignum
+			(read-binary 'movitz-bignum (image-stream image)))
 		       (t (warn "unknown other object: #x~X: ~S code #x~X."
 				word type-tag type-code)
 			  (make-instance 'movitz-fixnum :value (truncate word 4))))))
