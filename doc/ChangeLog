@@ -1,3 +1,9 @@
+2004-07-12  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Added top-level-command :more, that will evaluate a form while
+	paging the console output. That is, prompt for a key-press after
+	each screenful.
+
 2004-07-08  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
 
 	* Migration to the new basic-vector data-structure is completed
