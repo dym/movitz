@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.3 2004/03/22 14:38:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -150,7 +150,7 @@
 (defun write (object &key stream case circle
 			  (array *print-array*) (base *print-base*)
 			  ((:escape *print-escape*) *print-escape*)
-			  ((:gensym *print-gensym*) *print-readably*)
+			  ((:gensym *print-gensym*) *print-gensym*)
 			  (length *print-length*)
 			  (level *print-level*) lines miser-width pprint-dispatch
 			  (pretty *print-pretty*) (radix *print-radix*)
