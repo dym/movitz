@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.37 2004/08/14 17:53:25 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.38 2004/08/18 22:35:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1013,9 +1013,11 @@ busy-waiting loop on P4."
     `(with-inline-assembly (:returns :untagged-fixnum-ecx)
        (:globally (:movl (:edi (:edi-offset ,name)) :ecx)))))
 
-(define-compiler-macro halt-cpu ()
+(define-compiler-macro halt-cpu (&optional eax-form)
   (let ((infinite-loop-label (make-symbol "infinite-loop")))
     `(with-inline-assembly (:returns :nothing)
+       ,@(when eax-form
+	   `((:compile-form (:result-mode :eax) ,eax-form)))
        ,infinite-loop-label
        (:halt)
        (:jmp ',infinite-loop-label))))
