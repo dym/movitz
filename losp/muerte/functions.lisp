@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.8 2004/04/14 12:25:27 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.9 2004/04/15 18:53:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -272,7 +272,7 @@ as that vector."
   (assert (below index (funobj-num-constants funobj)) (index)
     "Index ~D out of range, ~S has ~D constants." index funobj (funobj-num-constants funobj))
   (if (>= index (funobj-num-jumpers funobj))
-      (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:constant0) index :lisp)
+      (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0) index :lisp)
     ;; For a jumper, return its offset relative to the code-vector.
     ;; This is tricky wrt. to potential GC interrupts, because we're doing
     ;; pointer arithmetics.
@@ -281,7 +281,7 @@ as that vector."
       (:movl #.movitz:+code-vector-transient-word+ :ebx)
       (:addl (:eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:code-vector))
 	     :ebx)			; code-vector (word) into ebx
-      (:subl (:eax :ecx #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:constant0))
+      (:subl (:eax :ecx #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0))
 	     :ebx)
       (:negl :ebx)
       (:leal ((:ebx #.movitz:+movitz-fixnum-factor+)) :eax))))
@@ -291,7 +291,7 @@ as that vector."
   (assert (below index (funobj-num-constants funobj)) (index)
     "Index ~D out of range, ~S has ~D constants." index funobj (funobj-num-constants funobj))
   (if (>= index (funobj-num-jumpers funobj))
-      (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:constant0)
+      (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)
 		    index :lisp)
 	value)
     (progn
@@ -301,7 +301,7 @@ as that vector."
       (progn ;; without-gc
        (with-inline-assembly (:returns :nothing)
 	 (:compile-two-forms (:eax :ecx) funobj index)
-	 (:leal (:ecx :eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:constant0))
+	 (:leal (:ecx :eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0))
 		:ebx)			; dest. address into ebx.
 	 (:compile-form (:result-mode :untagged-fixnum-ecx) value)
 	 (:addl (:eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:code-vector))
