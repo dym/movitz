@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.32 2004/06/10 01:25:27 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.33 2004/06/10 01:30:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1316,18 +1316,7 @@ Preserve EAX and EBX."
     (t (error "Don't know."))))
 
 (defun rem (dividend divisor)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) dividend)
-    (:compile-form (:result-mode :ebx) divisor)
-    (:movl :eax :ecx)
-    (:orl :ebx :ecx)
-    (:testb #.movitz::+movitz-fixnum-zmask+ :cl)
-    (:jnz '(:sub-program (not-integer) (:int 107)))
-    (:cdq :eax :edx)
-    (:idivl :ebx :eax :edx)
-    (:movl :edx :eax)))
-
-
+  (nth-value 1 (truncate dividend divisor)))
 
 (defun mod (number divisor)
   "Returns second result of FLOOR."
