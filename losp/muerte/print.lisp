@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.13 2004/07/20 08:54:43 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.14 2004/07/27 15:16:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -82,11 +82,11 @@
 	  (write-simple-integer bigit base stream)))
       (write-digit (rem x base) stream))))
 
-(defun write-lowlevel-integer (x stream base comma-char comma-interval mincol padchar sign-char pos)
-  (multiple-value-bind (bigit rem)
+(defun write-integer-lowlevel (x stream base comma-char comma-interval mincol padchar sign-char pos)
+  (multiple-value-bind (remainder digit)
       (truncate x base)
     (cond
-     ((zerop bigit)
+     ((zerop remainder)
       (when mincol
 	(do ((i (+ pos 1 (if sign-char 1 0) (if comma-interval (truncate pos comma-interval) 0))
 		(1+ i)))
@@ -94,9 +94,28 @@
 	  (write-char padchar stream)))
       (when sign-char
 	(write-char sign-char stream)))
-     (t (write-lowlevel-integer bigit stream base comma-char comma-interval
+     (t (write-integer-lowlevel remainder stream base comma-char comma-interval
 				mincol padchar sign-char (1+ pos))))
-    (write-digit rem stream))
+    (write-digit digit stream))
+  (when (and comma-interval (plusp pos) (zerop (rem pos comma-interval)))
+    (write-char comma-char stream))
+  nil)
+
+(defun write-integer-lowlevel-ldb (x stream comma-char comma-interval mincol padchar sign-char pos
+				   digit-length)
+  (let* ((digit (ldb (byte digit-length (* pos digit-length)) x)))
+    (cond
+     ((<= (integer-length x) (* (1+ pos) digit-length))
+      (when mincol
+	(do ((i (+ pos 1 (if sign-char 1 0) (if comma-interval (truncate pos comma-interval) 0))
+		(1+ i)))
+	    ((>= i mincol))
+	  (write-char padchar stream)))
+      (when sign-char
+	(write-char sign-char stream)))
+     (t (write-integer-lowlevel-ldb x stream comma-char comma-interval
+				    mincol padchar sign-char (1+ pos) digit-length)))
+    (write-digit digit stream))
   (when (and comma-interval (plusp pos) (zerop (rem pos comma-interval)))
     (write-char comma-char stream))
   nil)
@@ -120,8 +139,11 @@
        (sign-always
 	(values #\+ x))
        (t (values nil x)))
-    (write-lowlevel-integer print-value stream base comma-char comma-interval
-			    mincol padchar sign-char 0))
+    (if (= 1 (logcount base))
+	(write-integer-lowlevel-ldb print-value stream comma-char comma-interval
+				    mincol padchar sign-char 0 (1- (integer-length base)))
+      (write-integer-lowlevel print-value stream base comma-char comma-interval
+			      mincol padchar sign-char 0)))
   (when (and radix (= 10 base))
     (write-char #\. stream))
   nil)
