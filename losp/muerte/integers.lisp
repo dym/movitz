@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.29 2004/06/09 20:23:15 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.30 2004/06/09 20:33:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1991,3 +1991,9 @@ Preserve EAX and EBX."
 	 (t (values (1- q) (+ r divisor))))))
    (t (n &optional (divisor 1))
       (floor n divisor))))
+
+(defun isqrt (natural)
+  "=> natural-root"
+  (check-type natural (integer 0 *))
+  (do ((i 0 (1+ i)))
+      ((> (* i i) natural) (1- i))))
