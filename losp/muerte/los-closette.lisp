@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.3 2004/02/15 13:16:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -29,7 +29,7 @@
 		     ,(canonicalize-direct-superclasses direct-superclasses)
 		     :direct-slots
 		     ,(canonicalize-direct-slots direct-slots name env)
-		     ,@(canonicalize-defclass-options options env)))))
+		     ,@(canonicalize-defclass-options options env name)))))
 
 (defmacro defgeneric (function-name lambda-list &rest options)
   `(eval-when (:compile-toplevel)
@@ -591,6 +591,20 @@ knowing there are EQL specialized methods."
 	    gf (length (std-gf-classes-to-emf-table gf))))
     (apply emfun args)))
 
+(defun cached-lookup-failed-map111 (gf &rest args)
+  (declare (dynamic-extent args))
+  (multiple-value-bind (emfun active-specializers)
+      (slow-method-lookup gf args (mapcar #'class-of args))
+    (push (list* (first active-specializers)
+		 (second active-specializers)
+		 (third active-specializers)
+		 emfun)
+	  (std-gf-classes-to-emf-table gf))
+    (when (< 4 (length (std-gf-classes-to-emf-table gf)))
+      (warn "method cache size for ~S: ~D"
+	    gf (length (std-gf-classes-to-emf-table gf))))
+    (apply emfun args)))
+
 (defun cached-lookup-failed-map1111 (gf &rest args)
   (declare (dynamic-extent args))
   (multiple-value-bind (emfun active-specializers)
@@ -712,7 +726,7 @@ knowing there are EQL specialized methods."
       (let ((class0 (class-of arg0))
 	    (class1 (class-of arg1)))
 	(dolist (entry (std-gf-classes-to-emf-table gf)
-		  (apply 'cached-lookup-failed-map111 gf arg0 arg1 optional-args))
+		  (apply 'cached-lookup-failed-map11 gf arg0 arg1 optional-args))
 	  (let ((e entry))
 	    (when (and (eq class0 (pop e))
 		       (eq class1 (pop e)))
@@ -741,8 +755,25 @@ knowing there are EQL specialized methods."
 		       (eq class2 (pop e)))
 	      (return (apply e arg0 arg1 arg2 optional-args)))))))))
 
+(defun discriminating-function-map111 (&edx gf arg0 arg1 arg2 &rest optional-args)
+  (declare (dynamic-extent optional-args))
+  (let ((es-table (std-gf-eql-specializer-table gf)))
+    (macrolet ((specializer-of (arg)
+		 `(let ((es (pop es-table)))
+		    (or (and es (gethash ,arg es))
+			(class-of ,arg)))))
+      (let ((specializer0 (specializer-of arg0))
+	    (specializer1 (specializer-of arg1))
+	    (specializer2 (specializer-of arg2)))
+	(dolist (entry (std-gf-classes-to-emf-table gf)
+		  (apply 'cached-lookup-failed-map111 gf arg0 arg1 arg2 optional-args))
+	  (let ((e entry))
+	    (when (and (eq specializer0 (pop e))
+		       (eq specializer1 (pop e))
+		       (eq specializer2 (pop e)))
+	      (return (apply e arg0 arg1 arg2 optional-args)))))))))
+
 (defun discriminating-function-map1111 (&edx gf arg0 arg1 arg2 arg3 &rest optional-args)
-  "This discriminator will work for all GFs with 4 required arguments or fewer."
   (declare (dynamic-extent optional-args))
   (let ((es-table (std-gf-eql-specializer-table gf)))
     (macrolet ((specializer-of (arg)
@@ -827,7 +858,11 @@ knowing there are EQL specialized methods."
 	  ((and (not eqls-p)
 		(= specializer-bitmap (logand #b101 specializer-bitmap)))
 	   #'discriminating-function-map101-no-eqls)
-	  ((= specializer-bitmap (logand #b1111 specializer-bitmap))
+	  ((and (<= 3 (std-gf-num-required-arguments gf))
+		(= specializer-bitmap (logand #b111 specializer-bitmap)))
+	   #'discriminating-function-map111)
+	  ((and (<= 4 (std-gf-num-required-arguments gf))
+		(= specializer-bitmap (logand #b1111 specializer-bitmap)))
 	   #'discriminating-function-map1111)
 	  (t (warn "Defaulting map ~b for ~S~@[ with eql-specializers~]."
 		   specializer-bitmap gf eqls-p)
