@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.118 2004/12/09 13:36:46 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.119 2004/12/10 12:46:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -965,6 +965,17 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	  (setf (ldb (byte 5 0) (slot-value funobj 'debug-info)) x))
 	 (t (warn "Can't encode start-stack-frame-setup label ~D into debug-info for ~S."
 		  x (movitz-funobj-name funobj)))))
+      (let* ((a (or (cdr (assoc 'entry%1op code-symtab)) 0))
+	     (b (or (cdr (assoc 'entry%2op code-symtab)) a))
+	     (c (or (cdr (assoc 'entry%3op code-symtab)) b)))
+	(unless (<= a b c)
+	  (warn "Weird code-entries: ~D, ~D, ~D." a b c))
+	(unless (<= 0 a 255)
+	  (break "entry%1: ~D" a))
+	(unless (<= 0 b 2047)
+	  (break "entry%2: ~D" b))
+	(unless (<= 0 c 4095)
+	  (break "entry%3: ~D" c)))
       (loop for ((entry-label slot-name)) on '((entry%1op code-vector%1op)
 					       (entry%2op code-vector%2op)
 					       (entry%3op code-vector%3op))
