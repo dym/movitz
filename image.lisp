@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.47 2004/07/15 21:06:19 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.48 2004/07/21 12:32:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1460,11 +1460,12 @@ this image will not be Multiboot compatible."
 	    (unless slot-descriptions
 	      (error "Don't know how to movitz-read struct: ~S" expr))
 	    (let ((movitz-object (make-instance 'movitz-struct
-				:name (movitz-read (type-of expr))
-				:length (length slot-descriptions))))
+				   :name (movitz-read (type-of expr))
+				   :length (length slot-descriptions))))
 	      (setf (image-lisp-to-movitz-object *image* expr) movitz-object)
 	      (setf (slot-value movitz-object 'slot-values)
-		(mapcar #'(lambda (slot) (movitz-read (slot-value expr slot)))
+		(mapcar #'(lambda (slot)
+			    (movitz-read (slot-value expr (if (consp slot) (car slot) slot))))
 			slot-descriptions))
 	      movitz-object))))))))
 
