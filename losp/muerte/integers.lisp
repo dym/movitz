@@ -1,15 +1,15 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 20012000, 2002-2004,
+;;;;    Copyright (C) 2000-2004,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      integers.lisp
-;;;; Description:   
+;;;; Description:   Arithmetics.
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.39 2004/07/08 11:30:20 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.40 2004/07/08 21:51:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1552,12 +1552,14 @@ Preserve EAX and EBX."
 	 (with-inline-assembly (:returns :eax)
 	   (:compile-two-forms (:eax :ebx) x y)
 	   (:xorl :ebx :eax)))
+	(((eql 0) t) y)
+	((t (eql 0)) x)
 	((positive-fixnum positive-bignum)
 	 (macrolet
 	     ((do-it ()
 		`(let ((r (copy-bignum y)))
 		   (with-inline-assembly (:returns :eax)
-		     (:compile-two-forms (:eax :ecx) y x)
+		     (:compile-two-forms (:eax :ecx) r x)
 		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 		     (:xorl (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)) :ecx)))))
 	   (do-it)))
@@ -1572,34 +1574,29 @@ Preserve EAX and EBX."
 	   (do-it)))
 	((positive-bignum positive-bignum)
 	 (if (< (%bignum-bigits x) (%bignum-bigits y))
-	     (logior y x)
+	     (logxor y x)
 	   (let ((r (copy-bignum x)))
 	     (macrolet
 		 ((do-it ()
-		    `(with-inline-assembly (:returns :eax)
-		       (:compile-two-forms (:eax :ebx) r y)
-		       (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
-				:ecx)
-		       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
-			       ,(* -1 movitz:+movitz-fixnum-factor+))
-			      :edx)	; EDX is loop counter
-		      or-loop
-		       (:movl (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
-			      :ecx)
-		       (:orl :ecx
-			     (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
-		       (:subl 4 :edx)
-		       (:jnc 'or-loop))))
-	       (do-it))))))
-      (number-double-dispatch (x y)
-	(((eql 0) t) y)
-	((t (eql 0)) x)
-	((fixnum fixnum)
-	 (with-inline-assembly (:returns :eax)
-	   (:compile-form (:result-mode :eax) x)
-	   (:compile-form (:result-mode :ecx) y)
-	   ;; (:orl #.movitz:+movitz-fixnum-zmask+ :ecx)
-	   (:xorl :ecx :eax)))))
+		    `(%bignum-canonicalize
+		      (with-inline-assembly (:returns :eax)
+			(:compile-two-forms (:eax :ebx) r y)
+			(:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+				 :ecx)
+			(:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
+				,(* -1 movitz:+movitz-fixnum-factor+))
+			       :edx)	; EDX is loop counter
+		       xor-loop
+			(:movl (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+			       :ecx)
+			(:xorl :ecx
+			       (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+			(:subl 4 :edx)
+			(:jnc 'xor-loop)
+		       
+			(:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+				 :ecx)))))
+	       (do-it)))))))
    (t (&rest integers)
       (declare (dynamic-extent integers))
       (if (null integers)
