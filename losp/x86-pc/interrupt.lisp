@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri May  4 18:08:50 2001
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.3 2004/01/19 11:23:52 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.4 2004/03/24 13:36:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -176,7 +176,12 @@
 		     (int-frame-ref int-frame :error-code :unsigned-byte32)
 		     $eax $ebx $ecx))
 	  (68 (warn "EIP: ~@Z EAX: ~@Z EBX: ~@Z  ECX: ~@Z EDX: ~@Z"
-		    $eip $eax $ebx $ecx $edx))
+		    $eip $eax $ebx $ecx $edx)
+	      (dotimes (i 100000)
+		(with-inline-assembly (:returns :nothing) (:nop))))
+	  (67 (muerte.debug:backtrace :fresh-lines nil :length 6)
+	      (dotimes (i 100000)
+		(with-inline-assembly (:returns :nothing) (:nop))))
 	  (66 (error "Unspecified type error in ~S with EAX=~@Z, ECX=~@Z."
 		     (@ (+ int-frame (int-frame-index :esi)))
 		     $eax $ecx))
