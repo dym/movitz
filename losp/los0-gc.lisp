@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.2 2004/03/31 16:36:29 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.3 2004/04/06 13:38:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -110,7 +110,7 @@
     (allocate-duo-space))
   (let ((conser (symbol-value 'new-fast-cons)))
     (check-type conser vector)
-    (setf (%run-time-context-slot 'fast-cons)
+    (setf (%run-time-context-slot 'muerte::fast-cons)
       conser))
   (let ((old-malloc (symbol-function 'muerte:malloc-clumps)))
     (setf (symbol-function 'muerte:malloc-clumps)
@@ -120,9 +120,9 @@
   (values))
 
 (defun install-old-consing ()
-  (let ((conser (symbol-value 'fast-cons)))
+  (let ((conser (symbol-value 'muerte::fast-cons)))
     (check-type conser vector)
-    (setf (%run-time-context-slot 'fast-cons)
+    (setf (%run-time-context-slot 'muerte::fast-cons)
       conser))
   (let ((old-malloc (symbol-function 'muerte:malloc-clumps)))
     (setf (symbol-function 'muerte:malloc-clumps)
