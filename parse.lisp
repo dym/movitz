@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:49:17 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: parse.lisp,v 1.4 2004/11/24 10:02:59 ffjeld Exp $
+;;;; $Id: parse.lisp,v 1.5 2004/12/09 14:09:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -23,24 +23,20 @@
 (defun parse-declarations-and-body (forms &optional (declare-symbol 'muerte.cl::declare))
   "From the list of FORMS, return first the list of non-declaration forms, ~
    second the list of declaration-specifiers."
-  (loop for form on forms
-      while (declare-form-p (car form) declare-symbol)
-      append (cdar form) into declarations
-      finally (return (values form declarations))))
+  (loop for declaration-form = (when (declare-form-p (car forms) declare-symbol)
+				 (pop forms))
+     while declaration-form
+     append (cdr declaration-form) into declarations
+     finally (return (values forms declarations))))
 
 (defun parse-docstring-declarations-and-body (forms &optional (declare-symbol 'muerte.cl::declare))
   "From the list of FORMS, return first the non-declarations forms, second the declarations, ~
    and third the documentation string."
-  (loop for rest-forms on forms
-      with docstring = nil
-      if (declare-form-p (first rest-forms) declare-symbol)
-      append (cdar rest-forms) into declarations
-      else if (and (null docstring)
-		   (not (endp (rest rest-forms)))
-		   (stringp (first rest-forms)))
-      do (setf docstring (first rest-forms))
-      else do (loop-finish)
-      finally (return (values rest-forms declarations docstring))))
+  (let ((docstring (when (and (cdr forms) (stringp (car forms)))
+		     (pop forms))))
+    (multiple-value-bind (body declarations)
+	(parse-declarations-and-body forms declare-symbol)
+      (values body declarations docstring))))
 
 (defun unfold-circular-list (list)
   "If LIST is circular (through cdr), return (a copy of) the non-circular portion of LIST, and the index (in LIST) of the cons-cell pointed to by (cdr (last LIST))."
@@ -54,11 +50,7 @@
 				cdr-index)))))
 
 (defun symbol-package-fix-cl (symbol)
-  *package*
-  #+ignore
-  (if (eq (find-package :cl) (symbol-package symbol))
-      (find-package :muerte.cl)
-    (symbol-package symbol)))
+  *package*)
 
 (eval-when (:execute :compile-toplevel :load-toplevel)
   (defun muerte::translate-program 
@@ -71,12 +63,18 @@ Doubly quoted forms are copied verbatim (sans the quotes)."
     (setf from-package (find-package from-package))
     (setf to-package (find-package to-package))
     (flet ((translate-symbol (s)
-	     (multiple-value-bind (symbol status)
-		 (find-symbol (symbol-name s) to-package)
-	       (if (eq :external status) symbol s))))
+	     (if (not (eq s (find-symbol (symbol-name s) from-package)))
+                 s
+	       (multiple-value-bind (symbol status)
+		   (find-symbol (symbol-name s) to-package)
+		 (when (or (and (find-symbol (symbol-name s) to-package)
+				(not (find-symbol (symbol-name s) from-package)))
+			   (and (find-symbol (symbol-name s) from-package)
+				(not (find-symbol (symbol-name s) to-package))))
+		   (error "blurgh ~S" s))
+		 (or symbol s) #+ignore (if (eq :external status) symbol s)))))
       (cond
-       ((and (symbolp program)		; single symbol?
-	     (eq (symbol-package program) from-package))
+       ((symbolp program)		; single symbol?
 	(translate-symbol program))
        ((simple-vector-p program)
 	(map 'vector
@@ -96,22 +94,6 @@ Doubly quoted forms are copied verbatim (sans the quotes)."
 	    (setf (cdr (last translated-program))
 	      (nthcdr cdr-index translated-program))
 	    translated-program)))
-       #+ignore ((and (eq quote-symbol (car program)) ; triple-quote?
-		      (consp (cadr program))
-		      (eq quote-symbol (caadr program))
-		      (consp (cadadr program))
-		      (eq quote-symbol (car (cadadr program))))
-		 (cons (translate-symbol (car program))
-		       (muerte::translate-program (rest program) from-package to-package
-							 :when when
-							 :remove-double-quotes-p remove-double-quotes-p
-							 :quote-symbol quote-symbol)))
-       #+ignore ((and (eq quote-symbol (car program)) ; double-quote?
-		      (consp (cadr program))
-		      (eq quote-symbol (caadr program)))
-		 (if remove-double-quotes-p
-		     (cadadr program)
-		   program))		; .. then don't mess with it.
        ((and (eq :translate-when (first program))
 	     (or (string= t (second program))
 		 (and when (eq when (second program)))))
@@ -119,8 +101,7 @@ Doubly quoted forms are copied verbatim (sans the quotes)."
        ((and (eq :translate-when (first program))
 	     (eq nil (second program)))
 	(third program))
-       ((and (symbolp (car program))
-	     (eq (symbol-package (car program)) from-package))
+       ((symbolp (car program))
 	(cons (translate-symbol (car program))
 	      (muerte::translate-program (cdr program) from-package to-package
 					 :when when
@@ -139,7 +120,11 @@ Doubly quoted forms are copied verbatim (sans the quotes)."
 		(muerte::translate-program (cdr program) from-package to-package
 					   :when when
 					   :remove-double-quotes-p remove-double-quotes-p
-					   :quote-symbol quote-symbol)))))))
+					   :quote-symbol quote-symbol))))))
+  (defun muerte::movitz-program (program)
+    (translate-program program :common-lisp :muerte.cl))
+  (defun muerte::host-program (program)
+    (translate-program program :muerte.cl :common-lisp)))
 
 (defun decode-normal-lambda-list (lambda-list &optional host-symbols-p)
   "3.4.1 Ordinary Lambda Lists.
