@@ -1,6 +1,20 @@
-###############################################################
-# bochsrc.txt file for DLX Linux disk image.
-###############################################################
+######################################################################
+## 
+##    Copyright (C) 2003-2004, 
+##    Department of Computer Science, University of Tromso, Norway.
+## 
+##    For distribution policy, see the accompanying file COPYING.
+## 
+## Filename:      bochsrc.txt
+## Description:   Bochs configuration file for frodef's Movitz setup.
+##                You can use this as a template, but you'll need to
+##                change the file paths etc.
+## Author:        Frode Vatvedt Fjeld <frodef@acm.org>
+## Created at:    Wed Jul 21 13:41:59 2004
+##                
+## $Id: bochsrc.txt,v 1.5 2004/07/21 11:45:52 ffjeld Exp $
+##                
+######################################################################
 
 # how much memory the emulated machine will have
 megs: 64
@@ -11,6 +25,9 @@ megs: 64
 romimage: file=../../tmp/bochs-cvs/bios/BIOS-bochs-latest, address=0xf0000
 vgaromimage: ../../tmp/bochs-cvs/bios/VGABIOS-elpin-2.40
 
+# This is just to make X11 clipboard pasting into bochs work.
+keyboard_mapping: enabled=1, map=../../tmp/bochs-cvs/gui/keymaps/x11-pc-us.map
+
 # what disk images will be used 
 floppya: 1_44=los0-image, status=inserted
 #floppya: 1_44=grub, status=inserted
@@ -18,8 +35,6 @@ floppya: 1_44=los0-image, status=inserted
 #diskc: file=hd10meg.img, cyl=306, heads=4, spt=17
 #newharddrivesupport: enabled=1
 
-# This is just to make X11 clipboard pasting into bochs work.
-keyboard_mapping: enabled=1, map=../../tmp/bochs-cvs/gui/keymaps/x11-pc-us.map
 
 # choose the boot disk.
 boot: a
