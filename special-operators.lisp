@@ -1,14 +1,14 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
 ;;;;    Copyright (C) 20012000, 2002-2004,
-;;;;    Department of Computer Science, University of Tromsø, Norway
+;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      special-operators.lisp
 ;;;; Description:   Compilation of internal special operators.
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.2 2004/01/15 16:40:40 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.3 2004/01/16 19:25:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -530,8 +530,9 @@ The valid parameters are~{ ~S~}."
 			     (list (register32-to-low8 returns))))
 		       (setf (assembly-macro-expander :compile-arglist amenv)
 			 #'(lambda (expr)
-			     (destructuring-bind (() &rest arg-forms)
+			     (destructuring-bind (ignore &rest arg-forms)
 				 (cdr expr)
+			       (declare (ignore ignore))
 			       (setq side-effects t)
 			       (make-compiled-argument-forms arg-forms funobj env))))
 		       (setf (assembly-macro-expander :compile-two-forms amenv)
@@ -545,29 +546,11 @@ The valid parameters are~{ ~S~}."
 				   (setq side-effects t))
 				 (setq modifies (modifies-union modifies sub-modifies))
 				 code))))
-;;;		       #+ignore
 		       (setf (assembly-macro-expander :call-global-constant amenv)
 			 #'(lambda (expr)
 			     (destructuring-bind (name)
 				 (cdr expr)
 			       `((:globally (:call (:edi (:edi-offset ,name))))))))
-;;;		       #+ignore
-;;;		       (setf (assembly-macro-expander :store-global-constant amenv)
-;;;			 #'(lambda (expr)
-;;;			     (assert side-effects ()
-;;;			       "Can't do :store-global-constant when :side-effects nil is declared.")
-;;;			     (destructuring-bind (name source &key thread-local)
-;;;				 (cdr expr)
-;;;			       (let ((pf (if thread-local '((:fs-override)))))
-;;;				 `((,@pf :movl ,source
-;;;					 ,(make-indirect-reference :edi (global-constant-offset name))))))))
-;;;		       (setf (assembly-macro-expander :load-global-constant amenv)
-;;;			 #'(lambda (expr)
-;;;			     (destructuring-bind (name destination &key thread-local)
-;;;				 (cdr expr)
-;;;			       (let ((pf (if thread-local '((:fs-override)))))
-;;;				 `((,@pf :movl ,(make-indirect-reference :edi (global-constant-offset name))
-;;;					,destination))))))
 		       (setf (assembly-macro-expander :warn amenv)
 			 #'(lambda (expr)
 			     (apply #'warn (cdr expr))
@@ -577,39 +560,6 @@ The valid parameters are~{ ~S~}."
 			   (destructuring-bind (var reg &key (type t))
 			       (cdr expr)
 			     `((:store-lexical ,(movitz-binding var env) ,reg :type ,type)))))
-;;;		       (setf (assembly-macro-expander :locally amenv)
-;;;			 (lambda (expr)
-;;;			   (destructuring-bind (sub-instr)
-;;;			       (cdr expr)
-;;;			     (assembly-macroexpand (list (cond
-;;;							  ((atom sub-instr)
-;;;							   sub-instr)
-;;;							  ((consp (car sub-instr))
-;;;							   (list* (append *compiler-local-segment-prefix*
-;;;									  (car sub-instr))
-;;;								  (cdr sub-instr)))
-;;;							  (t (list* *compiler-local-segment-prefix*
-;;;								    sub-instr))))
-;;;						   amenv))))
-;;;		       (setf (assembly-macro-expander :globally amenv)
-;;;			 (lambda (expr)
-;;;			   (destructuring-bind (sub-instr)
-;;;			       (cdr expr)
-;;;			     (assembly-macroexpand (list (cond
-;;;							  ((atom sub-instr)
-;;;							   sub-instr)
-;;;							  ((consp (car sub-instr))
-;;;							   (list* (append *compiler-global-segment-prefix*
-;;;									  (car sub-instr))
-;;;								  (cdr sub-instr)))
-;;;							  (t (list* *compiler-global-segment-prefix*
-;;;								    sub-instr))))
-;;;						   amenv))))
-;;;		       (setf (assembly-macro-expander :edi-offset amenv)
-;;;			 (lambda (expr)
-;;;			   (destructuring-bind (name)
-;;;			       (cdr expr)
-;;;			     (list (global-constant-offset name)))))
 		       (let ((code (assembly-macroexpand inline-asm amenv)))
 			 (assert (not (and (not side-effects)
 					   (tree-search code '(:store-lexical))))
