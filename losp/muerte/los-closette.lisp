@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.23 2004/11/23 16:06:37 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.24 2004/12/20 13:42:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -786,8 +786,8 @@ knowing there are EQL specialized methods."
     (let ((x (std-gf-classes-to-emf-table gf)))
       (cond
        ((not x)
-	(unless (get 'clos-bootsrap 'breaking-on-auto-bootstrap)
-	  (setf (get 'clos-bootsrap 'breaking-on-auto-bootstrap) t)
+	(unless (get 'clos-bootstrap 'breaking-on-auto-bootstrap)
+	  (setf (get 'clos-bootstrap 'breaking-on-auto-bootstrap) t)
 	  (break "Auto-bootstrapping CLOS."))
 	(clos-bootstrap)
 	(unless (get 'clos-bootstrap 'have-bootstrapped)
