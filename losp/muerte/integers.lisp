@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.59 2004/07/14 12:36:50 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.60 2004/07/14 13:48:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1098,7 +1098,7 @@ Preserve EAX and EBX."
 			:ecx)
 	       (:leal ((:ecx 1) ,(* -1 movitz:+movitz-fixnum-factor+))
 		      :eax)		; bigits-1
-	       (:bsrl (:ebx (:ecx 4) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+	       (:bsrl (:ebx (:ecx 1) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
 		      :ecx)
 	       (:shll 5 :eax)		; bits = bigits*32 + (bit-index+1)
 	       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) :eax
