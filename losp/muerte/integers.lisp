@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.84 2004/07/27 14:43:25 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.85 2004/07/27 20:59:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2077,6 +2077,21 @@ Preserve EAX and EBX."
 (defun logtest (integer-1 integer-2)
   "=> generalized-boolean"
   (not (= 0 (logand integer-1 integer-2))))
+
+(defun logcount (integer)
+  (etypecase integer
+    (positive-fixnum
+     (with-inline-assembly (:returns :untagged-fixnum-ecx :type (integer 0 29))
+       (:load-lexical (:lexical-binding integer) :eax)
+       (:xorl :ecx :ecx)
+      count-loop
+       (:shll 1 :eax)
+       (:adcl 0 :ecx)
+       (:testl :eax :eax)
+       (:jnz 'count-loop)))
+    (positive-bignum
+     (bignum-logcount integer))))
+	 
 
 (defun dpb (newbyte bytespec integer)
   (logior (mask-field bytespec (ash newbyte (byte-position bytespec)))
