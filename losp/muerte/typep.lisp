@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.38 2004/11/18 09:28:52 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.39 2004/11/24 10:08:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -574,6 +574,13 @@
 (define-simple-typep (package packagep))
 
 ;;;
+
+(define-typep rational (x &optional (lower-limit '*) (upper-limit '*))
+  (and (typep x 'rational)
+       (or (eq lower-limit '*)
+	   (<= lower-limit x))
+       (or (eq upper-limit '*)
+	   (<= x upper-limit))))
 
 (define-typep and (x &rest types)
   (declare (dynamic-extent types))
