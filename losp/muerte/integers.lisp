@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.26 2004/06/08 20:11:13 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.27 2004/06/08 23:30:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -280,30 +280,133 @@
 ;;; Comparison
 
 (define-primitive-function fast-compare-two-reals (n1 n2)
-  "Check that n1 and n2 are fixnums, and compare them."
-  (with-inline-assembly (:returns :nothing) ; unspecified
-    (:testb #.movitz::+movitz-fixnum-zmask+ :al)
-    (:jnz '(:sub-program ()
-	    (:int 107)
-	    (:jmp (:pc+ -4))))
-    (:testb #.movitz::+movitz-fixnum-zmask+ :bl)
-    (:jnz '(:sub-program ()
-	    (:movl :ebx :eax)
-	    (:int 107)
-	    (:jmp (:pc+ -4))))
-    (:cmpl :ebx :eax)
-    (:ret)))
+  "Compare two numbers (i.e. set EFLAGS accordingly)."
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :nothing) ; unspecified
+	    (:testb ,movitz::+movitz-fixnum-zmask+ :al)
+	    (:jnz 'n1-not-fixnum)
+	    (:testb ,movitz::+movitz-fixnum-zmask+ :bl)
+	    (:jnz 'n2-not-fixnum-but-n1-is)
+	    (:cmpl :ebx :eax)		; both were fixnum
+	    (:ret)
+	   n1-not-fixnum		; but we don't know about n2
+	    (:testb ,movitz::+movitz-fixnum-zmask+ :bl)
+	    (:jnz 'neither-is-fixnum)
+	    ;; n2 is fixnum
+	    (:locally (:jmp (:edi (:edi-offset fast-compare-real-fixnum))))
+	   n2-not-fixnum-but-n1-is
+	    (:locally (:jmp (:edi (:edi-offset fast-compare-fixnum-real))))
+	   neither-is-fixnum
+	    ;; Check that both numbers are bignums, and compare them.
+	    (:leal (:eax ,(- (movitz:tag :other))) :ecx)
+	    (:testb 7 :cl)
+	    (:jnz '(:sub-program (n1-not-bignum)
+		    (:int 107)))
+	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
+	    (:cmpb ,(movitz:tag :bignum) :cl)
+	    (:jne 'n1-not-bignum)
+
+	    (:cmpl :eax :ebx)		; If they are EQ, they are certainly =
+	    (:je '(:sub-program (n1-and-n2-are-eq)
+		   (:ret)))
+
+	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
+	    (:testb 7 :cl)
+	    (:jnz '(:sub-program (n2-not-bignum)
+		    (:int 107)))
+	    (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
+	    (:cmpb ,(movitz:tag :bignum) :cl)
+	    (:jne 'n2-not-bignum)
+
+	    (:cmpb :ch (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::sign)))
+	    (:jne '(:sub-program (different-signs)
+		    ;; Comparing the sign-bytes sets up EFLAGS correctly!
+		    (:ret)))
+	    (:testl #xff00 :ecx)
+	    (:jnz 'compare-negatives)
+	    ;; Both n1 and n2 are positive bignums.
+
+	    (:shrl 16 :ecx)
+	    (:cmpw :cx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length)))
+	    (:jne '(:sub-program (positive-different-sizes)
+		    (:ret)))
+
+	    ;; Both n1 and n2 are positive bignums of the same size, namely ECX.
+	    (:leal ((:ecx ,movitz:+movitz-fixnum-factor+))
+		   :edx)		; counter
+	   positive-compare-loop
+	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
+	    (:jz 'positive-compare-lsb)
+	    (:movl (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		   :ecx)
+	    (:cmpl :ecx
+		   (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+	    (:je 'positive-compare-loop)
+	    (:ret)
+	   positive-compare-lsb		; it's down to the LSB bigits.
+	    (:movl (:ebx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		   :ecx)
+	    (:cmpl :ecx
+		   (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+	    (:ret)
+	    
+	   compare-negatives
+	    ;; Moth n1 and n2 are negative bignums.
+
+	    (:shrl 16 :ecx)
+	    (:cmpw (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length)) :cx)
+	    (:jne '(:sub-program (negative-different-sizes)
+		    (:ret)))
+
+	    ;; Both n1 and n2 are negative bignums of the same size, namely ECX.
+	    (:leal ((:ecx ,movitz:+movitz-fixnum-factor+))
+		   :edx)		; counter
+	   negative-compare-loop
+	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
+	    (:jz 'negative-compare-lsb)
+	    (:movl (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		   :ecx)
+	    (:cmpl :ecx
+		   (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+	    (:je 'negative-compare-loop)
+	    (:ret)
+	   negative-compare-lsb		; it's down to the LSB bigits.
+	    (:movl (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+		   :ecx)
+	    (:cmpl :ecx
+		   (:ebx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+	    (:ret))))
+    (do-it)))
 
 (define-primitive-function fast-compare-fixnum-real (n1 n2)
   "Compare (known) fixnum <n1> with real <n2>."
-  (with-inline-assembly (:returns :nothing) ; unspecified
-    (:testb #.movitz::+movitz-fixnum-zmask+ :bl)
-    (:jnz '(:sub-program (not-integer)
-	    (:movl :ebx :eax)
-	    (:int 107)
-	    (:jmp 'not-integer)))
-    (:cmpl :ebx :eax)
-    (:ret)))
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :nothing) ; unspecified
+	    (:testb ,movitz::+movitz-fixnum-zmask+ :bl)
+	    (:jnz 'n2-not-fixnum)
+	    (:cmpl :ebx :eax)
+	    (:ret)
+	   n2-not-fixnum
+	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
+	    (:testb 7 :cl)
+	    (:jnz '(:sub-program (not-integer)
+		    (:int 107)
+		    (:jmp 'not-integer)))
+	    (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
+	    (:cmpw ,(movitz:tag :bignum 0) :cx)
+	    (:jne 'not-plusbignum)
+	    ;; compare eax with something bigger
+	    (:cmpl #x10000000 :edi)
+	    (:ret)
+	   not-plusbignum
+	    (:cmpw ,(movitz:tag :bignum #xff) :cx)
+	    (:jne 'not-integer)
+	    ;; compare ebx with something bigger
+	    (:cmpl #x-10000000 :edi)
+	    (:ret))))
+    (do-it)))
 
 (define-primitive-function fast-compare-real-fixnum (n1 n2)
   "Compare real <n1> with fixnum <n2>."
@@ -529,7 +632,6 @@
 
 (defun = (first-number &rest numbers)
   (declare (dynamic-extent numbers))
-  (check-type first-number fixnum)
   (dolist (n numbers t)
     (unless (= first-number n)
       (return nil))))
