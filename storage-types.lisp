@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.10 2004/03/18 09:16:38 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.11 2004/03/19 10:49:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -67,13 +67,13 @@
   :other 6
   :symbol 7
   
-  :vector #x08
-  :defstruct #x09
-  :funobj #x10
-  :std-instance #x14
-  :run-time-context #x15
+  :vector #x10
+  :defstruct #x20
+  :funobj #x30
+  :std-instance #x40
+  :run-time-context #x50
 
-  :simple-vector #x20
+  ;; :simple-vector #x20
   ;; :character-vector 
   
   :basic-restart #x32
@@ -326,9 +326,9 @@ integer (native lisp) value."
     :initarg :flags
     :initform nil
     :binary-type (define-bitfield movitz-vector-flags (u8)
-		   (((:bits) :fill-pointer-p 0
-			     :code-vector-p 1
-			     :std-instance-slots-p 2))))
+		   (((:bits) :fill-pointer-p 2
+			     :code-vector-p 3
+			     :std-instance-slots-p 4))))
    (alignment-power
     :binary-lisp-type u8		; align to 2^(high-nibble+3) + low-nibble
     :initform 0
@@ -585,18 +585,18 @@ integer (native lisp) value."
     :map-binary-read-delayed 'movitz-word
     :initform *movitz-nil*
     :accessor movitz-symbol-package)
+   (flags
+    :binary-type (define-bitfield movitz-symbol-flags (lu16)
+		   (((:bits)
+		     :special-variable 3
+		     :constant-variable 4
+		     :setf-placeholder 5)))
+    :accessor movitz-symbol-flags
+    :initform nil)
    (hash-key
     :binary-lisp-type lu16
     :reader movitz-symbol-hash-key
     :initarg :hash-key)
-   (flags
-    :binary-type (define-bitfield movitz-symbol-flags (lu16)
-		   (((:bits)
-		     :special-variable 0
-		     :constant-variable 1
-		     :setf-placeholder 4)))
-    :accessor movitz-symbol-flags
-    :initform nil)
    (lisp-symbol
     :initform nil
     :initarg :lisp-symbol))
@@ -793,10 +793,18 @@ integer (native lisp) value."
     :accessor movitz-funobj-name
     :initarg :name)
    (num-jumpers				; how many of the first constants are jumpers.
-    :binary-type lu16
-    :initform 0
+    :binary-type lu16			; 14 bits, the lower 16 bits of a fixnum.
+    :initform 0				; This, in order to see this as a fixnum while
+    :accessor movitz-funobj-num-jumpers	; GC scanning.
     :initarg :num-jumpers
-    :accessor movitz-funobj-num-jumpers)
+    :map-binary-write (lambda (x &optional type)
+			(declare (ignore type))
+			(check-type x (unsigned-byte 14))
+			(* x +movitz-fixnum-factor+))
+    :map-binary-read (lambda (x &optional type)
+		       (declare (ignore type))
+		       (assert (zerop (ldb (byte 2 0) x)))
+		       (/ x +movitz-fixnum-factor+)))
    (num-constants
     :binary-type lu16
     :initform 0
@@ -932,8 +940,13 @@ integer (native lisp) value."
    (num-jumpers
     :binary-type lu16
     :initform 0
-    :initarg :num-constants
-    :accessor movitz-funobj-num-jumpers)
+    :accessor movitz-funobj-num-jumpers
+    :map-binary-write (lambda (x &optional type)
+		       (declare (ignore typE))
+			(* x +movitz-fixnum-factor+))
+    :map-binary-read (lambda (x &optional type)
+		       (declare (ignore typE))
+		       (/ x +movitz-fixnum-factor+)))
    (num-constants
     :binary-type lu16
     :initform (/ (- (sizeof 'movitz-funobj-standard-gf)
