@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.108 2004/11/18 17:58:35 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.109 2004/11/18 23:49:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2756,13 +2756,13 @@ the sub-program options (&optional label) as secondary value."
   (let* ((count-init-pc (gethash binding var-counts))
 	 (count (car count-init-pc))
 	 (init-pc (cdr count-init-pc)))
+    ;; (warn "b ~S: count: ~D, init-pc: ~{~&~A~}" binding count init-pc)
     (cond
      ((binding-lended-p binding)
       ;; We can't lend a register.
       (values nil :never))
      ((and (= 1 count)
 	   init-pc)
-      ;; (warn "b ~S: count: ~D, init-pc: ~{~&~A~}" binding count init-pc)
       (assert (instruction-is (first init-pc) :init-lexvar))
       (destructuring-bind (init-binding &key init-with-register init-with-type
 					     protect-registers protect-carry)
@@ -2773,7 +2773,7 @@ the sub-program options (&optional label) as secondary value."
 		(find-if (lambda (i)
 			   (and (not (instruction-is i :init-lexvar))
 				(member binding (find-read-bindings i)
-					:test #'eq)))
+					:test #'eq #+ignore #'binding-eql)))
 			 (cdr init-pc)
 			 #-sbcl :end #-sbcl 15))
 	       (binding-destination (third load-instruction))
@@ -2836,6 +2836,9 @@ the sub-program options (&optional label) as secondary value."
 		   (assert (not (cdr count-init-pc)))
 		   (setf (cdr count-init-pc) init-pc))
 		 (unless storep
+		   (unless (eq binding (binding-target binding))
+		     ;; (break "ewfew: ~S" (gethash (binding-target binding) var-counter))
+		     (take-note-of-binding (binding-target binding)))
 		   (incf (car count-init-pc))))
 	       #+ignore
 	       (when (typep binding 'forwarding-binding)
@@ -2878,7 +2881,7 @@ the sub-program options (&optional label) as secondary value."
 			     (when init-with-register
 			       (take-note-of-binding binding t pc)
 			       (when (and (typep init-with-register 'binding)
-					  #+ignore (not (typep binding 'forwarding-binding)))
+					  (not (typep binding 'forwarding-binding))) ; XXX
 				 (take-note-of-binding init-with-register)))))
 			  (t (mapcar #'take-note-of-binding 
 				     (find-read-bindings instruction))
@@ -6090,7 +6093,7 @@ and a list of any intervening unwind-protect environment-slots."
 				 (and (typep binding 'forwarding-binding)
 				      (recursive-located-p (forwarding-binding-target b))))))
 		    (recursive-located-p binding)))
-	(warn "Unused variable: ~S." (binding-name binding))))
+	#+ignore (warn "Unused variable: ~S." (binding-name binding))))
      ((typep binding 'forwarding-binding)
       ;; No need to do any initialization because the target will be initialized.
       (assert (not (binding-lended-p binding)))
@@ -6409,8 +6412,8 @@ and a list of any intervening unwind-protect environment-slots."
       (when (and (bindingp destination)
 		 (binding-lended-p destination))
 	(warn "Add for lend0: ~S" destination))
-      (let ((loc0 (new-binding-location term0 frame-map :default nil))
-	    (loc1 (new-binding-location term1 frame-map :default nil)))
+      (let ((loc0 (new-binding-location (binding-target term0) frame-map :default nil))
+	    (loc1 (new-binding-location (binding-target term1) frame-map :default nil)))
 ;;;	(warn "add: ~A" instruction)
 ;;;	(warn "add for: ~S is ~A, from ~A/~A and ~A/~A."
 ;;;	      destination result-type
@@ -6455,7 +6458,7 @@ and a list of any intervening unwind-protect environment-slots."
 ;;;		  loc1 term1
 ;;;		  (type-specifier-singleton type0)
 ;;;		  (eq loc1 destination))
-;;;	     (warn "ADDI: ~S" instruction)
+;;;	    (warn "ADDI: ~S" instruction)
 	    (append (cond
 		     ((and (eq :eax loc0) (eq :ebx loc1))
 		      nil)
@@ -6511,21 +6514,25 @@ and a list of any intervening unwind-protect environment-slots."
 	(rotatef x y)
 	(rotatef x-type y-type)
 	(rotatef x-singleton y-singleton))
-      (warn "eql ~S ~S" x-singleton y-singleton)
-      (cond
-       ((and x-singleton y-singleton)
-	(break "Constant EQL: ~S ~S" (car x-singleton) (car y-singleton)))
-       ((or (movitz-subtypep x-type 'fixnum)
-	    (movitz-subtypep x-type 'character)
-	    (movitz-subtypep y-type 'fixnum)
-	    (movitz-subtypep y-type 'character))
-	(break "EQL that is EQ."))
-       (t (append (make-load-lexical x :eax funobj nil frame-map)
-		  (make-load-lexical y :ebx funobj nil frame-map)
-		  (let ((eql-done (gensym "eql-done-")))
-		    `((:cmpl :eax :ebx)
-		      (:je ',eql-done)
-		      (,*compiler-global-segment-prefix*
-		       :movl (:edi ,(global-constant-offset 'complicated-eql)) :esi)
-		      (:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%2op)))
-		      ,eql-done))))))))
+      (let ((x-loc (new-binding-location (binding-target x) frame-map :default nil))
+	    (y-loc (new-binding-location (binding-target y) frame-map :default nil)))
+	(warn "eql ~S/~S ~S/~S"
+	      x x-loc
+	      y y-loc)
+	(cond
+	 ((and x-singleton y-singleton)
+	  (break "Constant EQL: ~S ~S" (car x-singleton) (car y-singleton)))
+	 ((or (movitz-subtypep x-type 'fixnum)
+	      (movitz-subtypep x-type 'character)
+	      (movitz-subtypep y-type 'fixnum)
+	      (movitz-subtypep y-type 'character))
+	  (break "EQL that is EQ."))
+	 (t (append (make-load-lexical x :eax funobj nil frame-map)
+		    (make-load-lexical y :ebx funobj nil frame-map)
+		    (let ((eql-done (gensym "eql-done-")))
+		      `((:cmpl :eax :ebx)
+			(:je ',eql-done)
+			(,*compiler-global-segment-prefix*
+			 :movl (:edi ,(global-constant-offset 'complicated-eql)) :esi)
+			(:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%2op)))
+			,eql-done)))))))))
