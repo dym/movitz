@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.14 2004/03/29 19:19:51 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.15 2004/03/31 16:39:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -408,6 +408,7 @@
   (memref string 2 index :character))
 
 (defun (setf schar) (value string index)
+  (check-type string string)
   (setf (aref string index) value))
 
 (define-compiler-macro char%unsafe (string index)
@@ -448,7 +449,8 @@
   `(setf (memref ,vector 2 ,index :unsigned-byte32) ,value))
 
 (defun (setf u32ref%unsafe) (value vector index)
-  (setf (u32ref%unsafe vector index) value))
+  (setf (u32ref%unsafe vector index) value)
+  value)
 
 ;;; fast vector access
 
