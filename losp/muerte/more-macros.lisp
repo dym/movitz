@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.17 2004/07/28 10:01:16 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.18 2004/08/23 13:49:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -361,6 +361,13 @@ respect to multiple threads."
        (:cld))
      (do-case (t :multiple-values)
        (:compile-form (:result-mode :multiple-values) (no-macro-call read-time-stamp-counter)))))
+
+(defmacro without-interrupts (&body body)
+  (let ((var (gensym "interrupts-enabled-p-")))
+    `(let ((,var (logbitp ,(position :if +eflags-map+) (eflags))))
+       (unwind-protect (progn (cli) ,@body)
+	 (when ,var (sti))))))
+
 
 ;;; Some macros that aren't implemented, and we want to give compiler errors.
 
