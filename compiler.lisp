@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.37 2004/03/28 15:09:27 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.38 2004/03/30 19:23:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3432,7 +3432,7 @@ loading borrowed bindings."
 		 (make-immediate-move value :eax)))
 	      (:untagged-fixnum-ecx
 	       (let ((value (movitz-fixnum-value object)))
-		 (check-type value (unsigned-byte 16))
+		 (check-type value (signed-byte 30))
 		 (make-immediate-move value :ecx)))
 	      (:push
 	       `((:pushl ,x)))
