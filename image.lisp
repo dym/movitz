@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.38 2004/06/09 17:25:03 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.39 2004/06/10 19:31:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -17,16 +17,16 @@
 
 (define-binary-class movitz-constant-block (movitz-heap-object)
   ((constant-block-start :binary-type :label) ; keep this at the top.
-   (name
-    :binary-type word
-    :initform :global
-    :map-binary-write 'movitz-read-and-intern
-    :map-binary-read-delayed 'movitz-word)
    (type
     :binary-type other-type-byte
     :initform :run-time-context)
    (padding
     :binary-type 3)
+   (name
+    :binary-type word
+    :initform :global
+    :map-binary-write 'movitz-read-and-intern
+    :map-binary-read-delayed 'movitz-word)
    (fast-car
     :binary-type code-vector-word
     :initform nil
@@ -485,7 +485,9 @@
    (bochs-flags
     :binary-type lu32
     :initform 0)
-   )
+   (scratch0				; A non-GC-root scratch register
+    :binary-type lu32
+    :initform 0))
   (:slot-align null-cons -1))
 
 (defun atomically-status-simple-pf (pf-name reset-status-p &rest registers)
