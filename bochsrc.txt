@@ -12,8 +12,6 @@
 ## Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ## Created at:    Wed Jul 21 13:41:59 2004
 ##                
-## $Id: bochsrc.txt,v 1.5 2004/07/21 11:45:52 ffjeld Exp $
-##                
 ######################################################################
 
 # how much memory the emulated machine will have
