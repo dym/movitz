@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.3 2004/03/22 14:42:31 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.4 2004/04/17 15:34:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -53,6 +53,36 @@ Cons cell is in EBX, which is preserved."
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
     (:jnz '(:sub-program () (:int 66)))
+    (:movl (:eax 3) :eax)
+    (:ret)))
+
+(define-primitive-function fast-cddr ()
+  "This is the actual CDR code."
+  (with-inline-assembly (:returns :eax)
+    (:leal (:eax -1) :ecx)
+    (:testb 3 :cl)
+    (:jnz '(:sub-program () (:int 66)))
+    (:movl (:eax 3) :eax)
+    (:leal (:eax -1) :ecx)
+    (:testb 3 :cl)
+    (:jnz '(:sub-program () (:int 66)))
+    (:movl (:eax 3) :eax)
+    (:ret)))
+
+(define-primitive-function fast-cdddr ()
+  "This is the actual CDR code."
+  (with-inline-assembly (:returns :eax)
+    (:leal (:eax -1) :ecx)
+    (:testb 3 :cl)
+    (:jnz '(:sub-program (not-cons) (:int 66)))
+    (:movl (:eax 3) :eax)
+    (:leal (:eax -1) :ecx)
+    (:testb 3 :cl)
+    (:jnz '(:sub-program (not-cons) (:int 66)))
+    (:movl (:eax 3) :eax)
+    (:leal (:eax -1) :ecx)
+    (:testb 3 :cl)
+    (:jnz '(:sub-program (not-cons) (:int 66)))
     (:movl (:eax 3) :eax)
     (:ret)))
 

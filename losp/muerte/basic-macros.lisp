@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.13 2004/04/16 23:33:36 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.14 2004/04/17 15:33:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -575,6 +575,23 @@
 (define-compiler-macro cddr (x)
   `(cdr (cdr ,x)))
 
+(define-compiler-macro caddr (x)
+  `(car (cdr (cdr ,x))))
+
+(define-compiler-macro cadddr (x)
+  `(car (cdr (cdr (cdr ,x)))))
+
+(define-compiler-macro cdar (x)
+  `(cdr (car ,x)))
+			     
+
+(define-compiler-macro rest (x) `(cdr ,x))
+(define-compiler-macro first (x) `(car ,x))
+(define-compiler-macro second (x) `(cadr ,x))
+(define-compiler-macro third (x) `(caddr ,x))
+(define-compiler-macro fourth (x) `(cadddr ,x))
+(define-compiler-macro fifth (x) `(caddddr ,x))
+
 (define-compiler-macro (setf car) (value cell &environment env)
   (if (and (movitz:movitz-constantp value env)
 	   (eq nil (movitz::eval-form value env)))
@@ -840,32 +857,6 @@
     (array
      (error "Array backquote not implemented."))
     (t (list 'quote form))))
-
-;;;(defmacro defun+movitz (name &rest args)
-;;;  (flet ((make-compile-side-name (x)
-;;;	   (if (find-symbol (symbol-name x) :common-lisp)
-;;;	       (intern (format nil "~A-~A" '#:movitz x))
-;;;	     x)))
-;;;    (if (symbolp name)
-;;;	`(progn
-;;;	   (eval-when (:compile-toplevel)
-;;;	     (defun ,(make-compile-side-name name) ,@args))
-;;;	   (defun ,name ,@args))
-;;;      `(progn
-;;;	 (eval-when (:compile-toplevel)
-;;;	   (defun (,(first name) ,(make-compile-side-name (second name))) ,@(cddr name)
-;;;		  ,@args))
-;;;	 (defun ,name ,@args)))))
-
-
-(define-compiler-macro first (x)
-  `(car ,x))
-(define-compiler-macro second (x)
-  `(cadr ,x))
-(define-compiler-macro third (x)
-  `(caddr ,x))
-(define-compiler-macro rest (x)
-  `(cdr ,x))
 
 (define-compiler-macro find-class (&whole form &environment env symbol &optional (errorp t))
   (declare (ignore errorp))

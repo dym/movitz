@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.24 2004/04/16 08:57:29 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.25 2004/04/17 15:33:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -34,6 +34,18 @@
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
    (fast-cdr
+    :binary-type code-vector-word
+    :initform nil
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)
+   (fast-cddr
+    :binary-type code-vector-word
+    :initform nil
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)
+   (fast-cdddr
     :binary-type code-vector-word
     :initform nil
     :map-binary-write 'movitz-intern-code-vector
@@ -128,12 +140,6 @@
    (stack-top				; stack-top must be right after stack-bottom
     :binary-type word			; in order for the bound instruction to work.
     :initform #x100000)
-   (bochs-flags
-    :binary-type lu32
-    :initform 0)
-   (bochs-flags2
-    :binary-type lu32
-    :initform 0)
    ;;
    (unbound-value
     :binary-type word
@@ -421,6 +427,9 @@
    (segment-descriptor-7
     :binary-type segment-descriptor
     :initform (make-segment-descriptor))
+   (bochs-flags
+    :binary-type lu32
+    :initform 0)
    )
   (:slot-align null-cons -1))
 

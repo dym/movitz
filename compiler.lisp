@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.51 2004/04/17 14:10:00 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.53 2004/04/17 15:33:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -739,11 +739,12 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 					   have-normalized-ecx-p)))
 		     (let ((optimized-function-code
 			    (optimize-code function-code
-					   :keep-labels (append (subseq (movitz-funobj-const-list funobj)
-									0 (movitz-funobj-num-jumpers funobj))
-								'(entry%1op
-								  entry%2op
-								  entry%3op)))))
+					   :keep-labels (append
+							 (subseq (movitz-funobj-const-list funobj)
+								 0 (movitz-funobj-num-jumpers funobj))
+							 '(entry%1op
+							   entry%2op
+							   entry%3op)))))
 		       (cons numargs optimized-function-code))))))))
     (let ((code1 (cdr (assoc 1 code-specs)))
 	  (code2 (cdr (assoc 2 code-specs)))
@@ -2053,6 +2054,17 @@ falling below the label."
 			 (setq p `((:call (:edi ,(global-constant-offset newf))))
 			       next-pc (nthcdr 2 pc))
 			 (explain nil "Changed [~S ~S] to ~S" i i2 newf)))
+		      ((and (global-funcall-p i '(fast-cdr))
+			    (global-funcall-p i2 '(fast-cdr))
+			    (global-funcall-p i3 '(fast-cdr)))
+		       (setq p `((:call (:edi ,(global-constant-offset 'fast-cdddr))))
+			     next-pc (nthcdr 3 pc))
+		       (explain nil "Changed (cdr (cdr (cdr :eax))) to (cdddr :eax)."))
+		      ((and (global-funcall-p i '(fast-cdr))
+			    (global-funcall-p i2 '(fast-cdr)))
+		       (setq p `((:call (:edi ,(global-constant-offset 'fast-cddr))))
+			     next-pc (nthcdr 2 pc))
+		       (explain nil "Changed (cdr (cdr :eax)) to (cddr :eax)."))
 		      ((and (load-stack-frame-p i) (eq :eax (twop-dst i))
 			    (global-funcall-p i2 '(fast-car fast-cdr))
 			    (preserves-stack-location-p i3 (load-stack-frame-p i))
