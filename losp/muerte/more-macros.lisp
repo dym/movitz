@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.5 2004/04/06 14:05:23 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.6 2004/04/19 20:01:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -292,3 +292,13 @@ respect to multiple threads."
 (defmacro ignore-errors (&body body)
   `(handler-case (progn ,@body)
      (error (c) (values nil c))))
+
+(defmacro with-slots (slot-entries instance-form &body declarations-and-forms)
+  (let ((object-var (gensym "with-slots-object-")))
+    `(symbol-macrolet ,(mapcar (lambda (entry)
+				 (let ((var (if (atom entry) entry (car entry)))
+				       (slot (if (atom entry) entry (cadr entry))))
+				   `(,var (slot-value ,object-var ',slot))))
+			       slot-entries)
+       (let ((,object-var ,instance-form))
+	 ,@declarations-and-forms))))
