@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.43 2004/10/21 20:33:57 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.44 2004/11/11 19:24:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1069,18 +1069,13 @@ busy-waiting loop on P4."
 
 (define-compiler-macro boundp (symbol)
   `(with-inline-assembly-case ()
-     (do-case (t :boolean-cf=1 :labels (boundp-done))
+     (do-case (t :boolean-zf=0 :labels (boundp-done))
        (:compile-form (:result-mode :eax) ,symbol)
-       (:cmpl :edi :eax)
-       (:cmc)
-       (:je 'boundp-done)		; if ZF=1, then CF=1 after CMC
-       (:call-local-pf dynamic-find-binding)
-       (:jc 'boundp-done)
-       (:movl (:eax #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::value)) :eax)
-       (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax))
-       (:je 'boundp-done)
-       (:stc)
-      boundp-done)))
+       (:leal (:eax ,(- (movitz:tag :symbol))) :ecx)
+       (:testb 7 :cl)
+       (:jne '(:sub-program () (:int 66)))
+       (:call-local-pf dynamic-load-unprotected)
+       (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax)))))
 
 (defmacro define-global-variable (name init-form &optional docstring)
   "A global variable will be accessed by ignoring local bindings."

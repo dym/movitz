@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.22 2004/10/21 20:34:11 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.23 2004/11/11 19:25:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -52,12 +52,7 @@
   (check-type symbol symbol)
   (with-inline-assembly (:returns :eax)
     (:compile-form (:result-mode :eax) symbol)
-    (:call-local-pf dynamic-find-binding)
-    (:jnc 'no-local-binding)
-    (:movl (:eax) :eax)
-    (:jmp 'done)
-   no-local-binding
-    (:movl (:eax (:offset movitz-symbol value)) :eax)
+    (:call-local-pf dynamic-load-unprotected)
    done))
 
 (defun (setf symbol-value) (value symbol)
@@ -128,7 +123,7 @@
   (get-symbol-slot symbol package))
 
 (defun boundp (symbol)
-  (boundp symbol))
+  (compiler-macro-call boundp symbol))
 
 (defun makunbound (symbol)
   (setf (symbol-value symbol)
