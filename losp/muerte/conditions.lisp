@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.4 2004/04/06 14:05:18 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.5 2004/04/15 15:11:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -128,7 +128,23 @@
   (:report (lambda (c s)
 	     (format s "End of file encountered on ~W."
 		     (stream-error-stream c)))))
-		  
+
+(define-condition arithmetic-error (error)
+  ((operation
+    :initarg :operation
+    :initform nil
+    :reader arithmetic-error-operation)
+   (operands
+    :initarg :operands
+    :initform nil
+    :reader arithmetic-error-operands)))
+
+(define-condition division-by-zero (arithmetic-error)
+  ()
+  (:report (lambda (c s)
+	     (declare (ignore c))
+	     (format s "Division by zero."))))
+
 (defun make-condition (type &rest slot-initializations)
   (declare (dynamic-extent slot-initializations))
   (apply 'make-instance type slot-initializations))
