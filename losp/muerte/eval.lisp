@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.10 2004/08/18 20:16:26 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.11 2004/09/21 13:02:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -157,9 +157,10 @@ second the list of declaration-specifiers."
       (return t))))
 
 (defun eval-defun (name lambda-list body env)
-  (assert (not (eq (symbol-package name)
-		   (find-package 'common-lisp)))
-      () "Won't allow defun of a common-lisp symbol.")
+  (with-simple-restart (continue "Defun ~S anyway." name)
+    (assert (not (eq (symbol-package name)
+		     (find-package 'common-lisp)))
+	() "Won't allow defun of the Common Lisp symbol ~S." name))
   (setf (symbol-function name)
     (install-funobj-name name
 			 (lambda (&rest args)
