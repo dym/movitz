@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.83 2004/07/23 15:31:19 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.84 2004/07/23 16:42:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -388,7 +388,6 @@ Side-effects each binding's binding-store-type."
 		   (cond
 		    (thunk
 		     (assert (some #'bindingp thunk-args))
-		     ;; (warn "got a thunk for ~S" thunk-args)
 		     (push (cons thunk thunk-args) (type-analysis-thunks analysis)))
 		    ((typep binding 'function-argument)
 		     (setf (type-analysis-encoded-type analysis)
@@ -498,7 +497,10 @@ Side-effects each binding's binding-store-type."
 		     (apply #'encoded-type-decode (type-analysis-encoded-type analysis))
 		     (type-analysis-binding-types analysis))
 		   (setf (binding-store-type binding)
-		     (type-analysis-encoded-type analysis))
+		     (cond
+		      ((not (null (type-analysis-thunks analysis)))
+		       (multiple-value-list (type-specifier-encode t)))
+		      (t (type-analysis-encoded-type analysis))))
 		   #+ignore
 		   (when (apply #'encoded-type-singleton (type-analysis-encoded-type analysis))
 		     (warn "Singleton: ~A" binding))
