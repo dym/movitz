@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.15 2004/08/12 15:42:00 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.16 2004/08/16 08:25:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -179,7 +179,7 @@
 	    ((or movitz-funobj movitz-struct movitz-std-instance)
 	     object)
 	    (t (movitz-print object))))
-      (t (c) (list :word-error word c)))))
+      (serious-condition (c) (list :word-error word c)))))
 
 (defun backtrace (&key (reqs t) print-frames print-returns spartan)
   (format t "~&Backtracing from EIP = #x~X: "
