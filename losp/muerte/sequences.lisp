@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.3 2004/01/28 20:25:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -60,12 +60,12 @@
     (list
      (do ((x sequence (cdr x))
 	  (length 0 (1+ length)))
-	 ((endp x) length)))))
+	 ((null x) length)))))
 
 (defun length%list (sequence)
-  (do ((x sequence (cdr x))
-       (length 0 (1+ length)))
-      ((endp x) length)))
+  (do ((length 0 (1+ length))
+       (x sequence (cdr x)))
+      ((null x) length)))
 
 (defun elt (sequence index)
   (sequence-dispatch sequence
@@ -181,7 +181,7 @@
 (defun copy-seq (sequence)
   (subseq sequence 0))
 
-(defun position (item sequence &key from-end (test #'eql) test-not (start 0) end  (key 'identity))
+(defun position (item sequence &key from-end (test #'eql) test-not (start 0) end (key 'identity))
   (numargs-case
    (2 (item sequence)
       (sequence-dispatch sequence
@@ -193,10 +193,9 @@
 	     (when (eql (sequence-ref i) item)
 	       (return i)))))
 	(list
-	 (do ((p sequence (cdr p))
-	      (i 0 (1+ i)))
-	     ((endp p) nil)
-	   (when (eql (car p) item)
+	 (do ((i 0 (1+ i)))
+	     ((null sequence) nil)
+	   (when (eql (pop sequence) item)
 	     (return i))))))
    (t (item sequence &key from-end (test #'eql) test-not (start 0) end  (key 'identity))
       (with-funcallable (key)
@@ -219,21 +218,21 @@
 	    (list
 	     (cond
 	      ((not end)
-	       (do ((p (nthcdr start sequence) (cdr p))
+	       (do ((p (nthcdr start sequence))
 		    (i start (1+ i)))
-		   ((endp p) nil)
-		 (when (test (key (car p)) item)
+		   ((null p) nil)
+		 (when (test (key (pop p)) item)
 		   (return (if (not from-end)
 			       i
-			     (let ((next-i (position item (cdr p) :key key :from-end t
+			     (let ((next-i (position item p :key key :from-end t
 						     :test test :test-not test-not)))
 			       (if next-i (+ i 1 next-i ) i)))))))
-	      (t (do ((p (nthcdr start sequence) (cdr p))
+	      (t (do ((p (nthcdr start sequence))
 		      (i start (1+ i)))
-		     ((or (endp p) (>= i end)) nil)
-		   (when (test (key (car p)) item)
+		     ((or (null p) (>= i end)) nil)
+		   (when (test (key (pop p)) item)
 		     (return (if (not from-end) i
-			       (let ((next-i (position item (cdr p) :end (- end 1 i) :from-end t
+			       (let ((next-i (position item p :end (- end 1 i) :from-end t
 						       :key key :test test :test-not test-not)))
 				 (if next-i (+ i 1 next-i ) i)))))))))))))))
 
@@ -250,10 +249,10 @@
 	       (when (predicate (sequence-ref i))
 		 (return i)))))
 	  (list
-	   (do ((p sequence (cdr p))
+	   (do ((p sequence)
 		(i 0 (1+ i)))
-	       ((endp p))
-	     (when (predicate (car p))
+	       ((null p))
+	     (when (predicate (pop p))
 	       (return i)))))))
    (t (predicate sequence &key (start 0) end (key 'identity) from-end)
       (with-funcallable (predicate)
@@ -275,19 +274,20 @@
 	    (list
 	     (cond
 	      (end
-	       (do ((p (nthcdr start sequence) (cdr p))
+	       (do ((p (nthcdr start sequence))
 		    (i start (1+ i)))
-		   ((or (>= i end) (endp p)))
-		 (when (predicate (key (car p)))
+		   ((or (>= i end) (null p)))
+		 (when (predicate (key (pop p)))
 		   (return (if (not from-end) i
-			     (let ((next-i (position-if predicate (cdr p) :key key :from-end t :end (- end i 1))))
+			     (let ((next-i (position-if predicate p :key key
+							:from-end t :end (- end i 1))))
 			       (if next-i (+ i 1 next-i) i)))))))
-	      (t (do ((p (nthcdr start sequence) (cdr p))
+	      (t (do ((p (nthcdr start sequence))
 		      (i start (1+ i)))
-		     ((endp p))
-		   (when (predicate (key (car p)))
+		     ((null p))
+		   (when (predicate (key (pop p)))
 		     (return (if (not from-end) i
-			       (let ((next-i (position-if predicate (cdr p) :key key :from-end t)))
+			       (let ((next-i (position-if predicate p :key key :from-end t)))
 				 (if next-i (+ i 1 next-i) i)))))))))))))))
 
 
@@ -312,10 +312,10 @@
 (defun reverse (sequence)
   (sequence-dispatch sequence
     (list
-     (do ((p sequence (cdr p))
-	  (r nil))
-	 ((endp p) r)
-       (push (car p) r)))
+     (let ((result nil))
+       (dolist (x sequence)
+	 (push x result))
+       result))
     (vector
      (nreverse (copy-seq sequence)))))
 
