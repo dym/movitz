@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.16 2004/07/15 00:28:30 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.17 2004/07/20 12:40:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -533,7 +533,3 @@ be provided for those cases."
 	       (t (format t "~&?: ~Z" funobj))))))
   (values))
 
-(defun fixnum-word (fixnum)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) fixnum)
-    (:shrl #.movitz::+movitz-fixnum-shift+ :eax)))
