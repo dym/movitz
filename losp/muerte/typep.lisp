@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.37 2004/09/15 10:22:59 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.38 2004/11/18 09:28:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -620,5 +620,11 @@
   (cond
    ((typep object result-type)
     object)
+   ((and (eq result-type 'list)
+	 (typep object 'sequence))
+    (map 'list #'identity object))
+   ((and (typep object 'sequence)
+	 (member result-type '(vector array)))
+    (make-array (length object) :initial-contents object))
    (t (error "Don't know how to coerce ~S to ~S." object result-type))))
 
