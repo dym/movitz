@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.32 2004/07/23 15:37:17 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.33 2004/07/27 09:22:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -179,7 +179,7 @@
 		 (make-other-typep :bignum 0))
 		((negative-bignum)
 		 (make-other-typep :bignum #xff))
-		((integer number rational)
+		((integer)
 		 `(with-inline-assembly-case ()
 		    (do-case (t :boolean-zf=1 :labels (done))
 		      (:compile-form (:result-mode :eax) ,object)
@@ -555,8 +555,11 @@
   (typep x 'bignum))
 
 (define-simple-typep (number numberp) (x)
-  "Currently, only integer numbers are supported."
-  (integerp x))
+  "Currently, only integers and ratios are supported."
+  (or (typep x 'fixnum)
+      (and (typep x 'tag6)
+	   (or (typep x 'bignum)
+	       (ratio-p x)))))
 
 (define-simple-typep (function functionp) (x)
   (typep x 'function))
