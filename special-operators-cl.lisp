@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.11 2004/02/14 17:33:40 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.12 2004/03/24 18:36:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -468,7 +468,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 					     :protect-carry t
 					     :protect-registers (:eax :ebx))
 			       (:store-lexical ,(first lexical-bindings) :eax
-					       :type ,(type-specifier-primary values-type))
+					       :type ,(type-specifier-primary values-type)
+					       :protect-registers (:ebx))
 			       (:init-lexvar ,(second lexical-bindings)
 					     :protect-carry t
 					     :protect-registers (:ebx))
@@ -490,14 +491,17 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				     append
 				       (case pos
 					 (0 `((:init-lexvar ,binding
-							    :protect-registers '(:eax :ebx :ecx))
-					      (:store-lexical ,binding :eax :type ,type)))
+							    :protect-registers (:eax :ebx :ecx))
+					      (:store-lexical ,binding :eax :type ,type
+							      :protect-registers (:eax :ebx :ecx))))
 					 (1 `((:init-lexvar ,binding
-							    :protect-registers '(:ebx :ecx))
-					      (:store-lexical ,binding :edi :type null)
+							    :protect-registers (:ebx :ecx))
+					      (:store-lexical ,binding :edi :type null
+							      :protect-registers (:ecx))
 					      (:cmpl 1 :ecx)
 					      (:jbe ',skip-label)
-					      (:store-lexical ,binding :ebx :type ,type)
+					      (:store-lexical ,binding :ebx :type ,type
+							      :protect-registers (:ecx))
 					      ,skip-label))
 					 (t (if *compiler-use-cmov-p*
 						`((:init-lexvar ,binding :protect-registers '(:ecx))
@@ -506,7 +510,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 						  (:locally (:cmova (:edi (:edi-offset values
 										       ,(* 4 (- pos 2))))
 								    :eax))
-						  (:store-lexical ,binding :eax :type ,type))
+						  (:store-lexical ,binding :eax :type ,type
+								  :protect-registers (:eax)))
 					      `((:init-lexvar ,binding :protect-registers '(:ecx))
 						(:movl :edi :eax)
 						(:cmpl ,pos :ecx)
@@ -515,7 +520,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 										    ,(* 4 (- pos 2))))
 								 :eax))
 						,skip-label
-						(:store-lexical ,binding :eax :type ,type)))))))))))))))
+						(:store-lexical ,binding :eax :type ,type
+								:protect-registers (:ecx))))))))))))))))
 	  (compiler-values-bind (&code body-code &returns body-returns-mode)
 	      (compiler-call #'compile-form-unprotected
 		:defaults forward
