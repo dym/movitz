@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.11 2004/03/29 14:36:43 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.12 2004/03/31 16:32:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1322,6 +1322,7 @@
 	   #:*compiler-global-segment-prefix*
 	   #:*compiler-compile-eval-whens*
 	   #:*compiler-compile-macro-expanders*
+	   #:*compiler-allow-untagged-word-bits*
 	   )
   (:import-from muerte
 		#:translate-program
