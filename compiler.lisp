@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.68 2004/06/10 19:30:19 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.69 2004/06/21 07:48:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2658,7 +2658,7 @@ the sub-program options (&optional label) as secondary value."
 				(member binding (find-read-bindings i)
 					:test #'eq)))
 			 (cdr init-pc)
-			 :end 15))
+			 #-sbcl :end #-sbcl 15))
 	       (binding-destination (third load-instruction))
 	       (distance (position load-instruction (cdr init-pc))))
 	  (multiple-value-bind (free-registers more-later-p)
