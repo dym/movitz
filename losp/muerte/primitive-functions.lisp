@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.61 2005/01/25 13:54:57 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.62 2005/02/01 16:20:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -73,7 +73,8 @@
      (with-inline-assembly (:returns :nothing)
        (:movl :esi :edx)		; parameter for standard-gf-function.
        (:movl (:esi ,(bt:slot-offset 'movitz::movitz-funobj-standard-gf
-				     (intern (symbol-name to) :movitz))) :esi)
+				     (intern (symbol-name to) :movitz)))
+	      :esi)
        (:jmp (:esi ,(bt:slot-offset 'movitz::movitz-funobj
 				    (intern (symbol-name forward) :movitz)))))))
   
