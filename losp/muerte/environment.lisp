@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.6 2004/04/23 13:00:24 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.7 2004/04/23 15:02:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -132,9 +132,12 @@
       (read-time-stamp-counter)
     (let* ((skew (or (get 'report-time 'skew)
 		     (setf (get 'report-time 'skew)
-		       (multiple-value-bind (x-lo x-hi)
-			   (read-time-stamp-counter)
-			 (time-skew-measure start-mem x-lo x-hi)))))
+		       (loop repeat 10	; warm up caches.
+			   as x = (multiple-value-bind (x-lo x-hi)
+				      (read-time-stamp-counter)
+				    (constantly-true 123)
+				    (time-skew-measure start-mem x-lo x-hi))
+			   finally (return x)))))
 	   (clumps (- (malloc-cons-pointer) start-mem))
 	   (delta-hi (- end-time-hi start-time-hi))
 	   (delta-lo (- end-time-lo start-time-lo skew)))
