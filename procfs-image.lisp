@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.4 2004/04/06 14:35:36 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.5 2004/04/14 12:11:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -164,6 +164,10 @@
   (when (zerop (ldb (byte 2 0) stack-frame))
     (get-word (- stack-frame -4))))
 
+(defun interrupt-frame-index (name)
+  (- 5 (position name
+		 '(nil :eflags :eip :error-code :exception :ebp nil
+		   :ecx :eax :edx :ebx :esi :edi))))
 (defun backtrace ()
   (format t "~&Backtracing from EIP = #x~X: "
 	  (image-register32 *image* :eip))
@@ -182,14 +186,13 @@
 		(return-from backtrace nil))
 	      (write-string "?")
 	      (let* ((r (stack-frame-return-address stack-frame))
-		     (eax (get-word (+ stack-frame 28 8)))
-		     (ecx (get-word (+ stack-frame 24 8)))
-		     (edi (get-word (+ stack-frame 0 8)))
-		     (eip (get-word (+ stack-frame 40 8)))
-		     (exception (get-word (+ stack-frame 32 8)))
-		     (return (get-word (+ stack-frame 52 8))))
-		(when r (format t " (ret #x~X {EAX: #x~X, ECX: #x~X, EDI: #x~X, EIP: #x~X, exception ~D, ret: #x~X})"
-				r eax ecx edi eip exception return))))
+		     (eax (get-word (+ (* 4 (interrupt-frame-index :eax)) stack-frame)))
+		     (ecx (get-word (+ (* 4 (interrupt-frame-index :ecx)) stack-frame)))
+		     (edi (get-word (+ (* 4 (interrupt-frame-index :edi)) stack-frame)))
+		     (eip (get-word (+ (* 4 (interrupt-frame-index :eip)) stack-frame)))
+		     (exception (get-word (+ (* 4 (interrupt-frame-index :exception)) stack-frame))))
+		(when r (format t " (ret #x~X {EAX: #x~X, ECX: #x~X, EDI: #x~X, EIP: #x~X, exception ~D})"
+				r eax ecx edi eip exception))))
 	     (movitz-symbol
 	      (let ((name (movitz-print movitz-name)))
 		(write-string (symbol-name name))
