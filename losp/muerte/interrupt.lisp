@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2003-2004, 
+;;;;    Copyright (C) 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.33 2004/11/23 16:05:59 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.34 2005/01/04 16:54:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -25,6 +25,7 @@
       :ebp
       :funobj
       :edi
+      :dynamic-env
       :atomically-continuation
       :raw-scratch0      
       :ecx :eax :edx :ebx :esi
@@ -78,6 +79,8 @@
   (let ((ebp (dit-frame-ref stack dit-frame :ebp))
 	(esp (dit-frame-esp stack dit-frame)))
     (cond
+     ((null ebp)			; special mode
+      (stack-frame-ref stack (dit-frame-ref stack dit-frame :dynamic-env) 0))
      ((< esp ebp)
       ebp)
      ((> esp ebp)
@@ -118,6 +121,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:pushl 0)			; 0 'funobj' means default-interrupt-trampoline frame
 	    (:pushl :edi)		; 
 	    (:movl ':nil-value :edi)	; We want NIL!
+	    (:locally (:pushl (:edi (:edi-offset dynamic-env))))
 	    (:locally (:pushl (:edi (:edi-offset atomically-continuation))))
 	    (:locally (:pushl (:edi (:edi-offset raw-scratch0))))
 	    ,@(loop for reg in (sort (copy-list '(:eax :ebx :ecx :edx :esi))
@@ -206,6 +210,12 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 
 	    ;; Interrupted code was non-atomical, the normal case.
 	   normal-return
+	    (:movl (:ebp ,(dit-frame-offset :dynamic-env)) :ecx)
+	    (:locally (:cmpl :ecx (:edi (:edi-offset dynamic-env))))
+	    (:jne '(:sub-program ()
+		    ;; This would mean the interrupt handled failed to reset dynamic-env.
+		    (:int 63)))
+	    ;; (:locally (:movl :ecx (:edi (:edi-offset dynamic-env))))
 	    (:movl (:ebp ,(dit-frame-offset :raw-scratch0)) :ecx)
 	    (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0))))
 	    (:movl (:ebp ,(dit-frame-offset :scratch1)) :eax)

@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2003-2004, 
+;;;;    Copyright (C) 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.38 2005/01/03 11:53:47 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.39 2005/01/04 16:54:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -204,10 +204,11 @@ at the start-stack-frame location."
 				    (+ dit-frame (dit-frame-index :ecx)))))
 		    ;; 2. Pop to (dit-)frame's CASF
 		    (setf nether-frame dit-frame
-			  frame (dit-frame-casf stack frame))
-		    (let ((casf-funobj (funcall function (stack-frame-funobj stack frame) frame))
+			  frame casf-frame #+ignore (dit-frame-casf stack frame))
+		    (let ((eip-location (dit-frame-ref stack dit-frame :eip :location))
+			  (interrupted-esp (dit-frame-esp stack dit-frame))
 			  (interrupted-ebp (dit-frame-ref stack dit-frame :ebp))
-			  (interrupted-esp (dit-frame-esp stack dit-frame)))
+			  (casf-funobj (funcall function (stack-frame-funobj stack frame) frame)))
 		      (cond
 		       #+ignore
 		       ((eq nil casf-funobj)
@@ -218,23 +219,21 @@ at the start-stack-frame location."
 			(let ((casf-code-vector (scavenge-funobj-code-vector casf-funobj)))
 			  ;; 3. Scavenge the interrupted frame, according to one of i. ii. or iii.
 			  (cond
-			   ((< interrupted-ebp interrupted-esp)
+			   ((eq nil interrupted-ebp)
 			    (cond
-			     ((location-in-object-p casf-code-vector
-						    (dit-frame-ref stack dit-frame :eip :location))
-			      (warn "DIT at throw situation, in target EIP=~S"
+			     ((location-in-object-p casf-code-vector eip-location)
+			      (warn "DIT at throw situation, in target ~S at ~S"
+				    casf-funobj
 				    (dit-frame-ref stack dit-frame :eip :unsigned-byte32))
 			      (map-region function interrupted-esp frame))
-			     ((location-in-object-p (scavenge-funobj-code-vector (dit-frame-ref stack
-												dit-frame
-												:scratch1))
-						    (dit-frame-ref stack dit-frame :eip :location))
-			      (warn "DIT at throw situation, in thrower EIP=~S"
-				    (dit-frame-ref stack dit-frame :eip :unsigned-byte32))
-			      (map-region function interrupted-esp frame))
-			     (t (error "DIT with EBP<ESP, EBP=~S, ESP=~S"
-				       interrupted-ebp
-				       interrupted-esp))))
+			     ((location-in-object-p (%run-time-context-slot 'dynamic-jump-next)
+						    eip-location)
+			      (warn "DIT at throw situation, in dynamic-jump-next.")
+			      (let ((dynamic-env (dit-frame-ref stack dit-frame :dynamic-env)))
+				(assert (< dynamic-env frame))
+				(map-region function dynamic-env frame)))
+			     (t (error "Unknown throw situation with EBP=~S, ESP=~S"
+				       interrupted-ebp interrupted-esp))))
 			   ((location-in-object-p casf-code-vector
 						  (dit-frame-ref stack dit-frame :eip :location))
 			    (cond
@@ -295,7 +294,8 @@ at the start-stack-frame location."
 			    (map-region function (+ interrupted-esp 1) frame)
 			    (setf next-frame frame
 				  next-nether-frame (+ interrupted-esp 1 -2))))))
-		       (t (error "DIT-frame interrupted unknown CASF funobj: ~S" casf-funobj))))))
+		       (t (error "DIT-frame interrupted unknown CASF funobj: ~Z, CASF ~S"
+				 casf-funobj casf-frame))))))
 		 (t (error "Don't know how to scavenge across frame ~S of kind ~S." frame funobj)))))))
   (values))
 

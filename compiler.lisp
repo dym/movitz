@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.125 2005/01/04 11:35:10 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.126 2005/01/04 16:53:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5912,6 +5912,8 @@ cleanup-forms etc.) to <to-env> with <return-code>'s result intact."
       "Lexical unwind-protect not implemented, to-env: ~S. (this is not supposed to happen)"
       to-env)
     ;; (warn "dist: ~S, slots: ~S" stack-distance num-dynamic-slots)
+    (assert (not (eq t num-dynamic-slots)) ()
+      "Don't know how to make lexical-control-transfer across unknown number of dynamic slots.")
     (cond
      ((and (eq t stack-distance)
 	   (eql 0 num-dynamic-slots))
@@ -5921,8 +5923,7 @@ cleanup-forms etc.) to <to-env> with <return-code>'s result intact."
 		      (unless (eq :function (exit-result-mode to-env))
 			`((:load-lexical ,(movitz-binding (save-esp-variable to-env) to-env nil) :esp)))
 		      `((:jmp ',to-label)))))
-     ((or (eq t stack-distance)
-	  (eq t num-dynamic-slots))
+     ((eq t stack-distance)
       (compiler-values ()
 	:returns :non-local-exit
 	:code (append return-code

@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.27 2004/10/21 20:27:00 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.28 2005/01/04 16:54:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -470,6 +470,8 @@ be provided for those cases."
 	for frame = initial-stack-frame-index
 	then (or next-frame
 		 (let ((uplink (stack-frame-uplink stack frame)))
+		   (assert (typep uplink 'fixnum) ()
+		     "Weird uplink ~S for frame ~S." uplink frame)
 		   (assert (> uplink frame) ()
 		     "Backtracing uplink ~S from frame index ~S." uplink frame)
 		   uplink))

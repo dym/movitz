@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.58 2004/12/14 16:22:08 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.59 2005/01/04 16:54:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -678,3 +678,17 @@ The number of values (untagged) is returned in ECX, even if CF=0."
   "This is the global RET trampoline, used to achieve stack discipline."
   (with-inline-assembly (:returns :multiple-values)
     (:ret)))
+
+(define-primitive-function dynamic-jump-next ()
+  "Transfer control to (next) dynamic control transfer target in EDX.
+Final target is in raw-scratch0. Doesn't modify current-values."
+  (with-inline-assembly (:returns :non-local-exit)
+    (:movl :edi :esi)			; before bumping ESP, remove reference to funobj..
+					; ..in case it's stack-allocated.
+    (:locally (:movl :edx (:edi (:edi-offset dynamic-env)))) ; exit to next-env
+    (:movl :edi :ebp)			; enter non-local jump stack mode.
+    (:movl :edx :esp)			; 
+    (:movl (:esp) :edx)			; target stack-frame EBP
+    (:movl (:edx -4) :esi)		; get target funobj into ESI
+    (:movl (:esp 8) :edx)		; target jumper number
+    (:jmp (:esi :edx (:offset movitz-funobj constant0)))))

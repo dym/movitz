@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.40 2005/01/03 11:55:27 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.41 2005/01/04 16:54:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -749,35 +749,43 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	(movitz-env-get tag 'go-tag nil env)
       (assert (and label tagbody-env) ()
 	"Go-tag ~W is not visible." tag)
-      (if (and (eq funobj (movitz-environment-funobj tagbody-env))
-	       ;; any unwind-protects between here and there?
-	       (null (nth-value 2 (stack-delta env tagbody-env))))
-	  (compiler-values ()
-	    :returns :non-local-exit
-	    :code `((:lexical-control-transfer nil :nothing ,env ,tagbody-env ,label)))
-	;; Perform a lexical "throw" to the tag. Just like a regular (dynamic) throw.
-	(let ((save-esp-binding (movitz-binding (save-esp-variable tagbody-env) env))
-	      (label-id (movitz-env-get tag 'go-tag-label-id nil tagbody-env nil)))
-	  (assert label-id)
-	  (compiler-values ()
-	    :returns :non-local-exit
-	    :code `((:load-lexical ,save-esp-binding :edx)
-		    (:movl :edx :eax)
-		    ,@(when (plusp label-id)
-			;; The target jumper points to the tagbody's label-set.
-			;; Now, install correct jumper within tagbody as target.
-			`((:addl ,(* 4 label-id) (:edx 8))))
-		    (:locally (:call (:edi (:edi-offset dynamic-unwind-next))))
-		    ;; have next-continuation in EAX, final-continuation in EDX
-		    (:locally (:movl :edx (:edi (:edi-offset raw-scratch0)))) ; final continuation
-		    (:locally (:movl :esi (:edi (:edi-offset scratch1))))
-		    (:locally (:movl :eax (:edi (:edi-offset dynamic-env)))) ; exit to next-env
-		    (:movl :eax :esp)	; enter non-local jump stack mode.
-		    (:movl (:esp) :eax)	; target stack-frame EBP
-		    (:movl (:eax -4) :esi) ; get target funobj into ESI
-		    (:movl (:esp 8) :eax) ; target jumper number
-		    (:clc)
-		    (:jmp (:esi :eax ,(slot-offset 'movitz-funobj 'constant0))))))))))
+      (multiple-value-bind (stack-distance num-dynamic-slots unwind-protects)
+	  (stack-delta env tagbody-env)
+	(declare (ignore stack-distance))
+	(if (and (eq funobj (movitz-environment-funobj tagbody-env))
+		 ;; A well-known number of dynamic-slots?
+		 (not (eq t num-dynamic-slots))
+		 ;; any unwind-protects between here and there?
+		 (null unwind-protects))
+	    (compiler-values ()
+	      :returns :non-local-exit
+	      :code `((:lexical-control-transfer nil :nothing ,env ,tagbody-env ,label)))
+	  ;; Perform a lexical "throw" to the tag. Just like a regular (dynamic) throw.
+	  (let ((save-esp-binding (movitz-binding (save-esp-variable tagbody-env) env))
+		(label-id (movitz-env-get tag 'go-tag-label-id nil tagbody-env nil)))
+	    (assert label-id)
+	    (compiler-values ()
+	      :returns :non-local-exit
+	      :code `((:load-lexical ,save-esp-binding :edx)
+		      (:movl :edx :eax)
+		      ,@(when (plusp label-id)
+			  ;; The target jumper points to the tagbody's label-set.
+			  ;; Now, install correct jumper within tagbody as target.
+			  `((:addl ,(* 4 label-id) (:edx 8))))
+		      (:locally (:call (:edi (:edi-offset dynamic-unwind-next))))
+		      ;; have next-continuation in EAX, final-continuation in EDX
+		      (:locally (:movl :edx (:edi (:edi-offset raw-scratch0)))) ; final continuation
+
+		      (:movl :eax :edx)
+		      (:clc)
+		      (:locally (:call (:edi (:edi-offset dynamic-jump-next))))))))))))
+		      
+;;;		      (:locally (:movl :edx (:edi (:edi-offset dynamic-env)))) ; exit to next-env
+;;;		      (:movl :edx :esp)	; enter non-local jump stack mode.
+;;;		      (:movl (:esp) :edx) ; target stack-frame EBP
+;;;		      (:movl (:edx -4) :esi) ; get target funobj into ESI
+;;;		      (:movl (:esp 8) :edx) ; target jumper number
+;;;		      (:jmp (:esi :edx ,(slot-offset 'movitz-funobj 'constant0)))))))))))
 
 (define-special-operator block (&all forward &funobj funobj &form form &env env
 				     &result-mode result-mode)
@@ -849,10 +857,10 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			      new-code
 			      ;; wrapped-code
 			      `(,exit-block-label
+				(:movl (:esp 0) :ebp)
 				(:movl (:esp 12) :edx)
 				(:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
-				(:popl :ebp)
-				(:leal (:esp 12) :esp)))
+				(:leal (:esp 16) :esp)))
 		:returns :multiple-values
 		:functional-p block-no-side-effects-p))))))))
 
@@ -1225,92 +1233,98 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		      (:locally (:movl :esp (:edi (:edi-offset dynamic-env))))) ; install catch
 		    body-code
 		    `(,exit-point
+		      (:movl (:esp) :ebp)
 		      (:movl (:esp 12) :edx)
 		      (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
-		      (:popl :ebp)
-		      (:leal (:esp 12) :esp)
+		      (:leal (:esp 16) :esp)
 		      )))))
 
 (define-special-operator unwind-protect (&all all &form form &env env)
   (destructuring-bind (protected-form &body cleanup-forms)
       (cdr form)
-    (let* ((continuation-env (make-instance 'let-env
-			       :uplink env
-			       :funobj (movitz-environment-funobj env)))
-	   (next-continuation-step-binding
-	    (movitz-env-add-binding continuation-env
-				    (make-instance 'located-binding
-				      :name (gensym "up-next-continuation-step-"))))
-	   (unwind-protect-env (make-instance 'unwind-protect-env
-				 :cleanup-form (cons 'muerte.cl:progn cleanup-forms)
-				 :uplink continuation-env
-				 :funobj (movitz-environment-funobj env))))
-      (with-labels (unwind-protect (cleanup-label cleanup-entry continue continue-label))
-	(compiler-values ()
-	  :returns :multiple-values
-	  :code (append
-		 ;; install default continuation dynamic-env..
-		 `((:locally (:pushl (:edi (:edi-offset dynamic-env))))
-		   (:declare-label-set ,cleanup-label (,cleanup-entry))
-		   (:declare-label-set ,continue-label (,continue))
-		   (:pushl ',cleanup-label) ; jumper index
-		   (:globally (:pushl (:edi (:edi-offset unwind-protect-tag)))) ; tag
-		   (:pushl :ebp)	; stack-frame
-		   (:locally (:movl :esp (:edi (:edi-offset dynamic-env))))) ; install up-env
-		 ;; Execute protected form..
-		 (compiler-call #'compile-form
-		   :env unwind-protect-env
-		   :with-stack-used t ;; XXX Not really true, is it?
-		   :forward all
-		   :result-mode :multiple-values
-		   :form protected-form)
-		 ;; From now on, take care not to touch current-values from protected-form.
-		 `((:locally (:movl :esp (:edi (:edi-offset raw-scratch0))))
-		   ,cleanup-entry
+    (if (null cleanup-forms)
+	(compiler-call #'compile-form-unprotected
+	  :forward all
+	  :form protected-form)
+      (let* ((continuation-env (make-instance 'let-env
+				 :uplink env
+				 :funobj (movitz-environment-funobj env)))
+	     (next-continuation-step-binding
+	      (movitz-env-add-binding continuation-env
+				      (make-instance 'located-binding
+					:name (gensym "up-next-continuation-step-"))))
+	     (unwind-protect-env (make-instance 'unwind-protect-env
+				   :cleanup-form (cons 'muerte.cl:progn cleanup-forms)
+				   :uplink continuation-env
+				   :funobj (movitz-environment-funobj env))))
+	(with-labels (unwind-protect (cleanup-label cleanup-entry continue continue-label))
+	  (compiler-values ()
+	    :returns :multiple-values
+	    :code (append
+		   ;; install default continuation dynamic-env..
+		   `((:locally (:pushl (:edi (:edi-offset dynamic-env))))
+		     (:declare-label-set ,cleanup-label (,cleanup-entry))
+		     (:declare-label-set ,continue-label (,continue))
+		     (:pushl ',cleanup-label) ; jumper index
+		     (:globally (:pushl (:edi (:edi-offset unwind-protect-tag)))) ; tag
+		     (:pushl :ebp)	; stack-frame
+		     (:locally (:movl :esp (:edi (:edi-offset dynamic-env))))) ; install up-env
+		   ;; Execute protected form..
+		   (compiler-call #'compile-form
+		     :env unwind-protect-env
+		     :with-stack-used t ;; XXX Not really true, is it?
+		     :forward all
+		     :result-mode :multiple-values
+		     :form protected-form)
+		   ;; From now on, take care not to touch current-values from protected-form.
+		   `((:locally (:movl :esp (:edi (:edi-offset raw-scratch0))))
+		     ,cleanup-entry
+		     ;; First, restore stack-frame in EBP
+		     (:movl (:esp) :ebp)
+		     ;; Now (?), modify unwind-protect dyn-env-entry to be normal continuation
+		     (:locally (:movl (:edi (:edi-offset unbound-function)) :edx))
+		     (:movl :edx (:esp 4)) ; not unwind-protect-tag
+		     (:movl ',continue-label (:esp 8)) ; new jumper index
 
-		   ;; Now (?), modify unwind-protect dyn-env-entry to be normal continuation
-		   (:locally (:movl (:edi (:edi-offset unbound-function)) :edx))
-		   (:movl :edx (:esp 4)) ; not unwind-protect-tag
-		   (:movl ',continue-label (:esp 8)) ; new jumper index
-
-		   (:locally (:pushl (:edi (:edi-offset raw-scratch0))))) ; push final-continuation
-		 ;; Execute cleanup-forms.
-		 (compiler-call #'compile-form-unprotected
-		   :forward all
-		   :env continuation-env
-		   :with-stack-used t
-		   :result-mode :multiple-values
-		   :form `(muerte::with-cloak (:multiple-values)
-			    ;; Inside here we don't have to mind current-values.
-			    (muerte::with-inline-assembly (:returns :nothing)
-			      ;; First, find next-continuation-step..
-			      (:locally (:movl (:edi (:edi-offset raw-scratch0)) :eax)) ; final-cont..
-			      (:locally (:call (:edi (:edi-offset dynamic-unwind-next))))
-			      (:locally (:bound (:edi (:edi-offset stack-bottom)) :eax))
-			      (:store-lexical ,next-continuation-step-binding :eax :type t))
-			    ,@cleanup-forms))
-		 `((:locally (:popl (:edi (:edi-offset raw-scratch0)))) ; pop final continuation
+		     (:locally (:pushl (:edi (:edi-offset raw-scratch0))))) ; push final-continuation
+		   ;; Execute cleanup-forms.
+		   (compiler-call #'compile-form-unprotected
+		     :forward all
+		     :env continuation-env
+		     :with-stack-used t
+		     :result-mode :multiple-values
+		     :form `(muerte::with-cloak (:multiple-values)
+			      ;; Inside here we don't have to mind current-values.
+			      (muerte::with-inline-assembly (:returns :nothing)
+				;; First, find next-continuation-step..
+				(:locally (:movl (:edi (:edi-offset raw-scratch0)) :eax)) ; final-cont..
+				(:locally (:call (:edi (:edi-offset dynamic-unwind-next))))
+				(:locally (:bound (:edi (:edi-offset stack-bottom)) :eax))
+				(:store-lexical ,next-continuation-step-binding :eax :type t))
+			      ,@cleanup-forms))
+		   `((:locally (:popl (:edi (:edi-offset raw-scratch0)))) ; pop final continuation
 		   
 ;;;		   ;; Now (?), modify unwind-protect dyn-env-entry to be normal continuation
 ;;;		   (:locally (:movl (:edi (:edi-offset unbound-value)) :edx))
 ;;;		   (:movl :edx (:esp 4)) ; not unwind-protect-tag
 ;;;		   (:movl ',continue-label (:esp 8)) ; new jumper index
 
-		   (:load-lexical ,next-continuation-step-binding :edx)
-		   (:locally (:movl :esi (:edi (:edi-offset scratch1))))
-		   (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
-		   (:movl :edx :esp)	; enter non-local jump stack mode (possibly).
-			  
-		   (:movl (:esp) :edx)	; target stack-frame EBP
-		   (:movl (:edx -4) :esi) ; get target funobj into EDX
-			  
-		   (:movl (:esp 8) :edx) ; target jumper number
-		   (:jmp (:esi :edx ,(slot-offset 'movitz-funobj 'constant0))))
-		 `(,continue
-		   (:movl (:esp 12) :edx)
-		   (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
-		   (:popl :ebp)
-		   (:leal (:esp 12) :esp))))))))
+		     (:load-lexical ,next-continuation-step-binding :edx)
+		     (:locally (:call (:edi (:edi-offset dynamic-jump-next))))
+		   
+;;;		   (:locally (:movl :esi (:edi (:edi-offset scratch1))))
+;;;		   (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
+;;;		   (:movl :edx :esp)	; enter non-local jump stack mode (possibly).
+;;;		   (:movl (:esp) :edx)	; target stack-frame EBP
+;;;		   (:movl (:edx -4) :esi) ; get target funobj into EDX
+;;;		   (:movl (:esp 8) :edx) ; target jumper number
+;;;		   (:jmp (:esi :edx ,(slot-offset 'movitz-funobj 'constant0)))
+		     )
+		   `(,continue
+		     (:movl (:esp) :ebp)
+		     (:movl (:esp 12) :edx)
+		     (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
+		     (:leal (:esp 16) :esp)))))))))
 
 (define-special-operator if (&all all &form form &env env &result-mode result-mode)
   (destructuring-bind (test-form then-form &optional else-form)
