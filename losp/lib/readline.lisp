@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov  2 13:58:58 2001
 ;;;;                
-;;;; $Id: readline.lisp,v 1.6 2004/11/24 16:23:45 ffjeld Exp $
+;;;; $Id: readline.lisp,v 1.7 2004/12/09 14:16:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -219,7 +219,7 @@ completion-start and completion-end are bounding indexes into completion's name.
 		    (write-char #\space))
 		  (setf (cursor-x console) x
 			end pos)))
-	       ((#\delete #\^d)
+	       ((#\Rubout #\^d)
 		(when (< pos end)
 		  (dotimes (i (- end pos))
 		    (setf (char buffer (+ pos i))
