@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.6 2004/03/29 15:26:25 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.7 2004/04/01 02:11:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -87,8 +87,9 @@ after the point that called this stack-frame."
 
 (defun stack-ref-p (pointer)
   (let ((top (load-global-constant-u32 stack-top))
-	(bottom (with-inline-assembly (:returns :untagged-fixnum-ecx)
-		  (:movl :esp :ecx))))
+	(bottom (with-inline-assembly (:returns :eax)
+		  (:movl :esp :eax)
+		  (:shll #.movitz:+movitz-fixnum-shift+ :eax))))
     (<= bottom pointer top)))
 
 (defun stack-ref (pointer offset index type)
