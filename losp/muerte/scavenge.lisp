@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.17 2004/07/13 13:00:36 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.18 2004/07/13 22:44:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -150,7 +150,7 @@ at the start-stack-frame location."
 	     (function
 	      (assert (= 0 (funobj-frame-num-unboxed funobj)))
 	      (map-heap-words function (+ nether-frame 2) frame))
-	     ((eql 0)
+	     ((eql 0)			; An interrupt-frame?
 	      ;; 1. Scavenge the interrupt-frame
 	      (map-heap-words function
 			      (+ nether-frame 2)
