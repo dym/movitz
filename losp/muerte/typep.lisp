@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 20012000, 2002-2004,
+;;;;    Copyright (C) 2000-2004,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      typep.lisp
@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.20 2004/07/07 09:42:36 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.21 2004/07/07 17:37:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -95,45 +95,7 @@
 		(:jnz 'other-typep-failed)
 		(:cmpb ,(movitz:tag tag-name)
 		       (:eax ,(bt:slot-offset 'movitz::movitz-vector 'movitz::type)))
-		other-typep-failed)))
-	 (make-vector-typep (element-type)
-	   (assert (= 1 (- (bt:slot-offset 'movitz::movitz-vector 'movitz::element-type)
-			   (bt:slot-offset 'movitz::movitz-vector 'movitz::type))))
-	   (let ((old-type-code (dpb (bt:enum-value 'movitz::movitz-vector-element-type element-type)
-				     (byte 8 8)
-				     (movitz:tag :vector)))
-		 (type-code (dpb (bt:enum-value 'movitz::movitz-vector-element-type element-type)
-				 (byte 8 8)
-				 (movitz:tag :basic-vector))))
-	     `(with-inline-assembly-case ()
-;;;		(do-case (:boolean-branch-on-false)
-;;;		  (:compile-form (:result-mode :eax) ,object)
-;;;		  (:leal (:eax ,(- (movitz::tag :other))) :ecx)
-;;;		  (:testb 7 :cl)
-;;;		  (:branch-when :boolean-zf=0)
-;;;		  (:cmpw ,type-code
-;;;			 (:eax ,(bt:slot-offset 'movitz::movitz-vector 'movitz::type)))
-;;;		  (:branch-when :boolean-zf=0))
-;;;		(do-case (:boolean-branch-on-true :same :labels (vector-typep-failed))
-;;;		  (:compile-form (:result-mode :eax) ,object)
-;;;		  (:leal (:eax ,(- (movitz::tag :other))) :ecx)
-;;;		  (:testb 7 :cl)
-;;;		  (:jnz 'vector-typep-failed)
-;;;		  (:cmpw ,type-code
-;;;			 (:eax ,(bt:slot-offset 'movitz::movitz-vector 'movitz::type)))
-;;;		  (:branch-when :boolean-zf=1)
-;;;		  vector-typep-failed)
-		(do-case (t :boolean-zf=1 :labels (vector-typep-failed))
-		  (:compile-form (:result-mode :eax) ,object)
-		  (:leal (:eax ,(- (movitz::tag :other))) :ecx)
-		  (:testb 7 :cl)
-		  (:jnz 'vector-typep-failed)
-		  (:cmpw ,old-type-code
-			 (:eax ,(bt:slot-offset 'movitz::movitz-vector 'movitz::type)))
-		  (:je 'vector-typep-failed)
-		  (:cmpw ,type-code
-			 (:eax ,(bt:slot-offset 'movitz::movitz-vector 'movitz::type)))
-		 vector-typep-failed))))
+	       other-typep-failed)))
 	 (make-basic-vector-typep (element-type)
 	   (assert (= 1 (- (bt:slot-offset 'movitz::movitz-vector 'movitz::element-type)
 			   (bt:slot-offset 'movitz::movitz-vector 'movitz::type))))
@@ -273,20 +235,20 @@
 		 (make-other-typep :funobj))
 		((basic-vector)
 		 (make-other-typep :basic-vector))
-		((old-vector)
-		 (make-other-typep :vector))
 		((vector array)
-		 `(typep ,object '(or old-vector basic-vector)))
+		 `(typep ,object 'basic-vector))
 		(simple-vector
 		 (make-basic-vector-typep :any-t))
 		(string
 		 (make-basic-vector-typep :character))
 		(vector-u8
-		 (make-vector-typep :u8))
+		 (make-basic-vector-typep :u8))
 		(vector-u16
-		 (make-vector-typep :u16))
+		 (make-basic-vector-typep :u16))
 		(vector-u32
-		 (make-vector-typep :u32))
+		 (make-basic-vector-typep :u32))
+		(code-vector
+		 (make-basic-vector-typep :code))
 		(run-time-context
 		 (make-other-typep :run-time-context))
 		(structure-object

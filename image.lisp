@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.40 2004/06/29 23:16:43 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.41 2004/07/07 17:37:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -624,7 +624,7 @@
 
 (defun class-object-offset (name)
   (let ((name (translate-program name :cl :muerte.cl)))
-    (+ (bt:slot-offset 'movitz-vector 'data)
+    (+ (bt:slot-offset 'movitz-basic-vector 'data)
        (* 4 (1+ (or (position name (image-classes-map *image*))
 		    (error "No class named ~S in class-map." name)))))))
 
@@ -678,17 +678,18 @@
 (defmethod search-image ((image symbolic-image) address)
   (loop for a downfrom (logand address -8) by 8
       until (gethash a (image-address-hash image))
-      finally (progn 
-		;; (warn "Found at ~X: ~S" a (gethash a (image-address-hash image)))
-		(return (gethash a (image-address-hash image))))))
+      finally (let ((object (gethash a (image-address-hash image))))
+		(when (<= address (+ a (sizeof object)))
+		  ;; (warn "Found at ~X: ~S" a (gethash a (image-address-hash image)))
+		  (return object)))))
 
 (defun search-image-funobj (address &optional (*image* *image*))
   (search-image-funobj-by-image *image* address))
 
 (defmethod search-image-funobj-by-image ((image symbolic-image) address)
   (let ((code-vector (search-image image (1- address))))
-    (unless (and (typep code-vector 'movitz-vector)
-		 (eq :u8 (movitz-vector-element-type code-vector)))
+    (unless (and (typep code-vector 'movitz-basic-vector)
+		 (eq :code (movitz-vector-element-type code-vector)))
       (error "Not a code-vector at #x~8,'0X: ~S" address code-vector))
     (let ((offset (- address (movitz-intern-code-vector code-vector))))
       (assert (not (minusp offset)))
@@ -710,7 +711,7 @@
 
 (defun search-primitive-function (address &optional (*image* *image*))
   (let ((code-vector (search-image *image* address)))
-    (unless (and (typep code-vector 'movitz-vector)
+    (unless (and (typep code-vector 'movitz-basic-vector)
 		 (eq :u8 (movitz-vector-element-type code-vector)))
       (error "Not a code-vector at #x~8,'0X: ~S" address code-vector))
     (format t "~&;; Code vector: #x~X" (movitz-intern code-vector))
@@ -751,11 +752,11 @@ a movitz-funobj is that funobj's code-vector,
 a cons is an offset (the car) from some other code-vector (the cdr)."
   (assert (member type '(code-vector-word code-pointer)))
   (etypecase object
-    ((or vector movitz-vector)
+    ((or vector movitz-basic-vector)
      (+ 2 (movitz-intern object)))
     ((or symbol movitz-symbol)
      (let ((primitive-code-vector (movitz-symbol-value (movitz-read object))))
-       (check-type primitive-code-vector movitz-vector)
+       (check-type primitive-code-vector movitz-basic-vector)
        (movitz-intern-code-vector primitive-code-vector type)))
     (movitz-funobj
      (movitz-intern-code-vector (movitz-funobj-code-vector object) type))
@@ -811,7 +812,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
       (setf code-vector
 	(setf (movitz-symbol-value (movitz-read name))
 	  (movitz-read #()))))
-    (check-type code-vector movitz-vector)
+    (check-type code-vector movitz-basic-vector)
     code-vector))
 
 (defun create-image (&key (init-file *default-image-init-file*)
@@ -935,7 +936,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 				  :if-does-not-exist :create)
 	  (assert (file-position stream 512) () ; leave room for bootblock.
 	    "Couldn't set file-position for ~W." (pathname stream))
-	  (let* ((stack-vector (make-instance 'movitz-vector
+	  (let* ((stack-vector (make-instance 'movitz-basic-vector
 				 :num-elements #xffff
 				 :fill-pointer 0
 				 :symbolic-data nil
@@ -1053,15 +1054,14 @@ this image will not be Multiboot compatible."
 		      (write-size (write-binary-record obj stream)))
 		  (incf total-size write-size)
 		  (typecase obj
-		    (movitz-vector
+		    (movitz-basic-vector
 		     (case (movitz-vector-element-type obj)
 		       (:character (incf strings-numof)
 				   (incf strings-size write-size))
 		       (:any-t (incf simple-vectors-numof)
 			       (incf simple-vectors-size write-size))
-		       (:u8 (when (member :code-vector-p (movitz-vector-flags obj))
-			      (incf code-vectors-numof)
-			      (incf code-vectors-size write-size)))))
+		       (:code (incf code-vectors-numof)
+			      (incf code-vectors-size write-size))))
 		    (movitz-funobj (incf funobjs-numof)
 				(incf funobjs-size write-size))
 		    (movitz-symbol (incf symbols-numof)
@@ -1500,7 +1500,7 @@ this image will not be Multiboot compatible."
 	       (keyword (format nil ":~A" (movitz-print object)))
 	       (common-lisp (format nil "~:[~;'~]~A" quotep (movitz-print object)))
 	       (t (format nil "~:[~;'~]~A:~A" quotep package-name (movitz-print object)))))))))
-    (movitz-vector
+    (movitz-basic-vector
      (case (movitz-vector-element-type object)
        (:character (format nil "\"~A\"" (movitz-print object)))
        (t (movitz-print object))))

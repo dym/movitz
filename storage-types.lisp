@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.24 2004/07/06 21:11:53 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.25 2004/07/07 17:37:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -67,7 +67,7 @@
   :other 6
   :symbol 7
   
-  :vector #x1a
+  :old-vector #x1a
   :basic-vector #x22
   :funobj #x3a
   :bignum #x4a
@@ -328,11 +328,11 @@ integer (native lisp) value."
 
 ;;; movitz-vectors
 
-(define-binary-class movitz-vector (movitz-heap-object-other)
+(define-binary-class movitz-basic-vector (movitz-heap-object-other)
   ((type
     :binary-type other-type-byte
     :reader movitz-vector-type
-    :initform :vector)
+    :initform :basic-vector)
    (element-type
     :binary-type (define-enum movitz-vector-element-type (u8)
 		   :any-t 0
@@ -340,30 +340,28 @@ integer (native lisp) value."
 		   :u8 2
 		   :u16 3
 		   :u32 4
-		   :bit 5)
+		   :bit 5
+		   :code 6)
     :initarg :element-type
     :reader movitz-vector-element-type)
-   (num-elements
-    :binary-type lu16
-    :initarg :num-elements
-    :reader movitz-vector-num-elements)      
-   (flags
-    :accessor movitz-vector-flags
-    :initarg :flags
-    :initform nil
-    :binary-type (define-bitfield movitz-vector-flags (u8)
-		   (((:bits) :fill-pointer-p 2
-			     :code-vector-p 3
-			     :std-instance-slots-p 4))))
-   (alignment-power
-    :binary-lisp-type u8		; align to 2^(high-nibble+3) + low-nibble
-    :initform 0
-    :initarg :alignment-power
-    :reader movitz-vector-alignment-power)
    (fill-pointer
     :binary-type lu16
     :initarg :fill-pointer
-    :accessor movitz-vector-fill-pointer)
+    :accessor movitz-vector-fill-pointer
+    :map-binary-write (lambda (x &optional type)
+			(declare (ignore type))
+			(check-type x (unsigned-byte 14))
+			(* x 4))
+    :map-binary-read (lambda (x &optional type)
+		       (declare (ignore type))
+		       (assert (zerop (mod x 4)))
+		       (truncate x 4)))
+   (num-elements
+    :binary-type word
+    :initarg :num-elements
+    :reader movitz-vector-num-elements
+    :map-binary-write 'movitz-read-and-intern
+    :map-binary-read-delayed 'movitz-word-and-print)
    (data
     :binary-lisp-type :label)		; data follows physically here
    (symbolic-data
@@ -381,39 +379,8 @@ integer (native lisp) value."
        (byte 8 8)
        (enum-value 'other-type-byte :basic-vector)))
 
-(define-binary-class movitz-basic-vector (movitz-heap-object-other)
-  ((type
-    :binary-type other-type-byte
-    :reader movitz-vector-type
-    :initform :basic-vector)
-   (element-type
-    :binary-type (define-enum movitz-vector-element-type (u8)
-		   :any-t 0
-		   :character 1
-		   :u8 2
-		   :u16 3
-		   :u32 4
-		   :bit 5)
-    :initarg :element-type
-    :reader movitz-vector-element-type)
-   (fill-pointer
-    :binary-type lu16
-    :initarg :fill-pointer
-    :accessor movitz-vector-fill-pointer)
-   (num-elements
-    :binary-type word
-    :initarg :num-elements
-    :reader movitz-vector-num-elements
-    :map-binary-write 'movitz-read-and-intern
-    :map-binary-read-delayed 'movitz-word-and-print)
-   (data
-    :binary-lisp-type :label)		; data follows physically here
-   (symbolic-data
-    :initarg :symbolic-data
-    :accessor movitz-vector-symbolic-data))
-  (:slot-align type #.+other-type-offset+))
-
 (defun movitz-type-word-size (type)
+  "What's the size of TYPE in words?"
   (truncate (sizeof (intern (symbol-name type) :movitz)) 4))
 
 (defun movitz-svref (vector index)
@@ -422,16 +389,9 @@ integer (native lisp) value."
 (defun movitz-vector-element-type-size (element-type)
   (ecase element-type
     ((:any-t :u32) 32)
-    ((:character :u8) 8)
+    ((:character :u8 :code) 8)
     (:u16 16)
     (:bit 1)))
-
-(defmethod update-movitz-object ((movitz-vector movitz-vector) (vector vector))
-  (when (eq :any-t (movitz-vector-element-type movitz-vector))
-    (loop for i from 0 below (length vector)
-	do (setf (svref (movitz-vector-symbolic-data movitz-vector) i)
-	     (movitz-read (svref vector i)))))
-  (values))
 
 (defmethod update-movitz-object ((movitz-vector movitz-basic-vector) (vector vector))
   (when (eq :any-t (movitz-vector-element-type movitz-vector))
@@ -440,29 +400,10 @@ integer (native lisp) value."
 	     (movitz-read (svref vector i)))))
   (values))
 
-(defmethod write-binary-record ((obj movitz-vector) stream)
-  (flet ((write-element (type stream data)
-	   (ecase type
-	     (:u8        (write-binary 'u8 stream data))
-	     (:u16       (write-binary 'u16 stream data))
-	     (:u32       (write-binary 'u32 stream data))
-	     (:character (write-binary 'char8 stream data))
-	     (:any-t     (write-binary 'word stream (movitz-read-and-intern data 'word))))))
-    (+ (call-next-method)		; header
-       (etypecase (movitz-vector-symbolic-data obj)
-	 (list 
-	  (loop for data in (movitz-vector-symbolic-data obj)
-	      with type = (movitz-vector-element-type obj)
-	      summing (write-element type stream data)))
-	 (vector
-	  (loop for data across (movitz-vector-symbolic-data obj)
-	      with type = (movitz-vector-element-type obj)
-	      summing (write-element type stream data)))))))
-
 (defmethod write-binary-record ((obj movitz-basic-vector) stream)
   (flet ((write-element (type stream data)
 	   (ecase type
-	     (:u8        (write-binary 'u8 stream data))
+	     ((:u8 :code)(write-binary 'u8 stream data))
 	     (:u16       (write-binary 'u16 stream data))
 	     (:u32       (write-binary 'u32 stream data))
 	     (:character (write-binary 'char8 stream data))
@@ -477,21 +418,6 @@ integer (native lisp) value."
 	  (loop for data across (movitz-vector-symbolic-data obj)
 	      with type = (movitz-vector-element-type obj)
 	      summing (write-element type stream data)))))))
-
-(defmethod read-binary-record ((type-name (eql 'movitz-vector)) stream &key &allow-other-keys)
-  (let ((object (call-next-method)))
-    (setf (movitz-vector-symbolic-data object)
-      (loop for i from 1 to (movitz-vector-num-elements object)
-	  collecting
-	    (ecase (movitz-vector-element-type object)
-	      (:u8        (read-binary 'u8 stream))
-	      (:u16       (read-binary 'u16 stream))
-	      (:u32       (read-binary 'u32 stream))
-	      (:character (read-binary 'char8 stream))
-	      (:any-t     (let ((word (read-binary 'word stream)))
-			    (with-image-stream-position-remembered ()
-			      (movitz-word word)))))))
-    object))
 
 (defmethod read-binary-record ((type-name (eql 'movitz-basic-vector)) stream &key &allow-other-keys)
   (let ((object (call-next-method)))
@@ -499,7 +425,7 @@ integer (native lisp) value."
       (loop for i from 1 to (movitz-vector-num-elements object)
 	  collecting
 	    (ecase (movitz-vector-element-type object)
-	      (:u8        (read-binary 'u8 stream))
+	      ((:u8 :code)(read-binary 'u8 stream))
 	      (:u16       (read-binary 'u16 stream))
 	      (:u32       (read-binary 'u32 stream))
 	      (:character (read-binary 'char8 stream))
@@ -508,35 +434,11 @@ integer (native lisp) value."
 			      (movitz-word word)))))))
     object))
 
-(defmethod sizeof ((object movitz-vector))
-  (+ (call-next-method)
-     (ceiling (* (movitz-vector-element-type-size (slot-value object 'element-type))
-		 (slot-value object 'num-elements))
-	      8)))
-
 (defmethod sizeof ((object movitz-basic-vector))
   (+ (call-next-method)
      (ceiling (* (movitz-vector-element-type-size (slot-value object 'element-type))
 		 (slot-value object 'num-elements))
 	      8)))
-
-(defmethod print-object ((obj movitz-vector) stream)
-  (print-unreadable-movitz-object (obj stream :type nil :identity t)
-    (case (movitz-vector-element-type obj)
-      (:character
-       (format stream "~S" (map 'string #'identity
-				(movitz-vector-symbolic-data obj))))
-      (t (format stream "[ET:~A,NE:~A] ~A"
-		 (movitz-vector-element-type obj)
-		 (movitz-vector-num-elements obj)
-		 (movitz-vector-symbolic-data obj)))))
-  obj)
-
-(defmethod movitz-storage-alignment ((obj movitz-vector))
-  (expt 2 (+ 3 (ldb (byte 4 4) (movitz-vector-alignment-power obj)))))
-
-(defmethod movitz-storage-alignment-offset ((obj movitz-vector))
-  (ldb (byte 4 0) (movitz-vector-alignment-power obj)))
 
 (defun movitz-vector-upgrade-type (type)
   (case type
@@ -547,7 +449,7 @@ integer (native lisp) value."
     (movitz-character
      (values :character #\null))
     (movitz-code
-     (values :u8 0))
+     (values :code 0))
     (t (values :any-t nil))))
 
 (defun make-movitz-vector (size &key (element-type 'movitz-object)
@@ -571,18 +473,6 @@ integer (native lisp) value."
 	       (zerop (rem (log alignment 2) 1)))
       (alignment)
     "Illegal alignment: ~A." alignment)
-;;;  (cond
-;;;   ((subtypep element-type 'movitz-unboxed-integer)
-;;;    (loop for c in initial-contents
-;;;	do (assert (integerp c) ()
-;;;	     "Object ~S is not of type ~S." c element-type)))
-;;;   ((eq element-type 'movitz-code))
-;;;     (loop for c in initial-contents
-;;;	do (assert (typep c '(unsigned-byte 8)) ()
-;;;	     "Object ~S is not of type ~S." c element-type)))
-;;;   (t (loop for c in initial-contents
-;;;	  do (assert (typep c element-type) ()
-;;;	       "Object ~S is not of type ~S." c element-type))))
   (multiple-value-bind (et default-element)
       (movitz-vector-upgrade-type element-type)
     (when initial-element-p
@@ -592,28 +482,17 @@ integer (native lisp) value."
       (setf initial-contents
 	(make-array size :initial-element (or (and initial-element-p initial-element)
 					      default-element))))
-    (cond
-     ((member et '(:any-t :character :u8 :u32))
-      (when flags (break "flags: ~S" flags))
-      (when (and alignment-offset (plusp alignment-offset))
-	(break "alignment: ~S" alignment-offset))
-      (make-instance 'movitz-basic-vector
-	:element-type et
-	:num-elements size
-	:symbolic-data initial-contents ;; sv
-	:fill-pointer (* +movitz-fixnum-factor+
-			 (if (integerp fill-pointer)
-			     fill-pointer
-			   size))))
-     (t (make-instance 'movitz-vector
-	  :element-type et
-	  :num-elements size
-	  :symbolic-data initial-contents ;; sv
-	  :flags (union flags (if fill-pointer '(:fill-pointer-p) nil))
-	  :fill-pointer (if (integerp fill-pointer) fill-pointer size)
-	  :alignment-power (dpb (- (truncate (log alignment 2)) 3)
-				(byte 4 4)
-				alignment-offset))))))
+    (assert (member et '(:any-t :character :u8 :u32 :code)))
+    (when flags (break "flags: ~S" flags))
+    (when (and alignment-offset (plusp alignment-offset))
+      (break "alignment: ~S" alignment-offset))
+    (make-instance 'movitz-basic-vector
+      :element-type et
+      :num-elements size
+      :symbolic-data initial-contents ;; sv
+      :fill-pointer (if (integerp fill-pointer)
+			fill-pointer
+		      size))))
 
 (defun make-movitz-string (string)
   (make-movitz-vector (length string)
@@ -622,7 +501,7 @@ integer (native lisp) value."
 ;; (map 'list #'make-movitz-character string)))
 
 (defun movitz-stringp (x)
-  (and (typep x '(or movitz-basic-vector movitz-vector))
+  (and (typep x '(or movitz-basic-vector))
        (eq :character (movitz-vector-element-type x))))
 
 (deftype movitz-string ()
@@ -707,15 +586,14 @@ integer (native lisp) value."
       :lisp-symbol name)))
 
 (defmethod print-object ((object movitz-symbol) stream)
-  ;; (check-type (slot-value object 'name) movitz-vector)
-  (print-unreadable-object (object stream :type 'movitz-symbol)
-    (typecase (movitz-symbol-name object)
-      (movitz-vector
+  (typecase (movitz-symbol-name object)
+    (movitz-basic-vector
+     (print-unreadable-object (object stream :type 'movitz-symbol)
        (format stream "|~A|"
 	       (map 'string #'identity
 		    (slot-value (slot-value object 'name) 'symbolic-data))))
-      (t (call-next-method))))
-  object)
+     object)
+    (t (call-next-method))))
 
 (defun movitz-read-and-intern-function-value (obj type)
   (assert (eq type 'word))
@@ -977,8 +855,6 @@ integer (native lisp) value."
     :lambda-list lambda-list
     :name name))
 
-(defparameter *foo* (make-hash-table :test #'eq))
-
 ;;;
 
 (define-binary-class movitz-funobj-standard-gf (movitz-funobj)
@@ -1228,7 +1104,6 @@ integer (native lisp) value."
 		 finally
 		   (setf (svref bucket-data pos) movitz-key
 			 (svref bucket-data (1+ pos)) movitz-value)))
-      (setf *foo* bucket-data)
       (setf (first (movitz-struct-slot-values movitz-hash)) hash-test
 	    (second (movitz-struct-slot-values movitz-hash)) (movitz-read bucket-data)
 	    (third (movitz-struct-slot-values movitz-hash)) hash-sxhash)
@@ -1298,7 +1173,7 @@ integer (native lisp) value."
 	       else
 	       do (write-binary-record
 		   (make-gate-descriptor ':interrupt
-					 (+ (slot-offset 'movitz-vector 'data)
+					 (+ (slot-offset 'movitz-basic-vector 'data)
 					    (movitz-intern
 					     (find-primitive-function
 					      'muerte::default-interrupt-trampoline))

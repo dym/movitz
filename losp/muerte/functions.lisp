@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.13 2004/06/10 19:26:33 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.14 2004/07/07 17:37:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -102,7 +102,7 @@
 
 (defun (setf funobj-code-vector) (code-vector funobj)
   (check-type funobj function)
-  (check-type code-vector vector-u8)
+  (check-type code-vector code-vector)
   (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::code-vector) 0 :code-vector)
     code-vector))
 
@@ -135,7 +135,7 @@ as that vector."
 (defun (setf funobj-code-vector%1op) (code-vector funobj)
   (check-type funobj function)
   (etypecase code-vector
-    (vector-u8
+    (code-vector
      (with-inline-assembly (:returns :nothing)
        (:compile-form (:result-mode :ebx) funobj)
        (:compile-form (:result-mode :eax) code-vector)
@@ -180,7 +180,7 @@ as that vector."
 (defun (setf funobj-code-vector%2op) (code-vector funobj)
   (check-type funobj function)
   (etypecase code-vector
-    (vector-u8
+    (code-vector
      (with-inline-assembly (:returns :nothing)
        (:compile-form (:result-mode :ebx) funobj)
        (:compile-form (:result-mode :eax) code-vector)
@@ -225,7 +225,7 @@ as that vector."
 (defun (setf funobj-code-vector%3op) (code-vector funobj)
   (check-type funobj function)
   (etypecase code-vector
-    (vector-u8
+    (code-vector
      (with-inline-assembly (:returns :nothing)
        (:compile-form (:result-mode :ebx) funobj)
        (:compile-form (:result-mode :eax) code-vector)
@@ -340,14 +340,14 @@ as that vector."
 			 lambda-list)
   (setf code-vector
     (etypecase code-vector
-      (vector-u8 code-vector)
+      (code-vector code-vector)
       (list
        (make-array (length code-vector)
-		   :element-type 'u8
+		   :element-type 'code
 		   :initial-contents code-vector))
       (vector 
        (make-array (length code-vector)
-		   :element-type 'u8
+		   :element-type 'code
 		   :initial-contents code-vector))))
   (let ((funobj (malloc-words (+ #.(cl:truncate (bt:sizeof 'movitz:movitz-funobj) 4)
 				 (length constants)))))

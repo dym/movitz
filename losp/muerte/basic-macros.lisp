@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.24 2004/06/09 19:35:22 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.25 2004/07/07 17:37:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -557,7 +557,7 @@
     nil)
    (t (if (member type '(standard-gf-instance function pointer atom
 			 integer fixnum positive-fixnum cons symbol character null list
-			 string vector simple-vector vector-u8 vector-u16))
+			 string vector simple-vector vector-u8 vector-u16 code-vector))
 	  `(unless (typep ,place ',type)
 	     (with-inline-assembly (:returns :non-local-exit)
 	       (:int 66)))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.12 2004/06/22 21:41:57 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.13 2004/07/07 17:37:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -72,10 +72,10 @@ start-location and end-location."
 	  (let* ((funobj (%word-offset scan #.(movitz:tag :other)))
 		 (code-vector (funobj-code-vector funobj))
 		 (num-jumpers (funobj-num-jumpers funobj)))
-	    (check-type code-vector vector-u8)
+	    (check-type code-vector code-vector)
 	    (map-heap-words function (+ scan 5) (+ scan 7)) ; scan funobj's lambda-list and name
 	    (let ((new-code-vector (funcall function code-vector scan)))
-	      (check-type new-code-vector vector-u8)
+	      (check-type new-code-vector code-vector)
 	      (unless (eq code-vector new-code-vector)
 		(error "Code-vector migration is not implemented.")
 		(setf (memref scan 0 -1 :lisp) (%word-offset new-code-vector 2))
@@ -86,24 +86,28 @@ start-location and end-location."
 	  (assert (evenp scan) ()
 	    "Scanned #x~Z at odd address #x~X." x scan)
 	  (error "Scanning an infant object ~Z at ~S (end ~S)." x scan end-location))
-	 ((or (scavenge-wide-typep x :vector
+	 ((scavenge-typep x :old-vector)
+	  (error "Scanned old-vector #x~Z at odd address #x~X." x scan))
+	 ((or (scavenge-wide-typep x :basic-vector
 				   #.(bt:enum-value 'movitz:movitz-vector-element-type :u8))
-	      (scavenge-wide-typep x :vector
-				   #.(bt:enum-value 'movitz:movitz-vector-element-type :character)))
+	      (scavenge-wide-typep x :basic-vector
+				   #.(bt:enum-value 'movitz:movitz-vector-element-type :character))
+	      (scavenge-wide-typep x :basic-vector
+				   #.(bt:enum-value 'movitz:movitz-vector-element-type :code)))
 	  (assert (evenp scan) ()
 	    "Scanned #x~Z at odd address #x~X." x scan)
-	  (let ((len (word-upper16 x)))
-	    #+ignore (warn "scavenge at #x~X u8 vector len ~D." scan len)
+	  (let ((len (memref scan 0 1 :lisp)))
+	    ;; (warn "scavenge at #x~X u8 vector len ~D." scan len)
 	    (incf scan (1+ (* 2 (truncate (+ 7 len) 8))))))
-	 ((scavenge-wide-typep x :vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u16))
+	 ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u16))
 	  (assert (evenp scan) ()
 	    "Scanned #x~Z at odd address #x~X." x scan)
-	  (let ((len (word-upper16 x)))
+	  (let ((len (memref scan 0 1 :lisp)))
 	    (incf scan (1+ (* 2 (truncate (+ 3 len) 4))))))
-	 ((scavenge-wide-typep x :vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u32))
+	 ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u32))
 	  (assert (evenp scan) ()
 	    "Scanned #x~Z at odd address #x~X." x scan)
-	  (let ((len (word-upper16 x)))
+	  (let ((len (memref scan 0 1 :lisp)))
 	    (incf scan (1+ (logand (1+ len) -2)))))
 	 ((eq x (fixnum-word 3))
 	  (incf scan)
@@ -214,7 +218,7 @@ If so, return the primitive-function's code-vector."
 							  return-delta
 							  -3 -8)))))
 		       (primitive-function (%word-offset (%run-time-context-ref offset) -2)))
-		  (check-type primitive-function vector-u8)
+		  (check-type primitive-function code-vector)
 		  (if (not (location-in-object-p primitive-function eip-location))
 		      nil
 		    primitive-function))))))))))

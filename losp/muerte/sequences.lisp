@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.12 2004/06/17 19:44:44 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.13 2004/07/07 17:37:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -68,8 +68,6 @@
 			:eax)
 	      basic-vector-length-ok)))
        (do-it)))
-    (old-vector
-     (vector-fill-pointer sequence))
     (list
      (do ((x sequence (cdr x))
 	  (length 0 (1+ length)))
