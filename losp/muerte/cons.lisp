@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.5 2004/07/15 21:06:51 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.6 2004/07/22 01:02:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -23,7 +23,7 @@
   (with-inline-assembly (:returns :eax)
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program () (:int 61)))
     (:movl (:eax -1) :ebx)
     (:movl (:eax 3) :eax)
     (:ret)))
@@ -33,7 +33,7 @@
   (with-inline-assembly (:returns :eax)
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program () (:int 61)))
     (:movl (:eax -1) :eax)
     (:ret)))
 
@@ -43,7 +43,9 @@ Cons cell is in EBX, which is preserved."
   (with-inline-assembly (:returns :eax)
     (:leal (:ebx -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program ()
+	    (:movl :ebx :eax)
+	    (:int 66)))
     (:movl (:ebx -1) :eax)
     (:ret)))
 
@@ -52,7 +54,7 @@ Cons cell is in EBX, which is preserved."
   (with-inline-assembly (:returns :eax)
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program () (:int 61)))
     (:movl (:eax 3) :eax)
     (:ret)))
 
@@ -61,11 +63,11 @@ Cons cell is in EBX, which is preserved."
   (with-inline-assembly (:returns :eax)
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program () (:int 61)))
     (:movl (:eax 3) :eax)
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program () (:int 61)))
     (:movl (:eax 3) :eax)
     (:ret)))
 
@@ -74,15 +76,15 @@ Cons cell is in EBX, which is preserved."
   (with-inline-assembly (:returns :eax)
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program (not-cons) (:int 66)))
+    (:jnz '(:sub-program (not-cons) (:int 61)))
     (:movl (:eax 3) :eax)
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program (not-cons) (:int 66)))
+    (:jnz '(:sub-program (not-cons) (:int 61)))
     (:movl (:eax 3) :eax)
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program (not-cons) (:int 66)))
+    (:jnz '(:sub-program (not-cons) (:int 61)))
     (:movl (:eax 3) :eax)
     (:ret)))
 
@@ -92,7 +94,9 @@ Cons cell is in EBX, which is preserved."
   (with-inline-assembly (:returns :eax)
     (:leal (:ebx -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program ()
+	    (:movl :ebx :eax)
+	    (:int 61)))
     (:movl (:ebx 3) :eax)
     (:ret)))
 
@@ -104,7 +108,7 @@ Cons cell is in EBX, which is preserved."
     (:prefetch-nta (:eax))
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program () (:int 61)))
     (:movl (:eax -1) :ebx)
     (:movl (:eax 3) :eax)
     (:ret)))
@@ -115,7 +119,7 @@ Cons cell is in EBX, which is preserved."
     (:prefetch-nta (:eax))
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program () (:int 61)))
     (:movl (:eax -1) :eax)
     (:ret)))
 
@@ -126,7 +130,9 @@ Cons cell is in EBX, which is preserved."
     (:prefetch-nta (:ebx))
     (:leal (:ebx -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program ()
+	    (:movl :ebx :eax)
+	    (:int 61)))
     (:movl (:ebx -1) :eax)
     (:ret)))
 
@@ -136,7 +142,7 @@ Cons cell is in EBX, which is preserved."
     (:prefetch-nta (:eax))
     (:leal (:eax -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program () (:int 61)))
     (:movl (:eax 3) :eax)
     (:prefetch-nta (:eax))
     (:ret)))
@@ -148,7 +154,9 @@ Cons cell is in EBX, which is preserved."
     (:prefetch-nta (:ebx))
     (:leal (:ebx -1) :ecx)
     (:testb 3 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program ()
+	    (:movl :ebx :eax)
+	    (:int 61)))
     (:movl (:ebx 3) :eax)
     (:prefetch-nta (:eax))
     (:ret)))
@@ -159,7 +167,9 @@ Cons cell is in EBX, which is preserved."
     (:compile-form (:result-mode :eax) value)
     (:leal (:ebx -1) :ecx)
     (:testb 7 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program ()
+	    (:movl :ebx :eax)
+	    (:int 61)))
     (:movl :eax (:ebx -1))))
 
 (defun (setf cdr) (value cell)
@@ -168,7 +178,9 @@ Cons cell is in EBX, which is preserved."
     (:compile-form (:result-mode :eax) value)
     (:leal (:ebx -1) :ecx)
     (:testb 7 :cl)
-    (:jnz '(:sub-program () (:int 66)))
+    (:jnz '(:sub-program ()
+	    (:movl :ebx :eax)
+	    (:int 61)))
     (:movl :eax (:ebx 3))))
 
 
