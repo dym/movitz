@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.91 2004/08/04 12:59:23 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.92 2004/08/16 15:26:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -159,7 +159,7 @@
 	    (:jne 'done)
 	    ;; Ok.. we have two bignums of identical sign and size.
 	    (:shrl 16 :ecx)
-	    (:movl :ecx :edx)		; counter
+	    (:leal (:ecx 4) :edx)	; counter
 	   compare-loop
 	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
 	    (:jz 'done)
@@ -187,39 +187,6 @@
 	    (:movl :edi :eax)
 	    (:clc)
 	    )))
-    (do-it)))
-
-
-(define-primitive-function fast-eql (x y)
-  "Compare EAX and EBX under EQL, result in ZF.
-Preserve EAX and EBX."
-  (macrolet
-      ((do-it ()
-	 `(with-inline-assembly (:returns :nothing) ; unspecified
-	    (:cmpl :eax :ebx)		; EQ?
-	    (:je 'done)
-	    (:leal (:eax ,(- (movitz:tag :other))) :ecx)
-	    (:testb 7 :cl)
-	    (:jne 'done)
-	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
-	    (:testb 7 :cl)
-	    (:jne 'done)
-	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
-	    (:cmpb ,(movitz:tag :bignum) :cl)
-	    (:jne 'done)
-	    (:cmpl :ecx (:ebx ,movitz:+other-type-offset+))
-	    (:jne 'done)
-	    ;; Ok.. we have two bignums of identical sign and size.
-	    (:shrl 16 :ecx)
-	    (:movl :ecx :edx)		; counter
-	   compare-loop
-	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
-	    (:jz 'done)
-	    (:movl (:eax :edx (:offset movitz-bignum bigit0 -4)) :ecx)
-	    (:cmpl :ecx (:ebx :edx (:offset movitz-bignum bigit0 -4)))
-	    (:je 'compare-loop)
-	   done
-	    (:ret))))
     (do-it)))
 
 (define-primitive-function fast-compare-fixnum-real (n1 n2)
