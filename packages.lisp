@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.24 2004/06/02 23:52:26 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.25 2004/06/08 20:07:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1316,6 +1316,7 @@
 	   #:+movitz-most-positive-fixnum+
 	   #:+movitz-most-negative-fixnum+
 	   #:+movitz-fixnum-factor+
+	   #:+movitz-fixnum-bits+
 	   #:+movitz-fixnum-shift+
 	   #:+movitz-fixnum-zmask+
 	   #:+scan-skip-word+
@@ -1333,6 +1334,7 @@
 	   
 	   #:movitz-symbol
 	   #:movitz-string
+	   #:movitz-bignum
 
 	   #:movitz-character
 	   #:movitz-char
