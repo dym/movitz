@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.6 2004/03/29 01:09:46 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.7 2004/04/07 00:15:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -90,13 +90,13 @@
 
 
 ;;; Dynamic binding:
-;;;   12: parent (NIL == #x0)
+;;;   12: parent (no parent == #x0)
 ;;;    8: value
 ;;;    4: tag = #:unbound (unique value that cannot be a catch tag)
 ;;;    0: binding name/symbol
 
 ;;; Catch exit-point:
-;;;   12: parent (NIL == #x0)
+;;;   12: parent (no parent == #x0)
 ;;;    8: eip
 ;;;    4: catch tag object/word
 ;;;    0: ebp/stack-frame
