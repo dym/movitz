@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.121 2004/12/13 17:10:32 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.122 2004/12/15 13:58:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -988,11 +988,11 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 		     (mapcar #'car rest))
 	       (vector-push 0 code-vector))))
       (setf (movitz-funobj-code-vector funobj)
-	    #+ignore
 	    (make-movitz-vector (length code-vector)
 				:fill-pointer code-length
 				:element-type 'code
 				:initial-contents code-vector)
+	    #+ignore
 	    (make-movitz-code-vector code-vector
 				     (slot-value funobj 'code-vector%1op)
 				     (slot-value funobj 'code-vector%2op)

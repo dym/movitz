@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.85 2004/12/13 11:22:50 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.86 2004/12/15 13:58:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -847,6 +847,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
   *image*)
 
 (defun set-file-position (stream position &optional who)
+  (declare (ignore who))
   (or (ignore-errors (file-position stream position))
       (let* ((end (file-position stream :end))
 	     (diff (- position end)))

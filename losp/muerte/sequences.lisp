@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.18 2004/09/02 09:44:15 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.19 2004/12/15 13:58:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -684,12 +684,24 @@
 
 (defun fill (sequence item &key (start 0) end)
   "=> sequence"
-  (sequence-dispatch sequence
+  (etypecase sequence
     (list
      (do ((p (nthcdr start sequence) (cdr p))
 	  (i start (1+ i)))
 	 ((or (null p) (and end (>= i end))))
        (setf (car p) item)))
+    ((simple-array (unsigned-byte 32) 1)
+     (let* ((length (array-dimension sequence 0))
+	    (end (or end length)))
+       (unless (<= 0 end length)
+	 (error 'index-out-of-range :index end :range length))
+       (do ((i start (1+ i)))
+	   ((>= i end))
+	 (declare (type index i))
+	 (setf (memref sequence (movitz-type-slot-offset 'movitz-basic-vector 'data)
+		       :index i
+		       :type :unsigned-byte32)
+	   item))))
     (vector
      (let ((end (or end (length sequence))))
        (with-subvector-accessor (sequence-ref sequence start end)

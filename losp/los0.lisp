@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.34 2004/12/13 11:27:58 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.35 2004/12/15 13:58:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1187,6 +1187,8 @@ Can be used to measure the overhead of primitive function."
 ;;;		 (vector-push code-vector ts))))
       ;; (muerte::cli)
       (pic8259-end-of-interrupt 0)
+      (when (eql #\esc (muerte.x86-pc.keyboard:poll-char))
+	(break "Test-timer keyboard break."))
       (with-inline-assembly (:returns :nothing)
 	(:compile-form (:result-mode :ecx) muerte.x86-pc::*screen*)
 	(:shrl 2 :ecx)
