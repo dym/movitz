@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.13 2004/06/02 23:48:45 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.14 2004/06/09 17:21:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -371,7 +371,7 @@
 		     `(let ((typep-object ,object))
 			(,(car type)
 			 ,@(loop for subtype in (cdr type)
-			       collect `(typep ,object ',subtype)))))
+			       collect `(typep typep-object ',subtype)))))
 		    (t (warn "compiling typep ~A" type)))))))
 	    form)))))
 
@@ -403,7 +403,8 @@
   (let ((fname (intern (format nil "~A-~A" 'deftype name))))
     `(progn
        (eval-when (:compile-toplevel)
-	 (setf (gethash ',name *compiler-derived-typespecs*)
+	 (setf (gethash (translate-program ',name :cl :muerte.cl)
+			*compiler-derived-typespecs*)
 	   (lambda ,lambda ,@body))
 	 (setf (gethash (intern ,(symbol-name name))
 			*derived-typespecs*)
