@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.25 2004/07/07 17:37:06 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.26 2004/07/08 12:01:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -830,13 +830,6 @@ integer (native lisp) value."
 		       "Unable to resolve jumper ~S." data)
 		     (write-binary 'u32 stream
 				   (+ x (movitz-intern-code-vector (movitz-funobj-code-vector obj)))))))))
-
-;;;(defmethod print-object ((obj movitz-funobj) stream)
-;;;  (format stream "#<MOVITZ-FUNOBJ ~<ll: ~A~> ~<const: ~A~> ~<code: ~A~>>"
-;;;	  (movitz-funobj-lambda-list obj)
-;;;	  (movitz-funobj-const-list obj)
-;;;	  (movitz-funobj-code-vector obj))
-;;;  (call-next-method))
 
 (defmethod print-object ((object movitz-funobj) stream)
   (if (not (slot-boundp object 'name))
