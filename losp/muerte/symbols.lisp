@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.12 2004/04/21 14:00:15 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.13 2004/06/09 17:21:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -130,7 +130,8 @@
 
 (defun makunbound (symbol)
   (setf (symbol-value symbol)
-    'unbound))
+    (load-global-constant unbound-value))
+  symbol)
 
 (defun fboundp (symbol)
   (etypecase symbol
