@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.46 2004/07/12 13:43:43 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.47 2004/07/12 14:17:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1114,12 +1114,7 @@ Preserve EAX and EBX."
 	       (0 `(progn ,factor2 0))
 	       (1 factor2)
 	       (2 `(ash ,factor2 1))
-	       (t `(with-inline-assembly (:returns :eax :type integer)
-		     (:compile-form (:result-mode :eax) ,factor2)
-		     (:testb #.movitz::+movitz-fixnum-zmask+ :al)
-		     (:jnz '(:sub-program () (:int 107)))
-		     (:imull ,f1 :eax :eax)
-		     (:into))))))
+	       (t `(no-macro-call * ,factor1 ,factor2)))))
 	  (t `(no-macro-call * ,factor1 ,factor2)))))
     (t `(* (* ,(first operands) ,(second operands)) ,@(cddr operands)))))
 
@@ -1271,6 +1266,12 @@ Preserve EAX and EBX."
 		     (:xorl #xff00 (:eax ,movitz:+other-type-offset+))
 		    positive-result
 		     )))
+		((positive-bignum positive-bignum)
+		 (do ((f y)
+		      (r 0))
+		     ((typep f 'fixnum) (+ r (* f x)))
+		   (setf r (+ r (* most-positive-fixnum x)))
+		   (setf f (- f most-positive-fixnum))))
 		)))
 	(do-it)))
    (t (&rest factors)
