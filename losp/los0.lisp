@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.19 2004/07/13 02:39:13 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.20 2004/07/28 14:15:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,17 +28,21 @@
 (require :lib/repl)
 
 (defpackage muerte.init
-  (:use muerte.cl muerte muerte.lib
-	muerte.x86-pc
-	muerte.readline
-	muerte.toplevel
-	muerte.ethernet
-	muerte.ip6
-	muerte.ip4
-	muerte.mop
+  (:nicknames #:los0)
+  (:use #:common-lisp
+	#:muerte
+	#:muerte.lib
+	#:muerte.x86-pc
+	#:repl
+	#:muerte.readline
+	#:muerte.toplevel
+	#:muerte.ethernet
+	#:muerte.ip6
+	#:muerte.ip4
+	#:muerte.mop
 	#+ignore muerte.x86-pc.serial))
 
-(require :los0-gc)
+(require :los0-gc)			; Must come after defpackage.
 
 (in-package muerte.init)
 
@@ -657,7 +661,7 @@ s#+ignore
       (loop while (= s0 (rtc-register :second)))
       (multiple-value-bind (c1-lo c1-hi)
 	  (read-time-stamp-counter)
-	(+ (ash (- c1-hi c0-hi) 20)
+	(+ (ash (- c1-hi c0-hi) 19)
 	   (ash (+ 512 (- c1-lo c0-lo)) -10))))))
 
 (defun report-cpu-frequency ()
@@ -665,6 +669,13 @@ s#+ignore
       (truncate (assess-cpu-frequency) 976)
     (format t "~&CPU frequency: ~D.~2,'0D MHz.~%" mhz (round khz 10)))
   (values))
+
+(defvar *a* #(#x1 #x2 #x3 #x4 #x5 #x6 #x7 #x8))
+(defvar *b* #(#x5 #xa #xf #x14 #x19 #x1e #x23 #x28 #x1400 #x1e00 #x2800 #x3200
+	      #x3c00 #x4600 #x5000 #xa00 #x50 #x64 #x78 #x8c #xa0 #x14 #x28 #x3c
+	      #xc800 #xf001 #x1801 #x4000 #x2800 #x5000 #x7800 #xa000 #x230 #x280
+	      #x50 #xa0 #xf0 #x140 #x190 #x1e0 #x0 #xa001 #x4001 #xe002 #x8003
+	      #x2003 #xc004 #x6005 #x280 #x3c0 #x500 #x640))
 
 (defvar *cpu-frequency-mhz*)
 
@@ -684,6 +695,10 @@ s#+ignore
   (time (nano-sleep x)))
 
 ;;;;;
+
+(defvar div #xa65feaab511c61e33df38fdddaf03b59b6f25e1fa4de57e5cf00ae478a855dda4f3638d38bb00ac4af7d8414c3fb36e04fbdf3d3166712d43b421bfa757e85694ad27c48f396d03c8bce8da58db5b82039f35dcf857235c2f1c73b2226a361429190dcb5b6cd0edfb0ff6933900b02cecc0ce69274d8dae7c694804318d6d6b9)
+
+(defvar guess #x1dc19f99401de22d476c89943491fc187b80bcfa8293ec1cf69c1a81352f047e894e262d24116c82ad0be241c6c6216cab9b66d64417d43bf433db10114c0)
 
 ;;;;;;;;;;;;;;; CL
 
@@ -753,7 +768,7 @@ s#+ignore
 
 (define-toplevel-command :bt (&rest args)
   (declare (dynamic-extent args))
-  (apply #'backtrace args))
+  (apply #'backtrace (mapcar #'eval args)))
 
 (define-toplevel-command :cpu-reset ()
   (when (y-or-n-p "Really reset CPU?")
@@ -782,7 +797,7 @@ s#+ignore
 
 (define-toplevel-command :z (&optional x-list)
   (flet ((do-print (x)
-	   (format t "~&~Z => ~S" x x)
+	   (format t "~&~Z" x)
 	   x))
     (if x-list
 	(do-print (eval x-list))
@@ -959,6 +974,9 @@ s#+ignore
       (with-simple-restart (abort "Abort to command level ~D." (1+ *repl-level*))
 	(read-eval-print)))))
 
+(defun ub (x)
+  `(hello world ,x or . what))
+
 (defun random (limit)
   (etypecase limit
     (fixnum
@@ -968,27 +986,57 @@ s#+ignore
        (dotimes (i (1- (muerte::%bignum-bigits x)))
 	 (setf (memref x 2 i :unsigned-byte32)
 	   (muerte::read-time-stamp-counter)))
-       (setf x (muerte::%bignum-canonicalize x))
+       (setf x (muerte::bignum-canonicalize x))
        (loop while (>= x limit)
 	   do (setf x (truncate x 2)))
        x))))
 
+(define-primitive-function test-irq-pf ()
+  ""
+  (with-inline-assembly (:returns :nothing)
+    (:int 113)
+    (:ret)))
+
+(defun test-irq (&optional eax ebx ecx edx)
+  (setf (memref nil #x7f 20 :code-vector) (symbol-value 'test-irq-pf))
+  (multiple-value-bind (p1 p2)
+      (with-inline-assembly (:returns :multiple-values)
+	(:load-lexical (:lexical-binding eax) :eax)
+	(:load-lexical (:lexical-binding ebx) :ebx)
+	(:load-lexical (:lexical-binding ecx) :ecx)
+	(:load-lexical (:lexical-binding edx) :edx)
+	(:pushl :eax)
+	(:pushl :ebx)
+	(:jecxz 'dont-call)
+	(:globally (:call (:edi (:edi-offset values) 80)))
+       dont-call
+	(:store-lexical (:lexical-binding eax) :eax :type t)
+	(:store-lexical (:lexical-binding ebx) :ebx :type t)
+	(:store-lexical (:lexical-binding ecx) :ecx :type t)
+	(:store-lexical (:lexical-binding edx) :edx :type t)
+	(:popl :ebx)
+	(:popl :eax)
+	(:movl 2 :ecx)
+	(:stc))
+    (values eax ebx ecx edx p1 p2)))
+
 (defun genesis ()
-  #+ignore
   (let ((extended-memsize 0))
     ;;  Find out how much extended memory we have 
     (setf (io-port #x70 :unsigned-byte8) #x18)
     (setf extended-memsize (* 256 (io-port #x71 :unsigned-byte8)))
     (setf (io-port #x70 :unsigned-byte8) #x17)
     (incf extended-memsize (io-port #x71 :unsigned-byte8))
-    (format t "Extended memory: ~D KB" extended-memsize))
+    (format t "Extended memory: ~D KB~%" extended-memsize)
 
-  (idt-init)
-  (install-los0-consing)
+    (idt-init)
+    (install-los0-consing :kb-size 50)
+    #+ignore
+    (install-los0-consing :kb-size (max 100 (truncate (- extended-memsize 1024 2048) 2))))
   
   (setf *debugger-function* #'los0-debugger)
   (let ((*repl-readline-context* (make-readline-context :history-size 16))
-	(*backtrace-stack-frame-barrier* (stack-frame-uplink (current-stack-frame)))
+	#+ignore (*backtrace-stack-frame-barrier* (stack-frame-uplink (current-stack-frame)))
 	#+ignore (*error-no-condition-for-debugger* t)
 	#+ignore (*debugger-function* #'los0-debugger)
 	(*package* nil))
