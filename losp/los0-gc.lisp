@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.21 2004/07/08 18:59:51 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.22 2004/07/12 07:59:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -54,8 +54,8 @@
     (setf (space-other space1) space2)
     space1))
 
-(defun space-cons-pointer ()
-  (aref (%run-time-context-slot 'nursery-space) 0))
+;;;(defun space-cons-pointer ()
+;;;  (aref (%run-time-context-slot 'nursery-space) 0))
 
 (defun test ()
   (warn "install..")
@@ -329,8 +329,11 @@ Preserve EAX and EBX."
       (map-stack-words #'zap-oldspace (current-stack-frame))
       (initialize-space oldspace)
       (values))))
-  
+
+(defparameter *x* #500())
+
 (defun stop-and-copy (&optional evacuator)
+  (setf (fill-pointer *x*) 0)
   (let* ((space0 (%run-time-context-slot 'nursery-space))
 	 (space1 (space-other space0)))
     (check-type space0 vector-u32)
@@ -349,14 +352,29 @@ Preserve EAX and EBX."
 		 (lambda (x location)
 		   "If x is in oldspace, migrate it to newspace."
 		   (declare (ignore location))
-		   (if (not (object-in-space-p oldspace x))
-		       x
-		     (let ((forwarded-x (memref (object-location x) 0 1 :lisp)))
-		       (if (object-in-space-p newspace forwarded-x)
-			   forwarded-x
-			 (let ((forward-x (shallow-copy x)))
-			   (setf (memref (object-location x) 0 1 :lisp) forward-x)
-			   forward-x))))))))
+		   (cond
+		    ((not (object-in-space-p oldspace x))
+		     x)
+		    #+ignore
+		    ((typep x 'muerte::tag6)
+		     (let ((fwi (position (object-location x) *x* :test #'eq)))
+		       (if fwi
+			   (muerte::%word-offset (aref *x* (1+ fwi)) 6)
+			 (let ((fw (shallow-copy x)))
+			   (vector-push (object-location x) *x*)
+			   (vector-push (object-location fw) *x*)
+			   fw))))
+		    (t (let ((forwarded-x (memref (object-location x) 0 1 :lisp)))
+			 (if (object-in-space-p newspace forwarded-x)
+			     (progn
+			       (assert (eq (object-tag forwarded-x)
+					   (object-tag x)))
+			       forwarded-x)
+			   (let ((forward-x (shallow-copy x)))
+			     (when (typep x 'muerte::bignum)
+			       (assert (= x forward-x)))
+			     (setf (memref (object-location x) 0 1 :lisp) forward-x)
+			     forward-x)))))))))
 	;; Scavenge roots
 	(map-heap-words evacuator 0 (+ (malloc-buffer-start)
 				       (* 2 (malloc-cons-pointer))))
@@ -370,6 +388,17 @@ Preserve EAX and EBX."
 			       (+ newspace-location scan-pointer)
 			       (+ newspace-location (space-fresh-pointer newspace)))
 	       (setf scan-pointer fresh-pointer))
+
+	(dotimes (i (truncate (length *x*) 2))
+	  (let ((x (muerte::%word-offset (aref *x* (* i 2)) 6))
+		(y (muerte::%word-offset (aref *x* (1+ (* i 2))) 6)))
+	    (assert (and (object-in-space-p newspace y)
+			 (object-in-space-p oldspace x)
+			 (or (typep x 'muerte::std-instance)
+			     (equalp x y)))
+		()
+	      "Fail: i=~D, x: ~S/~Z, y: ~S/~Z, o: ~Z, n: ~Z" i x x y y oldspace newspace)))
+
 	;; GC completed, oldspace is evacuated.
 	(let ((old-size (truncate (- (space-fresh-pointer oldspace) 2) 2))
 	      (new-size (truncate (- (space-fresh-pointer newspace) 2) 2)))
