@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.99 2004/10/12 10:51:47 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.100 2004/10/12 14:43:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1152,7 +1152,7 @@
 		     (incf r (ash (* x (ldb (byte 29 i) y)) i)))))
 		((ratio ratio)
 		 (make-rational (* (ratio-numerator x) (ratio-numerator y))
-				(* (ratio-denominator x) (ratio-denominator x))))
+				(* (ratio-denominator x) (ratio-denominator y))))
 		((ratio t)
 		 (make-rational (* y (ratio-numerator x))
 				(ratio-denominator x)))
