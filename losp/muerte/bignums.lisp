@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 19:42:57 2004
 ;;;;                
-;;;; $Id: bignums.lisp,v 1.10 2004/09/22 16:22:45 ffjeld Exp $
+;;;; $Id: bignums.lisp,v 1.11 2004/09/23 09:17:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -383,7 +383,6 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	      (:shldl :cl :eax :edx)
 	      (jnz 'overflow)
 	     shift-short-loop
-	      (:int 32)
 	      (:movl (:ebx :esi (:offset movitz-bignum bigit0 -4))
 		     :eax)
 	      (:shldl :cl :eax (:ebx :esi (:offset movitz-bignum bigit0)))
