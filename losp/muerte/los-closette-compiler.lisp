@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.4 2004/02/04 15:29:25 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.5 2004/02/10 00:38:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -589,7 +589,7 @@
 ;;;
   
   (defun movitz-make-instance-funcallable (metaclass &rest all-keys &key name direct-superclasses direct-slots &allow-other-keys)
-    ;; (declare (ignore metaclass))
+    (declare (ignore all-keys))
     (let ((class (std-allocate-instance metaclass)))
       #+ignore
       (dolist (slot (class-slots (movitz-class-of class)))
@@ -650,7 +650,7 @@
 					&key name slots direct-slots ((:metaclass dummy))
 					     (direct-superclasses
 					      (list (movitz-find-class 'structure-object))))
-    (declare (ignore dummy))
+    (declare (ignore dummy all-keys))
     (assert (null direct-slots))
     (let ((class (std-allocate-instance (if (symbolp metaclass)
 					    (movitz-find-class metaclass)
