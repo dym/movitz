@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.10 2004/11/24 13:12:26 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.11 2004/11/24 14:22:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -112,10 +112,12 @@
     (setf (ip4-ref packet start 10 :unsigned-byte16) checksum)))
   packet)
 
-(defun checksum-ok (x)
-  (= #xffff
-     (+ (ldb (byte 16 0) x)
-	(ash x -16))))
+(defun checksum-ok (x &rest more-xes)
+  (declare (dynamic-extent more-xes))
+  (let ((x (reduce #'add-u16-ones-complement more-xes :initial-value x)))
+    (= #xffff
+       (+ (ldb (byte 16 0) x)
+	  (ash x -16)))))
 
 (defun ip-input (stack packet start)
   (let ((header-size (* 4 (ip-header-length packet start))))
