@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.14 2004/07/27 15:16:55 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.15 2004/10/11 13:53:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -395,12 +395,12 @@
     #.(cl:cons 'progn
 	       (cl:loop for octet from 3 downto 1
 		   collecting 
-		     `(let ((n (memref x 0 ,octet :unsigned-byte8)))
+		     `(let ((n (memref x 0 :index ,octet :type :unsigned-byte8)))
 			(when (setq z (or z (<= #x10 n)))
 			  (write-digit (ldb (byte 4 4) n) stream))
 			(when (setq z (or z (plusp n)))
 			  (write-digit (ldb (byte 4 0) n) stream)))))
-    (let ((n (memref x 0 0 :unsigned-byte8)))
+    (let ((n (memref x 0 :type :unsigned-byte8)))
       (when (or z (<= #x10 n))
 	(write-digit (ldb (byte 4 4) n) stream))
       (write-digit (ldb (byte 4 0) n) stream)))

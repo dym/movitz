@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.97 2004/09/22 17:40:47 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.98 2004/10/11 13:52:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -881,7 +881,7 @@
        (t (check-type integer (integer 0 *))
 	  (let ((result (%make-bignum (ceiling result-length 32))))
 	    (dotimes (i (* 2 (%bignum-bigits result)))
-	      (setf (memref result -2 i :unsigned-byte16)
+	      (setf (memref result -2 :index i :type :unsigned-byte16)
 		(let ((pos (- (* i 16) count)))
 		  (cond
 		   ((minusp (+ pos 16)) 0)
@@ -889,8 +889,12 @@
 		    (ldb (byte 16 pos) integer))
 		   (t (ash (ldb (byte (+ pos 16) 0) integer)
 			   (- pos)))))))
-	    (assert (or (plusp (memref result -2 (+ -1 (* 2 (%bignum-bigits result))) :unsigned-byte16))
-			(plusp (memref result -2 (+ -2 (* 2 (%bignum-bigits result))) :unsigned-byte16))))
+	    (assert (or (plusp (memref result -2
+				       :index (+ -1 (* 2 (%bignum-bigits result)))
+				       :type :unsigned-byte16))
+			(plusp (memref result -2
+				       :index (+ -2 (* 2 (%bignum-bigits result)))
+				       :type :unsigned-byte16))))
 	    (bignum-canonicalize result))))))
    (t (let ((count (- count)))
 	(etypecase integer
@@ -913,9 +917,9 @@
 		     (let ((src-max-bigit (* 2 (%bignum-bigits integer))))
 		       (dotimes (i (* 2 (%bignum-bigits result)))
 			 (let ((src (+ i long)))
-			   (setf (memref result -2 i :unsigned-byte16)
+			   (setf (memref result -2 :index i :type :unsigned-byte16)
 			     (if (< src src-max-bigit)
-				 (memref integer -2 src :unsigned-byte16)
+				 (memref integer -2 :index src :type :unsigned-byte16)
 			       0)))))
 		     (bignum-canonicalize
 		      (macrolet

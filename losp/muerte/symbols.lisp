@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.19 2004/09/22 18:49:24 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.20 2004/10/11 13:53:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -74,13 +74,13 @@
   (setf (symbol-value symbol) value))
 
 (define-compiler-macro %symbol-global-value (symbol)
-  `(memref ,symbol ,(bt:slot-offset 'movitz:movitz-symbol 'movitz::value) 0 :lisp))
+  `(memref ,symbol ,(bt:slot-offset 'movitz:movitz-symbol 'movitz::value)))
 
 (defun %symbol-global-value (symbol)
   (%symbol-global-value symbol))
 
 (define-compiler-macro (setf %symbol-global-value) (value symbol)
-  `(setf (memref ,symbol ,(bt:slot-offset 'movitz:movitz-symbol 'movitz::value) 0 :lisp)
+  `(setf (memref ,symbol ,(bt:slot-offset 'movitz:movitz-symbol 'movitz::value))
      ,value))
 
 (defun (setf %symbol-global-value) (value symbol)
@@ -94,7 +94,8 @@
 
 (defun %unbounded-symbol-function (symbol)
   (check-type symbol symbol)
-  (movitz-accessor symbol movitz-symbol function-value))
+  (memref symbol (movitz-type-slot-offset 'movitz-symbol 'function-value)))
+  ;; (movitz-accessor symbol movitz-symbol function-value))
 
 (defun (setf symbol-function) (value symbol)
   (check-type symbol symbol)
@@ -109,7 +110,8 @@
     (null
      (error "Can't change the name of NIL."))
     (symbol
-     (setf-movitz-accessor (symbol movitz-symbol name) value))))
+     (setf (memref symbol (movitz-type-slot-offset 'movitz-symbol 'name))
+       value))))
 
 (defun symbol-plist (symbol)
   (get-symbol-slot symbol plist))
@@ -119,7 +121,8 @@
     (null
      (error "Can't change the plist of NIL."))
     (symbol
-     (setf-movitz-accessor (symbol movitz-symbol plist) value))))
+     (setf (memref symbol (movitz-type-slot-offset 'movitz-symbol 'plist))
+       value))))
 
 (defun symbol-package (symbol)
   (get-symbol-slot symbol package))

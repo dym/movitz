@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.21 2004/09/22 16:40:32 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.22 2004/10/11 13:52:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -106,12 +106,14 @@
 
 (defun funobj-code-vector (funobj)
   (check-type funobj function)
-  (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::code-vector) 0 :code-vector))
+  (memref funobj (movitz-type-slot-offset 'movitz-funobj 'code-vector)
+	  :type :code-vector))
 
 (defun (setf funobj-code-vector) (code-vector funobj)
   (check-type funobj function)
   (check-type code-vector code-vector)
-  (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::code-vector) 0 :code-vector)
+  (setf (memref funobj (movitz-type-slot-offset 'movitz-funobj 'code-vector)
+		:type :code-vector)
     code-vector))
 
 (defun funobj-code-vector%1op (funobj)
@@ -299,12 +301,12 @@ represented as that vector."
 
 (defun funobj-name (funobj)
   (check-type funobj function)
-  (movitz-accessor funobj movitz-funobj name))
+  (memref funobj (movitz-type-slot-offset 'movitz-funobj 'name)))
 
 (defun (setf funobj-name) (name funobj)
   (check-type funobj function)
-  ;; (check-type name (or symbol list)
-  (setf-movitz-accessor (funobj movitz-funobj name) name))
+  (setf (memref funobj (movitz-type-slot-offset 'movitz-funobj 'name))
+    name))
 
 (defun funobj-lambda-list (funobj)
   (check-type funobj function)
@@ -342,7 +344,7 @@ represented as that vector."
   (assert (below index (funobj-num-constants funobj)) (index)
     "Index ~D out of range, ~S has ~D constants." index funobj (funobj-num-constants funobj))
   (if (>= index (funobj-num-jumpers funobj))
-      (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0) index :lisp)
+      (memref funobj (movitz-type-slot-offset 'movitz-funobj 'constant0) :index index)
     ;; For a jumper, return its offset relative to the code-vector.
     ;; This is tricky wrt. to potential GC interrupts, because we're doing
     ;; pointer arithmetics.
@@ -361,8 +363,7 @@ represented as that vector."
   (assert (below index (funobj-num-constants funobj)) (index)
     "Index ~D out of range, ~S has ~D constants." index funobj (funobj-num-constants funobj))
   (if (>= index (funobj-num-jumpers funobj))
-      (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)
-		    index :lisp)
+      (setf (memref funobj (movitz-type-slot-offset 'movitz-funobj 'constant0) :index index)
 	value)
     (progn
       (assert (below value (length (funobj-code-vector funobj))) (value)
@@ -382,7 +383,7 @@ represented as that vector."
 
 (defun funobj-debug-info (funobj)
   (check-type funobj function)
-  (movitz-accessor-u16 funobj movitz-funobj debug-info))
+  (memref funobj (movitz-type-slot-offset 'movitz-funobj 'debug-info) :type :unsigned-byte16))
 
 (defun funobj-frame-num-unboxed (funobj)
   "The number of unboxed slots in this function's stack-frame(s)."

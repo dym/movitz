@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Jan  9 15:57:22 2002
 ;;;;                
-;;;; $Id: malloc-init.lisp,v 1.5 2004/07/15 21:06:38 ffjeld Exp $
+;;;; $Id: malloc-init.lisp,v 1.6 2004/10/11 13:52:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -31,7 +31,7 @@
   (muerte:malloc-initialize start-location end-location)
   (setf (cdar muerte::%memory-map%) end-location)
   (loop for x from kernel-end-location below start-location
-      do (setf (memref x 0 0 :unsigned-byte32) 0))
+      do (setf (memref x 0 :type :unsigned-byte32) 0))
   (values))
 
 

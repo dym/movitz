@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.22 2004/09/21 13:11:08 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.23 2004/10/11 13:51:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -149,6 +149,31 @@
   (declare (dynamic-extent x))
   (print x)
   'jumbo)
+
+#+ignore
+(defun tagbodyxx (x)
+  (tagbody
+    (print 'hello)
+   haha
+    (unwind-protect
+	(when x (go hoho))
+      (warn "unwind.."))
+    (print 'world)
+   hoho
+    (print 'blrugh)))
+
+#+ignore
+(defun tagbodyxx (x)
+  (tagbody
+    (print 'hello)
+   haha
+    (unwind-protect
+	(funcall (lambda ()
+		   (when x (go hoho))))
+      (warn "unwind.."))
+    (print 'world)
+   hoho
+    (print 'blrugh)))
 
 #+ignore
 (defun kumbo (&key a b (c (jumbo 1 2 3)) d)
@@ -384,7 +409,7 @@
 (defun xplus (x)
   (typep x '(integer 0 *)))
 
-(defstruct xxx
+(defstruct (xxx :constructor (:constructor boa-make-xxx (x y z)))
   x y (z 'init-z))
 
 (defun test-struct ()
@@ -1035,7 +1060,7 @@ s#+ignore
     (muerte::positive-bignum
      (let ((x (muerte::copy-bignum limit)))
        (dotimes (i (1- (muerte::%bignum-bigits x)))
-	 (setf (memref x 2 i :unsigned-byte32)
+	 (setf (memref x 2 :index i :type :unsigned-byte32)
 	   (muerte::read-time-stamp-counter)))
        (setf x (muerte::bignum-canonicalize x))
        (loop while (>= x limit)
@@ -1049,7 +1074,6 @@ s#+ignore
     (:ret)))
 
 (defun test-irq (&optional eax ebx ecx edx)
-  (setf (memref nil #x7f 20 :code-vector) (symbol-value 'test-irq-pf))
   (multiple-value-bind (p1 p2)
       (with-inline-assembly (:returns :multiple-values)
 	(:load-lexical (:lexical-binding eax) :eax)
@@ -1078,18 +1102,30 @@ s#+ignore
     (1+ x)))
 
 (defparameter *timer-stack* nil)
+(defparameter *timer-prevstack* nil)
 (defparameter *timer-esi* nil)
 (defparameter *timer-frame* #100())
+(defparameter *timer-base* 2)
+(defparameter *timer-variation* 1000)
+
+(defun test-format (&optional timeout (x #xab))
+  (let ((fasit (format nil "~2,'0X" x)))
+    (test-timer timeout)
+    (format t "~&Fasit: ~S" fasit)
+    (loop
+      (let ((x (format nil "~2,'0X" x)))
+	(assert (string= fasit x) ()
+	  "Failed tesT. Fasit: ~S, X: ~S" fasit x)))))
 
 (defun test-clc (&optional timeout)
   (test-timer timeout)
   (loop
     (funcall (find-symbol (string :test-clc) :clc))))
 
-(defun test-timer (&optional timeout)
+(defun test-timer (&optional timeout (base *timer-base*) (variation *timer-variation*))
   (setf (exception-handler 32)
     (lambda (exception-vector exception-frame)
-      (declare (ignore exception-vector #+ignore exception-frame))
+      (declare (ignore exception-vector exception-frame))
 ;;;      (loop with f = *timer-frame*
 ;;;	  for o from 20 downto -36 by 4 as i upfrom 0
 ;;;	  do (setf (aref f i) (memref exception-frame o 0 :lisp)))
@@ -1102,14 +1138,13 @@ s#+ignore
 ;;;		 (vector-push funobj ts)
 ;;;		 (vector-push offset ts)
 ;;;		 (vector-push code-vector ts))))
-      (muerte::cli)
+      ;; (muerte::cli)
       (pic8259-end-of-interrupt 0)
       (with-inline-assembly (:returns :nothing)
 	(:compile-form (:result-mode :ecx) muerte.x86-pc::*screen*)
 	(:shrl 2 :ecx)
 	((:gs-override) :addb 1 (:ecx 158))
 	((:gs-override) :movb #x40 (:ecx 159)))
-      (setf *timer-esi* (muerte::dit-frame-ref nil exception-frame :esi :unsigned-byte32))
       (do ((frame (stack-frame-uplink nil (current-stack-frame))
 		  (stack-frame-uplink nil frame)))
 	  ((plusp frame))
@@ -1127,21 +1162,22 @@ s#+ignore
 			 x)
 		       nil
 		       (current-stack-frame))
-      (setf *timer-stack* (muerte::copy-current-control-stack))
-      (setf (pit8253-timer-mode 0) +pit8253-mode-single-timeout+
-	    (pit8253-timer-count 0) (or timeout (+ 5 (random 2000))))
       (with-inline-assembly (:returns :nothing)
 	(:compile-form (:result-mode :ecx) muerte.x86-pc::*screen*)
 	(:shrl 2 :ecx)
-	((:gs-override) :movb #x20 (:ecx 159)))      
-      (muerte::sti)
-      ))
+	((:gs-override) :movb #x20 (:ecx 159)))
+      (setf *timer-prevstack* *timer-stack*
+	    *timer-stack* (muerte::copy-current-control-stack))
+      (setf (pit8253-timer-mode 0) +pit8253-mode-single-timeout+
+	    (pit8253-timer-count 0) (or timeout (+ base (random variation))))
+      
+      #+ignore (muerte::sti)))
   (with-inline-assembly (:returns :nothing)
     (:compile-form (:result-mode :ecx) muerte.x86-pc::*screen*)
     (:shrl 2 :ecx)
     ((:gs-override) :movw #x4646 (:ecx 158)))
   (setf (pit8253-timer-mode 0) +pit8253-mode-single-timeout+
-	(pit8253-timer-count 0) (or timeout (+ 10 (random 1000))))
+	(pit8253-timer-count 0) (or timeout (+ base (random variation))))
   (setf (pic8259-irq-mask) #xfffe)
   (pic8259-end-of-interrupt 0)
   (with-inline-assembly (:returns :nothing) (:sti))
@@ -1179,6 +1215,12 @@ s#+ignore
 		       (incf (memref-int muerte.x86-pc::*screen* 0 80 :unsigned-byte16 t)))))
 	(incf (memref-int muerte.x86-pc::*screen* 0 160 :unsigned-byte16 t))))))
 
+(defun mumbojumbo ()
+  (with-inline-assembly (:returns :multiple-values)
+    (:leave)
+    (:movl (:ebp -4) :esi)
+    (:break)
+    (:ret)))
 
 (defun genesis ()
   (let ((extended-memsize 0))
@@ -1190,11 +1232,12 @@ s#+ignore
     (format t "Extended memory: ~D KB~%" extended-memsize)
 
     (idt-init)
-    (install-los0-consing :kb-size 500)
     #+ignore
+    (install-los0-consing :kb-size 500)
     (install-los0-consing :kb-size (max 100 (truncate (- extended-memsize 1024 2048) 2))))
 
   (setf *debugger-function* #'los0-debugger)
+  (clos-bootstrap)
   (let ((*repl-readline-context* (make-readline-context :history-size 16))
 	#+ignore (*backtrace-stack-frame-barrier* (stack-frame-uplink (current-stack-frame)))
 	#+ignore (*error-no-condition-for-debugger* t)
@@ -1208,7 +1251,6 @@ s#+ignore
       ;; (muerte:asm :int 49)
 
       (setf *package* (find-package "INIT"))
-      (clos-bootstrap)
       (when muerte::*multiboot-data*
 	(set-textmode +vga-state-90x30+))
       
@@ -1228,7 +1270,7 @@ s#+ignore
     (let ((* nil) (** nil) (*** nil)
 	  (/ nil) (// nil) (/// nil)
 	  (+ nil) (++ nil) (+++ nil))
-      (format t "~&Movitz image Los0 build ~D [~Z]." *build-number* (cons 1 2))
+      (format t "~&Movitz image Los0 build ~D." *build-number*)
       (loop
 	(catch :top-level-repl		; If restarts don't work, you can throw this..
 	  (with-simple-restart (abort "Abort to the top command level.")

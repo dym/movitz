@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.42 2004/09/24 09:33:16 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.43 2004/10/11 13:52:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -76,8 +76,8 @@ Otherwise, stack-frame is an absolute location."
     (let ((pos (+ frame index)))
       (assert (< -1 pos (length stack))
 	  () "Index ~S, pos ~S, len ~S" index pos (length stack))
-      (memref stack 2 pos type)))
-   (t (memref frame 0 index type))))
+      (memref stack 2 :index pos :type type)))
+   (t (memref frame 0 :index index :type type))))
 
 (defun (setf stack-frame-ref) (value stack frame index &optional (type ':lisp))
   (cond
@@ -86,8 +86,8 @@ Otherwise, stack-frame is an absolute location."
     (let ((pos (+ frame index)))
       (assert (< -1 pos (length stack))
 	  () "Index ~S, pos ~S, len ~S" index pos (length stack))
-      (setf (memref stack 2 pos type) value)))
-   (t (setf (memref frame 0 index type) value))))
+      (setf (memref stack 2 :index pos :type type) value)))
+   (t (setf (memref frame 0 :index index :type type) value))))
 
 (defun current-dynamic-context ()
   (with-inline-assembly (:returns :eax)
@@ -248,12 +248,9 @@ Otherwise, stack-frame is an absolute location."
 		    (dotimes (i (funobj-num-constants x) t)
 		      (unless (test funobj-constant-ref i)))))
 	      (symbol
-	       (and (test memref #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::function-value)
-			  0 :lisp)
-		    (test memref #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::name)
-			  0 :lisp)
-		    (test memref #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::flags)
-			  0 :lisp)))
+	       (and (test memref (movitz-type-slot-offset 'movitz-symbol 'function-value))
+		    (test memref (movitz-type-slot-offset 'movitz-symbol 'name))
+		    (test memref (movitz-type-slot-offset 'movitz-symbol 'flags))))
 	      (vector
 	       (and (typep y 'vector)
 		    (test array-element-type)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.32 2004/09/21 13:56:32 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.33 2004/10/11 13:53:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -49,7 +49,7 @@ start-location and end-location."
       (with-simple-restart (continue-map-heap-words
 			    "Continue map-heap-words at location ~S." (1+ scan))
 	(let ((*scan* scan)
-	      (x (memref scan 0 0 :unsigned-byte16)))
+	      (x (memref scan 0 :type :unsigned-byte16)))
 	  (declare (special *scan*))
 	  (when verbose
 	    (format *terminal-io* " [at ~S: ~S]" scan x))
@@ -65,7 +65,7 @@ start-location and end-location."
 	    (assert (evenp scan) ()
 	      "Scanned bignum-header ~S at odd location #x~X." x scan)
 	    ;; Just skip the bigits
-	    (let* ((bigits (memref scan 0 1 :unsigned-byte14))
+	    (let* ((bigits (memref scan 0 :index 1 :type :unsigned-byte14))
 		   (delta (logior bigits 1)))
 	      (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
 	      (incf scan delta)))
@@ -76,7 +76,7 @@ start-location and end-location."
 	   ((scavenge-typep x :funobj)
 	    (assert (evenp scan) ()
 	      "Scanned funobj-header ~S at odd location #x~X." 
-	      (memref scan 0 0 :unsigned-byte32) scan)
+	      (memref scan 0 :type :unsigned-byte32) scan)
 	    (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
 	    ;; Process code-vector pointers specially..
 	    (let* ((funobj (%word-offset scan #.(movitz:tag :other)))
@@ -88,7 +88,7 @@ start-location and end-location."
 		(check-type new-code-vector code-vector)
 		(unless (eq code-vector new-code-vector)
 		  (error "Code-vector migration is not implemented.")
-		  (setf (memref scan 0 -1 :lisp) (%word-offset new-code-vector 2))
+		  (setf (memref scan 0 :index -1) (%word-offset new-code-vector 2))
 		  ;; Do more stuff here to update code-vectors and jumpers
 		  ))
 	      (incf scan (+ 7 num-jumpers)))) ; Don't scan the jumpers.
@@ -104,21 +104,21 @@ start-location and end-location."
 				     #.(bt:enum-value 'movitz:movitz-vector-element-type :code)))
 	    (assert (evenp scan) ()
 	      "Scanned u8-vector-header ~S at odd location #x~X." x scan)
-	    (let ((len (memref scan 0 1 :lisp)))
+	    (let ((len (memref scan 0 :index 1 :type :lisp)))
 	      (check-type len positive-fixnum)
 	      (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
 	      (incf scan (1+ (* 2 (truncate (+ 7 len) 8))))))
 	   ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u16))
 	    (assert (evenp scan) ()
 	      "Scanned u16-vector-header ~S at odd location #x~X." x scan)
-	    (let ((len (memref scan 0 1 :lisp)))
+	    (let ((len (memref scan 0 :index 1)))
 	      (check-type len positive-fixnum)
 	      (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
 	      (incf scan (1+ (* 2 (truncate (+ 3 len) 4))))))
 	   ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u32))
 	    (assert (evenp scan) ()
 	      "Scanned u32-vector-header ~S at odd location #x~X." x scan)
-	    (let ((len (memref scan 0 1 :lisp)))
+	    (let ((len (memref scan 4)))
 	      (assert (typep len 'positive-fixnum) ()
 		"Scanned basic-vector at ~S with illegal length ~S." scan len)
 	      (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
@@ -133,17 +133,17 @@ start-location and end-location."
 	   ((eq x 3)
 	    (setf *scan-last* scan)
 	    (incf scan)
-	    (let ((delta (memref scan 0 0 :lisp)))
+	    (let ((delta (memref scan 0)))
 	      (check-type delta positive-fixnum)
 	      ;; (warn "at ~S skipping ~S to ~S." scan delta (+ scan delta))
 	      (incf scan delta)))
 	   (t ;; (typep x 'pointer)
-	    (let* ((old (memref scan 0 0 :lisp))
+	    (let* ((old (memref scan 0))
 		   (new (funcall function old scan)))
 	      (when verbose
 		(format *terminal-io* " [~Z => ~Z]" old new))
 	      (unless (eq old new)
-		(setf (memref scan 0 0 :lisp) new)))))))))
+		(setf (memref scan 0) new)))))))))
   (values))
 
 (defun map-stack-words (function stack start-frame)
@@ -229,14 +229,14 @@ at the start-stack-frame location."
 						(dit-frame-ref stack dit-frame :eip :location))
 			  (cond
 			   ((let ((x0-tag (ldb (byte 3 0)
-					       (memref interrupted-esp 0 0 :unsigned-byte8))))
+					       (memref interrupted-esp 0 :type :unsigned-byte8))))
 			      (and (member x0-tag '(1 5 6 7))
 				   (location-in-object-p casf-code-vector
-							 (memref interrupted-esp 0 0 :location))))
+							 (memref interrupted-esp 0 :type :location))))
 			    ;; When code-vector migration is implemented...
 			    (warn "Scanning at ~S X0 call ~S in ~S."
 				  (dit-frame-ref stack dit-frame :eip :unsigned-byte32)
-				  (memref interrupted-esp 0 0 :unsigned-byte32)
+				  (memref interrupted-esp 0 :type :unsigned-byte32)
 				  (funobj-name casf-funobj))
 			    #+ignore (map-heap-words function (+ interrupted-esp 1) frame)
 			    (when (eq 0 (stack-frame-ref stack frame -1))
@@ -244,14 +244,14 @@ at the start-stack-frame location."
 			    (setf next-frame frame
 				  next-nether-frame (+ interrupted-esp 1 -2)))
 			   ((let ((x1-tag (ldb (byte 3 0)
-					       (memref interrupted-esp 4 0 :unsigned-byte8))))
+					       (memref interrupted-esp 4 :type :unsigned-byte8))))
 			      (and (member x1-tag '(1 5 6 7))
 				   (location-in-object-p casf-code-vector
-							 (memref interrupted-esp 0 1 :location))))
+							 (memref interrupted-esp 4 :type :location))))
 			    ;; When code-vector migration is implemented...
 			    (warn "Scanning at ~S X1 call ~S in ~S."
 				  (dit-frame-ref stack dit-frame :eip :unsigned-byte32)
-				  (memref interrupted-esp 0 1 :unsigned-byte32)
+				  (memref interrupted-esp 4 :type :unsigned-byte32)
 				  (funobj-name casf-funobj))
 			    (when (eq 0 (stack-frame-ref stack frame -1))
 			      (break "X1 call in DIT-frame."))
@@ -263,10 +263,10 @@ at the start-stack-frame location."
 			    (setf next-frame frame
 				  next-nether-frame (- interrupted-esp 2))
 			    )))
-			 ((eq casf-frame (memref interrupted-esp 0 0 :location))
+			 ((eq casf-frame (memref interrupted-esp 0 :type :location))
 			  ;; Situation ii. esp(0)=CASF, esp(1)=code-vector
 			  (assert (location-in-object-p casf-code-vector
-							(memref interrupted-esp 0 1 :location))
+							(memref interrupted-esp 4 :type :location))
 
 			      () "Stack discipline situation ii. invariant broken. CASF=#x~X, ESP=~S, EBP=~S"
 			      casf-frame interrupted-esp interrupted-ebp)
@@ -275,7 +275,7 @@ at the start-stack-frame location."
 				next-nether-frame (+ interrupted-esp 2 -2)))
 			 (t ;; Situation iii. esp(0)=code-vector.
 			  (assert (location-in-object-p casf-code-vector
-							(memref interrupted-esp 0 0 :location))
+							(memref interrupted-esp 0 :type :location))
 			      () "Stack discipline situation iii. invariant broken. CASF=#x~X"
 			      casf-frame)
 			  #+ignore (map-heap-words function (+ interrupted-esp 1) frame)

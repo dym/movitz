@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.28 2004/10/07 12:42:38 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.29 2004/10/11 13:52:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -57,7 +57,7 @@
   (if (not (and (movitz:movitz-constantp stack env)
 		(eq nil (movitz:movitz-eval stack env))))
       form
-    `(memref ,frame (dit-frame-offset ,reg) 0 ,type)))
+    `(memref ,frame (dit-frame-offset ,reg) :type ,type)))
 
 (defun dit-frame-ref (stack frame reg &optional (type :lisp))
   (stack-frame-ref stack frame (dit-frame-index reg) type))
@@ -263,7 +263,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
   (declare (without-check-stack-limit))
   (macrolet ((dereference (fixnum-address &optional (type :lisp))
 	       "Dereference the fixnum-address."
-	       `(memref ,fixnum-address 0 0 ,type)))
+	       `(memref ,fixnum-address 0 :type ,type)))
     (let (($eip (+ dit-frame (dit-frame-index :eip)))
 	  ($eax (+ dit-frame (dit-frame-index :eax)))
 	  ($ebx (+ dit-frame (dit-frame-index :ebx)))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct 17 21:50:42 2001
 ;;;;                
-;;;; $Id: read.lisp,v 1.10 2004/09/21 13:10:40 ffjeld Exp $
+;;;; $Id: read.lisp,v 1.11 2004/10/11 13:53:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -93,6 +93,7 @@ of string delimited by start and end."
 			       (digit-char-p (schar string (1+ start)) *read-base*)
 			       0)))
 	     (denominator nil)
+	     (decimal nil)
 	     (i (1+ start) (1+ i)))
 	    ((or (>= i end)
 		 (member (schar string i) +simple-token-terminators+))
@@ -103,19 +104,19 @@ of string delimited by start and end."
 			 integer))
 		     (when (and integer denominator (plusp denominator))
 		       denominator)))
-	  (when (char= #\: (schar string i))
-	    (setf colon-position i))
-	  (setf almost-integer integer)
-	  (when integer
-	    (if (and (not denominator)
-		     (char= #\/ (schar string i)))
-		(setf denominator 0)
-	      (let ((digit (digit-char-p (schar string i) *read-base*)))
+	  (let ((c (schar string i)))
+	    (when (char= #\: c)
+	      (setf colon-position i))
+	    (setf almost-integer integer)
+	    (when integer
+	      (let ((digit (digit-char-p c *read-base*)))
 		(cond
-		 ((and denominator (not digit))
-		  (setf integer nil))
 		 (denominator
-		  (setf denominator (+ (* denominator *read-base*) digit)))
+		  (if (not digit)
+		      (setf integer nil)
+		    (setf denominator (+ (* denominator *read-base*) digit))))
+		 ((char= #\/ c)
+		  (setf denominator 0))
 		 (t (setf integer (and digit (+ (* integer *read-base*) digit)))))))))
       (cond
        (token-denominator
@@ -123,14 +124,19 @@ of string delimited by start and end."
 		token-end))
        (token-integer
 	(values token-integer token-end))
-       ((and almost-integer		; check for base 10 <n>. notation.
+       ((and (char= #\. (schar string (1- token-end))) ; check for base-10 <n>. notation.
 	     (> token-end start)
-	     (char= #\. (schar string (1- token-end))))
-	(if (= *read-base* 10)
-	    (values almost-integer token-end)
-	  (values (parse-integer string :start start :end (1- token-end)
-				 :junk-allowed nil)
-		  token-end)))
+	     (or almost-integer
+		 (and (< *read-base* 10)
+		      (do ((i start (1+ i)))
+			  ((>= i (1- token-end)) t)
+			(unless (digit-char-p (schar string i) 10)
+			  (return nil))))))
+	(let ((x (if (= *read-base* 10)
+		     almost-integer
+		   (parse-integer string :start start :end (1- token-end)
+				  :junk-allowed nil))))
+	  (values x token-end)))
        ((not colon-position)
 	(values (intern-string string *package* :start start :end token-end :key #'char-upcase)
 		token-end))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.14 2004/09/27 08:54:53 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.15 2004/10/11 13:53:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -35,11 +35,11 @@
   (let ((slot (find-run-time-context-slot context slot-name)))
     (ecase (second slot)
       (word
-       (memref context -6 (third slot) :lisp))
+       (memref context -6 :index (third slot)))
       (code-vector-word
-       (memref context -6 (third slot) :code-vector))
+       (memref context -6 :index (third slot) :type :code-vector))
       (lu32
-       (memref context -6 (third slot) :unsigned-byte32)))))
+       (memref context -6 :index (third slot) :type :unsigned-byte32)))))
 
 (define-compiler-macro (setf %run-time-context-slot) (&whole form &environment env value slot-name
 						      &optional (context '(current-run-time-context)))
@@ -67,11 +67,11 @@
   (let ((slot (find-run-time-context-slot context slot-name)))
     (ecase (second slot)
       (word
-       (setf (memref context -6 (third slot) :lisp) value))
+       (setf (memref context -6 :index (third slot)) value))
       (lu32
-       (setf (memref context -6 (third slot) :unsigned-byte32) value))
+       (setf (memref context -6 :index (third slot) :type :unsigned-byte32) value))
       (code-vector-word
-       (setf (memref context -6 (third slot) :code-vector) value)))))
+       (setf (memref context -6 :index (third slot) :type :code-vector) value)))))
 
 (defun %run-time-context-segment-base (slot-name
 				      &optional (context (current-run-time-context)))
@@ -81,9 +81,9 @@
       (segment-descriptor
        (let ((index8 (* 4 (third slot)))
 	     (index16 (* 2 (third slot))))
-	 (+ (memref context (+ -6 2) index16 :unsigned-byte16)
-	    (ash (memref context (+ -6 4) index8 :unsigned-byte8) 16)
-	    (ash (memref context (+ -6 7) index8 :unsigned-byte8) 24)))))))
+	 (+ (memref context (+ -6 2) :index index16 :type :unsigned-byte16)
+	    (ash (memref context (+ -6 4) :index index8 :type :unsigned-byte8) 16)
+	    (ash (memref context (+ -6 7) :index index8 :type :unsigned-byte8) 24)))))))
 
 (defun (setf %run-time-context-segment-base) (value slot-name
 					     &optional (context (current-run-time-context)))
@@ -93,9 +93,9 @@
       (segment-descriptor
        (let ((index8 (* 4 (third slot)))
 	     (index16 (* 2 (third slot))))
-	 (setf (memref context (+ -6 2) index16 :unsigned-byte16) (ldb (byte 16 0) value)
-	       (memref context (+ -6 4) index8 :unsigned-byte8) (ldb (byte 8 16) value)
-	       (memref context (+ -6 7) index8 :unsigned-byte8) (ldb (byte 6 24) value)))))
+	 (setf (memref context (+ -6 2) :index index16 :type :unsigned-byte16) (ldb (byte 16 0) value)
+	       (memref context (+ -6 4) :index index8 :type :unsigned-byte8) (ldb (byte 8 16) value)
+	       (memref context (+ -6 7) :index index8 :type :unsigned-byte8) (ldb (byte 6 24) value)))))
     value))
 
 (defun %run-time-context-ref (edi-offset)

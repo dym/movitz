@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.31 2004/10/07 12:43:29 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.32 2004/10/11 13:53:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,7 +18,8 @@
 
 (in-package muerte)
 
-(define-compiler-macro memref (&whole form object offset index type &key (localp nil) (endian :host)
+(define-compiler-macro memref (&whole form object offset &key (index 0) (type :lisp)
+							      (localp nil) (endian :host)
 			       &environment env)
   (if (or (not (movitz:movitz-constantp type env))
 	  (not (movitz:movitz-constantp localp env))
@@ -323,29 +324,29 @@
 			    (:load-lexical (:lexical-binding ,object-var) :eax)
 			    (:addl :ebx :ecx)
 			    (:movl (:eax :ecx ,(offset-by 4)) :eax)))))))
-		(t (error "Unknown memref type: ~S" (movitz::eval-form type nil nil))
+		(t (error "Unknown memref type: ~S" (movitz:movitz-eval type nil nil))
 		   form)))))))))
 
-(defun memref (object offset index type &key localp (endian :host))
+(defun memref (object offset &key (index 0) (type :lisp) localp (endian :host))
   (ecase type
     (:lisp              (if localp
-			    (memref object offset index :lisp :localp t)
-			  (memref object offset index :lisp :localp nil)))
-    (:unsigned-byte32   (memref object offset index :unsigned-byte32))
-    (:character         (memref object offset index :character))
-    (:unsigned-byte8    (memref object offset index :unsigned-byte8))
-    (:location          (memref object offset index :location))
-    (:unsigned-byte14   (memref object offset index :unsigned-byte14))
+			    (memref object offset :index index :localp t)
+			  (memref object offset :index index :localp nil)))
+    (:unsigned-byte32   (memref object offset :index index :type :unsigned-byte32))
+    (:character         (memref object offset :index  index :type :character))
+    (:unsigned-byte8    (memref object offset :index index :type :unsigned-byte8))
+    (:location          (memref object offset :index index :type :location))
+    (:unsigned-byte14   (memref object offset :index index :type :unsigned-byte14))
     (:unsigned-byte16   (ecase endian
 			  ((:host :little)
-			   (memref object offset index :unsigned-byte16 :endian :little))
+			   (memref object offset :index index :type :unsigned-byte16 :endian :little))
 			  ((:big)
-			   (memref object offset index :unsigned-byte16 :endian :big))))
-    (:signed-byte30+2   (memref object offset index :signed-byte30+2))
-    (:unsigned-byte29+3 (memref object offset index :unsigned-byte29+3))))
+			   (memref object offset :index index :type :unsigned-byte16 :endian :big))))))
+;;;    (:signed-byte30+2   (memref object offset index :signed-byte30+2))
+;;;    (:unsigned-byte29+3 (memref object offset index :unsigned-byte29+3))))
 
-(define-compiler-macro (setf memref) (&whole form &environment env value object offset index type
-				      &key (localp nil) (endian :host))
+(define-compiler-macro (setf memref) (&whole form &environment env value object offset
+				      &key (index 0) (type :lisp) (localp nil) (endian :host))
   (if (or (not (movitz:movitz-constantp type env))
 	  (not (movitz:movitz-constantp localp env))
 	  (not (movitz:movitz-constantp endian env)))
@@ -683,24 +684,29 @@
       (t ;; (warn "Can't handle inline MEMREF: ~S" form)
 	 form))))
 
-(defun (setf memref) (value object offset index type &key localp (endian :host))
+(defun (setf memref) (value object offset &key (index 0) (type :lisp) localp (endian :host))
   (ecase type
     (:character
-     (setf (memref object offset index :character) value))
+     (setf (memref object offset :index index :type :character)
+       value))
     (:unsigned-byte8
-     (setf (memref object offset index :unsigned-byte8) value))
+     (setf (memref object offset :index index :type :unsigned-byte8)
+       value))
     (:unsigned-byte16
      (ecase endian
        ((:host :little)
-	(setf (memref object offset index :unsigned-byte16 :endian :little) value))
+	(setf (memref object offset :index index :type :unsigned-byte16 :endian :little)
+	  value))
        ((:big)
-	(setf (memref object offset index :unsigned-byte16 :endian :big) value))))
+	(setf (memref object offset :index index :type :unsigned-byte16 :endian :big)
+	  value))))
     (:unsigned-byte32
-     (setf (memref object offset index :unsigned-byte32) value))
+     (setf (memref object offset :index index :type :unsigned-byte32)
+       value))
     (:lisp
      (if localp
-	 (setf (memref object offset index :lisp :localp t) value)
-       (setf (memref object offset index :lisp :localp nil) value)))))
+	 (setf (memref object offset :index index :localp t) value)
+       (setf (memref object offset :index index :localp nil) value)))))
 
 (define-compiler-macro memref-int (&whole form &environment env address offset index type
 				   &optional physicalp)

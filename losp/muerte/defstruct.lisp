@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.14 2004/09/23 09:31:28 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.15 2004/10/11 13:52:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -21,10 +21,10 @@
 
 (defun structure-object-length (object)
   (check-type object structure-object)
-  (memref object -4 0 :unsigned-byte14))
+  (memref object -4 :type :unsigned-byte14))
 
 (defun structure-object-class (x)
-  (memref x -6 1 :lisp))
+  (memref x -6 :index 1))
 
 (defun copy-structure (object)
   (%shallow-copy-object object (+ 2 (structure-object-length object))))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.41 2004/10/07 12:54:43 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.42 2004/10/11 13:51:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -29,7 +29,7 @@
   "Make a space vector at a fixed location."
   (assert (evenp location))
   (macrolet ((x (index)
-	       `(memref location 0 ,index :unsigned-byte32)))
+	       `(memref location 0 :index ,index :type :unsigned-byte32)))
     (setf (x 1) (* #.movitz:+movitz-fixnum-factor+ size)
 	  (x 0) #.(cl:dpb (bt:enum-value 'movitz:movitz-vector-element-type :u32)
 			  (cl:byte 8 8)
@@ -38,10 +38,10 @@
 
 
 (defmacro space-fresh-pointer (space)
-  `(memref ,space -6 2 :lisp))
+  `(memref ,space -6 :index 2))
 
 (defmacro space-other (space)
-  `(memref ,space -6 3 :lisp))
+  `(memref ,space -6 :index 3))
 
 (defun allocate-space (size &optional other-space)
   (let ((space (make-array size :element-type '(unsigned-byte 32))))
@@ -339,8 +339,8 @@ duo-space where each space is KB-SIZE kilobytes."
 		   x)
 		  (t (or (and (eq (object-tag x)
 				  (ldb (byte 3 0)
-				       (memref (object-location x) 0 0 :unsigned-byte8)))
-			      (let ((forwarded-x (memref (object-location x) 0 0 :lisp)))
+				       (memref (object-location x) 0 :type :unsigned-byte8)))
+			      (let ((forwarded-x (memref (object-location x) 0)))
 				(and (object-in-space-p newspace forwarded-x)
 				     forwarded-x)))
 			 (let ((forward-x (shallow-copy x)))
@@ -348,9 +348,9 @@ duo-space where each space is KB-SIZE kilobytes."
 				      *gc-consitency-check*)
 			     (let ((a *x*))
 			       (vector-push (%object-lispval x) a)
-			       (vector-push (memref (object-location x) 0 0 :unsigned-byte32) a)
+			       (vector-push (memref (object-location x) 0 :type :unsigned-byte32) a)
 			       (assert (vector-push (%object-lispval forward-x) a))))
-			   (setf (memref (object-location x) 0 0 :lisp) forward-x)
+			   (setf (memref (object-location x) 0) forward-x)
 			   forward-x))))))))
       ;; Scavenge roots
       (dolist (range muerte::%memory-map-roots%)
@@ -375,7 +375,7 @@ duo-space where each space is KB-SIZE kilobytes."
 		((>= i (length a)))
 	      (let ((old (%lispval-object (aref a i)))
 		    (old-class (aref a (+ i 1))))
-		(setf (memref (object-location old) 0 0 :unsigned-byte32) old-class)))
+		(setf (memref (object-location old) 0 :type :unsigned-byte32) old-class)))
 	    ;; Then, check that each migrated object is equalp to its new self.
 	    (do ((i 0 (+ i 3)))
 		((>= i (length a)))

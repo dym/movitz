@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb 19 19:09:05 2001
 ;;;;                
-;;;; $Id: hash-tables.lisp,v 1.3 2004/06/29 23:19:21 ffjeld Exp $
+;;;; $Id: hash-tables.lisp,v 1.4 2004/10/11 13:52:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -96,9 +96,6 @@
   (if (not (plusp limit))
       0
     (typecase object
-      #+ignore
-      (std-instance
-       (memref object #x1e 2 :lisp))
       (cons
        (logxor (sxhash-limited (car object) (- limit 2))
 	       (sxhash-limited (cdr object) (1- limit))))

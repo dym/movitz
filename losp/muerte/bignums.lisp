@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 19:42:57 2004
 ;;;;                
-;;;; $Id: bignums.lisp,v 1.11 2004/09/23 09:17:51 ffjeld Exp $
+;;;; $Id: bignums.lisp,v 1.12 2004/10/11 13:52:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -82,7 +82,7 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 (defun print-bignum (x)
   (check-type x bignum)
   (dotimes (i (1+ (%bignum-bigits x)))
-    (format t "~8,'0X " (memref x -6 i :unsigned-byte32)))
+    (format t "~8,'0X " (memref x -6 :index i :type :unsigned-byte32)))
   (terpri)
   (values))
 
@@ -468,7 +468,8 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 (defun bignum-set-zerof (bignum)
   (check-type bignum bignum)
   (dotimes (i (%bignum-bigits bignum))
-    (setf (memref bignum -2 i :lisp) 0))
+    (setf (memref bignum (movitz-type-slot-offset 'movitz-bignum 'bigit0)
+		  :index i :type :unsigned-byte32) 0))
   bignum)
 
 (defun %bignum= (x y)

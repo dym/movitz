@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.44 2004/09/24 09:31:19 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.45 2004/10/11 13:52:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,8 +22,8 @@
 (in-package muerte)
 
 (defun vector-element-type (object)
-  (memref object #.(bt:slot-offset 'movitz::movitz-basic-vector 'movitz::element-type) 0
-	  :unsigned-byte8))
+  (memref object (movitz-type-slot-offset 'movitz-basic-vector 'element-type)
+	  :type :unsigned-byte8))
 
 (defmacro vector-double-dispatch ((s1 s2) &rest clauses)
   (flet ((make-double-dispatch-value (et1 et2)
@@ -43,14 +43,13 @@
 			     forms))))))
 
 (define-compiler-macro vector-element-type (object)
-  `(memref ,object 0
-	   ,(bt:slot-offset 'movitz::movitz-basic-vector 'movitz::element-type)
-	   :unsigned-byte8))
+  `(memref ,object (movitz-type-slot-offset 'movitz-basic-vector 'element-type)
+	   :type :unsigned-byte8))
 
 (defun (setf vector-element-type) (numeric-element-type vector)
   (check-type vector vector)
-  (setf (memref vector #.(bt:slot-offset 'movitz::movitz-basic-vector 'movitz::element-type) 0
-		:unsigned-byte8)
+  (setf (memref vector (movitz-type-slot-offset 'movitz-basic-vector 'element-type)
+		:type :unsigned-byte8)    
     numeric-element-type))
 
 (defun array-element-type (array)
@@ -114,15 +113,16 @@
   (etypecase array
     ((simple-array * 1)
      (assert (zerop axis-number))
-     (movitz-accessor array movitz-basic-vector num-elements))))
+     (memref array (movitz-type-slot-offset 'movitz-basic-vector 'num-elements)))))
 
 (defun array-dimensions (array)
   (check-type array array)
   1)
 
 (defun shrink-vector (vector new-size)
-  (setf-movitz-accessor (vector movitz-basic-vector num-elements) new-size)
-  vector)
+  (check-type vector vector)
+  (setf (memref vector (movitz-type-slot-offset 'movitz-basic-vector 'num-elements))
+    new-size))
 
 (define-compiler-macro %basic-vector-has-fill-pointer-p (vector)
   "Does the basic-vector have a fill-pointer?"
@@ -155,29 +155,21 @@
 
 (defun copy-vector (vector)
   (check-type vector vector)
-  (ecase (vector-element-type vector)
-    (#.(bt:enum-value 'movitz::movitz-vector-element-type :any-t)
-       (%shallow-copy-object
-	vector
-	(+ 2 (movitz-accessor vector movitz-basic-vector num-elements))))
-    (#.(bt:enum-value 'movitz::movitz-vector-element-type :u32)
-       (%shallow-copy-non-pointer-object
-	vector
-	(+ 2 (movitz-accessor vector movitz-basic-vector num-elements))))
-    ((#.(bt:enum-value 'movitz::movitz-vector-element-type :character)
-      #.(bt:enum-value 'movitz::movitz-vector-element-type :u8)
-      #.(bt:enum-value 'movitz::movitz-vector-element-type :code))
-     (%shallow-copy-non-pointer-object
-      vector
-      (+ 2 (truncate (+ 3 (movitz-accessor vector movitz-basic-vector num-elements)) 4))))
-    (#.(bt:enum-value 'movitz::movitz-vector-element-type :u16)
-       (%shallow-copy-non-pointer-object
-	vector
-	(+ 2 (truncate (+ 1 (movitz-accessor vector movitz-basic-vector num-elements)) 2))))
-    (#.(bt:enum-value 'movitz::movitz-vector-element-type :bit)
-       (%shallow-copy-non-pointer-object
-	vector
-	(+ 2 (truncate (+ 31 (movitz-accessor vector movitz-basic-vector num-elements)) 32))))))
+  (let ((length (the fixnum
+		  (memref vector (movitz-type-slot-offset 'movitz-basic-vector 'num-elements)))))
+    (ecase (vector-element-type vector)
+      (#.(bt:enum-value 'movitz::movitz-vector-element-type :any-t)
+	 (%shallow-copy-object vector (+ 2 length)))
+      (#.(bt:enum-value 'movitz::movitz-vector-element-type :u32)
+	 (%shallow-copy-non-pointer-object vector (+ 2 length)))
+      ((#.(bt:enum-value 'movitz::movitz-vector-element-type :character)
+	#.(bt:enum-value 'movitz::movitz-vector-element-type :u8)
+	#.(bt:enum-value 'movitz::movitz-vector-element-type :code))
+       (%shallow-copy-non-pointer-object vector	(+ 2 (truncate (+ 3 length) 4))))
+      (#.(bt:enum-value 'movitz::movitz-vector-element-type :u16)
+	 (%shallow-copy-non-pointer-object vector (+ 2 (truncate (+ 1 length) 2))))
+      (#.(bt:enum-value 'movitz::movitz-vector-element-type :bit)
+	 (%shallow-copy-non-pointer-object vector (+ 2 (truncate (+ 31 length) 32)))))))
 
 (defun (setf fill-pointer) (new-fill-pointer vector)
   (etypecase vector
@@ -298,8 +290,7 @@
 			    (error "Index ~D is beyond vector length ~D."
 			     index
 			     (memref array
-			      ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
-			      0 :lisp)))))
+			      (movitz-type-slot-offset 'movitz-basic-vector 'num-elements))))))
 		   (:jmp (:esi (:ecx 4) 'basic-vector-dispatcher
 			       ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
 		   
@@ -454,10 +445,10 @@
 ;;; simple-vector accessors
 
 (define-compiler-macro svref%unsafe (simple-vector index)
-  `(memref ,simple-vector 2 ,index :lisp))
+  `(memref ,simple-vector 2 :index ,index))
 
 (define-compiler-macro (setf svref%unsafe) (value simple-vector index)
-  `(setf (memref ,simple-vector 2 ,index :lisp) ,value))
+  `(setf (memref ,simple-vector 2 :index ,index) ,value))
 
 (defun svref%unsafe (simple-vector index)
 ;;  (compiler-macro-call svref%unsafe simple-vector index))
@@ -522,16 +513,16 @@
 (defun char (string index)
   (check-type string string)
   (assert (below index (array-dimension string 0)))
-  (memref string 2 index :character))
+  (memref string 2 :index index :type :character))
 
 (defun (setf char) (value string index)
   (assert (below index (array-dimension string 0)))
-  (setf (memref string 2 index :character) value))
+  (setf (memref string 2 :index index :type :character) value))
 
 (defun schar (string index)
   (check-type string string)
   (assert (below index (length string)))
-  (memref string 2 index :character))
+  (memref string 2 :index index :type :character))
 
 (defun (setf schar) (value string index)
   (check-type string string)
@@ -539,13 +530,13 @@
   (setf (aref string index) value))
 
 (define-compiler-macro char%unsafe (string index)
-  `(memref ,string 2 ,index :character))
+  `(memref ,string 2 :index ,index :type :character))
 
 (defun char%unsafe (string index)
   (char%unsafe string index))
 
 (define-compiler-macro (setf char%unsafe) (value string index)
-  `(setf (memref ,string 2 ,index :character) ,value))
+  `(setf (memref ,string 2 :index ,index :type :character) ,value))
 
 (defun (setf char%unsafe) (value string index)
   (setf (char%unsafe string index) value))
@@ -553,13 +544,13 @@
 ;;; u8 accessors
 
 (define-compiler-macro u8ref%unsafe (vector index)
-  `(memref ,vector 2 ,index :unsigned-byte8))
+  `(memref ,vector 2 :index ,index :type :unsigned-byte8))
 
 (defun u8ref%unsafe (vector index)
   (u8ref%unsafe vector index))
 
 (define-compiler-macro (setf u8ref%unsafe) (value vector index)
-  `(setf (memref ,vector 2 ,index :unsigned-byte8) ,value))
+  `(setf (memref ,vector 2 :index ,index :type :unsigned-byte8) ,value))
 
 (defun (setf u8ref%unsafe) (value vector index)
   (setf (u8ref%unsafe vector index) value))
@@ -567,7 +558,7 @@
 ;;; u32 accessors
 
 (define-compiler-macro u32ref%unsafe (vector index)
-  `(memref ,vector 2 ,index :unsigned-byte32))
+  `(memref ,vector 2 :index ,index :type :unsigned-byte32))
 
 (defun u32ref%unsafe (vector index)
   (compiler-macro-call u32ref%unsafe vector index))
@@ -576,7 +567,7 @@
   (let ((var (gensym "setf-u32ref-value-")))
     ;; Use var so as to avoid re-boxing of the u32 value.
     `(let ((,var ,value))
-       (setf (memref ,vector 2 ,index :unsigned-byte32) ,var)
+       (setf (memref ,vector 2 :index ,index :type :unsigned-byte32) ,var)
        ,var)))
 
 (defun (setf u32ref%unsafe) (value vector index)
