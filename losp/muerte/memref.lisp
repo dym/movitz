@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.19 2004/07/17 12:16:28 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.20 2004/07/19 09:56:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -341,8 +341,7 @@
 		  (,object-var ,object)
 		  (,index-var ,index))
 	      (with-inline-assembly (:returns :untagged-fixnum-ecx)
-		(:load-lexical (:lexical-binding ,value-var) :eax)
-		(:call-global-pf unbox-u32)
+		(:load-lexical (:lexical-binding ,value-var) :untagged-fixnum-ecx)
 		(:compile-two-forms (:ebx :eax) ,object-var ,index-var)
 		(:movl :ecx (:eax :ebx ,(movitz:movitz-eval offset env)))))))
 	(t (let ((value-var (gensym "memref-value-"))
