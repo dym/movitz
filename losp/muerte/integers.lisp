@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.24 2004/06/07 13:42:57 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.25 2004/06/08 08:15:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1293,8 +1293,10 @@
     (:compile-form (:result-mode :eax) integer)
     (:xorl #.(cl:- #xffffffff movitz::+movitz-fixnum-zmask+) :eax)))
 
-(defun ldb (bytespec integer)
-  (logand (ash integer (- (byte-position bytespec)))
+(defun ldb%byte (size position integer)
+  (check-type size fixnum)
+  (check-type position fixnum)
+  (logand (ash integer (- position))
 	  (svref #(#x0 #x1 #x3 #x7
 		   #xf #x1f #x3f #x7f
 		   #xff #x1ff #x3ff #x7ff
@@ -1303,76 +1305,82 @@
 		   #xfffff #x1fffff #x3fffff #x7fffff
 		   #xffffff #x1ffffff #x3ffffff #x7ffffff
 		   #xfffffff)
-		 (byte-size bytespec))))
+		 size)))
 
-(define-compiler-macro ldb (&whole form &environment env bytespec integer)
-  (flet ((constant-bytespec-p (bytespec)
-	   (and (consp bytespec)
-		(eq 'byte (first bytespec))
-		(movitz:movitz-constantp (second bytespec) env)
-		(movitz:movitz-constantp (third bytespec) env))))
-    (cond
-     ((and (constant-bytespec-p bytespec)
-	   (movitz:movitz-constantp integer env))
-      (ldb (byte (movitz:movitz-eval (second bytespec) env)
-		 (movitz:movitz-eval (third bytespec) env))
-	   (movitz:movitz-eval integer env))) ; constant folding
-     ((constant-bytespec-p bytespec)
-      (let ((size (movitz:movitz-eval (second bytespec) env))
-	    (position (movitz:movitz-eval (third bytespec) env)))
-	(cond
-	 ((or (minusp size) (minusp position))
-	  (error "Negative byte-spec for ldb."))
-	 ((= 0 size)
-	  `(progn ,integer 0))
-	 ((<= (+ size position) (- 31 movitz:+movitz-fixnum-shift+))
-	  `(with-inline-assembly (:returns :register
-					   :type (integer 0 ,(mask-field (byte size 0) -1)))
+(define-compiler-macro ldb%byte (&whole form &environment env size position integer)
+  (cond
+   ((and (movitz:movitz-constantp size env)
+	 (movitz:movitz-constantp position env)
+	 (movitz:movitz-constantp integer env))
+    (ldb (byte (movitz:movitz-eval size env)
+	       (movitz:movitz-eval position env))
+	 (movitz:movitz-eval integer env))) ; constant folding
+   ((and (movitz:movitz-constantp size env)
+	 (movitz:movitz-constantp position env))
+    (let ((size (movitz:movitz-eval size env))
+	  (position (movitz:movitz-eval position env)))
+      (cond
+       ((or (minusp size) (minusp position))
+	(error "Negative byte-spec for ldb."))
+       ((= 0 size)
+	`(progn ,integer 0))
+       ((<= (+ size position) (- 31 movitz:+movitz-fixnum-shift+))
+	`(with-inline-assembly (:returns :register
+					 :type (integer 0 ,(mask-field (byte size 0) -1)))
+	   (:compile-form (:result-mode :eax) ,integer)
+	   (:call-global-constant unbox-u32)
+	   (:andl ,(mask-field (byte size position) -1) :ecx)
+	   ,@(unless (zerop position)
+	       `((:shrl ,position :ecx)))
+	   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) (:result-register))))
+       ((<= (+ size position) 32)
+	`(with-inline-assembly-case ()
+	   (do-case (t :eax :labels (nix done))
 	     (:compile-form (:result-mode :eax) ,integer)
+	     ,@(cond
+		((and (= 0 position) (= 32 size))
+		 ;; If integer is a positive bignum with one bigit, return it.
+		 `((:leal (:eax ,(- (movitz:tag :other))) :ecx)
+		   (:testb 7 :cl)
+		   (:jnz 'nix)
+		   (:cmpl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0))
+			  (:eax ,movitz:+other-type-offset+))
+		   (:je 'done)))
+		((and (= 0 position) (<= (- 32 movitz:+movitz-fixnum-shift+) size ))
+		 `((:leal (:eax ,(- (movitz:tag :other))) :ecx)
+		   (:testb 7 :cl)
+		   (:jnz 'nix)
+		   (:cmpl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0))
+			  (:eax ,movitz:+other-type-offset+))
+		   (:jne 'nix)
+		   (:movl (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
+			  :ecx)
+		   (:testl ,(logxor #xffffffff (mask-field (byte size 0) -1))
+			   :ecx)
+		   (:jz 'done)
+		   (:andl ,(mask-field (byte size 0) -1)
+			  :ecx)
+		   (:call-global-constant box-u32-ecx)
+		   (:jmp 'done))))
+	    nix
 	     (:call-global-constant unbox-u32)
-	     (:andl ,(mask-field (byte size position) -1) :ecx)
+	     ,@(unless (= 32 (- size position))
+		 `((:andl ,(mask-field (byte size position) -1) :ecx)))
 	     ,@(unless (zerop position)
 		 `((:shrl ,position :ecx)))
-	     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) (:result-register))))
-	 ((<= (+ size position) 32)
-	  `(with-inline-assembly-case ()
-	     (do-case (t :eax :labels (nix done))
-	       (:compile-form (:result-mode :eax) ,integer)
-	       ,@(cond
-		  ((and (= 0 position) (= 32 size))
-		   ;; If integer is a positive bignum with one bigit, return it.
-		   `((:leal (:eax ,(- (movitz:tag :other))) :ecx)
-		     (:testb 7 :cl)
-		     (:jnz 'nix)
-		     (:cmpl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0))
-			    (:eax ,movitz:+other-type-offset+))
-		     (:je 'done)))
-		  ((and (= 0 position) (<= (- 32 movitz:+movitz-fixnum-shift+) size ))
-		   `((:leal (:eax ,(- (movitz:tag :other))) :ecx)
-		     (:testb 7 :cl)
-		     (:jnz 'nix)
-		     (:cmpl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0))
-			    (:eax ,movitz:+other-type-offset+))
-		     (:jne 'nix)
-		     (:movl (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
-			    :ecx)
-		     (:testl ,(logxor #xffffffff (mask-field (byte size 0) -1))
-			     :ecx)
-		     (:jz 'done)
-		     (:andl ,(mask-field (byte size 0) -1)
-			    :ecx)
-		     (:call-global-constant box-u32-ecx)
-		     (:jmp 'done))))
-	      nix
-	       (:call-global-constant unbox-u32)
-	       ,@(unless (= 32 (- size position))
-		   `((:andl ,(mask-field (byte size position) -1) :ecx)))
-	       ,@(unless (zerop position)
-		   `((:shrl ,position :ecx)))
-	       (:call-global-constant box-u32-ecx)
-	      done)))
-	 (t form))))
-     (t form))))
+	     (:call-global-constant box-u32-ecx)
+	    done)))
+       (t form))))
+   (t form)))
+
+(defun ldb (bytespec integer)
+  (ldb%byte (byte-size bytespec) (byte-position bytespec) integer))
+
+(define-compiler-macro ldb (&whole form &environment env bytespec integer)
+  (let ((bytespec (movitz::movitz-macroexpand bytespec env)))
+    (if (not (and (consp bytespec) (eq 'byte (car bytespec))))
+	form
+      `(ldb%byte ,(second bytespec) ,(third bytespec) ,integer))))
 
 (define-setf-expander ldb (bytespec int &environment env)
   "Stolen from the Hyperspec example in the define-setf-expander entry."
