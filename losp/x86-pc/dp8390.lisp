@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 18 12:21:36 2002
 ;;;;                
-;;;; $Id: dp8390.lisp,v 1.4 2004/02/02 13:41:52 ffjeld Exp $
+;;;; $Id: dp8390.lisp,v 1.5 2004/02/02 14:03:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -128,7 +128,7 @@
   ;; Must be located inside with-dp8390.
   `(multiple-value-prog1
        (macrolet ((dp8390-abort-dma ()
-		    `(setf (,dp8390-var ($page0-write cr)) ($command abort-complete))))
+		    `(setf (,',dp8390-var ($page0-write cr)) ($command abort-complete))))
 	 (initialize-dma ,dp8390-var ($command ,rdma-command) ,size ,address)
 	 ,@body)
      (wait-for-dma-completion ,dp8390-var ',rdma-command)))
