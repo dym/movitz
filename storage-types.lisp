@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.48 2005/01/03 11:55:57 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.49 2005/01/17 10:54:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -771,7 +771,10 @@ integer (native lisp) value."
    (entry-protocol
     :initform :default
     :initarg :entry-protocol
-    :reader funobj-entry-protocol))
+    :reader funobj-entry-protocol)
+   (headers-on-stack-frame-p
+    :initform nil
+    :accessor headers-on-stack-frame-p))
   (:slot-align type #.+other-type-offset+))
 
 (defmethod write-binary-record ((obj movitz-funobj) stream)
