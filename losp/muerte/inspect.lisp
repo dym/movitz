@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.4 2004/03/26 14:05:20 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.5 2004/03/29 14:33:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -168,6 +168,24 @@ after the point that called this stack-frame."
        (when (member :catch types)
 	 (format t "~&catch:   ~Z: ~S" tag tag))))))
 
+(defun shallow-copy (old)
+  "Allocate a new object that is similar to the old one."
+  (etypecase old
+    (cons
+     (cons (car old) (cdr old)))
+    (std-instance
+     (allocate-std-instance (std-instance-class old)
+			    (std-instance-slots old)))
+    (symbol
+     (copy-symbol old t))
+    (vector
+     (make-array (array-dimension old 0)
+		 :element-type (array-element-type old)
+		 :initial-contents old
+		 :fill-pointer (fill-pointer old)))
+    (function
+     (copy-funobj old))
+    ))
 
 (defun malloc-words (words)
   (malloc-clumps (1+ (truncate (1+ words) 2))))
@@ -182,3 +200,60 @@ after the point that called this stack-frame."
       (setf (memref x -6 (* i 2) :lisp) nil
 	    (memref x -2 (* i 2) :lisp) nil))
     x))
+
+(defun malloc-data-clumps (clumps)
+  "Allocate clumps for non-pointer data (i.e. doesn't require initialization)."
+  (malloc-clumps clumps))
+
+(defun location-in-object-p (object location)
+  "Is location inside object?"
+  (let ((object-location (object-location object)))
+    (etypecase object
+      ((or number null character)
+       nil)
+      (cons
+       (<= object-location
+	   location
+	   (+ object-location 1)))
+      (symbol
+       (<= object-location
+	   location
+	   (+ -1 object-location #.(movitz::movitz-type-word-size :movitz-symbol))))
+      (run-time-context
+       (<= object-location
+	   location
+	   (+ -1 object-location #.(movitz::movitz-type-word-size :movitz-constant-block))))
+      (std-instance
+       (<= object-location
+	   location
+	   (+ -1 object-location #.(movitz::movitz-type-word-size :movitz-std-instance))))
+      (function
+       (<= object-location
+	   location
+	   (+ -1 object-location
+	      #.(movitz::movitz-type-word-size :movitz-funobj)
+	      (funobj-num-constants object))))
+      ((or vector-u8 string)
+       (<= object-location
+	   location
+	   (+ -1 object-location
+	      #.(movitz::movitz-type-word-size :movitz-vector)
+	      (* 2 (truncate (+ (array-dimension object 0) 7) 8)))))
+      (vector-u16
+       (<= object-location
+	   location
+	   (+ -1 object-location
+	      #.(movitz::movitz-type-word-size :movitz-vector)
+	      (* 2 (truncate (+ (array-dimension object 0) 3) 4)))))
+      ((or vector-u32 simple-vector)
+       (<= object-location
+	   location
+	   (+ -1 object-location
+	      #.(movitz::movitz-type-word-size :movitz-vector)
+	      (* 2 (truncate (+ (array-dimension object 0) 1) 2)))))
+      (structure-object
+       (<= object-location
+	   location
+	   (+ -1 object-location
+	      #.(movitz::movitz-type-word-size :movitz-struct)
+	      (* 2 (truncate (+ (structure-object-length object) 1) 2))))))))
