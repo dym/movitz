@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.5 2004/04/07 00:18:57 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.6 2004/04/19 15:05:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -65,7 +65,7 @@
   (if (not (and (movitz:movitz-constantp slot-name env)
 		(equal context '(current-run-time-context))))
       form
-    (let ((slot-name (movitz::eval-form slot-name env)))
+    (let ((slot-name (movitz:movitz-eval slot-name env)))
       (ecase (bt:binary-slot-type 'movitz::movitz-constant-block (intern (symbol-name slot-name) :movitz))
 	(movitz:word
 	 `(with-inline-assembly (:returns :eax)
