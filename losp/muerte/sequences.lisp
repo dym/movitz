@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.8 2004/05/20 17:48:04 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.9 2004/06/10 12:21:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1268,6 +1268,10 @@
     (vector
      (error "vector delete-if not implemented."))))
 
+(defun delete-if-not (test sequence &rest key-args)
+  (declare (dynamic-extent key-args))
+  (apply 'delete-if (complement test) sequence key-args))
+
 (defun remove-duplicates (sequence &key (test 'eql) (key 'identity) (start 0) end test-not from-end)
   (when test-not
     (setf test (complement test-not)))
@@ -1575,6 +1579,27 @@ quick-sort with cut-off greater than 1."
 	(if (eq list-1 (cdr head))
 	    (return list-1))))))
 
+(defun make-sequence (result-type size &key (initial-element nil initial-element-p))
+  "=> sequence"
+  (ecase result-type
+    (string
+     (if (not initial-element-p)
+	 (make-string size)
+       (make-string size :initial-element initial-element)))
+    (list
+     (make-list size :initial-element initial-element))))
 
-  
+(defun concatenate (result-type &rest sequences)
+  "=> result-sequence"
+  (declare (dynamic-extent sequences))
+  (cond
+   ((null sequences)
+    (make-sequence result-type 0))
+   ((and (null (rest sequences))
+	 (typep (first sequences) result-type))
+    (copy-seq (first sequences)))
+   ((= 0 (length (first sequences)))
+    (apply #'concatenate result-type (cdr sequences)))
+   (t (error "Can't concatenate ~S yet: ~:S" result-type sequences))))
+     
   
