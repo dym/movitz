@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.39 2004/09/22 17:58:56 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.40 2004/10/01 12:44:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -323,16 +323,7 @@ duo-space where each space is KB-SIZE kilobytes."
 	  (assert (eq space0 (space-other space1)))
 	  (assert (= 2 (space-fresh-pointer space1)))
 	  (setf (%run-time-context-slot 'nursery-space) space1)
-	  (values space1 space0)
-	  #+ignore
-	  (multiple-value-bind (newspace oldspace)
-	      (if (< (space-fresh-pointer space0) ; Chose the emptiest space as newspace.
-		     (space-fresh-pointer space1))
-		  (values space0 space1)
-		(values space1 space0))
-	    ;; Ensure newspace is activated.
-	    (setf (%run-time-context-slot 'nursery-space) newspace)
-	    (values newspace oldspace))))
+	  (values space1 space0)))
     ;; Evacuate-oldspace is to be mapped over every potential pointer.
     (let ((evacuator
 	   (or evacuator
@@ -375,45 +366,46 @@ duo-space where each space is KB-SIZE kilobytes."
 
       ;; Consistency check..
       (when *gc-consitency-check*
-	(let ((a *x*))
-	  ;; First, restore the state of old-space
-	  (do ((i 0 (+ i 3)))
-	      ((>= i (length a)))
-	    (let ((old (%lispval-object (aref a i)))
-		  (old-class (aref a (+ i 1))))
-	      (setf (memref (object-location old) 0 0 :unsigned-byte32) old-class)))
-	  ;; Then, check that each migrated object is equalp to its new self.
-	  (do ((i 0 (+ i 3)))
-	      ((>= i (length a)))
-	    (let ((old (%lispval-object (aref a i)))
-		  (new (%lispval-object (aref a (+ i 2)))))
-	      (unless (and (object-in-space-p newspace new)
-			   (object-in-space-p oldspace old)
-			   (objects-equalp old new))
-		(let ((*old* old)
-		      (*new* new)
-		      (*old-class* (aref a (+ i 1))))
-		  (declare (special *old* *new* *old-class*))
-		  (with-simple-restart (continue "Ignore failed GC consistency check.")
-		    (error "GC consistency check failed:
+	(without-interrupts
+	  (let ((a *x*))
+	    ;; First, restore the state of old-space
+	    (do ((i 0 (+ i 3)))
+		((>= i (length a)))
+	      (let ((old (%lispval-object (aref a i)))
+		    (old-class (aref a (+ i 1))))
+		(setf (memref (object-location old) 0 0 :unsigned-byte32) old-class)))
+	    ;; Then, check that each migrated object is equalp to its new self.
+	    (do ((i 0 (+ i 3)))
+		((>= i (length a)))
+	      (let ((old (%lispval-object (aref a i)))
+		    (new (%lispval-object (aref a (+ i 2)))))
+		(unless (and (object-in-space-p newspace new)
+			     (object-in-space-p oldspace old)
+			     (objects-equalp old new))
+		  (let ((*old* old)
+			(*new* new)
+			(*old-class* (aref a (+ i 1))))
+		    (declare (special *old* *new* *old-class*))
+		    (with-simple-restart (continue "Ignore failed GC consistency check.")
+		      (error "GC consistency check failed:
 old object: ~Z: ~S
 new object: ~Z: ~S
 oldspace: ~Z, newspace: ~Z, i: ~D"
-			   old old new new oldspace newspace i))))))
-	  (map-heap-words (lambda (x y)
-			    (declare (ignore y))
-			    (when (location-in-object-p (space-other (%run-time-context-slot 'nursery-space))
-							(object-location x))
-			      (break "Seeing old object in values-vector: ~Z" x))
-			    x)
-			  #x38 #xb8)
-	  (let* ((stack (%run-time-context-slot 'muerte::nursery-space))
-		 (stack-start (- (length stack) (muerte::current-control-stack-depth))))
-	    (do ((i 0 (+ i 3)))
-		((>= i (length a)))
-	      (when (find (aref a i) stack :start stack-start)
-		(break "Seeing old object ~S in current stack!"
-		       (aref a i)))))))
+			     old old new new oldspace newspace i))))))
+	    (map-heap-words (lambda (x y)
+			      (declare (ignore y))
+			      (when (location-in-object-p (space-other (%run-time-context-slot 'nursery-space))
+							  (object-location x))
+				(break "Seeing old object in values-vector: ~Z" x))
+			      x)
+			    #x38 #xb8)
+	    (let* ((stack (%run-time-context-slot 'muerte::nursery-space))
+		   (stack-start (- (length stack) (muerte::current-control-stack-depth))))
+	      (do ((i 0 (+ i 3)))
+		  ((>= i (length a)))
+		(when (find (aref a i) stack :start stack-start)
+		  (break "Seeing old object ~S in current stack!"
+			 (aref a i))))))))
 
       ;; GC completed, oldspace is evacuated.
       (unless *gc-quiet*
