@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.17 2004/07/12 11:09:18 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.18 2004/07/13 02:21:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -199,10 +199,16 @@ The unit clump is 8 bytes, or two words."
 	     (:compile-form (:result-mode :ebx) clumps)
 	     (:shll 1 :ebx)
 	     (:globally (:call (:edi (:edi-offset malloc))))
-	     (:addl #.(movitz::tag :other) :eax))))
-    (dotimes (i clumps)
-      (setf (memref x -6 (* i 2) :lisp) nil
-	    (memref x -2 (* i 2) :lisp) nil))
+	     (:addl #.(movitz::tag :other) :eax)
+	     (:xorl :ecx :ecx)
+	    reset-loop
+	     (:movl :edi (:eax :ecx -6))
+	     (:addl 4 :ecx)
+	     (:cmpl :ecx :ebx)
+	     (:jae 'reset-loop))))
+    #+ignore
+    (dotimes (i (* 2 clumps))
+      (setf (memref x -6 i :lisp) nil))
     x))
 
 (defun malloc-data-clumps (clumps)
@@ -308,16 +314,16 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 
 (defun copy-bignum (old)
   (check-type old bignum)
-  (let* ((length (1+ (%bignum-bigits old)))
+  (let* ((length (%bignum-bigits old))
 	 (new (malloc-data-words length)))
     (with-inline-assembly (:returns :eax)
       (:compile-two-forms (:eax :ebx) new old)
       (:compile-form (:result-mode :edx) length)
      copy-bignum-loop
-      (:subl #.movitz:+movitz-fixnum-factor+ :edx)
       (:movl (:ebx :edx #.movitz:+other-type-offset+) :ecx)
       (:movl :ecx (:eax :edx #.movitz:+other-type-offset+))
-      (:jnz 'copy-bignum-loop))))
+      (:subl #.movitz:+movitz-fixnum-factor+ :edx)
+      (:jnc 'copy-bignum-loop))))
 
 (defun print-bignum (x)
   (check-type x bignum)
