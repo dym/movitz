@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.30 2004/11/18 17:58:50 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.31 2004/11/23 19:03:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -46,9 +46,6 @@
 
 (in-package muerte.init)
 
-(defun xx (a b)
-  (eql b #x123456789))
-
 (defun test0 ()
   (ash 1 -1000000000000))
 
@@ -72,7 +69,7 @@
   (loop for x below 2 count (not (not (typep x t)))))
 
 (defun test4 ()
-  (let ((a 1)) (if (not (/= a 0)) a 0)))
+  (let ((aa 1)) (if (not (/= aa 0)) aa 0)))
 
 
 (defun test-floppy ()
@@ -243,13 +240,6 @@
   (declare (dynamic-extent args))
   (break "xfuncall:~{ ~S~^,~}" args)
   (values))
-
-(defun xx ()
-  (format t "wefewf")
-  (with-inline-assembly (:returns :untagged-fixnum-ecx)
-    (:sbbl :edx :edx)
-    (:andl :edx :ecx)
-    (:leal (:edx :ecx 1) :ecx)))
 
 (defun xfoo (f) 
   (do-check-esp
@@ -545,8 +535,11 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
    (print 'hello-cleanup)))
 
 (defun test-cons (x)
-  (let ((c (cons x x)))
-    (cdr c)))
+  (let ((cc (cons x x)))
+    (cdr cc)))
+
+(defun xx (x)
+  (eql nil x))
 
 (defun test-fixed (x y z)
   (warn "x: ~W, y: ~W, z: ~W" x y z))
@@ -732,7 +725,7 @@ s#+ignore
 (defclass pie2 (food)
   ((filling :accessor pie-filling 
 	    :initarg :filling
-	    :initform nil)))
+	    )))
 
 (defmethod cook ((p (eql 'pie)))
   (warn "Won't really cook a symbolic pie!")
@@ -796,7 +789,7 @@ s#+ignore
 
 (defun init-nano-sleep ()
   (setf *cpu-frequency-mhz*
-    (truncate (assess-cpu-frequency) 100)))
+    (truncate (assess-cpu-frequency) 976)))
 
 (defun nano-sleep (nano-seconds)
   (let* ((t0 (read-time-stamp-counter))
@@ -844,7 +837,16 @@ s#+ignore
 		      (read-time-stamp-counter)
 		    (+ (ash (ldb (byte 16 0) hi) 13) 
 		       (ash lo -16)))))
-	      (setf internal-time-units-per-second res)))))))))
+	      (setf internal-time-units-per-second res))))))))
+  (setf (symbol-function 'sleep)
+    (lambda (seconds)
+      ;; A stupid busy-waiting sleeper.
+      (check-type seconds (real 0 *))
+      (let ((start-time (get-internal-run-time)))
+	(loop with start-time = (get-internal-run-time)
+	    with end-time = (+ start-time (* seconds internal-time-units-per-second))
+	    while (< (get-internal-run-time) end-time)))))
+  (values))
 
 
 ;;;(defun get-internal-run-time ()
@@ -1260,13 +1262,15 @@ Can be used to measure the overhead of primitive function."
 		       (incf (memref-int muerte.x86-pc::*screen* :index 80 :type :unsigned-byte16)))))
 	(incf (memref-int muerte.x86-pc::*screen* :index 160 :type :unsigned-byte16))))))
 
-(defun mumbojumbo ()
-  (with-inline-assembly (:returns :multiple-values)
-    (:leave)
-    (:movl (:ebp -4) :esi)
-    (:break)
-    (:ret)))
-
+(defun mumbojumbo (x)
+  (with-inline-assembly (:returns :eax)
+    (:compile-form (:result-mode :untagged-fixnum-ecx) x)
+    (:movl 0 :eax)
+    (:cmpl -1 :ecx)
+    (:jno 'no-overflow)
+    (:movl 4 :eax)
+   no-overflow))
+    
 (defun genesis ()
   ;; (install-shallow-binding)
   (let ((extended-memsize 0))
@@ -1591,7 +1595,7 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
 (define-primitive-function dynamic-variable-lookup-shallow (symbol)
   "Load the dynamic value of SYMBOL into EAX."
   (with-inline-assembly (:returns :multiple-values)
-    (:movl (:eax (:offset movitz-symbol value)) :eax)
+    (:movl (:ebx (:offset movitz-symbol value)) :eax)
     (:ret)))
 
 (define-primitive-function dynamic-variable-store-shallow (symbol value)
