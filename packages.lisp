@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.14 2004/04/07 00:34:06 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.15 2004/04/14 12:41:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1293,7 +1293,8 @@
 	   #:+movitz-fixnum-shift+
 	   #:+movitz-fixnum-zmask+
 	   #:+scan-skip-word+
-	   #:constant0
+	   #:+code-vector-word-offset+
+	   #:+code-vector-transient-word+
 	   
 	   #:movitz-object-browser-properties
 	   #:movitz-heap-object
