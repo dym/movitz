@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:52:58 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: movitz.lisp,v 1.6 2004/04/14 12:37:23 ffjeld Exp $
+;;;; $Id: movitz.lisp,v 1.7 2004/04/21 15:09:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -61,6 +61,13 @@ make clear it's a Movitz object, with extra <..>"
 				     (declare (ignore subchar arg))
 				     (list 'muerte.common-lisp::function
 					   (read stream t nil t))))
+     (set-dispatch-macro-character #\# #\{
+				   (lambda (stream subchar arg)
+				     (declare (ignore subchar arg))
+				     (let ((data (read-delimited-list #\} stream)))
+				       (make-movitz-vector (length data)
+							   :element-type 'movitz-unboxed-integer-u8
+							   :initial-contents data))))
      (set-macro-character #\` (lambda (stream char)
 				(declare (ignore char))
 				(let ((*bq-level* (1+ *bq-level*)))
