@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.23 2004/02/12 21:57:05 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.24 2004/02/13 10:40:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2709,6 +2709,14 @@ bindings are located in the appropriate register, so no stack location is needed
      mode)
     (t default-mode)))
 
+(defun chose-free-register (unfree-registers &optional (preferred-register :eax))
+  (cond
+   ((not (member preferred-register unfree-registers))
+    preferred-register)
+   ((find-if (lambda (r) (not (member r unfree-registers)))
+	     '(:eax :ebx :ecx :edx)))
+   (t (error "Unable to find a free register."))))
+
 (defun make-indirect-reference (base-register offset)
   "Make the shortest possible assembly indirect reference, explointing the constant edi register."
   (if (<= #x-80 offset #x7f)
@@ -2874,51 +2882,55 @@ loading borrowed bindings."
 		   (install-for-single-value binding binding-location :eax nil)))
 	       ))))))))
 
-(defun make-store-lexical (binding source shared-reference-p frame-map)
+(defun make-store-lexical (binding source shared-reference-p frame-map
+			   &key protect-registers)
   (assert (not (and shared-reference-p
 		    (not (binding-lended-p binding))))
       (binding)
     "funny binding: ~W" binding)
-  (cond
-   ((typep binding 'borrowed-binding)
-    (let ((slot (borrowed-binding-reference-slot binding)))
-      (if (not shared-reference-p)
-	  (let ((tmp-reg (if (eq source :eax) :ebx :eax)))
-	    `((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
-		     ,tmp-reg)
-	      (:movl ,source (-1 ,tmp-reg))))
-	`((:movl ,source (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot))))))))
-   ((typep binding 'forwarding-binding)
-    (assert (not (binding-lended-p binding)) (binding))
-    (make-store-lexical (forwarding-binding-target binding)
-			source shared-reference-p frame-map))
-   ((not (new-binding-located-p binding frame-map))
-    ;; (warn "Can't store to unlocated binding ~S." binding)
-    nil)
-   ((and (binding-lended-p binding)
-	 (not shared-reference-p))
-    (let ((tmp-reg (if (eq source :eax) :ebx :eax))
-	  (location (new-binding-location binding frame-map)))
-      (if (integerp location)
-	  `((:movl (:ebp ,(stack-frame-offset location)) ,tmp-reg)
-	    (:movl ,source (,tmp-reg -1)))
-	(ecase location
-	  (:argument-stack
-	   (assert (<= 2 (function-argument-argnum binding)) ()
-	     "store-lexical argnum can't be ~A." (function-argument-argnum binding))
-	   `((:movl (:ebp ,(argument-stack-offset binding)) ,tmp-reg)
-	     (:movl ,source (,tmp-reg -1))))))))
-   (t (let ((location (new-binding-location binding frame-map)))
+  (let ((protect-registers (cons source protect-registers)))
+    (cond
+     ((typep binding 'borrowed-binding)
+      (let ((slot (borrowed-binding-reference-slot binding)))
+	(if (not shared-reference-p)
+	    (let ((tmp-reg (chose-free-register protect-registers)
+			   #+ignore(if (eq source :eax) :ebx :eax)))
+	      `((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
+		       ,tmp-reg)
+		(:movl ,source (-1 ,tmp-reg))))
+	  `((:movl ,source (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot))))))))
+     ((typep binding 'forwarding-binding)
+      (assert (not (binding-lended-p binding)) (binding))
+      (make-store-lexical (forwarding-binding-target binding)
+			  source shared-reference-p frame-map))
+     ((not (new-binding-located-p binding frame-map))
+      ;; (warn "Can't store to unlocated binding ~S." binding)
+      nil)
+     ((and (binding-lended-p binding)
+	   (not shared-reference-p))
+      (let ((tmp-reg (chose-free-register protect-registers)
+		     #+ignore (if (eq source :eax) :ebx :eax))
+	    (location (new-binding-location binding frame-map)))
 	(if (integerp location)
-	    `((:movl ,source (:ebp ,(stack-frame-offset location))))
+	    `((:movl (:ebp ,(stack-frame-offset location)) ,tmp-reg)
+	      (:movl ,source (,tmp-reg -1)))
 	  (ecase location
-	    ((:eax :ebx :edx)
-	     (unless (eq source location)
-	       `((:movl ,source ,location))))
 	    (:argument-stack
 	     (assert (<= 2 (function-argument-argnum binding)) ()
 	       "store-lexical argnum can't be ~A." (function-argument-argnum binding))
-	     `((:movl ,source (:ebp ,(argument-stack-offset binding)))))))))))
+	     `((:movl (:ebp ,(argument-stack-offset binding)) ,tmp-reg)
+	       (:movl ,source (,tmp-reg -1))))))))
+     (t (let ((location (new-binding-location binding frame-map)))
+	  (if (integerp location)
+	      `((:movl ,source (:ebp ,(stack-frame-offset location))))
+	    (ecase location
+	      ((:eax :ebx :edx)
+	       (unless (eq source location)
+		 `((:movl ,source ,location))))
+	      (:argument-stack
+	       (assert (<= 2 (function-argument-argnum binding)) ()
+		 "store-lexical argnum can't be ~A." (function-argument-argnum binding))
+	       `((:movl ,source (:ebp ,(argument-stack-offset binding))))))))))))
 
 (defun finalize-code (code funobj frame-map)
   (labels ((actual-binding (b)
@@ -5333,17 +5345,17 @@ and a list of any intervening unwind-protect environment-slots."
 ;;;;;;;;;;;;;;;;;; incf-lexvar
 
 (define-find-write-binding-and-type :incf-lexvar (instruction)
-  (destructuring-bind (binding delta)
+  (destructuring-bind (binding delta &key protect-registers)
       (cdr instruction)
-    (declare (ignore delta))
+    (declare (ignore delta protect-registers))
     (values binding 'integer)))
 
-(define-find-read-bindings :incf-lexvar (binding delta)
-  (declare (ignore delta))
+(define-find-read-bindings :incf-lexvar (binding delta &key protect-registers)
+  (declare (ignore delta protect-registers))
   binding)
 
 (define-extended-code-expander :incf-lexvar (instruction funobj frame-map)
-  (destructuring-bind (binding delta)
+  (destructuring-bind (binding delta &key protect-registers)
       (cdr instruction)
     (check-type binding binding)
     (check-type delta integer)
@@ -5353,32 +5365,38 @@ and a list of any intervening unwind-protect environment-slots."
 	"Weird encoded-type: ~S" (binding-store-type binding))
       (cond
        ((and location
+	     (not (binding-lended-p binding))
 	     (multiple-value-call #'encoded-subtypep
 	       (values-list (binding-store-type binding))
 	       (type-specifier-encode 'integer)))
-	#+ignore
-	(warn "incf ~S type: ~S location: ~S"
-	      binding
-	      (apply #'encoded-type-decode (binding-store-type binding))
-	      location)
+	;; This is an optimized incf that doesn't have to do type-checking.
 	(check-type location (integer 1 *))
 	`((:addl ,(* delta +movitz-fixnum-factor+)
 		 (:ebp ,(stack-frame-offset location)))
 	  (:into)))
        ((multiple-value-call #'encoded-subtypep 
-	       (values-list (binding-store-type binding))
-	       (type-specifier-encode 'integer))
-	`(,@(make-load-lexical (ensure-local-binding binding funobj) :eax funobj nil frame-map)
-	    (:addl ,(* delta +movitz-fixnum-factor+) :eax)
-	    (:into)
-	    ,@(make-store-lexical (ensure-local-binding binding funobj)
-				  :eax nil frame-map)))
-       (t `(,@(make-load-lexical (ensure-local-binding binding funobj) :eax funobj nil frame-map)
-	      (:testb ,+movitz-fixnum-zmask+ :al)
-	      (:jnz '(:sub-program (,(gensym "not-integer-"))
-		      (:int 107)
-		      (:jmp (:pc+ -4))))
+	  (values-list (binding-store-type binding))
+	  (type-specifier-encode 'integer))
+	(let ((register (chose-free-register protect-registers)))
+	  `(,@(make-load-lexical (ensure-local-binding binding funobj) 
+				 register funobj nil frame-map
+				 :protect-registers protect-registers)
 	      (:addl ,(* delta +movitz-fixnum-factor+) :eax)
 	      (:into)
-	      ,@(make-store-lexical (ensure-local-binding binding funobj) :eax nil frame-map)))))))
+	      ,@(make-store-lexical (ensure-local-binding binding funobj)
+				    register nil frame-map
+				    :protect-registers protect-registers))))
+       (t (let ((register (chose-free-register protect-registers)))
+	    `(,@(make-load-lexical (ensure-local-binding binding funobj)
+				   register funobj nil frame-map
+				   :protect-registers protect-registers)
+		(:testb ,+movitz-fixnum-zmask+ ,(register32-to-low8 register))
+		(:jnz '(:sub-program (,(gensym "not-integer-"))
+			(:int 107)
+			(:jmp (:pc+ -4))))
+		(:addl ,(* delta +movitz-fixnum-factor+) ,register)
+		(:into)
+		,@(make-store-lexical (ensure-local-binding binding funobj)
+				      register nil frame-map
+				      :protect-registers protect-registers))))))))
 
