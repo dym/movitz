@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.16 2004/07/08 21:52:29 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.17 2004/07/12 08:00:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -805,6 +805,32 @@ s#+ignore
       (dolist (x cl:/ (values-list cl:/))
 	(do-print x)))))
 
+(defmacro with-paging (options &body body)
+  (declare (ignore options))
+  `(block paging
+     (let ((*paging-offset* 2))
+       (handler-bind
+	   ((newline (lambda (condition)
+		       (declare (ignore condition))
+		       (when (>= (incf *paging-offset*)
+				 muerte.x86-pc::*screen-height*)
+			 (format t "~&more? ")
+			 (loop
+			   (case (muerte.x86-pc.keyboard:poll-char)
+			     ((#\esc #\n #\N)
+			      (return-from paging (values)))
+			     ((#\y #\Y #\space #\newline)
+			      (setf *paging-offset* 1)
+			      (return))))))))
+	 ,@body))))
+
+(defun tp (x) (dotimes (i x) (print i)))
+
+(define-toplevel-command :more (form)
+  (with-paging ()
+    (multiple-value-call #'format t "~@{~&~W~}"
+			 (eval form))))
+	 
 (define-toplevel-command :pop ()
   (when *debugger-dynamic-context*
     (let ((r (find-restart-from-context 'abort *debugger-dynamic-context*)))
