@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.11 2004/11/24 14:22:57 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.12 2004/11/24 16:21:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -43,6 +43,7 @@
 	   :type ,type))
 
 (require :lib/net/arp)
+(require :lib/net/tftp)
 
 (defclass ip4-stack ()
   ((interface
