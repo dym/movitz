@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct 17 21:50:42 2001
 ;;;;                
-;;;; $Id: read.lisp,v 1.6 2004/07/21 14:15:43 ffjeld Exp $
+;;;; $Id: read.lisp,v 1.7 2004/07/21 22:35:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,6 +18,9 @@
 (provide :muerte/read)
 
 (in-package muerte)
+
+(defvar *read-suppress*)
+(defvar *readtable*)
 
 (defun substring (string start end)
   (if (and (zerop start) (= end (length string)))
@@ -302,19 +305,6 @@ of string delimited by start and end."
       (t (return-from simple-read-from-string
 	   (simple-read-token string :start i :end end))))))
 
-;;;(defun read-char (&optional input-stream eof-error-p eof-value recursive-p)
-;;;  " => char"
-;;;  (declare (ignore recursive-p))
-;;;  (let* ((stream (input-stream-designator input-stream))
-;;;	 (char (stream-read-char stream)))
-;;;    (cond
-;;;     ((not (eq :eof char))
-;;;      char)
-;;;     (eof-error-p
-;;;      (error 'end-of-file :stream stream))
-;;;     (t eof-value))))
-
-
 (defun un-backquote (form level)
   "Dont ask.."
   (declare (notinline un-backquote))
@@ -340,7 +330,7 @@ of string delimited by start and end."
 			     (muerte::movitz-backquote
 			      (list 'list
 				    (list 'list (list 'quote 'muerte::movitz-backquote)
-					  (un-backquote-xxx (cadr sub-form) (1+ level)))))
+					  (un-backquote (cadr sub-form) (1+ level)))))
 			     (backquote-comma
 			      (cond
 			       ((= 0 level)
@@ -354,15 +344,19 @@ of string delimited by start and end."
 			       (t (list 'list
 					(list 'list
 					      (list 'quote 'backquote-comma)
-					      (un-backquote-xxx (cadr sub-form) (1- level)))))))
+					      (un-backquote (cadr sub-form) (1- level)))))))
 			     (backquote-comma-at
 			      (if (= 0 level)
 				  (cadr sub-form)
 				(list 'list
 				      (list 'list
 					    (list 'quote 'backquote-comma-at)
-					    (un-backquote-xxx (cadr sub-form) (1- level))))))
-			     (t (list 'list (un-backquote-xxx sub-form level)))))))))))
+					    (un-backquote (cadr sub-form) (1- level))))))
+			     (t (list 'list (un-backquote sub-form level))))))
+		     when (not (listp (cdr sub-form-head)))
+		     collect (list 'quote (cdr sub-form-head)))
+		 ))))
      (array
       (error "Array backquote not implemented."))
      (t (list 'quote form)))))
+
