@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.36 2004/07/31 23:35:03 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.37 2004/08/04 13:00:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -430,7 +430,6 @@ Result in EAX, with tag :other."
     (:leal (:ebx :ecx) :edx)		; new roof to EDX
     (:cmpl :edx (:eax))			; end of buffer?
     (:jl '(:sub-program (failed)
-	   (:movl (:eax) :esi)
 	   (:int 112)
 	   (:halt)
 	   (:jmp 'failed)))
@@ -455,7 +454,6 @@ Result in EAX, with tag 6."
     (:leal (:ebx :ecx) :edx)		; new roof to EDX
     (:cmpl :edx (:eax))			; end of buffer?
     (:jl '(:sub-program (failed)
-	   (:movl (:eax) :esi)
 	   (:int 112)
 	   (:halt)
 	   (:jmp 'failed)))
