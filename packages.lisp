@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.7 2004/03/17 16:36:36 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.8 2004/03/23 11:18:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1165,6 +1165,7 @@
 	   funobj-lambda-list
 	   funobj-name
 	   funobj-num-constants
+	   funobj-num-jumpers
 	   funobj-constant-ref
 	   funobj-debug-info
 	   install-function
