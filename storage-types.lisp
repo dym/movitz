@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.44 2004/11/10 15:35:32 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.45 2004/12/10 12:46:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -69,7 +69,7 @@
   :other 6
   :symbol 7
   
-  :old-vector #x1a
+  :code-vector #x1a
   :basic-vector #x22
   :defstruct #x2a
   :funobj #x3a
@@ -80,7 +80,6 @@
   :run-time-context #x50
   :illegal #x13
   :infant-object #x23
-
   :basic-restart #x32
   )
 
@@ -330,6 +329,27 @@ integer (native lisp) value."
     (setf (movitz-last-cdr (movitz-cdr movitz-list)) value)))
 
 ;;; movitz-vectors
+
+(define-binary-class movitz-code-vector (movitz-heap-object-other)
+  ((type
+    :binary-type other-type-byte
+    :reader movitz-vector-type
+    :initform :code-vector)
+   (blurg)
+   (num-elements
+    :binary-type word
+    :initarg :num-elements
+    :reader movitz-vector-num-elements
+    :map-binary-write 'movitz-read-and-intern
+    :map-binary-read-delayed 'movitz-word-and-print)
+   (data
+    :binary-lisp-type :label)		; data follows physically here
+   (symbolic-data
+    :initarg :symbolic-data
+    :initform nil
+    :accessor movitz-vector-symbolic-data))
+  (:slot-align type #.+other-type-offset+))
+
 
 (define-binary-class movitz-basic-vector (movitz-heap-object-other)
   ((type
