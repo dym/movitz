@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.18 2004/07/12 08:41:23 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.19 2004/07/13 02:39:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -113,9 +113,6 @@
 ;;;    (:compile-form (:result-mode :ecx) x)
 ;;;    (:leal (:edi -4) :eax)
 ;;;    (:rorb :cl :al)))
-
-(defun foo (x)
-  (foo x x))
 
 
 #+ignore
@@ -298,13 +295,6 @@
 	    (- (object-location result) (object-location foo))
 	    (- (object-location bar) (object-location result))))
     (values foo result bar)))
-
-(defun foo (number &rest more-numbers)
-  (declare (dynamic-extent more-numbers))
-  (do ((p more-numbers (cdr p)))
-      ((not (cdr p)) number)
-    (unless (< (car p) (cadr p))
-      (return nil))))
 
 (defun modx (x)
   (lambda ()
@@ -693,12 +683,6 @@ s#+ignore
 (defun test-nano-sleep (x)
   (time (nano-sleep x)))
 
-(defun mvtest ()
-  (multiple-value-call #'list (round 5 2))
-  (list (memref-int #x1000000 0 0 :unsigned-byte8)
-	(memref-int #x1000004 0 0 :unsigned-byte8)))
-
-
 ;;;;;
 
 ;;;;;;;;;;;;;;; CL
@@ -974,6 +958,20 @@ s#+ignore
     (loop
       (with-simple-restart (abort "Abort to command level ~D." (1+ *repl-level*))
 	(read-eval-print)))))
+
+(defun random (limit)
+  (etypecase limit
+    (fixnum
+     (rem (read-time-stamp-counter) limit))
+    (muerte::positive-bignum
+     (let ((x (muerte::copy-bignum limit)))
+       (dotimes (i (1- (muerte::%bignum-bigits x)))
+	 (setf (memref x 2 i :unsigned-byte32)
+	   (muerte::read-time-stamp-counter)))
+       (setf x (muerte::%bignum-canonicalize x))
+       (loop while (>= x limit)
+	   do (setf x (truncate x 2)))
+       x))))
 
 (defun genesis ()
   #+ignore
