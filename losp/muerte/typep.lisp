@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.29 2004/07/21 12:49:24 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.30 2004/07/21 14:16:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -426,7 +426,8 @@
   (let ((fname (intern (format nil "~A-~A" 'deftype name))))
     `(progn
        (eval-when (:compile-toplevel)
-	 ,form
+	 (unless (eq (symbol-package ',name) (find-package :common-lisp))
+	   ,form)
 	 (setf (gethash (translate-program ',name :cl :muerte.cl)
 			*compiler-derived-typespecs*)
 	   (lambda ,lambda ,@body))
