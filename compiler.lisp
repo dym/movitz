@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.133 2005/01/31 14:11:14 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.134 2005/02/02 07:48:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5369,7 +5369,7 @@ preceding code). As secondary value, returns the new :returns value."
 	   ((:single-value :eax :ebx)
 	    (values `((:addl ,(* 4 stack-displacement) :esp))
 		    :multiple-values)))) ; assume this addl will set CF=0
-	((:single-value :eax :ebx :ecx :edx :push :lexical-binding
+	((:single-value :eax :ebx :ecx :edx :push :lexical-binding :untagged-fixnum-ecx
 	  :boolean :boolean-branch-on-false :boolean-branch-on-true)
 	 (ecase returns
 	   (#.+boolean-modes+
