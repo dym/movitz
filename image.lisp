@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.26 2004/04/19 15:06:21 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.27 2004/04/21 15:06:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -549,7 +549,8 @@
     muerte:run-time-context
     muerte.mop:standard-effective-slot-definition
     muerte.mop:funcallable-standard-class
-    muerte:basic-restart))
+    muerte:basic-restart
+    muerte:illegal-object))
 
 (defun class-object-offset (name)
   (+ (bt:slot-offset 'movitz-vector 'data)
