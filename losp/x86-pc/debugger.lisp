@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.35 2005/02/28 23:34:02 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.36 2005/03/01 00:41:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -614,12 +614,31 @@ be provided for those cases."
 			(location-in-object-p (%run-time-context-slot slot-name)
 					      instruction-location))
 	       (return (values slot-name :run-time-context))))
-      (do-all-symbols (symbol)
-	(when (and (fboundp symbol)
+      (with-hash-table-iterator (hashis (get-global-property :setf-namespace))
+	(do () (nil)
+	  (multiple-value-bind (morep setf-name symbol)
+	      (hashis)
+	    (cond
+	     ((not morep)
+	      (return nil))
+	     ((and (fboundp symbol)
 		   (location-in-code-vector-p%unsafe (funobj-code-vector (symbol-function symbol))
 						     instruction-location))
-	  (return symbol))
+	      (return (list 'setf setf-name)))))))
+      (do-all-symbols (symbol)
+	(when (fboundp symbol)
+	  (let ((f (symbol-function symbol)))
+	    (when (location-in-code-vector-p%unsafe (funobj-code-vector f)
+						    instruction-location)
+	      (return symbol))
+	    (when (typep f 'generic-function)
+	      (dolist (m (generic-function-methods f))
+		(when (location-in-code-vector-p%unsafe (funobj-code-vector (method-function m))
+							instruction-location)
+		  (return-from find-function-name
+		    (funobj-name (method-function m))))))))
 	(when (and (boundp symbol)
 		   (typep (symbol-value symbol) 'code-vector)
 		   (location-in-code-vector-p%unsafe (symbol-value symbol) instruction-location))
 	  (return (values symbol :symbol-value))))))
+
