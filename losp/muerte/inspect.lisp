@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.9 2004/04/17 14:09:07 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.10 2004/06/02 23:21:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -175,6 +175,8 @@ after the point that called this stack-frame."
   (etypecase old
     (cons
      (cons (car old) (cdr old)))
+    (bignum
+     (copy-bignum old))
     (std-instance
      (allocate-std-instance (std-instance-class old)
 			    (std-instance-slots old)))
