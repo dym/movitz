@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.12 2004/08/23 13:58:19 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.13 2004/11/02 15:52:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -117,7 +117,7 @@
     :initarg :tag
     :reader throw-error-tag))
   (:report (lambda (c s)
-	     (format s "Cannot throw to tag ~Z." (throw-error-tag c)))))
+	     (format s "Cannot throw to tag `~S'." (throw-error-tag c)))))
 
 (define-condition wrong-argument-count (program-error)
   ((function
