@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.7 2004/04/11 18:56:31 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.8 2004/04/15 13:17:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -455,7 +455,7 @@ be provided for those cases."
 		       ((:fresh-lines *backtrace-do-fresh-lines*) *backtrace-do-fresh-lines*)
 		       (conflate *backtrace-do-conflate*)
 		       (length *backtrace-length*)
-		       print-returns
+		       print-returns conflate-interrupts
 		       ((:print-frames *backtrace-print-frames*) *backtrace-print-frames*))
   (let ((*print-safely* t)
 	(*standard-output* *debug-io*)
@@ -483,7 +483,7 @@ be provided for those cases."
 	       (integer
 		(let* ((interrupt-frame stack-frame)
 		       (funobj (interrupt-frame-ref interrupt-frame :esi :lisp)))
-		  (if (and conflate
+		  (if (and conflate-interrupts conflate
 			   ;; When the interrupted function has a stack-frame, conflate it.
 			   (typep funobj 'function)
 			   (= 1 (ldb (byte 1 5) (funobj-debug-info funobj))))
