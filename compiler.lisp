@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.88 2004/08/06 14:41:37 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.89 2004/08/07 11:10:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5972,6 +5972,9 @@ and a list of any intervening unwind-protect environment-slots."
 	      (:pushl :edi)
 	      (:subl 4 :edx)
 	      (:jnz ',restify-alloca-loop)
+	      ,@(when *compiler-auto-stack-checks-p*
+		  `((,*compiler-local-segment-prefix*
+		     :bound (:edi ,(global-constant-offset 'stack-bottom)) :esp)))
 	      (:leal (:esp 5) :edx)
 	      (:andl -7 :edx))		; Make EDX a proper consp into the alloca area.
 	    (cond
