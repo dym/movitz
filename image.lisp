@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.58 2004/07/30 21:06:22 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.59 2004/07/31 23:34:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -618,7 +618,7 @@
 (defmethod image-classes-map ((image symbolic-image))
   '(muerte.cl:null muerte.cl:cons muerte.cl:fixnum muerte.cl:symbol
     muerte.cl:character muerte.cl:function muerte.cl:condition
-    muerte.cl:integer muerte.cl:ratio
+    muerte.cl:integer muerte.cl:ratio muerte.cl:complex
     muerte.cl:vector muerte.cl:string muerte.cl:bit-vector muerte.cl:array
     muerte.cl:class muerte.cl:standard-class
     muerte.cl:standard-generic-function
@@ -1472,6 +1472,9 @@ this image will not be Multiboot compatible."
 	    (hash-table
 	     (make-movitz-hash-table expr))
 	    (ratio
+	     (make-instance 'movitz-ratio
+	       :value expr)
+	     #+ignore
 	     (let ((slot-descriptions (gethash 'muerte.cl::ratio
 					       (image-struct-slot-descriptions *image*)
 					       nil)))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.35 2004/07/26 21:02:25 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.36 2004/07/31 23:35:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -718,6 +718,8 @@ BUFFER-SIZE is the number of words in the buffer."
 
 (defun complicated-class-of (object)
   (typecase object
+    (ratio
+     (find-class 'ratio))
     (std-instance
      (movitz-accessor object movitz-std-instance class))
     (standard-gf-instance
