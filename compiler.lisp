@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.48 2004/04/15 19:58:20 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.49 2004/04/16 19:20:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2451,11 +2451,13 @@ the sub-program options (&optional label) as secondary value."
 	  (destructuring-bind (binding &key init-with-register init-with-type
 					    protect-registers protect-carry)
 	      (cdr i)
-	    (declare (ignore binding protect-carry init-with-type))
+	    (declare (ignore protect-carry init-with-type))
 	    (when init-with-register
 	      (setf free-so-far (remove-if (lambda (x)
-					     (or (eq x init-with-register)
-						 (member x protect-registers)))
+					     (if (new-binding-located-p binding frame-map)
+						 (eq x (new-binding-location binding frame-map))
+					       (or (eq x init-with-register)
+						   (member x protect-registers))))
 					   free-so-far)))))
 	 (t (case (instruction-is i)
 	      ((nil :call)
@@ -2476,8 +2478,7 @@ the sub-program options (&optional label) as secondary value."
 		 (remove-if (lambda (r)
 			      (tree-search i r))
 			    free-so-far)))
-	      ((:load-constant :load-lexical :store-lexical :init-lexvar
-		:cons-get :endp :incf-lexvar)
+	      ((:load-constant :load-lexical :store-lexical :cons-get :endp :incf-lexvar :init-lexvar)
 	       (assert (gethash (instruction-is i) *extended-code-expanders*))
 	       (unless (can-expand-extended-p i frame-map)
 		 (return (values nil t)))
@@ -3764,6 +3765,9 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 		  (and (edx-var env)
 		       (new-binding-location (edx-var env) frame-map :default nil))))
 	    ;; (warn "l0: ~S, l1: ~S" location-0 location-1)
+	    (assert (not (and location-0
+			      (eql location-0 location-1))) ()
+	      "Compiler bug: two bindings in same location.")
 	    (cond
 	     ((and (eq :ebx location-0) (eq :eax location-1))
 	      `((:xchgl :eax :ebx)))
