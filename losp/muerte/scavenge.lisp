@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.23 2004/07/20 13:13:41 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.24 2004/07/20 14:13:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -168,16 +168,29 @@ at the start-stack-frame location."
 					    interrupted-eip-loc)
 		      ;; The simple case: The interruptee matches interrupted EIP
 		      (map-heap-words function interrupted-esp frame)
-		    (let ((primitive-function-vector
+		    (let ((primitive-function
 			   (stack-frame-primitive-funcall interrupted-funobj
 							  interrupted-esp
 							  interrupted-eip-loc)))
-		      (if primitive-function-vector
+		      (if (not primitive-function)
+			  (error "Don't know how to scavenge across PF interrupt frame at ~S."
+				 interrupt-frame)
+			(let ((forwarded-pf (funcall function primitive-function nil)))
 			  ;; Next simplest case: The interruptee was in a primitive-function,
 			  ;; with the return-address at top of stack.
-			  (map-heap-words function (1+ interrupted-esp) frame)
-			(error "Don't know how to scavenge across interrupt frame at ~S."
-			       interrupt-frame)))))))
+			  (unless (eq primitive-function forwarded-pf)
+			    ;; The PF's vector has migrated.
+			    (let* ((interrupted-eip
+				    (interrupt-frame-ref :eip :unsigned-byte32 0 :unsigned-byte32))
+				   (offset (- interrupted-eip (%object-lispval primitive-function))))
+			      (break "Active PF moved. PF: ~Z, fwPF: ~Z, offset: ~D, PFlen ~D."
+				     primitive-function
+				     forwarded-pf
+				     offset
+				     (+ 8 (length forwarded-pf)))
+			      (setf (memref interrupted-esp 0 0 :unsigned-byte32)
+				(+ offset (%object-lispval forwarded-pf)))))
+			  (map-heap-words function (1+ interrupted-esp) frame))))))))
 	     (t (error "Don't know how to scavenge across frame ~S of kind ~S." frame funobj)))))
   (values))
 
@@ -189,6 +202,7 @@ at the start-stack-frame location."
 (defun stack-frame-primitive-funcall (funobj stack-location eip-location)
   "Is stack-frame in a primitive-function?
 If so, return the primitive-function's code-vector."
+  (declare (ignore eip-location))
   (let ((return-address (memref stack-location 0 0 :unsigned-byte32))
 	(code-vector (funobj-code-vector funobj)))
     (multiple-value-bind (return-location return-delta)
@@ -219,9 +233,9 @@ If so, return the primitive-function's code-vector."
 				 (:signed32
 				  ;; We must read the unsigned-byte32 that starts at ip
 				  (let ((x (logior (aref code-vector (- ip 1))
-						       (* (aref code-vector (+ 0 ip)) #x100)
-						       (* (aref code-vector (+ 1 ip)) #x10000)
-						       (* (aref code-vector (+ 2 ip)) #x1000000))))
+						   (* (aref code-vector (+ 0 ip)) #x100)
+						   (* (aref code-vector (+ 1 ip)) #x10000)
+						   (* (aref code-vector (+ 2 ip)) #x1000000))))
 				    (if (not (logbitp 7 (aref code-vector (+ ip 2))))
 					x
 				      (break "Negative 32-bit offset."))))
@@ -232,7 +246,10 @@ If so, return the primitive-function's code-vector."
 							  return-delta
 							  -3 -8)))))
 		       (primitive-function (%word-offset (%run-time-context-ref offset) -2)))
-		  (check-type primitive-function code-vector)
-		  (if (not (location-in-object-p primitive-function eip-location))
+		  (if (not (typep primitive-function 'code-vector))
 		      nil
 		    primitive-function))))))))))
+;;;		  (check-type primitive-function code-vector)
+;;;		  (if (not (location-in-object-p primitive-function eip-location))
+;;;		      nil
+;;;		    primitive-function))))))))))
