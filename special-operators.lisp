@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.35 2004/08/10 13:28:05 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.36 2004/08/14 17:45:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -290,10 +290,12 @@ and the correspondig returns mode (secondary value)."
   (destructuring-bind (function-name proto-name &rest parameters)
       (cdr form)
     (let* ((funobj-proto (movitz-env-named-function proto-name))
-	   (code-vector (movitz-funobj-code-vector funobj-proto))
 	   (funobj (make-instance 'movitz-funobj
 		     :name (movitz-read function-name)
-		     :code-vector code-vector
+		     :code-vector (movitz-funobj-code-vector funobj-proto)
+		     :code-vector%1op (movitz-funobj-code-vector%1op funobj-proto)
+		     :code-vector%2op (movitz-funobj-code-vector%2op funobj-proto)
+		     :code-vector%3op (movitz-funobj-code-vector%3op funobj-proto)
 		     :lambda-list (movitz-funobj-lambda-list funobj-proto)
 		     :num-constants (movitz-funobj-num-constants funobj-proto)
 		     :num-jumpers (movitz-funobj-num-jumpers funobj-proto)
@@ -317,32 +319,6 @@ The valid parameters are~{ ~S~}."
       (setf (movitz-funobj-symbolic-name funobj) function-name)
       (setf (movitz-env-named-function function-name) funobj)
       (compiler-values ()))))
-
-(define-special-operator make-prototyped-function (&all forward &form form)
-  (destructuring-bind (function-name proto-name &rest parameters)
-      (cdr form)
-    (let* ((funobj-proto (movitz-env-named-function proto-name))
-	   (code-vector (movitz-funobj-code-vector funobj-proto))
-	   (funobj (make-instance 'movitz-funobj
-		     :name (movitz-read function-name)
-		     :code-vector code-vector
-		     :lambda-list (movitz-funobj-lambda-list funobj-proto)
-		     :num-constants (movitz-funobj-num-constants funobj-proto)
-		     :symbolic-code (when (slot-boundp funobj-proto 'symbolic-code)
-				      (movitz-funobj-symbolic-code funobj-proto))
-		     :const-list (let ((c (copy-list (movitz-funobj-const-list funobj-proto))))
-				   (loop for (lisp-parameter value) in parameters
-				       as parameter = (movitz-read lisp-parameter)
-				       do (assert (member parameter c) ()
-					    "~S is not a function prototype parameter for ~S. ~
-The valid parameters are~{ ~S~}."
-					    parameter proto-name
-					    (mapcar #'movitz-print (movitz-funobj-const-list funobj-proto)))
-				       do (setf (car (member parameter c)) (movitz-read value)))
-				   c))))
-      (compiler-call #'compile-self-evaluating
-	:form funobj
-	:forward forward))))
 
 (define-special-operator define-setf-expander-compile-time (&form form)
   (destructuring-bind (access-fn lambda-list macro-body)
