@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.3 2004/02/02 13:40:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -464,6 +464,7 @@
 		 ',name
 		 (movitz::movitz-eval ',name)
 		 movitz-value))
+	 (proclaim `(special ,movitz-name))
 	 (setf (movitz::movitz-symbol-value movitz-symbol) (movitz::movitz-read movitz-value)
 	       (symbol-value movitz-name) movitz-value)))
      (declaim (muerte::constant-variable ,name))))
