@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.5 2004/02/10 18:06:30 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.6 2004/02/26 11:31:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1151,6 +1151,10 @@
 	   find-restart-from-context
 	   map-active-restarts
 	   with-basic-restart
+
+	   vector-u8
+	   vector-u16
+	   vector-u32
 	   
 	   make-funobj
 	   funobj-type
@@ -1240,6 +1244,7 @@
   (:export #:create-image
 	   #:dump-image
 
+	   #:other-type-byte
 	   #:parse-docstring-and-declarations
 	   #:global-constant-offset
 	   #:tag #:tag-name
