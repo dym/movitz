@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.20 2004/07/21 12:19:15 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.21 2004/08/12 17:26:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -98,7 +98,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			;; lexical...
 		    else collect
 			 (compiler-values-bind (&code init-code	&functional-p functional-p
-						&type type &returns init-register)
+						&type type &returns init-register
+						&final-form final-form)
 			     (compiler-call #'compile-form-to-register
 			       :env init-env
 			       :defaults all
@@ -115,7 +116,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				   init-type)
 				 (case init-register
 				   (:non-local-exit :edi)
-				   (t init-register))))
+				   (t init-register))
+				 final-form))
 		    and do (movitz-env-add-binding local-env (make-instance 'located-binding
 							       :name var)))))
 	  (setf (stack-used local-env)
@@ -172,7 +174,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		    ))
 		 (t (let ((code (append
 				 (loop
-				     for ((var init-form init-code functional-p type init-register)
+				     for ((var init-form init-code functional-p type init-register
+					       final-form)
 					  . rest-codes)
 				     on binding-var-codes
 				     as binding = (movitz-binding var local-env nil)
@@ -182,12 +185,12 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 					(assert (not (binding-lended-p binding)))
 				     appending
 				       (cond
-					;; #+ignore
 					((and (typep binding 'located-binding)
 					      (not (binding-lended-p binding))
-					      (= 1 (length init-code))
-					      (eq :load-lexical (first (first init-code)))
-					      (let* ((target-binding (second (first init-code))))
+;;;					      (= 1 (length init-code))
+;;;					      (eq :load-lexical (first (first init-code)))
+					      (typep final-form 'lexical-binding)
+					      (let ((target-binding final-form))
 						(and (typep target-binding 'lexical-binding)
 						     (eq (binding-funobj binding)
 							 (binding-funobj target-binding))
@@ -247,23 +250,39 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 					((typep binding 'lexical-binding)
 					 (let ((init (type-specifier-singleton
 						      (type-specifier-primary type))))
-					   (if (and init (eq *movitz-nil* (car init)))
-					       (append (if functional-p
-							   nil
-							 (compiler-call #'compile-form-unprotected
-							   :env init-env
-							   :defaults all
-							   :form init-form
-							   :result-mode :ignore
-							   :modify-accumulate let-modifies))
-						       `((:init-lexvar ,binding
-								       :init-with-register :edi
-								       :init-with-type null)))
-					     (append init-code
-						     `((:init-lexvar
-							,binding
-							:init-with-register ,init-register
-							:init-with-type ,(type-specifier-primary type)))))))
+					   (cond
+					    ((and init (eq *movitz-nil* (car init)))
+					     (append (if functional-p
+							 nil
+						       (compiler-call #'compile-form-unprotected
+							 :env init-env
+							 :defaults all
+							 :form init-form
+							 :result-mode :ignore
+							 :modify-accumulate let-modifies))
+						     `((:init-lexvar ,binding
+								     :init-with-register :edi
+								     :init-with-type null))))
+					    ((and (typep final-form 'lexical-binding)
+						  (eq (binding-funobj final-form)
+						      funobj))
+					     (append (if functional-p
+							 nil
+						       (compiler-call #'compile-form-unprotected
+							 :env init-env
+							 :defaults all
+							 :form init-form
+							 :result-mode :ignore
+							 :modify-accumulate let-modifies))
+						     `((:init-lexvar ,binding
+								     :init-with-register ,final-form
+								     ;; :init-with-type ,final-form
+								     ))))
+					    (t (append init-code
+						       `((:init-lexvar
+							  ,binding
+							  :init-with-register ,init-register
+							  :init-with-type ,(type-specifier-primary type))))))))
 					(t init-code)))
 				 (when (plusp (num-specials local-env))
 				   `((:locally (:movl :esp (:edi (:edi-offset dynamic-env))))))
