@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 29 13:39:43 2003
 ;;;;                
-;;;; $Id: simple-streams.lisp,v 1.4 2004/02/18 14:39:37 ffjeld Exp $
+;;;; $Id: simple-streams.lisp,v 1.5 2004/05/20 17:48:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -427,7 +427,7 @@
        (%check stream :output)
        (funcall-stm-handler-2 j-write-char character (sm melded-stream stream))))
     (string
-     (vector-push character stream))))
+     (vector-push-extend character stream))))
 
 (defun %read-line (stream eof-error-p eof-value recursive-p)
   (declare (ignore recursive-p))
