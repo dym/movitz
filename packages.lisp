@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.27 2004/06/17 09:49:03 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.28 2004/07/08 11:28:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1299,6 +1299,7 @@
 	   #:*default-image-init-file*
 	   #:movitz-constantp
 	   #:movitz-eval
+	   #:movitz-subtypep
 
 	   #:movitz-compile-file
 	   
