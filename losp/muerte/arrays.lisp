@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.48 2004/11/23 19:30:23 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.49 2004/11/25 02:10:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -518,6 +518,8 @@
 	  :index index :type :character))
 
 (defun (setf char) (value string index)
+  (check-type string string)
+  (check-type value character)
   (assert (below index (array-dimension string 0)))
   (setf (memref string (movitz-type-slot-offset 'movitz-basic-vector 'data)
 		:index index :type :character) value))
@@ -531,6 +533,7 @@
 
 (defun (setf schar) (value string index)
   (check-type string string)
+  (check-type value character)
   (assert (below index (length string)))
   (setf (memref string (movitz-type-slot-offset 'movitz-basic-vector 'data)
 		:index index :type :character)
