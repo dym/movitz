@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.46 2005/02/02 07:50:57 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.47 2005/02/03 09:13:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -201,13 +201,16 @@ at the start-stack-frame location."
 	 ((location-in-object-p dit-code-vector location)
 	  dit-code-vector)
 	 ((match-funobj esi location))
+	 ((location-in-object-p (symbol-value 'ret-trampoline) location)
+	  (symbol-value 'ret-trampoline))
 	 (t (break "DIT returns outside DIT??")))))
      ((match-funobj casf-funobj location))
      ((match-funobj esi location))      
-     ((match-funobj edx location)
-      (break "Trampoline/EDX situation?"))
+     ((match-funobj edx location))
      ((not (typep casf-funobj 'function))
       (break "Unknown funobj/frame-type: ~S" casf-funobj))
+     ((location-in-object-p (symbol-value 'ret-trampoline) location)
+      (symbol-value 'ret-trampoline))
      ((location-in-object-p (%run-time-context-slot 'dynamic-jump-next) location)
       (%run-time-context-slot 'dynamic-jump-next))
      ((when primitive-function-p
