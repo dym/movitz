@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.15 2004/04/19 19:49:11 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.16 2004/04/21 15:08:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -30,33 +30,29 @@
   "Call a function with 1 argument"
   (with-inline-assembly (:returns :nothing)
     (:movb 1 :cl)
-    (:jmp (:esi -6))))
+    (:jmp (:esi #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:code-vector)))))
 
 (define-primitive-function trampoline-funcall%2op ()
   "Call a function with 2 arguments"
   (with-inline-assembly (:returns :nothing)
     (:movb 2 :cl)
-    (:jmp (:esi -6))))
+    (:jmp (:esi #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:code-vector)))))
 
 (define-primitive-function trampoline-funcall%3op ()
   "Call a function with 3 arguments"
   (with-inline-assembly (:returns :nothing)
-;;;    (:xorl :ecx :ecx)
-;;;    (:movb 2 :cl)
     (:movb 3 :cl)
-    (:jmp (:esi -6))))
+    (:jmp (:esi #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:code-vector)))))
 
 (define-primitive-function trampoline-cl-dispatch-1or2 ()
   "Jump to the entry-point designated by :cl, which must be 1 or 2."
   (with-inline-assembly (:returns :nothing)
-    (:cmpb 1 :cl)
-    (:jne 'not-one)
-    (:jmp (:esi #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:code-vector%1op)))
-   not-one
-    (:cmpb 2 :cl)
-    (:jne 'not-two)
-    (:jmp (:esi #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:code-vector%2op)))
-   not-two
+    (:subb 1 :cl)			; 1 or 2 => 0 or 1
+    (:testb #xfe :cl)
+    (:jnz 'mismatch)
+    (:jmp (:esi (:ecx 4) #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:code-vector%1op)))
+   mismatch
+    (:addb 1 :cl)
     (:int 100)))
 
 (define-primitive-function no-code-vector ()
@@ -246,10 +242,7 @@ with EAX still holding the tag."
     (:jecxz 'no-stack-binding)
     (:cmpl :eax (:ecx))
     (:je 'success)
-;;;    (:locally (:movl (:edi (:edi-offset stack-top)) :edx))
    search-loop
-;;;    (:cmpl :edx (:ecx 12))
-;;;    (:jnc '(:sub-program () (:int 97)))
     (:movl (:ecx 12) :ecx)		; parent
     (:jecxz 'no-stack-binding)
     (:cmpl :eax (:ecx))			; compare name
@@ -277,10 +270,7 @@ with EAX still holding the tag."
     (:jecxz 'no-binding)
     (:cmpl :eax (:ecx))
     (:je 'success)
-;;;    (:locally (:movl (:edi (:edi-offset stack-top)) :edx))
    search-loop
-;;;    (:cmpl :edx (:ecx 12))
-;;;    (:jnc '(:sub-program () (:int 97)))
     (:movl (:ecx 12) :ecx)		; parent
     (:jecxz 'no-binding)
     (:cmpl :eax (:ecx))			; compare name
@@ -555,7 +545,8 @@ Returns list in EAX and preserves numargs in ECX."
 (define-primitive-function fast-class-of-tag3 ()
   "Return the class of a tag3 object."
   (with-inline-assembly (:returns :multiple-values)
-    (:int 64)
+    (:globally (:movl (:edi (:edi-offset classes)) :eax))
+    (:movl (:eax #.(movitz::class-object-offset 'illegal-object)) :eax)
     (:ret)))
 
 (define-primitive-function fast-class-of-character ()
@@ -572,10 +563,14 @@ Returns list in EAX and preserves numargs in ECX."
 (define-primitive-function fast-class-of-null ()
   "Return the class of a nil object."
   (with-inline-assembly (:returns :multiple-values)
+    (:globally (:movl (:edi (:edi-offset classes)) :ebx))
     (:cmpl :edi :eax)
-    (:jne '(:sub-program () (:int 64)))
-    (:globally (:movl (:edi (:edi-offset classes)) :eax))
-    (:movl (:eax #.(movitz::class-object-offset 'null)) :eax)
+    (:je 'null)
+    (:movl (:ebx #.(movitz::class-object-offset 'illegal-object)) :eax)
+    (:jmp 'not-null)
+   null
+    (:movl (:ebx #.(movitz::class-object-offset 'null)) :eax)
+   not-null
     (:ret)))
 
 (define-primitive-function fast-class-of-other ()
@@ -626,13 +621,7 @@ Returns list in EAX and preserves numargs in ECX."
      (find-class 'fixnum))
     (basic-restart
      (find-class 'basic-restart))
-    (tag6
-     (error "Don't know the class of ~Z with other-type #x~X."
-	    object (with-inline-assembly (:returns :untagged-fixnum-ecx)
-		     (:compile-form (:result-mode :eax) object)
-		     (:movzxb (:eax -2) :ecx))))
-    (t (error "Don't know the class of the word ~Z!" object)
-       (find-class t))))
+    (t (find-class 'illegal-object))))
 
 (define-primitive-function push-current-values ()
   "Push all current return-values on the stack. And, return number
