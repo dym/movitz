@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.42 2005/01/25 13:51:36 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.43 2005/02/02 07:47:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -774,11 +774,10 @@
 			 (:ebx :ecx ,(movitz:movitz-eval offset env)))
 		  (,prefixes
 		   :addl :eax (:ebx :ecx ,(movitz:movitz-eval offset env)))))))
-	  (t (error "variable (setf memref) type :code-vector not implemented.")
-	     #+ignore
-	     (let ((value-var (gensym "memref-value-"))
+	  (t (let ((value-var (gensym "memref-value-"))
 		   (object-var (gensym "memref-object-")))
-	       `(let ((,value-var ,value) (,object-var ,object))
+	       `(let ((,value-var ,value)
+		      (,object-var ,object))
 		  (with-inline-assembly (:returns :eax)
 		    (:compile-two-forms (:untagged-fixnum-ecx :ebx) ,offset ,index)
 		    (:load-lexical (:lexical-binding ,value-var) :eax)
@@ -786,7 +785,8 @@
 			`((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ebx))
 		    (:addl :ebx :ecx)	; index += offset
 		    (:load-lexical (:lexical-binding ,object-var) :ebx)
-		    (:movl :eax (:ebx :ecx)))))))))
+		    (:movl ,movitz:+code-vector-word-offset+ (:ebx :ecx))
+		    (,prefixes :addl :eax (:ebx :ecx)))))))))
       (t ;; (warn "Can't handle inline MEMREF: ~S" form)
 	 form))))
 
@@ -812,7 +812,11 @@
     (:lisp
      (if localp
 	 (setf (memref object offset :index index :localp t) value)
-       (setf (memref object offset :index index :localp nil) value)))))
+       (setf (memref object offset :index index :localp nil) value)))
+    (:code-vector
+     (if localp
+	 (setf (memref object offset :index index :localp t :type :code-vector) value)
+       (setf (memref object offset :index index :localp nil :type :code-vector) value)))))
 
 (define-compiler-macro memref-int
     (&whole form address &key (offset 0) (index 0) (type :unsigned-byte32) (physicalp t)
