@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep 24 16:04:12 2001
 ;;;;                
-;;;; $Id: keyboard.lisp,v 1.2 2004/01/19 11:23:52 ffjeld Exp $
+;;;; $Id: keyboard.lisp,v 1.3 2004/10/07 12:45:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -37,7 +37,8 @@
       #\D      #\F      #\G      #\H      #\J      #\K      #\L      #\: ; #x20
       #\"      #\~      nil      #\|      #\Z      #\X      #\C      #\V ; #x28
       #\B      #\N      #\M      #\<      #\>      #\?      nil      nil ; #x30
-      nil      nil      nil      nil      nil      nil      nil      nil)) ; #x38
+      nil      nil      nil      nil      nil      nil      nil      nil ; #x38
+      nil      nil      nil      nil      nil    :pause     nil      nil)) ; #x40
 
 (defparameter *scan-codes*
     #(#\null   #\esc    #\1      #\2      #\3      #\4      #\5      #\6 ; #x00
@@ -50,7 +51,7 @@
       #\b      #\n      #\m      #\,      #\.      #\/  :shift-right #\esc ; #x30
       :alt-left #\space :caps-lock :f1    :f2      :f3      :f4      :f5 ; #x38
 			       
-      :f6      :f7      :f8      :f9      :f10    :num-lock nil      nil ; #x40
+      :f6      :f7      :f8      :f9      :f10   :break :scroll-lock nil ; #x40
       nil      nil      nil      nil      nil      nil      nil      nil ; #x48
       nil      :kp-ins  nil      :kp-del  nil      nil      nil      :f11 ; #x50
       :f12     nil      nil      nil      nil      nil      nil      nil ; #x58
@@ -112,21 +113,6 @@ Secondly, whether this was a release event is returned."
        (io-port #x60 :unsigned-byte8))
       (t (values (ldb (byte 7 0) first-code)
 		 (logbitp 7 first-code))))))
-
-;;;(defmacro define-boolbit-accessor (name (bit-pos state-var) &body body)
-;;;  `(progn
-;;;     (defun ,name ()
-;;;       (logbitp ,bit-pos ,state-var))
-;;;     (defun (setf ,name) (value)
-;;;       (setf ,state-var
-;;;	 (dpb (if value 1 0) (byte 1 ,bit-pos) ,state-var))
-;;;       ,@body
-;;;       (logbitp ,bit-pos ,state-var))))
-
-
-;;;(define-boolbit-accessor qualifier-shift (0 *qualifier-state*))
-;;;(define-boolbit-accessor qualifier-ctrl  (1 *qualifier-state*))
-;;;(define-boolbit-accessor qualifier-alt   (2 *qualifier-state*))
 
 (define-named-integer qualifier (:only-constants t)
   (0 shift)
