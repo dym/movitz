@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.16 2004/04/15 15:24:31 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.17 2004/04/15 19:56:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1103,6 +1103,20 @@
 	   print-unreadable-movitz-object
 	   
 	   #:*print-safely*
+	   
+	   #:*debugger-function*
+	   #:*debugger-condition*
+	   #:*backtrace-conflate-names*
+	   #:*backtrace-do-conflate*
+	   #:*backtrace-max-frames*
+	   #:*backtrace-max-args*
+	   #:*backtrace-on-error*
+	   #:*backtrace-stack-frame-barrier*
+	   #:*backtrace-do-fresh-lines*
+	   #:*backtrace-be-spartan-p*
+	   #:*backtrace-print-length*
+	   #:*backtrace-print-level*
+	   #:backtrace
 
 	   #:stack-ref
 	   #:with-each-dynamic-context

@@ -10,28 +10,11 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.9 2004/04/15 15:23:53 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.10 2004/04/15 19:57:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (provide :x86-pc/debugger)
-
-(defpackage muerte
-  ;; (:use #:muerte.cl #:muerte #:muerte.x86-pc)
-  (:export #:*debugger-function*
-	   #:*debugger-condition*
-	   #:*backtrace-conflate-names*
-	   #:*backtrace-do-conflate*
-	   #:*backtrace-max-frames*
-	   #:*backtrace-max-args*
-	   #:*backtrace-on-error*
-	   #:*backtrace-stack-frame-barrier*
-	   #:*backtrace-do-fresh-lines*
-	   #:*backtrace-be-spartan-p*
-	   #:*backtrace-print-length*
-	   #:*backtrace-print-level*
-	   #:backtrace
-	   ))
 
 (in-package muerte)
 
