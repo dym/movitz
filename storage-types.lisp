@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.7 2004/02/12 22:58:02 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.8 2004/02/12 22:58:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1166,19 +1166,6 @@ integer (native lisp) value."
 	    (third (movitz-struct-slot-values movitz-hash)) hash-sxhash)
       movitz-hash)))
 					     
-    
-
-;;;(define-binary-class movitz-dynamic-environment (movitz-heap-object-other)
-;;;  ((uplink :binary-type word
-;;;	   :map-binary-write movitz-read-and-intern
-;;;	   :initarg uplink
-;;;	   :initform nil)
-;;;   (alist  :binary-type word
-;;;	   :map-binary-write movitz-read-and-intern
-;;;	   :initarg alist
-;;;	   :initform nil)))
-
-
 ;;;
 
 (unless (typep *movitz-nil* 'movitz-nil)
