@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:47:19 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: bootblock.lisp,v 1.2 2004/01/15 19:40:58 ffjeld Exp $
+;;;; $Id: bootblock.lisp,v 1.3 2004/01/15 20:02:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -85,6 +85,8 @@
       "Image too large for 1.44 floppy geometry.")
     (ia-x86:read-proglist
      `(
+       (:jmp (:pc+ 0))			; some BIOSes might check for this.
+       
        ;;
        ;; We are running at address #x7c00.
        ;; First we need to initialize the data segment
