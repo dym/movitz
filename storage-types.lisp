@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.37 2004/07/31 23:34:57 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.38 2004/08/10 13:25:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1112,33 +1112,25 @@ integer (native lisp) value."
 		  type
 		  'segment-present)))
 
-(defconstant +idt-size+ 127)
-(defconstant +idt-irq-start+ 32)
-
-(defun make-initial-interrupt-descriptors ()
-  (make-array
-   +idt-size+
-   :initial-element nil))
-
-(defun map-idt-to-array (idt type)
-  (check-type idt movitz-basic-vector)
+(defun map-interrupt-trampolines-to-idt (trampolines type)
+  (check-type trampolines vector)
   (assert (eq type 'word))
-  (let ((byte-list
-	 (with-binary-output-to-list (bytes)
-	   (loop for descriptor across (movitz-vector-symbolic-data idt)
-	       as i upfrom 0
-	       if (not (eq *movitz-nil* descriptor))
-	       do (write-binary-record descriptor bytes)
-	       else
-	       do (write-binary-record
-		   (make-gate-descriptor ':interrupt
-					 (+ (slot-offset 'movitz-basic-vector 'data)
-					    (movitz-intern
-					     (find-primitive-function
-					      'muerte::default-interrupt-trampoline))
-					    (* 10 i))
-					 :segment-selector (* 3 8))
-		   bytes)))))
+  (let* ((byte-list
+	  (with-binary-output-to-list (bytes)
+	    (loop for trampoline across trampolines
+		as exception-vector upfrom 0
+		do (let* ((trampoline-address (movitz-intern (find-primitive-function trampoline)))
+			  (symtab (movitz-env-get trampoline :symtab))
+			  (trampoline-offset (cdr (assoc exception-vector symtab))))
+		     (assert symtab ()
+		       "No symtab for exception trampoline ~S." trampoline)
+		     (write-binary-record
+		      (make-gate-descriptor ':interrupt
+					    (+ (slot-offset 'movitz-basic-vector 'data)
+					       trampoline-address
+					       trampoline-offset)
+					    :segment-selector (* 3 8))
+		      bytes))))))
     (let ((l32 (merge-bytes byte-list 8 32)))
       (movitz-intern (make-movitz-vector (length l32)
 					 :element-type '(unsigned-byte 32)
