@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jan  4 16:13:46 2002
 ;;;;                
-;;;; $Id: named-integers.lisp,v 1.3 2004/01/19 11:23:44 ffjeld Exp $
+;;;; $Id: named-integers.lisp,v 1.4 2004/05/05 08:24:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,13 +20,14 @@
 
 (in-package muerte.lib)
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
+(eval-when (:compile-toplevel :load-toplevel)
   (defun name->integer (map name)
     (if (integerp name)
 	name
-      (or (etypecase map
-	    (vector (position name map))
-	    (list (car (rassoc name map))))
+      (or (ecase (car map)
+	    (:enum (position name (cdr map)))
+	    (:assoc (cdr (assoc name (cdr map))))
+	    (:rassoc (car (rassoc name (cdr map)))))
 	  (error "No integer named ~S in ~S." name map))))
   (defun names->integer (map &rest names)
     (declare (dynamic-extent names))
@@ -34,11 +35,13 @@
 	sum (name->integer map name))))
 
 (defmacro with-named-integers-syntax (name-maps &body body)
-  `(macrolet ,(mapcar (lambda (name-map)
-			(destructuring-bind (name map)
-			    name-map
-			  `(,name (&rest names) (apply 'muerte.lib:names->integer ,map names))))
-		      name-maps)
+  `(macrolet
+       ,(mapcar (lambda (name-map)
+		  (destructuring-bind (name map)
+		      name-map
+		    `(,name (&rest names)
+			    (apply 'muerte.lib:names->integer ,map names))))
+		name-maps)
      ,@body))       
 
 (define-compile-time-variable *name-to-integer-tables*

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 18 12:21:36 2002
 ;;;;                
-;;;; $Id: dp8390.lisp,v 1.6 2004/02/26 11:19:17 ffjeld Exp $
+;;;; $Id: dp8390.lisp,v 1.7 2004/05/05 08:24:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,19 +22,20 @@
 (in-package muerte.x86-pc.ne2k)
 
 (defconstant +page0-read-map+
-    #(cr clda0 clda1 bnry tsr ncr fifo isr crda0 crda1 rbcr0 rbcr1 rsr cntr0 cntr1 cntr2))
+    '(:enum cr clda0 clda1 bnry tsr ncr fifo isr crda0 crda1 rbcr0 rbcr1 rsr cntr0 cntr1 cntr2))
 
 (defconstant +page0-write-map+
-    #(cr pstart pstop bnry tpsr tbcr0 tbcr1 isr rsar0 rsar1 rbcr0 rbcr1 rcr tcr dcr imr))
+    '(:enum cr pstart pstop bnry tpsr tbcr0 tbcr1 isr rsar0 rsar1 rbcr0 rbcr1 rcr tcr dcr imr))
 
 (defconstant +page1-read-map+
-    #(nil nil nil nil nil nil nil curr))
+    '(:enum nil nil nil nil nil nil nil curr))
 
 (defconstant +page1-write-map+
-    #(cr par0 par1 par2 par3 par4 par5 curr mar0 mar1 mar2 mar3 mar4 mar5 mar6 mar7))
+    '(:enum cr par0 par1 par2 par3 par4 par5 curr mar0 mar1 mar2 mar3 mar4 mar5 mar6 mar7))
 
 (defconstant +command-map+
-    '((#b001 . stop)
+    '(:rassoc
+      (#b001 . stop)
       (#b010 . start)
       (#b100 . transmit)
       (#o10  . remote-read)
@@ -47,7 +48,8 @@
       (#xc0  . page-3)))
 
 (defconstant +interrupt-status-map+
-    #(packet-received
+    '(:enum
+      packet-received
       packet-transmitted
       receive-error
       transmit-error
@@ -57,7 +59,8 @@
       reset-status))
 
 (defconstant +data-config-map+
-    '((#x01 . dma-16-bit)
+    '(:rassoc
+      (#x01 . dma-16-bit)
       (#x02 . big-endian)
       (#x04 . dma-address-32bit)
       (#x08 . loopback-off)
@@ -68,13 +71,15 @@
       (#x60 . fifo-threshold-12-bytes)))
 
 (defconstant +tx-config-map+
-    '((#x00 . loopback-mode-0)
+    '(:rassoc
+      (#x00 . loopback-mode-0)
       (#x02 . loopback-mode-1)
       (#x04 . loopback-mode-2)
       (#x06 . loopback-mode-3)))
 
 (defconstant +rx-config-map+
-    '((#x01 . save-error-packets)
+    '(:rassoc
+      (#x01 . save-error-packets)
       (#x02 . runt-packets)
       (#x04 . broadcast)
       (#x08 . multicast)
@@ -82,7 +87,7 @@
       (#x20 . monitor-mode)))
 
 (defconstant +command-bit-map+
-    #(stop start transmit))
+    '(:enum stop start transmit))
 
 ;;; Convenience syntax
 

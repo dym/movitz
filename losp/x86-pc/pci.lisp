@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Dec 14 22:33:42 2003
 ;;;;                
-;;;; $Id: pci.lisp,v 1.2 2004/04/23 15:04:17 ffjeld Exp $
+;;;; $Id: pci.lisp,v 1.3 2004/05/05 08:24:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,7 +18,7 @@
 
 (provide :x86-pc/pci)
 
-(defun bios32-find ()
+(defun find-bios32 ()
   (loop for bios32 from #xe0000 to #xffff0 by 16
       if (and (= (memref-int bios32 0 0 :unsigned-byte16 t) #x335f)
 	      (= (memref-int bios32 0 1 :unsigned-byte16 t) #x5f32)
