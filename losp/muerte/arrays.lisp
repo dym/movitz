@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.32 2004/07/08 15:28:52 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.33 2004/07/08 18:53:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,7 +22,7 @@
 (in-package muerte)
 
 (defun vector-element-type (object)
-  (memref object #.(bt:slot-offset 'movitz::movitz-vector 'movitz::element-type) 0
+  (memref object #.(bt:slot-offset 'movitz::movitz-basic-vector 'movitz::element-type) 0
 	  :unsigned-byte8))
 
 (defmacro vector-double-dispatch ((s1 s2) &rest clauses)
@@ -44,12 +44,12 @@
 
 (define-compiler-macro vector-element-type (object)
   `(memref ,object 0
-	   #.(bt:slot-offset 'movitz::movitz-vector 'movitz::element-type)
+	   ,(bt:slot-offset 'movitz::movitz-basic-vector 'movitz::element-type)
 	   :unsigned-byte8))
 
 (defun (setf vector-element-type) (numeric-element-type vector)
   (check-type vector vector)
-  (setf (memref vector #.(bt:slot-offset 'movitz::movitz-vector 'movitz::element-type) 0
+  (setf (memref vector #.(bt:slot-offset 'movitz::movitz-basic-vector 'movitz::element-type) 0
 		:unsigned-byte8)
     numeric-element-type))
 
@@ -75,7 +75,7 @@
      (movitz-accessor array movitz-basic-vector num-elements))))
 
 (defun shrink-vector (vector new-size)
-  (set-movitz-accessor-u16 vector movitz-vector num-elements new-size)
+  (setf-movitz-accessor (vector movitz-basic-vector num-elements) new-size)
   vector)
 
 (define-compiler-macro %basic-vector-has-fill-pointer-p (vector)
@@ -205,19 +205,19 @@
 	     ((do-it ()
 		`(with-inline-assembly (:returns :eax)
 		   (:declare-label-set basic-vector-dispatcher
-				       ,(print (loop with x = (make-list 8 :initial-element 'unknown)
+				       ,(loop with x = (make-list 8 :initial-element 'unknown)
 					    for et in '(:any-t :character :u8 :u32 :code :bit)
 					    do (setf (elt x (bt:enum-value
 							     'movitz::movitz-vector-element-type
 							     et))
 						 et)
-					    finally (return x))))
+					    finally (return x)))
 		   (:compile-two-forms (:eax :ebx) array index)
 		   (:movl (:eax ,movitz:+other-type-offset+) :ecx)
-		   (:cmpb ,(movitz:tag :basic-vector) :cl)
-		   (:jne '(:sub-program (not-vector)
-			   (:compile-form (:result-mode :ignore)
-			    (error "Not an array: ~S." array))))
+;;;		   (:cmpb ,(movitz:tag :basic-vector) :cl)
+;;;		   (:jne '(:sub-program (not-vector)
+;;;			   (:compile-form (:result-mode :ignore)
+;;;			    (error "Not an array: ~S." array))))
 		   (:testb ,movitz:+movitz-fixnum-zmask+ :bl)
 		   (:jnz '(:sub-program (illegal-index)
 			   (:compile-form (:result-mode :ignore)
@@ -387,7 +387,7 @@
 (defun svref%unsafe (simple-vector index)
   (with-inline-assembly (:returns :eax)
     (:compile-two-forms (:eax :ebx) simple-vector index)
-    (:movl (:eax :ebx #.(bt:slot-offset 'movitz:movitz-vector 'movitz::data)) :eax)))
+    (:movl (:eax :ebx #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)) :eax)))
 
 (defun (setf svref%unsafe) (value simple-vector index)
   (setf (svref%unsafe simple-vector index) value))
@@ -745,7 +745,7 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 
 (define-compiler-macro bvref-u16 (&whole form vector offset index &environment env)
   (let ((actual-index (and (movitz:movitz-constantp index env)
-			   (movitz::eval-form index env))))
+			   (movitz:movitz-eval index env))))
     (if (not (typep actual-index '(integer 0 *)))
 	`(bvref-u16-fallback ,vector ,offset ,index)
       (let ((var (gensym)))
@@ -754,11 +754,14 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 	       (bvref-u16-fallback ,var ,offset ,index)
 	     (with-inline-assembly (:returns :untagged-fixnum-ecx)
 	       (:compile-two-forms (:eax :ecx) ,var ,offset)
-	       (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
-	       (:andl #xfffe :ecx)
-	       (:cmpw :cx (:eax #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)))
-	       (:jbe '(:sub-program () (:int 69)))
-	       (:movw (:eax :ecx ,(+ actual-index (bt:slot-offset 'movitz::movitz-vector 'movitz::data))) :cx)
+	       (:cmpl (:eax ,(bt:slot-offset 'movitz::movitz-basic-vector
+					     'movitz::num-elements))
+		      :ecx)
+	       (:jnc '(:sub-program () (:int 69)))
+	       (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
+	       (:movw (:eax :ecx ,(+ actual-index (bt:slot-offset 'movitz::movitz-basic-vector
+								  'movitz::data)))
+		      :cx)
 	       (:xchgb :cl :ch))))))))
 
 (defun bvref-u16-fallback (vector offset index)

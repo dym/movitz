@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.11 2004/05/24 14:59:08 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.12 2004/07/08 18:53:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -871,7 +871,7 @@ is no unspecialized method was called."))
        (:compile-form (:result-mode :eax) instance)
        (:movl (:eax ,(bt:slot-offset 'movitz::movitz-std-instance 'movitz::slots))
 	      :eax)
-       (:movl (:eax ,(+ (bt:slot-offset 'movitz::movitz-vector 'movitz::data)
+       (:movl (:eax ,(+ (bt:slot-offset 'movitz::movitz-basic-vector 'movitz::data)
 			(* location 4)))
 	      :eax)
        (:cmpl :eax ,(movitz::make-indirect-reference :edi (movitz::global-constant-offset 'unbound-value)))

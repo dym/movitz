@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.6 2004/04/19 15:05:01 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.7 2004/07/08 18:53:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -78,7 +78,7 @@
 	(movitz:code-vector-word
 	 `(with-inline-assembly (:returns :eax)
 	    (:compile-form (:result-mode :eax) ,value)
-	    (:leal (:eax ,(bt:slot-offset 'movitz:movitz-vector 'movitz::data)) :ecx)
+	    (:leal (:eax ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)) :ecx)
 	    (:locally (:movl :ecx (:edi (:edi-offset ,slot-name))))))))))
 
 (defun (setf %run-time-context-slot) (value slot-name &optional (context (current-run-time-context)))

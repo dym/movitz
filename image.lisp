@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.41 2004/07/07 17:37:01 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.42 2004/07/08 18:53:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -613,7 +613,7 @@
   '(muerte.cl:null muerte.cl:cons muerte.cl:fixnum muerte.cl:symbol
     muerte.cl:character muerte.cl:function muerte.cl:condition
     muerte.cl:integer muerte.cl:ratio
-    muerte.cl:vector muerte.cl:string muerte.cl:array
+    muerte.cl:vector muerte.cl:string muerte.cl:bit-vector muerte.cl:array
     muerte.cl:class muerte.cl:standard-class
     muerte.cl:standard-generic-function
     muerte:run-time-context

@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.23 2004/07/08 15:28:12 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.24 2004/07/08 18:54:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -76,29 +76,26 @@
 		(:leal (:eax ,(cl:- (movitz:tag :other))) :ecx)
 		(:testb 7 :cl)
 		(:branch-when :boolean-zf=0)
-		(:cmpb ,(movitz:tag tag-name)
-		       (:eax ,(bt:slot-offset 'movitz::movitz-vector 'movitz::type)))
+		(:cmpb ,(movitz:tag tag-name) (:eax ,movitz:+other-type-offset+))
 		(:branch-when :boolean-zf=0))
 	      (do-case (:boolean-branch-on-true :same :labels (other-typep-failed))
 		(:compile-form (:result-mode :eax) ,object)
 		(:leal (:eax ,(cl:- (movitz:tag :other))) :ecx)
 		(:testb 7 :cl)
 		(:jnz 'other-typep-failed)
-		(:cmpb ,(movitz:tag tag-name)
-		       (:eax ,(bt:slot-offset 'movitz::movitz-vector 'movitz::type)))
+		(:cmpb ,(movitz:tag tag-name) (:eax ,movitz:+other-type-offset+))
 		(:branch-when :boolean-zf=1)
 		other-typep-failed)
 	      (do-case (t :boolean-zf=1 :labels (other-typep-failed))
 		(:compile-form (:result-mode :eax) ,object)
-		(:leal (:eax ,(cl:- (movitz:tag :other))) :ecx)
+		(:leal (:eax ,movitz:+other-type-offset+) :ecx)
 		(:testb 7 :cl)
 		(:jnz 'other-typep-failed)
-		(:cmpb ,(movitz:tag tag-name)
-		       (:eax ,(bt:slot-offset 'movitz::movitz-vector 'movitz::type)))
+		(:cmpb ,(movitz:tag tag-name) (:eax ,movitz:+other-type-offset+))
 	       other-typep-failed)))
 	 (make-basic-vector-typep (element-type)
-	   (assert (= 1 (- (bt:slot-offset 'movitz::movitz-vector 'movitz::element-type)
-			   (bt:slot-offset 'movitz::movitz-vector 'movitz::type))))
+	   (assert (= 1 (- (bt:slot-offset 'movitz::movitz-basic-vector 'movitz::element-type)
+			   (bt:slot-offset 'movitz::movitz-basic-vector 'movitz::type))))
 	   (let ((type-code (dpb (bt:enum-value 'movitz::movitz-vector-element-type element-type)
 				 (byte 8 8)
 				 (movitz:tag :basic-vector))))
@@ -108,16 +105,14 @@
 		  (:leal (:eax ,(- (movitz::tag :other))) :ecx)
 		  (:testb 7 :cl)
 		  (:branch-when :boolean-zf=0)
-		  (:cmpw ,type-code
-			 (:eax ,(bt:slot-offset 'movitz::movitz-vector 'movitz::type)))
+		  (:cmpw ,type-code (:eax ,movitz:+other-type-offset+))
 		  (:branch-when :boolean-zf=0))
 		(do-case (:boolean-branch-on-true :same :labels (vector-typep-failed))
 		  (:compile-form (:result-mode :eax) ,object)
 		  (:leal (:eax ,(- (movitz::tag :other))) :ecx)
 		  (:testb 7 :cl)
 		  (:jnz 'vector-typep-failed)
-		  (:cmpw ,type-code
-			 (:eax ,(bt:slot-offset 'movitz::movitz-vector 'movitz::type)))
+		  (:cmpw ,type-code (:eax ,movitz:+other-type-offset+))
 		  (:branch-when :boolean-zf=1)
 		 vector-typep-failed)
 		(do-case (t :boolean-zf=1 :labels (vector-typep-failed))
@@ -125,8 +120,7 @@
 		  (:leal (:eax ,(- (movitz::tag :other))) :ecx)
 		  (:testb 7 :cl)
 		  (:jnz 'vector-typep-failed)
-		  (:cmpw ,type-code
-			 (:eax ,(bt:slot-offset 'movitz::movitz-vector 'movitz::type)))
+		  (:cmpw ,type-code (:eax ,movitz:+other-type-offset+))
 		 vector-typep-failed))))
 	 (make-function-typep (funobj-type)
 	   (assert (= 1 (- (bt:slot-offset 'movitz::movitz-funobj 'movitz::funobj-type)

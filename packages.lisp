@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.28 2004/07/08 11:28:34 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.29 2004/07/08 18:53:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1329,7 +1329,6 @@
 	   #:movitz-heap-object
 	   
 	   #:movitz-basic-vector
-	   #:movitz-vector
 	   #:movitz-vector-num-elements
 	   #:movitz-vector-element-type
 	   #:movitz-vector-symbolic-data

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.14 2004/07/08 15:23:15 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.15 2004/07/08 18:53:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -249,19 +249,19 @@ The unit clump is 8 bytes, or two words."
        (<= object-location
 	   location
 	   (+ -1 object-location
-	      #.(movitz::movitz-type-word-size :movitz-vector)
+	      #.(movitz::movitz-type-word-size 'movitz-basic-vector)
 	      (* 2 (truncate (+ (array-dimension object 0) 7) 8)))))
       (vector-u16
        (<= object-location
 	   location
 	   (+ -1 object-location
-	      #.(movitz::movitz-type-word-size :movitz-vector)
+	      #.(movitz::movitz-type-word-size 'movitz-basic-vector)
 	      (* 2 (truncate (+ (array-dimension object 0) 3) 4)))))
       ((or vector-u32 simple-vector)
        (<= object-location
 	   location
 	   (+ -1 object-location
-	      #.(movitz::movitz-type-word-size :movitz-vector)
+	      #.(movitz::movitz-type-word-size 'movitz-basic-vector)
 	      (* 2 (truncate (+ (array-dimension object 0) 1) 2)))))
       (structure-object
        (<= object-location
