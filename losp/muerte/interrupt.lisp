@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.21 2004/08/18 22:37:56 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.22 2004/09/02 09:45:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -118,8 +118,8 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:call (:pc+ 0))		; push EIP.
 	    ;; Now add a few bytes to the on-stack EIP so the iret goes to
 	    ;; *DEST* below.
-	    ((4) :addl 5 (:esp))	; 4 bytes
-	    ((1) :iretd)		; 1 byte
+	    (((:size 4)) :addl 5 (:esp)) ; 4 bytes
+	    (((:size 1)) :iretd)	; 1 byte
     
 	    ;; *DEST* iret branches to here.
 	    ;; we're now in the context of the interruptee.
@@ -321,11 +321,12 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 		(with-inline-assembly (:returns :nothing) (:nop))))
 	  (70 (error "Unaligned memref access."))
 	  ((5 55)
-	   (let* ((old-bottom (prog1 (stack-bottom)
-				(setf (stack-bottom) 0)))
+	   (let* ((old-bottom (prog1 (%run-time-context-slot 'stack-bottom)
+				(setf (%run-time-context-slot 'stack-bottom) 0)))
 		  (stack (%run-time-context-slot 'movitz::stack-vector))
 		  (real-bottom (- (object-location stack) 2))
 		  (stack-left (- old-bottom real-bottom))
+		  (old-dynamic-env (%run-time-context-slot 'dynamic-env))
 		  (new-bottom (cond
 			       ((< stack-left 10)
 				(princ "Halting CPU due to stack exhaustion.")
@@ -334,20 +335,23 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 				(format *debug-io*
 					"~&This is your LAST chance to pop off stack.~%")
 				real-bottom)
-			       (t (+ real-bottom (truncate stack-left 2)))))) ; Cushion the fall..
+			       (t (+ real-bottom (truncate stack-left 4)))))) ; Cushion the fall..
 	     (unwind-protect
 		 (progn
-		   (setf (stack-bottom) new-bottom)
-		   (format *debug-io* "~&Stack-warning: Bumped stack-bottom by ~D to #x~X.~%"
+		   (setf (%run-time-context-slot 'stack-bottom) new-bottom
+			 (%run-time-context-slot 'dynamic-env) 0)
+		   (format *debug-io* "~&Stack-warning: Bumped stack-bottom by ~D to #x~X. Reset ENV.~%"
 			   (- old-bottom new-bottom)
 			   new-bottom)
-		   (break "Stack overload exception ~D at EIP=~@Z, ESI=~@Z, ESP=~@Z, bottom=#x~X."
-			  vector $eip $esi
-			  (+ dit-frame (dit-frame-index :ebp))
-			  old-bottom))
+		   (break "Stack overload exception ~D at EIP=~@Z, ESP=~@Z, bottom=#x~X, ENV=#x~X."
+			  vector $eip
+			  (dit-frame-esp dit-frame)
+			  old-bottom
+			  old-dynamic-env))
 	       (format *debug-io* "~&Stack-warning: Resetting stack-bottom to #x~X.~%"
 		       old-bottom)
-	       (setf (stack-bottom) old-bottom))))
+	       (setf (%run-time-context-slot 'stack-bottom) old-bottom
+		     (%run-time-context-slot 'dynamic-env) old-dynamic-env))))
 	  (69
 	   (error "Not a function: ~S" (dereference $edx)))
 	  (70
