@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 19 14:58:12 2003
 ;;;;                
-;;;; $Id: repl.lisp,v 1.6 2004/03/26 01:36:30 ffjeld Exp $
+;;;; $Id: repl.lisp,v 1.7 2004/03/26 13:54:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -80,7 +80,7 @@
 					 arg)
 			   until (eq arg '#0#)
 			   collect arg)))))))
-    #+ignore (muerte.readline::readline-break (c)
-	       (declare (ignore c))
-	       (values))))
+    (muerte.readline::readline-break (c)
+      (declare (ignore c))
+      (values))))
 
