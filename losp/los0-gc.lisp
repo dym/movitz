@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.3 2004/04/06 13:38:21 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.4 2004/04/06 23:47:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -59,27 +59,14 @@
   (with-inline-assembly (:returns :eax)
     (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
     (:movl (:edx 2) :ecx)
+    (:cmpl #x3fff4 :ecx)
+    (:jge '(:sub-program () (:int 112)))
     (:movl :eax (:edx :ecx 2))
     (:movl :ebx (:edx :ecx 6))
     (:leal (:edx :ecx 3) :eax)
-    (:cmpl #x3fff4 :ecx)
-    (:jge '(:sub-program () (:int 112)))
     (:addl 8 :ecx)
     (:movl :ecx (:edx 2))
     (:ret)))
-
-(defun new-fast-cons (car cdr)
-  (with-inline-assembly (:returns :eax)
-    (:compile-two-forms (:eax :ebx) car cdr)
-    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
-    (:movl (:edx 2) :ecx)
-    (:movl :eax (:edx :ecx 2))
-    (:movl :ebx (:edx :ecx 6))
-    (:leal (:edx :ecx 3) :eax)
-    (:cmpl #x3fff4 :ecx)
-    (:jge '(:sub-program () (:int 112)))
-    (:addl 8 :ecx)
-    (:movl :ecx (:edx 2))))
 
 (defun new-malloc-clumps (clumps)
   (check-type clumps (integer 0 200))
