@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.4 2004/03/24 13:31:43 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.5 2004/03/28 17:33:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -29,6 +29,19 @@
      (with-inline-assembly (:returns :eax)
        (:compile-form (:result-mode :eax) symbol)
        (:call-global-constant dynamic-load)))))
+
+(defun %unbounded-symbol-value (symbol)
+  "Return the symbol's value without checking if it's bound or not."
+  (check-type symbol symbol)
+  (with-inline-assembly (:returns :eax)
+    (:compile-form (:result-mode :eax) symbol)
+    (:call-global-constant dynamic-find-binding)
+    (:jnc 'no-local-binding)
+    (:movl (:eax) :eax)
+    (:jmp 'done)
+   no-local-binding
+    (:movl (:eax #.(bt:slot-offset 'movitz::movitz-symbol 'movitz::value)) :eax)
+   done))
 
 (defun (setf symbol-value) (value symbol)
   (etypecase symbol
@@ -61,6 +74,10 @@
     (when (eq function-value (load-global-constant movitz::unbound-function))
       (error 'undefined-function :name symbol))
     function-value))
+
+(defun %unbounded-symbol-function (symbol)
+  (check-type symbol symbol)
+  (movitz-accessor symbol movitz-symbol function-value))
 
 (defun (setf symbol-function) (value symbol)
   (check-type symbol symbol)
@@ -120,17 +137,39 @@
      (not (eq (movitz-accessor symbol movitz-symbol function-value)
 	      (load-global-constant movitz::unbound-function))))))
 
-(defun make-symbol (name)
+(defun create-symbol (name &optional (package nil)
+				     (plist nil)
+				     (value (load-global-constant unbound-value))
+				     (function (load-global-constant movitz::unbound-function))
+				     (flags 0))
   (eval-when (:compile-toplevel)
     (assert (= 1 (- (movitz:tag :symbol) (movitz:tag :other)))))
   (let ((symbol (%word-offset (malloc-clumps 3) 1)))
-    (setf-movitz-accessor (symbol movitz-symbol package) nil)
+    (setf-movitz-accessor (symbol movitz-symbol package) package)
     (setf-movitz-accessor (symbol movitz-symbol hash-key) (sxhash name))
-    (setf (symbol-flags symbol) 0
-	  (symbol-function symbol) (load-global-constant movitz::unbound-function)
+    (setf (symbol-flags symbol) flags
+	  (symbol-plist symbol) plist
+	  (symbol-function symbol) function
 	  (symbol-name symbol) name
-	  (symbol-value symbol) (load-global-constant unbound-value))
+	  (symbol-value symbol) value)
     symbol))
+
+(defun make-symbol (name)
+  (create-symbol name))
+
+(defun copy-symbol (symbol &optional copy-properties) 
+  "copy-symbol returns a fresh, uninterned symbol, the name of which
+  is string= to and possibly the same as the name of the given
+  symbol."
+  (if (or (eq nil symbol)
+	  (not copy-properties))
+      (create-symbol (symbol-name symbol))
+    (create-symbol (symbol-name symbol)
+		   nil
+		   (symbol-plist symbol)
+		   (%unbounded-symbol-value symbol)
+		   (%unbounded-symbol-function symbol)
+		   (symbol-flags symbol))))
 
 (defun symbol-flags (symbol)
   (etypecase symbol
