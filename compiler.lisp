@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.96 2004/08/18 22:30:51 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.97 2004/08/19 00:22:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -561,8 +561,8 @@ of all function-bindings seen."
 ;;;		     (warn "binding ~S of ~S is not local to ~S, replacing with ~S of ~S."
 ;;;			   binding (binding-env binding) funobj
 ;;;			   borrowing-binding (binding-env borrowing-binding))
-		     (pushnew borrowing-binding 
-			      (getf (binding-lended-p binding) :lended-to))
+;;;		     (pushnew borrowing-binding 
+;;;			      (getf (binding-lended-p binding) :lended-to))
 		     (dolist (usage usages)
 		       (pushnew usage (borrowed-binding-usage borrowing-binding)))
 		     borrowing-binding)
@@ -650,6 +650,10 @@ of all function-bindings seen."
 		  (list :anonymous-lambda
 			(movitz-funobj-name toplevel-funobj)
 			(post-incf sub-funobj-index)))))
+	     (loop for borrowed-binding in (borrowed-bindings sub-funobj)
+		 do (pushnew borrowed-binding
+			     (getf (binding-lending (borrowed-binding-target borrowed-binding))
+				   :lended-to)))
 	     (cond
 	      ((or (null usage)
 		   (null (borrowed-bindings sub-funobj)))
@@ -788,7 +792,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 				 optp-location req-location opt-location)))
 		      (make-stack-setup-code (- stack-frame-size stack-setup-pre))
 		      (when (binding-lended-p req-binding)
-			(let ((lended-cons-position (getf (binding-lended-p req-binding)
+			(let ((lended-cons-position (getf (binding-lending req-binding)
 							  :stack-cons-location)))
 			  (etypecase req-location
 			    (integer
@@ -2297,13 +2301,17 @@ falling below the label."
     :accessor macro-binding-expander)))
 
 (defclass variable-binding (binding)
-  ((lended-p				; a property-list
+  ((lending				; a property-list
     :initform nil
-    :accessor binding-lended-p)
+    :accessor binding-lending)
    (store-type				; union of all types ever stored here
     :initform nil
     ;; :initarg :store-type
     :accessor binding-store-type)))
+
+(defmethod binding-lended-p ((binding variable-binding))
+  (and (getf (binding-lending binding) :lended-to)
+       (not (eq :unused (getf (binding-lending binding) :lended-to)))))
 
 (defclass lexical-binding (variable-binding) ())
 (defclass located-binding (lexical-binding) ())
@@ -2807,7 +2815,7 @@ the sub-program options (&optional label) as secondary value."
 				 (pushnew lended-binding
 					  (potentially-lended-bindings function-env))
 				 (take-note-of-binding lended-binding)
-				 (symbol-macrolet ((p (binding-lended-p lended-binding)))
+				 (symbol-macrolet ((p (binding-lending lended-binding)))
 				   (incf (getf p :lended-count 0))
 				   (setf (getf p :dynamic-extent-p) (and (getf p :dynamic-extent-p t)
 									 dynamic-extent-p))))))
@@ -2962,7 +2970,7 @@ the sub-program options (&optional label) as secondary value."
 			(dolist (binding bindings-register-goodness-sort)
 			  (unless (and (binding-lended-p binding)
 				       (not (typep binding 'borrowed-binding))
-				       (not (getf (binding-lended-p binding) :stack-cons-location)))
+				       (not (getf (binding-lending binding) :stack-cons-location)))
 			    (unless (new-binding-located-p binding frame-map)
 			      (check-type binding located-binding)
 			      (multiple-value-bind (register status)
@@ -3011,12 +3019,12 @@ the sub-program options (&optional label) as secondary value."
 		 (dolist (binding bindings-register-goodness-sort)
 		   (when (and (binding-lended-p binding)
 			      (not (typep binding 'borrowed-binding))
-			      (not (getf (binding-lended-p binding) :stack-cons-location)))
+			      (not (getf (binding-lending binding) :stack-cons-location)))
 		     ;; (warn "assigning lending-cons for ~W at ~D" binding stack-frame-position)
 		     (let ((cons-pos (post-incf stack-frame-position 2)))
 		       (setf (new-binding-location (cons :lended-cons binding) frame-map)
 			 (1+ cons-pos))
-		       (setf (getf (binding-lended-p binding) :stack-cons-location)
+		       (setf (getf (binding-lending binding) :stack-cons-location)
 			 cons-pos)))
 		   (unless (new-binding-located-p binding frame-map)
 		     (etypecase binding
@@ -3551,18 +3559,18 @@ loading borrowed bindings."
 			      funobj
 			      lended-binding borrowing-binding)
 	       (assert (eq funobj (binding-funobj lended-binding)))
-	       (assert (plusp (getf (binding-lended-p (actual-binding lended-binding))
+	       (assert (plusp (getf (binding-lending (actual-binding lended-binding))
 				    :lended-count 0)) ()
 		 "Asked to lend ~S of ~S to ~S of ~S with no lended-count."
 		 lended-binding (binding-env lended-binding)
 		 borrowing-binding (binding-env borrowing-binding))
 	       (assert (eq funobj-register :edx))
-	       (when (getf (binding-lended-p lended-binding) :dynamic-extent-p)
+	       (when (getf (binding-lending lended-binding) :dynamic-extent-p)
 		 (assert dynamic-extent-p))
 	       ;; (warn "lending: ~W" lended-binding)
 	       (append (make-load-lexical lended-binding :eax funobj t frame-map)
 		       (unless (or (typep lended-binding 'borrowed-binding)
-				   (getf (binding-lended-p lended-binding) :dynamic-extent-p))
+				   (getf (binding-lending lended-binding) :dynamic-extent-p))
 			 (append `((:pushl :edx)
 				   (:globally (:call (:edi (:edi-offset ensure-heap-cons-variable))))
 				   (:popl :edx))
@@ -4176,7 +4184,7 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 	      `((:movl :edx (:ebp ,(stack-frame-offset (new-binding-location (edx-var env) frame-map))))))
 	    eax-ebx-code-post-stackframe
 	    (loop for binding in (potentially-lended-bindings env)
-		as lended-cons-position = (getf (binding-lended-p binding) :stack-cons-location)
+		as lended-cons-position = (getf (binding-lending binding) :stack-cons-location)
 		as location = (new-binding-location binding frame-map :default nil)
 		when (and (not (typep binding 'borrowed-binding))
 			  lended-cons-position
@@ -6040,7 +6048,7 @@ and a list of any intervening unwind-protect environment-slots."
 	    ))))
 	 (cond
 	  ((binding-lended-p binding)
-	   (let* ((cons-position (getf (binding-lended-p binding)
+	   (let* ((cons-position (getf (binding-lending binding)
 				       :stack-cons-location))
 		  (init-register (etypecase init-with-register
 				   (lexical-binding
