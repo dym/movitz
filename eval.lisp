@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  2 17:45:05 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: eval.lisp,v 1.7 2004/07/21 14:14:29 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.8 2004/10/11 13:46:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -56,29 +56,41 @@
 	   (eq 'muerte.cl::quote (first x)))
        t))
 
-(defun movitz-constantp (form &optional (environment nil))
-  (let ((form (translate-program form :cl :muerte.cl)))
-    (typecase form
-      (keyword t)
-      (symbol (or (movitz-env-get form 'constantp nil environment)
-		  (typep (movitz-binding form environment) 'constant-object-binding)))
-      (cons (case (car form)
-	      ((muerte.cl:quote) t)
-	      ((muerte.cl:not)
-	       (movitz-constantp (second form)))
-	      ((muerte.cl:+ muerte.cl:- muerte.cl:* muerte.cl:coerce)
-	       (every (lambda (sub-form)
-			(movitz-constantp sub-form environment))
-		      (cdr form)))))
-      (t t))))				; anything else is self-evaluating.
+(defun movitz-constantp (form &optional (env nil))
+  (typecase form
+    (keyword t)
+    (symbol
+     (let ((form (translate-program form :cl :muerte.cl)))
+       (or (movitz-env-get form 'constantp nil env)
+	   (typep (movitz-binding form env) 'constant-object-binding))))
+    (cons
+     (let* ((compiler-macro-function (movitz-compiler-macro-function (car form) env))
+	    (compiler-macro-expansion (and compiler-macro-function
+					   (funcall *movitz-macroexpand-hook*
+						    compiler-macro-function
+						    form env))))
+       (or (let ((form (translate-program form :cl :muerte.cl)))
+	     (case (car form)
+	       ((muerte.cl:quote) t)
+	       ((muerte.cl:not)
+		(movitz-constantp (second form)))
+	       ((muerte.cl:+ muerte.cl:- muerte.cl:* muerte.cl:coerce)
+		(every (lambda (sub-form)
+			 (movitz-constantp sub-form env))
+		       (cdr form)))))
+	   (and compiler-macro-function
+		(not (movitz-env-get (car form) 'notinline nil env))
+		(not (eq form compiler-macro-expansion))
+		(movitz-constantp compiler-macro-expansion env)))))
+    (t t)))				; anything else is self-evaluating.
 
 
-(defun isconst (x)
-  (or (integerp x)
-      (stringp x)
-      (eq t x)
-      (eq nil x)
-      (quote-form-p x)))
+;;;(defun isconst (x)
+;;;  (or (integerp x)
+;;;      (stringp x)
+;;;      (eq t x)
+;;;      (eq nil x)
+;;;      (quote-form-p x)))
 
 (defun eval-form (&rest args)
   (apply 'movitz-eval args))
@@ -115,11 +127,32 @@
 
 (defun eval-cons (form env top-level-p)
   "3.1.2.1.2 Conses as Forms"
-  (let ((operator (car form)))
-    (declare (ignore operator))
+  (let* ((operator (car form))
+	 (compiler-macro-function (movitz-compiler-macro-function operator env))
+	 (compiler-macro-expansion (and compiler-macro-function
+					(funcall *movitz-macroexpand-hook*
+						 compiler-macro-function
+						 form env))))
     (cond
-     ((movitz-constantp form env)
-      (eval-constant-compound form env top-level-p))
+;;;     ((movitz-constantp form env)
+;;;      (eval-constant-compound form env top-level-p))
+     ((member operator '(cl:quote muerte.cl::quote))
+      (eval-self-evaluating (second form) env top-level-p))
+     ((member operator '(muerte.cl::not))
+      (not (eval-form (second form) env nil)))
+     ((member operator '(muerte.cl:+ muerte.cl:- muerte.cl:*))
+      (apply (translate-program (car form) :muerte.cl :cl)
+	     (mapcar (lambda (sub-form)
+		       (movitz-eval sub-form env nil))
+		     (cdr form))))
+     ((member operator '(muerte.cl:coerce))
+      (apply #'coerce
+	     (mapcar (lambda (arg) (movitz-eval arg env nil))
+		     (cdr form))))
+     ((and compiler-macro-function
+	   (not (movitz-env-get (car form) 'notinline nil env))
+	   (not (eq form compiler-macro-expansion)))
+      (movitz-eval compiler-macro-expansion env top-level-p))
 ;;;     ((lambda-form-p form)
 ;;;      (eval-lambda-form form env top-level-p))
 ;;;     ((symbolp operator)
