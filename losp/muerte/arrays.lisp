@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.4 2004/03/08 14:26:13 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.5 2004/03/08 14:33:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -199,7 +199,7 @@
 		(:compile-form (:result-mode :ignore)
 		 (error "Not a vector: ~S" vector))))
 		
-;;;	(:shrl #.movitz::+movitz-fixnum-shift+ :ebx)
+	(:shrl #.movitz::+movitz-fixnum-shift+ :ebx)
 	(:movzxw (:eax -2) :ecx)
 
 	(:cmpw (:eax #.(bt:slot-offset 'movitz:movitz-vector 'movitz::num-elements)) :bx)
@@ -209,13 +209,12 @@
 
 	(:cmpl #.(movitz:vector-type-tag :any-t) :ecx)
 	(:jne 'not-any-t)
-	(:movl (:eax :ebx 2) :eax)
+	(:movl (:eax (:ebx 4) 2) :eax)
 	(:jmp 'done)
 
        not-any-t
 	(:cmpl #.(movitz:vector-type-tag :character) :ecx)
 	(:jne 'not-character)
-	(:shrl #.movitz::+movitz-fixnum-shift+ :ebx)
 	(:movb (:eax :ebx 2) :bl)
 	(:xorl :eax :eax)
 	(:movb :bl :ah)
@@ -225,7 +224,6 @@
        not-character
 	(:cmpl #.(movitz:vector-type-tag :u8) :ecx)
 	(:jne 'not-u8)
-	(:shrl #.movitz::+movitz-fixnum-shift+ :ebx)
 	(:movzxb (:eax :ebx 2) :eax)	; u8
 	(:shll #.movitz::+movitz-fixnum-shift+ :eax)
 	(:jmp 'done)
@@ -233,14 +231,13 @@
        not-u8
 	(:cmpl #.(movitz:vector-type-tag :u16) :ecx)
 	(:je 'not-u16)
-	(:shrl #.(cl:1- movitz::+movitz-fixnum-shift+) :ebx)
-	(:movzxw (:eax :ebx 2) :eax)	; u16
+	(:movzxw (:eax (:ebx 2) 2) :eax) ; u16
 	(:jmp 'done)
 
        not-u16
 	(:cmpl #.(movitz:vector-type-tag :u32) :ecx)
 	(:je 'not-u32)
-	(:movl (:eax :ebx 2) :ecx)	; u32
+	(:movl (:eax (:ebx 4) 2) :ecx)	; u32
 	(:cmpl #.movitz::+movitz-most-positive-fixnum+ :ecx)
 	(:jg '(:sub-program (:overflowing-u32)
 	       (:int 107)))
