@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.87 2004/07/29 00:12:54 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.88 2004/08/06 14:41:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3404,7 +3404,7 @@ loading borrowed bindings."
 		      `((:cmpl :edi (:ebp ,(stack-frame-offset binding-location)))
 			(:jne ',(operands result-mode)))
 		    (ecase (operator binding-location)
-		      ((:eax :ebx)
+		      ((:eax :ebx :edx)
 		       `((:cmpl :edi ,binding-location)
 			 (:jne ',(operands result-mode))))
 		      (:argument-stack
@@ -3415,7 +3415,7 @@ loading borrowed bindings."
 		      `((:cmpl :edi (:ebp ,(stack-frame-offset binding-location)))
 			(:je ',(operands result-mode)))
 		    (ecase (operator binding-location)
-		      ((:eax :ebx)
+		      ((:eax :ebx :edx)
 		       `((:cmpl :edi ,binding-location)
 			 (:je ',(operands result-mode))))
 		      (:argument-stack
@@ -4264,6 +4264,10 @@ Return arg-init-code, need-normalized-ecx-p."
 							      (function-argument-argnum binding)))
 		 unless (movitz-env-get optional-var 'ignore nil env nil)
 		 append
+		   `((:init-lexvar ,binding))
+		 when supplied-p-binding
+		 append `((:init-lexvar ,supplied-p-binding))
+		 append
 		   (compiler-values-bind (&code init-code-edx &producer producer)
 		       (compiler-call #'compile-form
 			 :form (optional-function-argument-init-form binding)
@@ -4379,7 +4383,7 @@ Return arg-init-code, need-normalized-ecx-p."
 		 (append #+ignore (make-immediate-move rest-position :edx)
 			 `(#+ignore (:call (:edi ,(global-constant-offset 'restify-dynamic-extent)))
 			   (:init-lexvar ,rest-binding
-					 :init-with-register :eax
+					 :init-with-register :edx
 					 :init-with-type list)))))
 	     (cond
 	      ;; &key processing..
@@ -5942,7 +5946,7 @@ and a list of any intervening unwind-protect environment-slots."
 	(append
 	 (cond
 	  ((typep binding 'rest-function-argument)
-	   (assert (eq :eax init-with-register))
+	   (assert (eq :edx init-with-register))
 	   (assert (or (typep binding 'hidden-rest-function-argument)
 		       (movitz-env-get (binding-name binding)
 				       'dynamic-extent nil (binding-env binding)))
@@ -5951,13 +5955,47 @@ and a list of any intervening unwind-protect environment-slots."
 	   (setf (need-normalized-ecx-p (find-function-env (binding-env binding)
 							   funobj))
 	     t)
-	   (append (make-immediate-move (function-argument-argnum binding) :edx)
-		   `((:call (:edi ,(global-constant-offset 'restify-dynamic-extent))))
-		   #+ignore
-		   (unless (or (typep binding 'hidden-rest-function-argument)
-			       (movitz-env-get (binding-name binding)
-					       'dynamic-extent nil (binding-env binding)))
-		     (make-compiled-funcall-by-symbol 'muerte.cl:copy-list 1 funobj)))))
+	   (let ((restify-alloca-loop (gensym "alloca-loop-"))
+		 (restify-done (gensym "restify-done-"))
+		 (restify-at-one (gensym "restify-at-one-"))
+		 (restify-loop (gensym "restify-loop-")))
+	   (append
+	    ;; (make-immediate-move (function-argument-argnum binding) :edx)
+	    ;; `((:call (:edi ,(global-constant-offset 'restify-dynamic-extent))))
+	    ;; Make space for (1+ (* 2 (- ECX rest-pos))) words on the stack.
+	    ;; Factor two is for one cons-cell per word, 1 is for 8-byte alignment.
+	    `((:movl :edi :edx)
+	      (:subl ,(function-argument-argnum binding) :ecx)
+	      (:jbe ',restify-done)
+	      (:leal ((:ecx 8) 4) :edx)	; EDX is fixnum counter
+	      ,restify-alloca-loop
+	      (:pushl :edi)
+	      (:subl 4 :edx)
+	      (:jnz ',restify-alloca-loop)
+	      (:leal (:esp 5) :edx)
+	      (:andl -7 :edx))		; Make EDX a proper consp into the alloca area.
+	    (cond
+	     ((= 0 (function-argument-argnum binding))
+	      `((:movl :eax (:edx -1))
+		(:movl :edx :eax)
+		(:subl 1 :ecx)
+		(:jz ',restify-done)
+		(:addl 8 :eax)
+		(:movl :eax (:eax -5))))
+	     (t `((:movl :edx :eax))))
+	    (when (>= 1 (function-argument-argnum binding))
+	      `((:jmp ',restify-at-one)))
+	    `(,restify-loop
+	      (:movl (:ebp (:ecx 4) 4) :ebx)
+	      ,restify-at-one
+	      (:movl :ebx (:eax -1))
+	      (:subl 1 :ecx)
+	      (:jz ',restify-done)
+	      (:addl 8 :eax)
+	      (:movl :eax (:eax -5))
+	      (:jmp ',restify-loop)
+	      ,restify-done)
+	    ))))
 	 (cond
 	  ((binding-lended-p binding)
 	   (let* ((cons-position (getf (binding-lended-p binding)
