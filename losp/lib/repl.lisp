@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 19 14:58:12 2003
 ;;;;                
-;;;; $Id: repl.lisp,v 1.11 2004/04/23 14:59:35 ffjeld Exp $
+;;;; $Id: repl.lisp,v 1.12 2004/07/21 22:29:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,7 +18,18 @@
 (require :lib/readline)
 (provide :lib/repl)
 
-(in-package muerte.lib)
+(defpackage #:muerte.repl
+  (:documentation "Implementation of Read Eval Print Loop.")
+  (:nicknames #:repl)
+  (:use #:common-lisp #:muerte)
+  (:export #:*repl-level*
+	   #:*repl-prompter*
+	   #:*repl-prompt-context*
+	   #:*repl-print-format*
+	   #:*repl-readline-context*
+	   #:read-eval-print))
+
+(in-package #:muerte.repl)
 
 (defparameter *repl-level* -1)
 (defparameter *repl-prompter* 'default-repl-prompter)

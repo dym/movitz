@@ -10,12 +10,13 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Sep 27 17:24:11 2002
 ;;;;                
-;;;; $Id: package.lisp,v 1.3 2004/01/19 11:23:44 ffjeld Exp $
+;;;; $Id: package.lisp,v 1.4 2004/07/21 22:29:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
-(defpackage muerte.lib
-  (:use muerte.cl muerte)
+(defpackage #:muerte.lib
+  (:nicknames #:lib)
+  (:use #:common-lisp #:muerte)
   (:export #:*scroll-offset*
 	   #:cursor-x cursor-y
 	   #:console-width console-height
@@ -58,12 +59,12 @@
 	   #:with-named-integers-syntax
 	   
 	   ;; :lib/repl
-	   #:*repl-level*
-	   #:*repl-prompter*
-	   #:*repl-prompt-context*
-	   #:*repl-print-format*
-	   #:*repl-readline-context*
-	   #:read-eval-print
+;;;	   #:*repl-level*
+;;;	   #:*repl-prompter*
+;;;	   #:*repl-prompt-context*
+;;;	   #:*repl-print-format*
+;;;	   #:*repl-readline-context*
+;;;	   #:read-eval-print
 	   ))
 
 (provide :lib/package)
