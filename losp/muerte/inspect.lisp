@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.31 2004/07/23 15:36:46 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.32 2004/07/27 09:19:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -245,7 +245,7 @@ after the point that called this stack-frame."
 		  (test cdr)))
 	    (structure-object
 	     (and (typep y 'structure-object)
-		  (test structure-object-name)
+		  (test structure-object-class)
 		  (test structure-object-length)
 		  (dotimes (i (structure-object-length x) t)
 		    (unless (test structure-ref i)

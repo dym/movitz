@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.11 2004/07/24 01:30:44 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.12 2004/07/27 09:19:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,6 +22,9 @@
 (defun structure-object-length (object)
   (check-type object structure-object)
   (memref object -4 0 :unsigned-byte14))
+
+(defun structure-object-class (x)
+  (memref x -6 1 :lisp))
 
 (defun copy-structure (object)
   ;; (check-type object structure-object)
@@ -167,6 +170,7 @@ Parameters: struct-name."
 	       ((cons symbol (cons * null))
 		(let ((parameter (second option)))
 		  (ecase (car option)
+		    (:superclass (push parameter (getf collector :superclass)))
 		    (:conc-name (push (string (or parameter ""))
 				      (getf collector :conc-name)))
 		    (:constructor (push parameter (getf collector :constructor)))
@@ -194,6 +198,7 @@ Parameters: struct-name."
 			  (assert (<= 1 (length (getf options ,option)) ,max-values) ()
 			    "Option ~S given too many times." ,option))))
 	  (default (:type 1) 'class-struct)
+	  (default (:superclass 1) 'structure-object)
 	  (default (:named 1) nil)
 	  (default (:conc-name 1)
 	      (concatenate 'string (string struct-name) (string #\-)))
@@ -202,9 +207,15 @@ Parameters: struct-name."
 	  (default (:predicate 1)
 	      (intern (concatenate 'string (string struct-name) (string '-p)))))
 	(let* ((struct-type (first (getf options :type)))
+	       (superclass (first (getf options :superclass)))
 	       (struct-named (first (getf options :named)))
 	       (conc-name (first (getf options :conc-name)))
 	       (predicate-name (first (getf options :predicate)))
+	       (standard-name-and-options (if (not (consp name-and-options))
+					      name-and-options
+					    (remove :superclass name-and-options
+						    :key (lambda (x)
+							   (when (consp x) (car x))))))
 	       (canonical-slot-descriptions
 		(mapcar #'(lambda (d)
 			    "(<slot-name> <init-form> <type> <read-only-p> <initarg>)"
@@ -224,9 +235,9 @@ Parameters: struct-name."
 		  (setf (gethash '(:translate-when :eval ,struct-name :cl :muerte.cl)
 				 (movitz::image-struct-slot-descriptions movitz:*image*))
 		    '(:translate-when :eval ,slot-descriptions :cl :muerte.cl))
-		  (defstruct (:translate-when :eval ,name-and-options :cl :muerte.cl)
+		  (defstruct (:translate-when :eval ,standard-name-and-options :cl :muerte.cl)
 		    . (:translate-when :eval ,slot-names :cl :muerte.cl)))
-		(defclass ,struct-name (structure-object) ()
+		(defclass ,struct-name (,superclass) ()
 			  (:metaclass structure-class)
 			  (:slots ,(loop for (name) in canonical-slot-descriptions
 				       as location upfrom 0
@@ -334,6 +345,5 @@ Parameters: struct-name."
 		',struct-name))
 	    ))))))
 
-;;;(defun structure-object-name (x)
-;;;  (movitz-accessor x movitz-struct name))
+
 
