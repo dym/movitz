@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.61 2004/07/14 13:53:16 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.62 2004/07/14 16:17:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -283,7 +283,6 @@
 		   ;; Assume x is smallest.
 		   (with-inline-assembly (:returns :eax :labels (retry-not-size1
 								 not-size1
-								 term-zero
 								 copy-bignum-loop
 								 add-bignum-loop
 								 add-bignum-done
@@ -339,8 +338,14 @@
 			     (:jmp 'add-bignum-done)))
 		     (:addl (:ebx :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
 			    :ecx)
-		    term-zero
-		     (:adcl :ecx (:eax :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
+		     (:jc '(:sub-program (term1-carry)
+			    ;; The digit + carry carried over, ECX = 0
+			    (:movl 1 :ecx)
+			    (:addl 4 :edx)
+			    (:cmpw :dx (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)))
+			    (:jae 'add-bignum-loop)
+			    (:jmp 'add-bignum-done)))
+		     (:addl :ecx (:eax :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
 		     (:sbbl :ecx :ecx)
 		     (:negl :ecx)	; ECX = Add's Carry.
 		     (:addl 4 :edx)
@@ -478,7 +483,10 @@
 		       sub-loop
 			(:addl (:ebx :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0))
 			       :ecx)
-			(:sbbl :ecx
+			(:jc '(:sub-program (carry-overflow)
+			       ;;
+			       (:break)))
+			(:subl :ecx
 			       (:eax :edx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)))
 			(:sbbl :ecx :ecx)
 			(:negl :ecx)
@@ -1287,8 +1295,8 @@ Preserve EAX and EBX."
 		   ;; X is the biggest factor.
 		   (let ((r 0) (f 0))
 		     (dotimes (half-bigit (* 2 (%bignum-bigits y)))
-		       (incf r (ash (* (memref y -2 half-bigit :unsigned-byte16) x)
-				    f))
+		       (setf r (+ r (ash (* (memref y -2 half-bigit :unsigned-byte16) x)
+					  f)))
 		       (incf f 16))
 		     r))))))
 	(do-it)))
