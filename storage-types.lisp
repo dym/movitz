@@ -9,13 +9,11 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.34 2004/07/28 10:00:50 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.35 2004/07/29 00:13:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (in-package movitz)
-
-(defvar *movitz-nil* nil)
 
 ;; (defconstant +tag-other+ 6)
 
@@ -276,14 +274,14 @@ integer (native lisp) value."
 
 (defun print-cons (ic stream)
   (typecase (movitz-cdr ic)
-    (movitz-nil (format stream "~A" (movitz-car ic)))
+    (movitz-null (format stream "~A" (movitz-car ic)))
     (movitz-cons (format stream "~A " (movitz-car ic)))
     (t (format stream "~A . ~A" (movitz-car ic) (movitz-cdr ic)))))
 
 (defun movitz-list-length (x)
   (etypecase x
     (list (list-length x))
-    (movitz-nil 0)
+    (movitz-null 0)
     (movitz-cons
      (flet ((movitz-endp (x) (eq x *movitz-nil*)))
        (do ((n 0 (+ n 2))		;Counter.
@@ -533,38 +531,38 @@ integer (native lisp) value."
 ;;; Symbols
 
 (define-binary-class movitz-symbol (movitz-heap-object)
-  ((value
-    :binary-type word
-    :map-binary-write 'movitz-read-and-intern
-    :map-binary-read-delayed 'movitz-word
-    :initform 'muerte::unbound	;
-    :accessor movitz-symbol-value
-    :initarg value)
-   (function-value
+  ((function-value
     :binary-type word
     :accessor movitz-symbol-function-value
     :map-binary-write 'movitz-read-and-intern-function-value
     :map-binary-read-delayed 'movitz-word
-    :initarg function-value
-    :initform 'muerte::unbound)
+    :initarg :function-value
+    :initform 'muerte::unbound-function)
+   (value
+    :binary-type word
+    :map-binary-write 'movitz-read-and-intern
+    :map-binary-read-delayed 'movitz-word
+    :initform 'muerte::unbound		;
+    :accessor movitz-symbol-value
+    :initarg :value)
    (plist
     :binary-type word
     :accessor movitz-plist
-    :map-binary-write 'movitz-intern
+    :map-binary-write 'movitz-read-and-intern
     :map-binary-read-delayed 'movitz-word
-    :initform *movitz-nil*
-    :initarg plist)
+    :initform nil
+    :initarg :plist)
    (name
     :binary-type word
-    :map-binary-write 'movitz-intern
+    :map-binary-write 'movitz-read-and-intern
     :map-binary-read-delayed 'movitz-word
-    :initarg name
+    :initarg :name
     :accessor movitz-symbol-name)
    (package
     :binary-type word
-    :map-binary-write 'movitz-intern
+    :map-binary-write 'movitz-read-and-intern
     :map-binary-read-delayed 'movitz-word
-    :initform *movitz-nil*
+    :initform nil
     :accessor movitz-symbol-package)
    (flags
     :binary-type (define-bitfield movitz-symbol-flags (lu16)
@@ -573,6 +571,7 @@ integer (native lisp) value."
 		     :constant-variable 4
 		     :setf-placeholder 5)))
     :accessor movitz-symbol-flags
+    :initarg :flags
     :initform nil)
    (hash-key
     :binary-lisp-type lu16
@@ -581,7 +580,7 @@ integer (native lisp) value."
    (lisp-symbol
     :initform nil
     :initarg :lisp-symbol))
-  (:slot-align value -7))
+  (:slot-align function-value -7))
 
 #+ignore
 (defmethod write-binary-record :before ((obj movitz-symbol) stream)
@@ -604,7 +603,7 @@ integer (native lisp) value."
   (let ((name-string (image-read-intern-constant *image* (symbol-name name))))
     (make-instance 'movitz-symbol
       :hash-key (movitz-sxhash name-string)
-      'name name-string
+      :name name-string
       :lisp-symbol name)))
 
 (defmethod print-object ((object movitz-symbol) stream)
@@ -620,8 +619,6 @@ integer (native lisp) value."
 (defun movitz-read-and-intern-function-value (obj type)
   (assert (eq type 'word))
   (cond
-   ((eq 'muerte::unbound obj)
-    (binary-slot-value (image-run-time-context *image*) 'unbound-function))
    ((typep obj 'movitz-funobj)
     (movitz-intern obj))
    ((symbolp obj)
@@ -632,90 +629,26 @@ integer (native lisp) value."
 
 ;;; NIL
 
-(define-binary-class movitz-nil (movitz-heap-object)
-  ((car :binary-type word
-	:map-binary-read-delayed 'movitz-word
-	:map-binary-write 'movitz-intern)
-   (cdr :binary-type word
-	:map-binary-read-delayed 'movitz-word
-	:map-binary-write 'movitz-intern)
-   (sym :reader movitz-nil-sym)))
 
-(defmethod movitz-object-offset ((obj movitz-nil)) (error "xxx"))
-(defmethod movitz-symbol-value ((obj movitz-nil)) obj)
-
-(defmethod update-movitz-object ((obj movitz-nil) lisp-obj)
-  (declare (ignore lisp-obj))
-  (values))
-
-(defmethod movitz-car ((x movitz-nil)) x)
-(defmethod movitz-cdr ((x movitz-nil)) x)
-
-(define-binary-class movitz-nil-symbol (movitz-symbol)
-  ((value
-    :binary-type word
-    :initform nil
-    :map-binary-write 'movitz-read-and-intern
-    :map-binary-read-delayed 'movitz-word)
-   (function-value
-    :initarg function-value
-    :initform 'muerte::unbound
-    :binary-type word
-    :map-binary-write 'movitz-read-and-intern-function-value
-    :map-binary-read-delayed 'movitz-word)
-   (plist
-    :binary-type word
-    :initform nil
-    :map-binary-write 'movitz-intern
-    :map-binary-read-delayed 'movitz-word)
-   (name
-    :binary-type word
-    :map-binary-write 'movitz-intern
-    :map-binary-read-delayed 'movitz-word)
-   (package
-    :binary-type word
-    :initform *movitz-nil*
-    :map-binary-write 'movitz-intern
-    :map-binary-read-delayed 'movitz-word)
-   (hash-key
-    :binary-lisp-type lu16)
-   (flags
-    :binary-type movitz-symbol-flags
-    :initform '(:constant-variable)))
-  (:slot-align value 7))
-
-(defmethod movitz-intern ((object movitz-nil-symbol) &optional type)
-  (declare (ignore type))
-  (image-intern-object *image* object))
-
-;;;(defmethod movitz-intern ((obj movitz-nil))
-;;;  (declare (special *image*))
-;;;  (princ (image-nil-value *image*)))
+(define-binary-class movitz-null (movitz-symbol) ())
 
 (defun make-movitz-nil ()
-  (let ((new-nil (make-instance 'movitz-nil)))
-    (setf (slot-value new-nil 'car) new-nil
-	  (slot-value new-nil 'cdr) new-nil)
-    (let ((*movitz-nil* new-nil))
-      (setf (slot-value new-nil 'sym)
-	(make-instance 'movitz-nil-symbol
-	  'name (make-movitz-string "NIL")
-	  'value new-nil
-	  'function-value 'muerte::unbound
-	  'plist new-nil
-	  :hash-key (if (not (boundp '*image*)) 0
-		      (logand #xffff (incf (image-symbol-hash-key-counter *image*)))))))
-    new-nil))
+  (make-instance 'movitz-null
+    :name (symbol-name nil)
+    :value nil
+    :plist nil
+    :hash-key 0
+    :flags '(:constant-variable)))
+
+(defmethod movitz-intern ((object movitz-null) &optional (type 'word))
+  (assert (eq 'word type))
+  (image-nil-word *image*))
 
 (defun movitz-null (x)
-  (eq x *movitz-nil*))
+  (typep x 'movitz-null))
 
 (deftype movitz-list ()
-  `(or movitz-cons (satisfies movitz-null)))
-
-(defmethod movitz-intern ((obj movitz-nil) &optional type)
-  (declare (ignore type))
-  (image-nil-word *image*))
+  `(or movitz-cons movitz-null))
 
 ;;; Compiled funobj
 
@@ -1046,7 +979,8 @@ integer (native lisp) value."
 (defun movitz-sxhash (object)
   "Must match the SXHASH function in :cl/hash-tables."
   (typecase object
-    (movitz-nil 0)
+    (movitz-null
+     0)
     (movitz-symbol
      (movitz-symbol-hash-key object))
     (movitz-string
@@ -1134,9 +1068,9 @@ integer (native lisp) value."
 					     
 ;;;
 
-(unless (typep *movitz-nil* 'movitz-nil)
-  (warn "Creating new *MOVITZ-NIL* object!")
-  (setf *movitz-nil* (make-movitz-nil)))
+;;;(unless (typep *movitz-nil* 'movitz-nil)
+;;;  (warn "Creating new *MOVITZ-NIL* object!")
+;;;  (setf *movitz-nil* (make-movitz-nil)))
 
 
 (define-binary-class gate-descriptor ()
@@ -1218,8 +1152,8 @@ integer (native lisp) value."
    (pad :binary-lisp-type 3)
    (dummy
     :binary-type word
-    :initform *movitz-nil*
-    :map-binary-write 'movitz-intern
+    :initform nil
+    :map-binary-write 'movitz-read-and-intern
     :map-binary-read-delayed 'movitz-word)
    (class
     :binary-type word

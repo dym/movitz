@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.53 2004/07/28 10:00:33 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.54 2004/07/29 00:13:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -119,16 +119,21 @@
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
    ;; function global constants
-   (unbound-function
-    :binary-type word
-    :binary-tag :global-function
-    :map-binary-read-delayed 'movitz-word
-    :map-binary-write 'movitz-intern)   
+;;;   (unbound-function
+;;;    :binary-type word
+;;;    :binary-tag :global-function
+;;;    :map-binary-read-delayed 'movitz-word
+;;;    :map-binary-write 'movitz-intern)   
    ;; per thread parameters
    (dynamic-env
     :binary-type lu32
     :initform 0)
    ;; More per-thread parameters
+   (unwind-protect-tag
+    :binary-type word
+    :map-binary-read-delayed 'movitz-word
+    :map-binary-write 'movitz-read-and-intern
+    :initform 'muerte::unwind-protect-tag)
    (restart-tag
     :binary-type word
     :map-binary-read-delayed 'movitz-word
@@ -141,18 +146,8 @@
     :binary-type word			; in order for the bound instruction to work.
     :initform #x100000)
    ;;
-   (unbound-value
-    :binary-type word
-    :map-binary-read-delayed 'movitz-word
-    :map-binary-write 'movitz-read-and-intern
-    :initform 'muerte::unbound)
-   (unwind-protect-tag
-    :binary-type word
-    :map-binary-read-delayed 'movitz-word
-    :map-binary-write 'movitz-read-and-intern
-    :initform 'muerte::unwind-protect-tag)
    (boolean-one :binary-type :label)
-   (not-nil				; not-nil, t-symbol and null-cons must be consecutive.
+   (not-nil				; not-nil, t-symbol and not-not-nil must be consecutive.
     :binary-type word
     :initform nil
     :map-binary-write 'movitz-read-and-intern
@@ -163,13 +158,21 @@
     :initarg :t-symbol
     :map-binary-write 'movitz-intern
     :map-binary-read-delayed 'movitz-word)
-   (null-cons
-    :binary-type movitz-nil
-    :initarg :null-cons)
-   (null-sym
-    :binary-type movitz-nil-symbol
+   (not-not-nil
+    :binary-type word
+    :initform nil
+    :map-binary-write 'movitz-read-and-intern
+    :map-binary-read-delayed 'movitz-word)
+   ;;   (null-cons :binary-type :label)
+   (null-symbol
+    :binary-type movitz-symbol
     :reader movitz-run-time-context-null-symbol
-    :initarg :null-sym)
+    :initarg :null-symbol)
+   (unbound-value
+    :binary-type word
+    :map-binary-read-delayed 'movitz-word
+    :map-binary-write 'movitz-read-and-intern
+    :initform 'muerte::unbound)
    ;; primitive functions global constants
    (dynamic-find-binding
     :map-binary-write 'movitz-intern-code-vector
@@ -480,7 +483,7 @@
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function))
-  (:slot-align null-cons -1))
+  (:slot-align null-symbol -5))
 
 (defun atomically-status-simple-pf (pf-name reset-status-p &rest registers)
   (bt:enum-value 'movitz::atomically-status
@@ -511,15 +514,17 @@
 
 (defun global-constant-offset (slot-name)
   (check-type slot-name symbol)
-  
-  (slot-offset 'movitz-run-time-context
-	       (intern (symbol-name slot-name) :movitz)))
+  (let ((slot-name (find-symbol (symbol-name slot-name) :movitz)))
+    (assert slot-name)
+    (if (not (eq slot-name 'unbound-function))
+	(slot-offset 'movitz-run-time-context slot-name)
+      (+ (slot-offset 'movitz-run-time-context 'null-symbol)
+	 (slot-offset 'movitz-symbol 'function-value)))))
 
 (defun make-movitz-run-time-context ()
   (make-instance 'movitz-run-time-context
     :t-symbol (movitz-read 't)
-    :null-cons *movitz-nil*
-    :null-sym (movitz-nil-sym *movitz-nil*)))
+    :null-symbol  *movitz-nil*))
 
 (defclass image ()
   ((ds-segment-base
@@ -560,6 +565,9 @@
     :accessor image-symbol-hash-key-counter)
    (nil-word
     :accessor image-nil-word)
+   (nil-object
+    :initarg :nil-object
+    :accessor image-nil-object)
    (t-symbol
     :accessor image-t-symbol)
    (bootblock
@@ -639,7 +647,7 @@
       ()
     "The MOVITZ-HEAP-OBJECT-OTHER type ~A is malformed!" (type-of object))
   (etypecase object
-    (movitz-nil
+    (movitz-null
      (image-nil-word image))
     (movitz-heap-object
      (+ (movitz-object-offset object)
@@ -778,6 +786,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 
 (defun make-movitz-image (start-address)
   (let ((*image* (make-instance 'symbolic-image
+		   :nil-object (make-movitz-nil)
 		   :start-address start-address
 		   :movitz-features '(:movitz)
 		   :function-code-sizes
@@ -785,8 +794,8 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		       (copy-hash-table (function-code-sizes *image*))
 		     (make-hash-table :test #'equal)))))
     (setf (image-nil-word *image*)
-      (1+ (- (slot-offset 'movitz-run-time-context 'null-cons)
-	     (slot-offset 'movitz-run-time-context 'run-time-context-start))))
+      (+ 5 (- (slot-offset 'movitz-run-time-context 'null-symbol)
+	      (slot-offset 'movitz-run-time-context 'run-time-context-start))))
     (format t "~&;; NIL value: #x~X.~%" (image-nil-word *image*))
     (assert (eq :null (extract-tag (image-nil-word *image*))) ()
       "NIL value #x~X has tag ~D, but it must be ~D."
@@ -914,10 +923,13 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 											   ;; do (warn "sp: ~S ~S" symbol plist)
 	      do (let ((x (movitz-read symbol)))
 		   (typecase x
+		     (movitz-null)
 		     (movitz-symbol
 		      (setf (movitz-plist x)
-			(movitz-read (translate-program plist :cl :muerte.cl))))
-		     (movitz-nil)
+			(movitz-read (translate-program (loop for (property value) on plist by #'cddr
+							    unless (member property '(special constantp))
+							    append (list property value))
+							:cl :muerte.cl))))
 		     (t (warn "not a symbol for plist: ~S has ~S" symbol plist)))))
 	  ;; pull in global properties
 	  (loop for var in (image-compile-time-variables *image*)
@@ -1479,7 +1491,7 @@ this image will not be Multiboot compatible."
 (defun movitz-make-upload-form (object &optional (quotep t))
   "Not completed."
   (typecase object
-    ((or movitz-nil null) "()")
+    ((or movitz-null null) "()")
     (cons
      (format nil "(list~{ ~A~})"
 	     (mapcar #'movitz-make-upload-form object)))
@@ -1547,7 +1559,7 @@ this image will not be Multiboot compatible."
     (symbol expr)
     (array expr)
     (cons (mapcar #'movitz-print expr))
-    ((or movitz-nil movitz-run-time-context) nil)
+    ((or (satisfies movitz-null) movitz-run-time-context) nil)
     (movitz-fixnum
      (movitz-fixnum-value expr))
     (movitz-std-instance expr)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.17 2004/07/15 21:07:32 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.18 2004/07/29 00:13:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,6 +20,23 @@
 (provide :muerte/symbols)
 
 (in-package muerte)
+
+(define-compiler-macro get-symbol-slot (object slot &optional (type t))
+  "Read a slot off a symbol (including NIL)."
+  `(with-inline-assembly (:returns :eax :type ,type)
+     (:compile-form (:result-mode :eax) ,object)
+     (:leal (:eax ,(- (movitz:tag :null))) :ecx)
+     (:andl 7 :ecx)
+     (:testb 5 :cl)
+     (:jnz '(:sub-program (not-a-symbol)
+	     (:compile-form (:result-mode :ignore)
+	      (error-not-symbol (assembly-register :eax)))))
+     (:xorl 2 :ecx)
+     (:movl (:eax :ecx (:offset movitz-symbol ,slot))
+	    :eax)))
+
+(defun error-not-symbol (x)
+  (error 'type-error :expected-type 'symbol :datum x))
 
 (defun symbol-value (symbol)
   "Returns the dynamic value of SYMBOL."
@@ -40,7 +57,7 @@
     (:movl (:eax) :eax)
     (:jmp 'done)
    no-local-binding
-    (:movl (:eax #.(bt:slot-offset 'movitz::movitz-symbol 'movitz::value)) :eax)
+    (:movl (:eax (:offset movitz-symbol value)) :eax)
    done))
 
 (defun (setf symbol-value) (value symbol)
@@ -70,12 +87,7 @@
   (setf (%symbol-global-value symbol) value))
 
 (defun symbol-function (symbol)
-  (let ((function-value
-	 (etypecase symbol
-	   (null
-	    (movitz-accessor symbol movitz-nil-symbol function-value))
-	   (symbol
-	    (movitz-accessor symbol movitz-symbol function-value)))))
+  (let ((function-value (get-symbol-slot symbol function-value)))
     (when (eq function-value (load-global-constant movitz::unbound-function))
       (error 'undefined-function :name symbol))
     function-value))
@@ -90,14 +102,9 @@
   (setf-movitz-accessor (symbol movitz-symbol function-value) value))
 
 (defun symbol-name (symbol)
-  (etypecase symbol
-    (null
-     (movitz-accessor symbol movitz-nil-symbol name))
-    (symbol 
-     (movitz-accessor symbol movitz-symbol name))))
+  (get-symbol-slot symbol name string))
 
 (defun (setf symbol-name) (value symbol)
-  (check-type value string)
   (etypecase symbol
     (null
      (error "Can't change the name of NIL."))
@@ -105,11 +112,7 @@
      (setf-movitz-accessor (symbol movitz-symbol name) value))))
 
 (defun symbol-plist (symbol)
-  (etypecase symbol
-    (null
-     (movitz-accessor symbol movitz-nil-symbol plist))
-    (symbol 
-     (movitz-accessor symbol movitz-symbol plist))))
+  (get-symbol-slot symbol plist))
 
 (defun (setf symbol-plist) (value symbol)
   (etypecase symbol
@@ -119,11 +122,7 @@
      (setf-movitz-accessor (symbol movitz-symbol plist) value))))
 
 (defun symbol-package (symbol)
-  (etypecase symbol
-    (null
-     (movitz-accessor symbol movitz-nil-symbol package))
-    (symbol
-     (movitz-accessor symbol movitz-symbol package))))
+  (get-symbol-slot symbol package))
 
 (defun boundp (symbol)
   (boundp symbol))
@@ -134,11 +133,8 @@
   symbol)
 
 (defun fboundp (symbol)
-  (etypecase symbol
-    (null nil)
-    (symbol
-     (not (eq (movitz-accessor symbol movitz-symbol function-value)
-	      (load-global-constant movitz::unbound-function))))))
+  (not (eq (get-symbol-slot symbol function-value)
+	   (load-global-constant movitz::unbound-function))))
 
 (defun %create-symbol (name &optional (package nil)
 				      (plist nil)

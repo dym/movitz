@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:52:58 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: movitz.lisp,v 1.8 2004/07/21 22:28:48 ffjeld Exp $
+;;;; $Id: movitz.lisp,v 1.9 2004/07/29 00:13:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,6 +19,9 @@
 (defvar *ii* nil)			; for interactive use.
 
 (defvar *image*)
+
+(define-symbol-macro *movitz-nil*
+    (image-nil-object *image*))
 
 (define-unsigned lu16 2 :little-endian)
 (define-unsigned lu32 4 :little-endian)

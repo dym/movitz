@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.86 2004/07/28 10:00:20 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.87 2004/07/29 00:12:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3679,7 +3679,7 @@ loading borrowed bindings."
     (case op
       (:movl
        (etypecase movitz-obj
-	 (movitz-nil
+	 (movitz-null
 	  (ecase (result-mode-type result-mode)
 	    (:lexical-binding
 	     (make-store-lexical result-mode :edi nil frame-map))
@@ -4369,7 +4369,7 @@ Return arg-init-code, need-normalized-ecx-p."
 			    ,optional-ok-label)))))
 	     (when rest-var
 	       (let* ((rest-binding (movitz-binding rest-var env))
-		      (rest-position (function-argument-argnum rest-binding)))
+		      #+ignore (rest-position (function-argument-argnum rest-binding)))
 		 #+ignore
 		 (assert (or (typep rest-binding 'hidden-rest-function-argument)
 			     (movitz-env-get rest-var 'dynamic-extent nil env))
@@ -4377,8 +4377,7 @@ Return arg-init-code, need-normalized-ecx-p."
 		   "&REST variable ~S must be dynamic-extent." rest-var)
 		 ;; (setq need-normalized-ecx-p t)
 		 (append #+ignore (make-immediate-move rest-position :edx)
-			 `(#+ignore
-			   (:call (:edi ,(global-constant-offset 'restify-dynamic-extent)))
+			 `(#+ignore (:call (:edi ,(global-constant-offset 'restify-dynamic-extent)))
 			   (:init-lexvar ,rest-binding
 					 :init-with-register :eax
 					 :init-with-type list)))))
@@ -4796,8 +4795,8 @@ Return arg-init-code, need-normalized-ecx-p."
 		   (t (error "Don't know ECX mode ~S." returns-provided)))))
 	       (:boolean-cf=1
 		(values (append code
-				`((:sbbl :ecx :ecx)
-				  (:movl (:edi (:ecx 4) ,(global-constant-offset 'null-cons))
+				`((:sbbl :ecx :ecx) ; T => -1, NIL => 0
+				  (:movl (:edi (:ecx 4) ,(global-constant-offset 'not-not-nil))
 					 :eax)))
 			:eax))
 	       (#.+boolean-modes+
@@ -5632,7 +5631,7 @@ fifth:  all compiler-values for form1, as a list."
     (if (eq movitz-obj (image-t-symbol *image*))
 	(make-indirect-reference :edi (global-constant-offset 't-symbol))
       (etypecase movitz-obj
-	(movitz-nil :edi)
+	(movitz-null :edi)
 	(movitz-immediate-object (movitz-immediate-value movitz-obj))
 	(movitz-heap-object 
 	 (make-indirect-reference :esi (movitz-funobj-intern-constant funobj movitz-obj)))))))

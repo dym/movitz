@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.18 2004/07/09 16:10:26 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.19 2004/07/29 00:12:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -351,7 +351,7 @@ and any element of range1."
   (let ((x (or (= -1 code)
 	       (and (member x members :test #'movitz-eql) t)
 	       (cond
-		((typep x 'movitz-nil)
+		((typep x 'movitz-null)
 		 (type-code-p 'symbol code))
 		((basic-typep x 'fixnum)
 		 (or (type-code-p 'integer code)
