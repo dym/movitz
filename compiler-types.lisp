@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.10 2004/04/06 13:35:41 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.11 2004/04/18 23:10:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -363,7 +363,7 @@ with the single member of <type-specifier>."
 		(numscope-intersection integer-range0 integer-range1))
 	      (intersection members0 members1)
 	      (mapcar (lambda (sub0)
-			`(and ,sub0 (:encoded ,code1 ,integer-range1 ,members1 ,include1 nil)))
+			`(and ,sub0 ,(encoded-type-decode code1 integer-range1 members1 include1 nil)))
 		      include0)
 	      nil))
      ((and (null include0) include1)
@@ -373,7 +373,7 @@ with the single member of <type-specifier>."
 		(numscope-intersection integer-range0 integer-range1))
 	      (intersection members0 members1)
 	      (mapcar (lambda (sub1)
-			`(and ,sub1 (:encoded ,code0 ,integer-range0 ,members0 ,include0 nil)))
+			`(and ,sub1 ,(encoded-type-decode code0 integer-range0 members0 include0 nil)))
 		      include1)
 	      nil))
      (t (warn "and with two includes..")
@@ -436,14 +436,12 @@ with the single member of <type-specifier>."
 	(t (let ((deriver (and (boundp 'muerte::*compiler-derived-typespecs*)
 			       (gethash type-specifier
 					(symbol-value 'muerte::*compiler-derived-typespecs*)))))
-	     (assert deriver (type-specifier)
-	       "Unknown type ~S." type-specifier)
-	     (type-specifier-encode (funcall deriver))))))
+	     (if deriver
+		 (type-specifier-encode (funcall deriver))
+	       (type-values () :include (list type-specifier)))))))
      ((listp type-specifier)
       (check-type (car type-specifier) symbol)
       (case (car type-specifier)
-	(:encoded
-	 (multiple-value-list (cdr type-specifier)))
 	(satisfies
 	 (type-values () :include (list type-specifier)))
 	(member
