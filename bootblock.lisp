@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:47:19 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: bootblock.lisp,v 1.7 2004/04/15 13:03:16 ffjeld Exp $
+;;;; $Id: bootblock.lisp,v 1.8 2004/04/16 19:15:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -209,17 +209,6 @@
        (movw 'entering :si)		; Print welcome message
        (call 'print)
        
-       (:movb #xf :ah)
-       (:int #x10)			; 
-       (:andb #x7f :al)
-       (:cmpb #x3 :al)
-       (:je 'video-ok)
-       (:movw #x0083 :ax)		; set screen mode
-       (:int #x10)
-       (:movb 2 :ah)			; set cursor position
-       (:int #x10)
-       video-ok
-
        ;; Read the cursor position into DH (row) and DL (column).
        (:movb 3 :ah)
        (:movb 0 :bh)
