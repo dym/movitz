@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.13 2004/10/22 12:31:34 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.14 2004/10/22 12:33:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -99,6 +99,9 @@
       (make-destructuring-env (cadr form)
 			      (eval-form (caddr form) env)
 			      env)))
+    ((catch)
+     (catch (eval-form (second form) env)
+       (eval-progn (cddr form) env)))
     ((throw)
      (throw (eval-form (second form) env)
        (eval-form (third form) env)))
