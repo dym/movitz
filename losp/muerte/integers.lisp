@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.30 2004/06/09 20:33:31 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.31 2004/06/09 22:52:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -788,6 +788,34 @@ Preserve EAX and EBX."
       (when (< x min)
 	(setq min x)))))
 
+;;; Types
+
+(define-typep integer (x &optional (min '*) (max '*))
+  (and (typep x 'integer)
+       (or (eq min '*) (<= min x))
+       (or (eq max '*) (<= x max))))
+
+(deftype signed-byte (&optional (size '*))
+  (cond
+   ((eq size '*)
+    'integer)
+   ((typep size '(integer 1 *))
+    (list 'integer
+	  (- (ash 1 (1- size)))
+	  (1- (ash 1 (1- size)))))
+   (t (error "Illegal size for signed-byte."))))
+
+(deftype unsigned-byte (&optional (size '*))
+  (cond
+   ((eq size '*)
+    '(integer 0))
+   ((typep size '(integer 1 *))
+    (list 'integer 0 (1- (ash 1 size))))
+   (t (error "Illegal size for unsigned-byte."))))
+
+(define-simple-typep (bit bitp) (x)
+  (or (eq x 0) (eq x 1)))
+
 ;; shift 
 
 (define-compiler-macro ash (&whole form integer count &environment env)
@@ -856,6 +884,43 @@ Preserve EAX and EBX."
       (:sarl :cl :eax)
       (:andb #.(cl:logxor #xff movitz::+movitz-fixnum-zmask+) :al)))
    (t (if (= 0 integer) 0 (error "Illegal ash count: ~D" count)))))
+
+(defun integer-length (integer)
+  "=> number-of-bits"
+  (etypecase integer
+    (fixnum
+     (macrolet
+	 ((do-it ()
+	    `(with-inline-assembly (:returns :eax)
+	       (:xorl :eax :eax)
+	       (:compile-form (:result-mode :ecx) integer)
+	       (:testl :ecx :ecx)
+	       (:jns 'not-negative)
+	       (:notl :ecx)
+	      not-negative
+	       (:bsrl :ecx :ecx)
+	       (:jz 'zero)
+	       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
+		       ,(* -1 movitz:+movitz-fixnum-factor+))
+		      :eax)
+	      zero)))
+       (do-it)))
+    (positive-bignum
+     (macrolet
+	 ((do-it ()
+	    `(with-inline-assembly (:returns :eax)
+	       (:compile-form (:result-mode :ebx) integer)
+	       (:movzxw (:ebx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::length))
+			:ecx)
+	       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,(* -1 movitz:+movitz-fixnum-factor+))
+		      :eax)		; bigits-1
+	       (:bsrl (:ebx (:ecx 4) ,(+ -4 (bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		      :ecx)
+	       (:shll 5 :eax)		; bits = bigits*32 + (bit-index+1)
+	       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) :eax
+							     ,movitz:+movitz-fixnum-factor+)
+		      :eax))))
+       (do-it)))))
 
 ;;; Multiplication
 
@@ -1910,34 +1975,6 @@ Preserve EAX and EBX."
   (logior (mask-field bytespec newbyte)
 	  (logandc2 integer (mask-field bytespec -1))))
 
-;;; Types
-
-(define-typep integer (x &optional (min '*) (max '*))
-  (and (typep x 'integer)
-       (or (eq min '*) (<= min x))
-       (or (eq max '*) (<= x max))))
-
-(deftype signed-byte (&optional (size '*))
-  (cond
-   ((eq size '*)
-    'integer)
-   ((typep size '(integer 1 *))
-    (list 'integer
-	  (- (ash 1 (1- size)))
-	  (1- (ash 1 (1- size)))))
-   (t (error "Illegal size for signed-byte."))))
-
-(deftype unsigned-byte (&optional (size '*))
-  (cond
-   ((eq size '*)
-    '(integer 0))
-   ((typep size '(integer 1 *))
-    (list 'integer 0 (1- (ash 1 size))))
-   (t (error "Illegal size for unsigned-byte."))))
-
-(define-simple-typep (bit bitp) (x)
-  (or (eq x 0) (eq x 1)))
-
 ;;;
 
 (defun plus-if (x y)
@@ -1997,3 +2034,18 @@ Preserve EAX and EBX."
   (check-type natural (integer 0 *))
   (do ((i 0 (1+ i)))
       ((> (* i i) natural) (1- i))))
+
+(define-compiler-macro expt (&whole form base-number power-number &environment env)
+  (if (not (and (movitz:movitz-constantp base-number env)
+		(movitz:movitz-constantp power-number env)))
+      form
+    (expt (movitz:movitz-eval base-number env)
+	  (movitz:movitz-eval power-number env))))
+    
+
+(defun expt (base-number power-number)
+  "Take base-number to the power-number."
+  (do ((i 0 (1+ i))
+       (r 1 (* r base-number)))
+      ((>= i power-number) r)))
+  
