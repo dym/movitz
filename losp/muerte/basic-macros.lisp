@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.6 2004/04/06 13:39:47 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.7 2004/04/13 16:40:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -119,8 +119,20 @@
      ;; (muerte::compile-time-setq ,name ,initial-value)
      (setq ,name ,initial-value)))
 
-(defmacro defvar (name &optional value documentation)
-  `(defparameter ,name ,value ,documentation))
+(define-compiler-macro defparameter (&whole form name initial-value
+				     &optional docstring &environment env)
+  (declare (ignore docstring))
+  (if (not (movitz:movitz-constantp initial-value env))
+      form
+    (let ((mname (translate-program name :cl :muerte.cl)))
+      (setf (movitz::movitz-symbol-value (movitz:movitz-read mname))
+	(movitz:movitz-eval initial-value env))
+      `(declaim (special ,name)))))
+
+(defmacro defvar (name &optional (value nil valuep) documentation)
+  (if (not valuep)
+      `(declaim (special ,name))
+    `(defparameter ,name ,value ,documentation)))
 
 (defmacro define-compile-time-variable (name value)
   `(progn
