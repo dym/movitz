@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.18 2004/04/16 14:43:44 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.19 2004/04/16 19:21:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1149,6 +1149,9 @@
 	   #:%run-time-context-slot
 	   #:shallow-copy
 	   
+	   #:%symbol-global-value
+	   #:define-global-variable
+	   
 	   vector-element-type
 	   vector-element-size
 	   with-subvector-accessor
@@ -1303,7 +1306,9 @@
 	   #:code-vector%3op
 	   #:code-vector-word
 	   #:lu32
-	   
+
+	   #:+movitz-most-positive-fixnum+
+	   #:+movitz-most-negative-fixnum+
 	   #:+movitz-fixnum-factor+
 	   #:+movitz-fixnum-shift+
 	   #:+movitz-fixnum-zmask+
