@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.11 2004/06/02 14:31:20 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.12 2004/06/10 15:06:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -177,7 +177,7 @@ It is quite possible to return success without having found the result-{register
 	   (setf result-register (second p)
 		 result-position (third p)))
 	  (:or
-	   (dolist (sub-pattern (cdr p) (return nil))
+	   (dolist (sub-pattern (cdr p))
 	     (multiple-value-bind (success-p sub-result-register sub-result-position new-ip)
 		 (match-code-pattern sub-pattern code-vector ip register)
 	       (when success-p
@@ -185,7 +185,8 @@ It is quite possible to return success without having found the result-{register
 		   (setf result-register sub-result-register
 			 result-position sub-result-position))
 		 (setf ip new-ip)
-		 (return)))))
+		 (return))))
+	   (return nil))
 	  (:* (let ((max-times (second p)) ; (:kleene-star <max-times> <sub-pattern>)
 		    (sub-pattern (third p)))
 		(dotimes (i max-times)
@@ -484,11 +485,11 @@ be provided for those cases."
 			  (function
 			   (let ((delta (code-vector-offset (funobj-code-vector funobj) eip)))
 			     (if delta
-				 (format t "{Interrupt ~D in ~W at PC offset ~D."
+				 (format t "{Exception ~D in ~W at PC offset ~D."
 					 exception (funobj-name funobj) delta)
-			       (format t "{Interrupt ~D in ~W at EIP=#x~X. [#x~X]}"
+			       (format t "{Exception ~D in ~W at EIP=#x~X. [#x~X]}"
 				       exception (funobj-name funobj) eip interrupt-frame))))
-			  (t (format t "{Interrupt ~D with ESI=#x~Z and EIP=#x~X. [#x~X]}"
+			  (t (format t "{Exception ~D with ESI=#x~Z and EIP=#x~X. [#x~X]}"
 				     exception funobj eip interrupt-frame))))))))
 	       (function
 		(let ((name (funobj-name funobj)))
