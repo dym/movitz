@@ -298,6 +298,53 @@
 	#-LISPM `(cdr ,head-var))))
 
 
+(defstruct (loop-minimax
+	     (:constructor make-loop-minimax-internal)
+	     (:copier nil)
+	     (:predicate nil))
+  answer-variable
+  type
+  temp-variable
+  flag-variable
+  operations
+  infinity-data)
+
+(defstruct (loop-universe
+	     (:print-function print-loop-universe)
+	     (:copier nil)
+	     (:predicate nil))
+  keywords					;hash table, value = (fn-name . extra-data).
+  iteration-keywords				;hash table, value = (fn-name . extra-data).
+  for-keywords					;hash table, value = (fn-name . extra-data).
+  path-keywords					;hash table, value = (fn-name . extra-data).
+  type-symbols					;hash table of type SYMBOLS, test EQ, value = CL type specifier.
+  type-keywords					;hash table of type STRINGS, test EQUAL, value = CL type spec.
+  ansi						;NIL, T, or :EXTENDED.
+  implicit-for-required				;see loop-hack-iteration
+  )
+
+
+(defstruct (loop-collector
+	     (:copier nil)
+	     (:predicate nil))
+  name
+  class
+  (history nil)
+  (tempvars nil)
+  dtype
+  (data nil))				;collector-specific data
+
+(defstruct (loop-path
+	     (:copier nil)
+	     (:predicate nil))
+  names
+  preposition-groups
+  inclusive-permitted
+  function
+  user-data)
+
+
+
 ;;;; Maximization Technology
 
 (eval-when (:compile-toplevel :execute)
@@ -315,18 +362,6 @@ incrementally updating it as we generate loop body code, and then use
 a wrapper and internal macros to do the coding when the loop has been
 constructed.
 |#
-
-
-(defstruct (loop-minimax
-	     (:constructor make-loop-minimax-internal)
-	     (:copier nil)
-	     (:predicate nil))
-  answer-variable
-  type
-  temp-variable
-  flag-variable
-  operations
-  infinity-data)
 
 
 (defvar *loop-minimax-type-infinities-alist*
@@ -467,19 +502,7 @@ code to be loaded.
 (defmacro loop-store-table-data (symbol table datum)
   `(setf (gethash (symbol-name ,symbol) ,table) ,datum))
 
-(defstruct (loop-universe
-	     (:print-function print-loop-universe)
-	     (:copier nil)
-	     (:predicate nil))
-  keywords					;hash table, value = (fn-name . extra-data).
-  iteration-keywords				;hash table, value = (fn-name . extra-data).
-  for-keywords					;hash table, value = (fn-name . extra-data).
-  path-keywords					;hash table, value = (fn-name . extra-data).
-  type-symbols					;hash table of type SYMBOLS, test EQ, value = CL type specifier.
-  type-keywords					;hash table of type STRINGS, test EQUAL, value = CL type spec.
-  ansi						;NIL, T, or :EXTENDED.
-  implicit-for-required				;see loop-hack-iteration
-  )
+
 
 
 (defun print-loop-universe (u stream level)
@@ -1192,15 +1215,6 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
 ;;;; Value Accumulation: List
 
 
-(defstruct (loop-collector
-	     (:copier nil)
-	     (:predicate nil))
-  name
-  class
-  (history nil)
-  (tempvars nil)
-  dtype
-  (data nil))						;collector-specific data
 
 
 (eval-when (:compile-toplevel #+movitz-loop :load-toplevel)
@@ -1578,14 +1592,6 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
 ;;;; Iteration Paths
 
 
-(defstruct (loop-path
-	     (:copier nil)
-	     (:predicate nil))
-  names
-  preposition-groups
-  inclusive-permitted
-  function
-  user-data)
 
 
 (defun add-loop-path (names function universe &key preposition-groups inclusive-permitted user-data)
