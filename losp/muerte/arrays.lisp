@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.5 2004/03/08 14:33:52 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.6 2004/03/18 09:19:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -230,13 +230,13 @@
     
        not-u8
 	(:cmpl #.(movitz:vector-type-tag :u16) :ecx)
-	(:je 'not-u16)
+	(:jne 'not-u16)
 	(:movzxw (:eax (:ebx 2) 2) :eax) ; u16
 	(:jmp 'done)
 
        not-u16
 	(:cmpl #.(movitz:vector-type-tag :u32) :ecx)
-	(:je 'not-u32)
+	(:jne 'not-u32)
 	(:movl (:eax (:ebx 4) 2) :ecx)	; u32
 	(:cmpl #.movitz::+movitz-most-positive-fixnum+ :ecx)
 	(:jg '(:sub-program (:overflowing-u32)
