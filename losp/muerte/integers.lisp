@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.51 2004/07/13 19:45:38 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.52 2004/07/13 21:01:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2365,9 +2365,18 @@ Preserve EAX and EBX."
 
 (defun isqrt (natural)
   "=> natural-root"
-  (check-type natural (integer 0 *))
-  (do ((i 0 (1+ i)))
-      ((> (* i i) natural) (1- i))))
+  (etypecase natural
+    ((eql 0) 0)
+    ((integer 1 *)
+     (let ((r 1))
+       (do ((next-r (truncate (+ r (truncate natural r)) 2)
+		    (truncate (+ r (truncate natural r)) 2)))
+	   ((typep (- next-r r) '(integer 0 1))
+	    (let ((r+1 (1+ r)))
+	      (if (<= (* r+1 r+1) natural)
+		  r+1
+		r)))
+	 (setf r next-r))))))
 
 (define-compiler-macro expt (&whole form base-number power-number &environment env)
   (if (not (and (movitz:movitz-constantp base-number env)
