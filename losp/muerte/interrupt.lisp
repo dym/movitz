@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.23 2004/09/15 10:22:59 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.24 2004/09/21 13:06:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -21,16 +21,17 @@
 (defvar *last-dit-frame* nil)
 
 (defconstant +dit-frame-map+
-    '(nil :eflags :eip :error-code :exception-vector
+    '(:eflags :cs :eip :error-code :exception-vector
       :ebp
       :funobj
       :edi
-      :atomically-status
-      :atomically-esp
+      :atomically-continuation
       :raw-scratch0      
       :ecx :eax :edx :ebx :esi
-      :scratch1))
-
+      :scratch1
+      :debug0
+      :debug1
+      :tail-marker))
 
 (defun dit-frame-esp (stack dit-frame)
   "Return the frame ESP pointed to when interrupt at dit-frame occurred."
@@ -109,16 +110,19 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:pushl 0)			; 0 'funobj' means default-interrupt-trampoline frame
 	    (:pushl :edi)		; 
 	    (:movl ':nil-value :edi)	; We want NIL!
-	    (:locally (:pushl (:edi (:edi-offset atomically-status))))
-	    (:locally (:pushl (:edi (:edi-offset atomically-esp))))
+	    (:locally (:pushl (:edi (:edi-offset atomically-continuation))))
 	    (:locally (:pushl (:edi (:edi-offset raw-scratch0))))
 	    ,@(loop for reg in (sort (copy-list '(:eax :ebx :ecx :edx :esi))
 				     #'>
 				     :key #'dit-frame-index)
 		  collect `(:pushl ,reg))
 	    (:locally (:pushl (:edi (:edi-offset scratch1))))
+	    
+	    (:locally (:movl (:edi (:edi-offset nursery-space)) :eax))
+	    (:pushl :eax)		; debug0: nursery-space
+	    (:pushl (:eax 2))		; debug1: nursery-space's fresh-pointer
 
-	    (:locally (:movl 0 (:edi (:edi-offset atomically-status))))
+	    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 	    
 ;;;	    ;; See if ESP/EBP signalled a throwing situation
 ;;;	    (:leal (:ebp 24) :edx)	; Interrupted ESP
@@ -129,15 +133,15 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 ;;;	   not-throwing
 
 	    ;; rearrange stack for return
-	    (:movl (:ebp 12) :eax)	; load return address
-	    (:movl (:ebp 20) :ebx)	; load EFLAGS
-	    (:movl :ebx (:ebp 16))	; EFLAGS at next-to-bottom of stack
-	    (:movl :eax (:ebp 20))	; return address at bottom of stack
+;;;	    (:movl (:ebp 12) :eax)	; load return address
+;;;	    (:movl (:ebp 20) :ebx)	; load EFLAGS
+;;;	    (:movl :ebx (:ebp 16))	; EFLAGS at next-to-bottom of stack
+;;;	    (:movl :eax (:ebp 20))	; return address at bottom of stack
 
 	    (:xorl :eax :eax)		; Ensure safe value
 	    (:xorl :edx :edx)		; Ensure safe value
 
-	    (:pushl (:ebp 16))		; EFLAGS
+	    (:pushl (:ebp ,(dit-frame-offset :eflags))) ; EFLAGS
 	    (:pushl :cs)		; push CS
 	    (:call (:pc+ 0))		; push EIP.
 	    ;; Now add a few bytes to the on-stack EIP so the iret goes to
@@ -147,7 +151,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
     
 	    ;; *DEST* iret branches to here.
 	    ;; we're now in the context of the interruptee.
-
+	    
 	    (:cld)
 	    ;; Save/push thread-local values
 	    (:locally (:movl (:edi (:edi-offset num-values)) :ecx))
@@ -160,7 +164,19 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:jnz 'push-values-loop)
 	   push-values-done
 	    (:locally (:pushl (:edi (:edi-offset num-values))))
-    
+
+	    ;; Check the current atomically-continuation isn't a recursive one.
+	    (:movl (:ebp ,(dit-frame-offset :atomically-continuation)) :ecx)
+	    (:testl :ecx :ecx)
+	    (:jz 'atomically-continuation-ok)
+	    (:testb 3 :cl)
+	    (:jnz 'atomically-continuation-ok) ; can't tell for pf-atomically.
+	    (:movl (:ecx 4) :ecx)
+	    (:testl :ecx :ecx)
+	    (:jz 'atomically-continuation-ok)
+	    (:int 63)			; not ok.
+	   atomically-continuation-ok
+	    
 	    ;; call handler
 	    (:movl (:ebp ,(dit-frame-offset :exception-vector)) :ecx)
 	    (:locally (:movl (:edi (:edi-offset exception-handlers)) :eax))
@@ -181,15 +197,12 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:jnz 'pop-values-loop)
 	   pop-values-done
 
-	    (:movl (:ebp ,(dit-frame-offset :atomically-status)) :ecx)
-	    (:testb :cl :cl)
+	    (:movl (:ebp ,(dit-frame-offset :atomically-continuation)) :ecx)
+	    (:testl :ecx :ecx)
 	    (:jnz 'restart-atomical-block)
 
 	    ;; Interrupted code was non-atomical, the normal case.
-	   normal-return		; With atomically-status-to-restore in ECX
-	    (:locally (:movl :ecx (:edi (:edi-offset atomically-status))))
-	    (:movl (:ebp ,(dit-frame-offset :atomically-esp)) :ecx)
-	    (:locally (:movl :ecx (:edi (:edi-offset atomically-esp))))
+	   normal-return
 	    (:movl (:ebp ,(dit-frame-offset :raw-scratch0)) :ecx)
 	    (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0))))
 	    (:movl (:ebp ,(dit-frame-offset :scratch1)) :eax)
@@ -200,104 +213,48 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:movl (:ebp ,(dit-frame-offset :edx)) :edx)
 	    (:movl (:ebp ,(dit-frame-offset :eax)) :eax)
 	    (:movl (:ebp ,(dit-frame-offset :ecx)) :ecx)
-	    ;; Make stack safe before we exit dit-frame..
-	    (:movl :edi (:ebp 4))
-	    (:movl :edi (:ebp 8))
-	    (:movl :edi (:ebp 12))
 	    (:cli)			; Clear IF in EFLAGS before leaving dit-frame.
 	    (:leave)
-	    (:addl 12 :esp)
-	    (:popfl)			; pop EFLAGS (also resets IF)
-	    (:ret)			; pop EIP
+	    (:addl 8 :esp)		; Skip exception-vector and error-code.
+	    (:iretd)			; Pop EFLAGS, CS, and EIP.
     
 	   restart-atomical-block
-	    (:cmpb ,(bt:enum-value 'movitz::atomically-status :restart-primitive-function) :cl)
-	    (:jne 'not-simple-atomical-pf-restart)
-	    (:testl #xfe00 :ecx)	; map of registers to restore
-	    (:jnz 'not-simple-atomical-pf-restart)
-	    (:sarl 16 :ecx)		; move atomically-status data into ECX
-	    (:movl (:edi (:ecx 4) ,(- (movitz:tag :null)))
-		   :ecx)		; This is the EIP to restart
-	    (:movl :ecx (:ebp 20))
-	    (:movl (:ebp ,(dit-frame-offset :atomically-status)) :ecx)
-	    (:testl ,(bt:enum-value 'movitz::atomically-status :reset-status-p)
-		    :ecx)		; Should we reset status to zero?
-	    (:jnz 'normal-return)
-	    (:xorl :ecx :ecx)		; Do reset status to zero.
-	    (:jmp 'normal-return)
-	   not-simple-atomical-pf-restart
-	    (:cmpb ,(bt:enum-value 'movitz::atomically-status :restart-jumper) :cl)
-	    (:jne 'not-simple-restart-jumper)
-	    (:testl ,(bt:enum-value 'movitz::atomically-status :esp)
-		    :ecx)		; map of registers to restore
-	    (:jnz 'atomically-esp-ok)
-	    ;; Generate the correct ESP for interruptee's atomically-esp
-	    (:leal (:ebp 24) :ecx)
-	    (:movl :ecx (:ebp ,(dit-frame-offset :atomically-esp)))
-	   atomically-esp-ok
-	    (:movl (:ebp ,(dit-frame-offset :atomically-status)) :ecx)
-	    (:testl ,(bt:enum-value 'movitz::atomically-status :reset-status-p)
-		    :ecx)		; Should we reset status to zero?
-	    (:jnz 'atomically-jumper-return)
-	    (:xorl :ecx :ecx)		; Do reset status to zero.
+	    ;; Atomically-continuation is in ECX
 	    
-	   atomically-jumper-return
-	    (:locally (:movl :ecx (:edi (:edi-offset atomically-status))))
-	    (:movl (:ebp ,(dit-frame-offset :atomically-esp)) :ecx) ; Load interruptee's atomically-esp..
-	    (:locally (:movl :ecx (:edi (:edi-offset atomically-esp)))) ; ..and restore it.
+	    (:testb 3 :cl)
+	    (:jnz 'restart-simple-pf)
 
-	    (:testl #x40 (:ebp 16))	; Test EFLAGS bit DF
-	    (:jnz 'atomically-jumper-return-dirty-registers)
+	    ;; ECX is a throw target aka. next continuation step.
+	    (:locally (:movl :esi (:edi (:edi-offset scratch1))))
+	    (:movl (:ecx 12) :edx)
+	    (:locally (:movl :edx (:edi (:edi-offset dynamic-env)))) ; exit to target dynamic-env
+	    (:movl :ecx :esp)		; enter non-local jump stack mode.
+	    
+	    (:movl (:esp) :ecx)		; target stack-frame EBP
+	    (:movl (:ecx -4) :esi)	; get target funobj into ESI
+	    
+	    (:movl (:esp 8) :ecx)	; target jumper number
+	    (:jmp (:esi :ecx (:offset movitz-funobj constant0)))
+	    
+	   restart-simple-pf
+	    ;; ECX holds the run-time-context offset for us to load.
+	    
+	    (:movl ,movitz:+code-vector-transient-word+ :eax)
+	    (:locally (:addl (:edi :ecx) :eax))
+	    (:leal (:eax ,movitz:+other-type-offset+) :ecx)
+	    (:testb 7 :cl)
+	    (:jnz '(:sub-program (pf-continuation-not-code-vector)
+		    (:int 63)))
+	    (:cmpw ,(movitz:basic-vector-type-tag :code) (:eax ,movitz:+other-type-offset+))
+	    (:jne 'pf-continuation-not-code-vector)
+	    (:leal (:eax ,movitz:+code-vector-word-offset+) :ecx)
+	    (:movl :ecx (:ebp ,(dit-frame-offset :eip)))
+	    (:jmp 'normal-return)
+	    
 
-	    (:movl (:ebp ,(dit-frame-offset :edi)) :edi)
-	    (:movl (:ebp ,(dit-frame-offset :esi)) :esi)
-	    (:movl (:ebp ,(dit-frame-offset :edx)) :edx)
-	    (:movl (:ebp ,(dit-frame-offset :eax)) :eax)
-	    (:movl (:ebp ,(dit-frame-offset :ecx)) :ecx)
-
-	    (:movl (:ebp ,(dit-frame-offset :atomically-status)) :ebx) ; atomically-status..
-	    (:shrl ,(- 16 movitz:+movitz-fixnum-shift+) :ebx)
-
-	    ;; Make stack safe before we exit dit-frame..
-	    (:movl :edi (:ebp 4))
-	    (:movl :edi (:ebp 8))
-	    (:movl :edi (:ebp 12))
-	    (:movl :edi (:ebp 16))
-	    (:movl :edi (:ebp 20))
-	    (:movl (:ebp 0) :ebp)	; pop stack-frame
-	    (:movl (:ebp -4) :esi)	; reset funobj in ESI
-	    (:locally (:movl (:edi (:edi-offset atomically-esp)) :esp)) ; restore ESP
-	    ;; XXXX this state isn't covered in the stack discipline!?!
-	    (:jmp (:esi :ebx (:offset movitz-funobj constant0)))
-
-	   atomically-jumper-return-dirty-registers
-	    ;; If the interruptee had DF set, then initialize all GP registers with
-	    ;; safe values, keep EBP, set ESI=(EBP -4), and EDI is known-good EDI.
-	    ;; DF will be cleared.
-	    (:movl :edi :edx)
-	    (:movl :edi :eax)
-	    (:movl :edi :ecx)
-
-	    (:movl (:ebp ,(dit-frame-offset :atomically-status)) :ebx)
-	    (:shrl ,(- 16 movitz:+movitz-fixnum-shift+) :ebx)
-
-	    ;; Make stack safe before we exit dit-frame..
-	    (:movl :edi (:ebp 4))
-	    (:movl :edi (:ebp 8))
-	    (:movl :edi (:ebp 12))
-	    (:movl :edi (:ebp 16))
-	    (:movl :edi (:ebp 20))
-	    (:movl (:ebp 0) :ebp)	; pop dit-frame
-	    (:movl (:ebp -4) :esi)
-	    (:locally (:movl (:edi (:edi-offset atomically-esp)) :esp)) ; restore ESP
-	    ;; XXXX this state isn't covered in the stack discipline!?!
-	    (:jmp (:esi :ebx (:offset movitz-funobj constant0)))
-
-	   not-simple-restart-jumper
+	   not-restart-continuation
 	    ;; Don't know what to do.
-	    (:halt)
-	    (:int 90)
-	    (:jmp 'not-simple-atomical-pf-restart)
+	    (:int 63)
 	    )))
     (do-it)))
 

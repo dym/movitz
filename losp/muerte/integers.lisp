@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.95 2004/09/20 08:06:53 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.96 2004/09/21 13:06:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -485,7 +485,7 @@
 		((positive-bignum negative-fixnum)
 		 (+ y x))
 		((negative-fixnum positive-bignum)
-		 (with-inline-assembly (:returns :eax :labels (retry-not-size1
+		 (with-inline-assembly (:returns :eax :labels (restart-addition
 							       retry-jumper
 							       not-size1
 							       copy-bignum-loop
@@ -502,15 +502,23 @@
 		   (:addl (:eax (:offset movitz-bignum bigit0)) :ecx)
 		   (:call-local-pf box-u32-ecx)
 		   (:jmp 'pfix-pbig-done)
-		  retry-not-size1
+
+		  not-size1
+		   (:declare-label-set retry-jumper (restart-addition))
+		   (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+		   (:pushl 'retry-jumper)
+		   ;; ..this allows us to detect recursive atomicallies.
+		   (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+		   (:pushl :ebp)
+
+		  restart-addition
+		   (:movl (:esp) :ebp)
 		   (:compile-form (:result-mode :eax) y)
 		   (:movzxw (:eax (:offset movitz-bignum length)) :ecx)
-		  not-size1
-		   (:declare-label-set retry-jumper (retry-not-size1))
-		   (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
-		   (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
-				      'retry-jumper)
-				    (:edi (:edi-offset atomically-status))))
+		   
+		   (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+		   ;; Now inside atomically section.
+
 		   (:leal ((:ecx 1) ,(* 1 movitz:+movitz-fixnum-factor+))
 			  :eax)		; Number of words
 		   (:call-local-pf get-cons-pointer)
@@ -545,15 +553,15 @@
 		   (:subl ,movitz:+movitz-fixnum-factor+ :ecx)
 		  no-expansion
 		   (:call-local-pf cons-commit)
-		   (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-				    (:edi (:edi-offset atomically-status))))
+		   (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+		   (:leal (:esp 16) :esp)
 		   
 		  pfix-pbig-done))
 		((positive-bignum positive-bignum)
 		 (if (< (%bignum-bigits y) (%bignum-bigits x))
 		     (+ y x)
 		   ;; Assume x is smallest.
-		   (with-inline-assembly (:returns :eax :labels (retry-not-size1
+		   (with-inline-assembly (:returns :eax :labels (restart-addition
 								 retry-jumper
 								 not-size1
 								 copy-bignum-loop
@@ -570,20 +578,30 @@
 		     (:jne 'not-size1)
 		     (:movl (:ebx (:offset movitz-bignum bigit0)) :ecx)
 		     (:addl (:eax (:offset movitz-bignum bigit0)) :ecx)
-		     (:jc 'retry-not-size1)
+		     (:jc 'not-size1)
 		     (:call-local-pf box-u32-ecx)
 		     (:jmp 'pfix-pbig-done)
-		    retry-not-size1
+
+		    not-size1
+		     ;; Set up atomically continuation.
+		     (:declare-label-set restart-jumper (restart-addition))
+		     (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+		     (:pushl 'restart-jumper)
+		     ;; ..this allows us to detect recursive atomicallies.
+		     (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+		     (:pushl :ebp)
+		    restart-addition
+
+		     (:movl (:esp) :ebp)
 		     (:compile-form (:result-mode :eax) y)
 		     (:movzxw (:eax (:offset movitz-bignum length)) :ecx)
-		    not-size1
-		     (:declare-label-set retry-jumper (retry-not-size1))
-		     (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
-		     (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
-					'retry-jumper)
-				      (:edi (:edi-offset atomically-status))))
+
 		     (:leal ((:ecx 1) ,(* 2 movitz:+movitz-fixnum-factor+))
 			    :eax)	; Number of words
+		     
+		     (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+		     ;; Now inside atomically section.
+		     
 		     (:call-local-pf get-cons-pointer)
 		     (:load-lexical (:lexical-binding y) :ebx) ; bignum
 		     (:movzxw (:ebx (:offset movitz-bignum length)) :ecx)
@@ -636,8 +654,8 @@
 		     (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
 		    no-expansion
 		     (:call-local-pf cons-commit)
-		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-				      (:edi (:edi-offset atomically-status))))
+		     (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+		     (:leal (:esp 16) :esp)
 		    pfix-pbig-done)
 		   ))
 		(((integer * -1) (integer 0 *))
@@ -1055,14 +1073,23 @@
 		((fixnum bignum)
 		 (let (r)
 		   (with-inline-assembly (:returns :eax)
-		    retry
-		     (:declare-label-set retry-jumper (retry))
+		     ;; Set up atomically continuation.
+		     (:declare-label-set restart-jumper (restart-multiplication))
+		     (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+		     (:pushl 'restart-jumper)
+		     ;; ..this allows us to detect recursive atomicallies:
+		     (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+		     (:pushl :ebp)
+		    restart-multiplication
+		     
+		     (:movl (:esp) :ebp)
 		     (:compile-two-forms (:eax :ebx) (integer-length x) (integer-length y))
-		     (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
-		     (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
-					'retry-jumper)
-				      (:edi (:edi-offset atomically-status))))
+
 		     ;; Compute (1+ (ceiling (+ (len x) (len y)) 32)) ..
+		     
+		     (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+		     ;; Now inside atomically section.
+
 		     (:leal (:eax :ebx ,(* 4 (+ 31 32))) :eax)
 		     (:andl ,(logxor #xffffffff (* 31 4)) :eax)
 		     (:shrl 5 :eax)
@@ -1108,8 +1135,8 @@
 		     (:movl :edi :edx)
 		     (:cld)		; EAX, EDX, and ESI are GC roots again.
 		     (:call-local-pf cons-commit)
-		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-				      (:edi (:edi-offset atomically-status))))
+		     (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+		     (:leal (:esp 16) :esp)
 		     (:compile-form (:result-mode :ebx) x)
 		     (:testl :ebx :ebx)
 		     (:jns 'positive-result)
@@ -1221,16 +1248,26 @@
 		     (:call-local-pf box-u32-ecx)
 		     (:popl :ebx)
 		     (:jmp 'done)
+
 		    not-size1
+		     ;; Set up atomically continuation.
+		     (:declare-label-set restart-jumper (restart-truncation))
+		     (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+		     (:pushl 'restart-jumper)
+		     ;; ..this allows us to detect recursive atomicallies.
+		     (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+		     (:pushl :ebp)
+		    restart-truncation
+		     
+		     (:movl (:esp) :ebp)
 		     (:xorl :eax :eax)
 		     (:compile-form (:result-mode :ebx) number)
 		     (:movw (:ebx (:offset movitz-bignum length)) :ax)
-		     (:declare-label-set retry-jumper (not-size1))
-		     (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
-		     (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
-					'retry-jumper)
-				      (:edi (:edi-offset atomically-status))))
 		     (:addl 4 :eax)
+
+		     (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+		     ;; Now inside atomically section.
+		     
 		     (:call-local-pf get-cons-pointer) ; New bignum into EAX
 
 		     (:store-lexical (:lexical-binding r) :eax :type bignum) ; XXX breaks GC invariant!
@@ -1285,8 +1322,9 @@
 		    no-more-shrinkage
 		     (:call-local-pf cons-commit)
 		    fixnum-result
-		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-				      (:edi (:edi-offset atomically-status))))	     
+		     ;; Exit atomically block.
+		     (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+		     (:leal (:esp 16) :esp)
 		    done
 		     (:movl 2 :ecx)
 		     (:stc)))))
@@ -1722,8 +1760,18 @@
 	       ;; We need to generate a bignum..
 	       ;; ..filling in 1-bits since the integer is negative.
 	       (:pushl :eax)		; This will become the LSB bigit.
-	      retry-ones-expanded-bignum
-	       (:declare-label-set retry-jumper-ones-expanded-bignum (retry-ones-expanded-bignum))
+
+	       ;; Set up atomically continuation.
+	       (:declare-label-set restart-jumper (restart-ones-expanded-bignum))
+	       (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+	       (:pushl 'restart-jumper)
+	       ;; ..this allows us to detect recursive atomicallies.
+	       (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+	       (:pushl :ebp)
+	      restart-ones-expanded-bignum
+
+	       (:movl (:esp) :ebp)
+;;;	       (:declare-label-set retry-jumper-ones-expanded-bignum (retry-ones-expanded-bignum))
 	       ;; Calculate word-size from bytespec-size.
 	       (:compile-form (:result-mode :ecx) size)
 	       (:addl ,(* 31 movitz:+movitz-fixnum-factor+) :ecx) ; Add 31
@@ -1731,10 +1779,10 @@
 	       (:andl ,(- movitz:+movitz-fixnum-factor+) :ecx)
 	       (:leal (:ecx ,movitz:+movitz-fixnum-factor+) ; Add 1 for header.
 		      :eax)
-	       (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
-	       (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
-				  'retry-jumper-ones-expanded-bignum)
-				(:edi (:edi-offset atomically-status))))
+
+	       (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+	       ;; Now inside atomically section.
+	       
 	       (:call-local-pf get-cons-pointer)
 	       (:shll 16 :ecx)
 	       (:orl ,(movitz:tag :bignum 0) :ecx)
@@ -1744,8 +1792,8 @@
 		       ,(* 1 movitz:+movitz-fixnum-factor+)) ; add 1 for header.
 		      :ecx)
 	       (:call-local-pf cons-commit)
-	       (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-				(:edi (:edi-offset atomically-status))))
+	       (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+	       (:leal (:esp 16) :esp)
 	       ;; Have fresh bignum in EAX, now fill it with ones.
 	       (:xorl :ecx :ecx)	; counter
 	      fill-ones-loop
@@ -1858,7 +1906,7 @@
 	 (do-it)))
       (t (macrolet
 	     ((do-it ()
-		`(let ()
+		`(let (new-size)
 		   (with-inline-assembly (:returns :eax)
 		     (:compile-form (:result-mode :ebx) integer)
 		     (:compile-form (:result-mode :ecx) position)
@@ -1919,14 +1967,24 @@
 		     (:jz 'ldb-done)	; New size was zero, so the result of ldb is zero.
 		     (:movl :ecx :eax)	; New size into EAX.
 		    size-ok
-		    retry
-		     (:declare-label-set retry-jumper (retry))
-		     (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
-		     (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
-					'retry-jumper)
-				      (:edi (:edi-offset atomically-status))))
+		     (:store-lexical (:lexical-binding new-size) :eax :type fixnum)
+
+		     ;; Set up atomically continuation.
+		     (:declare-label-set restart-ldb-jumper (restart-ldb))
+		     (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+		     (:pushl 'restart-ldb-jumper)
+		     ;; ..this allows us to detect recursive atomicallies.
+		     (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+		     (:pushl :ebp)
+		    restart-ldb
+
+		     (:movl (:esp) :ebp)
+		     (:load-lexical (:lexical-binding new-size) :eax)
+
+		     (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+		     ;; Now inside atomically section.
 		     ;; (new) Size is in EAX.
-		     (:pushl :eax)	; Save for later
+		     
 		     (:subl ,movitz:+movitz-fixnum-factor+ :eax)
 		     (:andl ,(logxor #xffffffff
 				     (mask-field (byte (+ 5 movitz:+movitz-fixnum-shift+) 0) -1))
@@ -1997,7 +2055,6 @@
 		     ;; Now we must mask MSB bigit.
 		     (:movzxw (:ebx (:offset movitz-bignum length))
 			      :edx)
-		     (:popl :ecx)	; (new) bytespec size
 		     (:load-lexical (:lexical-binding size) :ecx)
 		     (:shrl 5 :ecx)
 		     (:andl -4 :ecx)	; ECX = index of (conceptual) MSB
@@ -2044,8 +2101,8 @@
 			    :ecx)
 		     (:call-local-pf cons-commit)
 		    return-fixnum
-		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-				      (:edi (:edi-offset atomically-status))))
+		     (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+		     (:leal (:esp 16) :esp)
 		    ldb-done))))
 	   (do-it)))))))
 

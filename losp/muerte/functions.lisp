@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.19 2004/09/15 10:22:59 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.20 2004/09/21 13:06:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -111,17 +111,26 @@
 (defun funobj-code-vector%1op (funobj)
   "This slot is not a lisp value, it is a direct address to code entry point. In practice it is either
 a pointer into the regular code-vector, or it points (with offset 2) to another vector entirely.
-The former is represented as a lisp integer that is the index into the code-vector, the latter is represented
-as that vector."
+The former is represented as a lisp integer that is the index into the code-vector, the latter is
+represented as that vector."
   (check-type funobj function)
   (with-inline-assembly (:returns :eax)
+    ;; Set up atomically continuation.
+    (:declare-label-set restart-jumper (retry))
+    (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+    (:pushl 'restart-jumper)
+    ;; ..this allows us to detect recursive atomicallies.
+    (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+    (:pushl :ebp)
    retry
-    (:declare-label-set retry-jumper (retry))
-    (:locally (:movl '(:funcall #.(movitz::atomically-status-jumper-fn t)
-		       'retry-jumper)
-		     (:edi (:edi-offset atomically-status))))
+
+    (:movl (:esp) :ebp)
     (:compile-form (:result-mode :ebx) funobj)
     (:movl (:ebx (:offset movitz-funobj code-vector)) :eax) ; EAX = code-vector
+
+    (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+    ;; Now inside atomically section.
+    
     (:movl (:ebx (:offset movitz-funobj code-vector%1op)) :ecx)
     ;; determine if ECX is a pointer into EBX
     (:subl :eax :ecx)
@@ -138,8 +147,8 @@ as that vector."
     (:movl #xfffffffe :eax)
     (:addl (:ebx (:offset movitz-funobj code-vector%1op)) :eax)
    done
-    (:locally (:movl #.(bt:enum-value 'movitz::atomically-status :inactive)
-		     (:edi (:edi-offset atomically-status))))))				; this cell stores word+2
+    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+    (:leal (:esp 16) :esp)))
 
 (defun (setf funobj-code-vector%1op) (code-vector funobj)
   (check-type funobj function)
@@ -163,17 +172,26 @@ as that vector."
 (defun funobj-code-vector%2op (funobj)
   "This slot is not a lisp value, it is a direct address to code entry point. In practice it is either
 a pointer into the regular code-vector, or it points (with offset 2) to another vector entirely.
-The former is represented as a lisp integer that is the index into the code-vector, the latter is represented
-as that vector."
+The former is represented as a lisp integer that is the index into the code-vector, the latter is
+represented as that vector."
   (check-type funobj function)
   (with-inline-assembly (:returns :eax)
+    ;; Set up atomically continuation.
+    (:declare-label-set restart-jumper (retry))
+    (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+    (:pushl 'restart-jumper)
+    ;; ..this allows us to detect recursive atomicallies.
+    (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+    (:pushl :ebp)
    retry
-    (:declare-label-set retry-jumper (retry))
-    (:locally (:movl '(:funcall #.(movitz::atomically-status-jumper-fn t)
-		       'retry-jumper)
-		     (:edi (:edi-offset atomically-status))))
+
+    (:movl (:esp) :ebp)
     (:compile-form (:result-mode :ebx) funobj)
     (:movl (:ebx (:offset movitz-funobj code-vector)) :eax) ; EAX = code-vector
+
+    (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+    ;; Now inside atomically section.
+    
     (:movl (:ebx (:offset movitz-funobj code-vector%2op)) :ecx)
     ;; determine if ECX is a pointer into EBX
     (:subl :eax :ecx)
@@ -190,8 +208,8 @@ as that vector."
     (:movl #xfffffffe :eax)
     (:addl (:ebx (:offset movitz-funobj code-vector%2op)) :eax)
    done
-    (:locally (:movl #.(bt:enum-value 'movitz::atomically-status :inactive)
-		     (:edi (:edi-offset atomically-status))))))
+    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+    (:leal (:esp 16) :esp)))
 
 (defun (setf funobj-code-vector%2op) (code-vector funobj)
   (check-type funobj function)
@@ -215,17 +233,26 @@ as that vector."
 (defun funobj-code-vector%3op (funobj)
   "This slot is not a lisp value, it is a direct address to code entry point. In practice it is either
 a pointer into the regular code-vector, or it points (with offset 2) to another vector entirely.
-The former is represented as a lisp integer that is the index into the code-vector, the latter is represented
-as that vector."
+The former is represented as a lisp integer that is the index into the code-vector, the latter is
+represented as that vector."
   (check-type funobj function)
   (with-inline-assembly (:returns :eax)
+    ;; Set up atomically continuation.
+    (:declare-label-set restart-jumper (retry))
+    (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+    (:pushl 'restart-jumper)
+    ;; ..this allows us to detect recursive atomicallies.
+    (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+    (:pushl :ebp)
    retry
-    (:declare-label-set retry-jumper (retry))
-    (:locally (:movl '(:funcall #.(movitz::atomically-status-jumper-fn t)
-		       'retry-jumper)
-		     (:edi (:edi-offset atomically-status))))
+
+    (:movl (:esp) :ebp)
     (:compile-form (:result-mode :ebx) funobj)
     (:movl (:ebx (:offset movitz-funobj code-vector)) :eax) ; EAX = code-vector
+
+    (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+    ;; Now inside atomically section.
+    
     (:movl (:ebx (:offset movitz-funobj code-vector%3op)) :ecx)
     ;; determine if ECX is a pointer into EBX
     (:subl :eax :ecx)
@@ -242,8 +269,8 @@ as that vector."
     (:movl #xfffffffe :eax)
     (:addl (:ebx (:offset movitz-funobj code-vector%3op)) :eax)
    done
-    (:locally (:movl #.(bt:enum-value 'movitz::atomically-status :inactive)
-		     (:edi (:edi-offset atomically-status))))))
+    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+    (:leal (:esp 16) :esp)))
 
 (defun (setf funobj-code-vector%3op) (code-vector funobj)
   (check-type funobj function)
@@ -393,37 +420,7 @@ as that vector."
 			   (:cmpl :ebx :edx)
 			   (:ja 'init-loop)
 			   init-done
-			   (:leal (:edx ,(bt:sizeof 'movitz:movitz-funobj)) :ecx))
-			#+ignore
-			`(with-inline-assembly (:returns :eax :labels (retry-alloc retry-jumper))
-			   (:declare-label-set retry-jumper (retry-alloc))
-			  retry-alloc
-			   (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
-					      'retry-jumper)
-					    (:edi (:edi-offset atomically-status))))
-			   (:compile-form (:result-mode :eax)
-					  (+ num-constants
-					     #.(cl:truncate (bt:sizeof 'movitz:movitz-funobj) 4)))
-			   (:call-local-pf get-cons-pointer)
-			   (:movl #.(movitz:tag :funobj) (:eax #.movitz:+other-type-offset+))
-			   (:load-lexical (:lexical-binding num-constants) :edx)
-			   (:movl :edx :ecx)
-			   (:shll #.(cl:- 16 movitz:+movitz-fixnum-shift+) :ecx)
-			   (:movl :ecx (:eax (:offset movitz-funobj num-jumpers)))
-			   (:xorl :ecx :ecx)
-			   (:xorl :ebx :ebx)
-			   (:testl :edx :edx)
-			   (:jmp 'init-done)
-			  init-loop
-			   (:movl :ecx (:eax :ebx #.movitz:+other-type-offset+))
-			   (:addl 4 :ebx)
-			   (:cmpl :ebx :edx)
-			   (:ja 'init-loop)
-			  init-done
-			   (:leal (:edx #.(bt:sizeof 'movitz:movitz-funobj)) :ecx)
-			   (:call-local-pf cons-commit)
-			   (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-					    (:edi (:edi-offset atomically-status)))))))
+			   (:leal (:edx ,(bt:sizeof 'movitz:movitz-funobj)) :ecx))))
 		   (do-it))))
     (setf (funobj-name funobj) name
 	  (funobj-code-vector funobj) code-vector

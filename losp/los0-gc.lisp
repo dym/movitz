@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.37 2004/09/16 08:55:00 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.38 2004/09/21 13:05:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -74,32 +74,26 @@
   (values))
 
 (define-primitive-function los0-fast-cons ()
-  "Allocate a cons cell from nursery-space."
+  "Allocate a cons cell of EAX and EBX from nursery-space."
   (macrolet
       ((do-it ()
 	 `(with-inline-assembly (:returns :eax)
 	   retry-cons
 	    ;; Set up thread-atomical execution
-	    (:locally (:movl ,(movitz::atomically-status-simple-pf 'fast-cons t)
-			     (:edi (:edi-offset atomically-status))))
+	    (:locally (:movl ,(movitz::atomically-continuation-simple-pf 'fast-cons)
+			     (:edi (:edi-offset atomically-continuation))))
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :ecx)
 	    (:cmpl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
 		   :ecx)
 	    (:jae '(:sub-program (allocation-failed)
-		    ;; Exit thread-atomical
-		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-			       (:edi (:edi-offset atomically-status))))
-		    (:int 113)
-		    ;; This interrupt can be retried.
-		    (:jmp 'retry-cons)))
+		    (:int 113)))
 	    (:movl :eax (:edx :ecx 2))
 	    (:movl :ebx (:edx :ecx 6))
 	    (:addl 8 :ecx)
 	    (:movl :ecx (:edx 2))	; Commit allocation
 	    ;; Exit thread-atomical
-	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-			     (:edi (:edi-offset atomically-status))))
+	    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 	    (:leal (:edx :ecx -5) :eax)
 	    (:ret))))
     (do-it)))
@@ -144,7 +138,7 @@ Preserve ECX."
       ((do-it ()
 	 `(with-inline-assembly (:returns :multiple-values)
 	   retry
-	    (:locally (:cmpl 0 (:edi (:edi-offset atomically-status)))) ; Atomically?
+	    (:locally (:cmpl 0 (:edi (:edi-offset atomically-continuation)))) ; Atomically?
 	    (:je '(:sub-program ()
 		   (:int 63)))		; This must be called inside atomically.
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
@@ -168,7 +162,7 @@ Preserve EAX and EBX."
       ((do-it ()
 	 `(with-inline-assembly (:returns :multiple-values)
 	   retry
-	    (:locally (:cmpl 0 (:edi (:edi-offset atomically-status)))) ; Atomically?
+	    (:locally (:cmpl 0 (:edi (:edi-offset atomically-continuation)))) ; Atomically?
 	    (:je '(:sub-program ()
 		   (:int 50)))		; This must be called inside atomically.
 	    (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
@@ -196,17 +190,14 @@ Preserve EAX and EBX."
 	    (:ret)
 	   not-fixnum
 	   retry-cons
-	    (:locally (:movl ,(movitz::atomically-status-simple-pf 'box-u32-ecx t)
-			     (:edi (:edi-offset atomically-status))))
+	    (:locally (:movl ,(movitz::atomically-continuation-simple-pf 'box-u32-ecx)
+			     (:edi (:edi-offset atomically-continuation))))
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :eax)
 	    (:cmpl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
 		   :eax)
 	    (:jae '(:sub-program ()
-		    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-			       (:edi (:edi-offset atomically-status))))
-		    (:int 113)		; This interrupt can be retried.
-		    (:jmp 'retry-cons)))
+		    (:int 113)))
 	    (:movl ,(dpb movitz:+movitz-fixnum-factor+
 			 (byte 16 16) (movitz:tag :bignum 0))
 		   (:edx :eax 2))
@@ -214,67 +205,8 @@ Preserve EAX and EBX."
 	    (:addl 8 :eax)
 	    (:movl :eax (:edx 2))	; Commit allocation
 	    ;; Exit thread-atomical
-	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-			     (:edi (:edi-offset atomically-status))))
+	    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 	    (:leal (:edx :eax) :eax)
-	    (:ret))))
-    (do-it)))
-
-(define-primitive-function los0-malloc-pointer-words (words)
-  "Number of words in EAX/fixnum. Result in EAX with tag :other."
-  (macrolet
-      ((do-it ()
-	 `(with-inline-assembly (:returns :multiple-values)
-	    (:addl 4 :eax)
-	    (:andl -8 :eax)
-	    (:movl :eax :ebx)		; Save count for later
-	   retry
-	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
-	    (:movl (:edx 2) :ecx)
-	    (:leal (:ecx :eax) :eax)
-	    (:cmpl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
-		   :eax)
-	    (:ja '(:sub-program ()
-		   (:int 113)
-		   (:movl :ebx :eax)	; Restore count in EAX before retry
-		   (:jmp 'retry)))
-	    (:movl :eax (:edx 2))
-	    (:movl ,(movitz:basic-vector-type-tag :any-t)
-		   (:edx :ecx ,(+ 8 movitz:+other-type-offset+)))
-	    (:subl 8 :ebx)
-	    (:movl :ebx (:edx :ecx ,(+ 16 movitz:+other-type-offset+)))
-	    (:leal (:edx :ecx 8) :eax)		
-	    (:xorl :ecx :ecx)
-	    (:addl 8 :ecx)
-	   init-loop			; Now init ebx number of words
-	    (:movl :edi (:eax :ecx ,(- (movitz:tag :other))))
-	    (:addl 4 :ecx)
-	    (:cmpl :ebx :ecx)
-	    (:jb 'init-loop)
-	    (:ret))))
-    (do-it)))
-
-(define-primitive-function los0-malloc-non-pointer-words (words)
-  "Number of words in EAX/fixnum. Result in EAX with tag :other."
-  (macrolet
-      ((do-it ()
-	 `(with-inline-assembly (:returns :multiple-values)
-	    (:addl 4 :eax)
-	    (:andl -8 :eax)
-	    (:movl :eax :ebx)		; Save count for later
-	   retry
-	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
-	    (:movl (:edx 2) :ecx)
-	    (:leal (:ecx :eax) :eax)
-	    (:cmpl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
-		   :eax)
-	    (:ja '(:sub-program ()
-		   (:int 113)
-		   (:movl :ebx :eax)	; Restore count in EAX before retry
-		   (:jmp 'retry)))
-	    (:movl :eax (:edx 2))
-	    (:movl ,(movitz:tag :infant-object) (:edx :ecx ,(+ 8 movitz:+other-type-offset+)))
-	    (:leal (:edx :ecx 8) :eax)	; Now EAX is a valid pointer
 	    (:ret))))
     (do-it)))
 
@@ -466,7 +398,21 @@ duo-space where each space is KB-SIZE kilobytes."
 old object: ~Z: ~S
 new object: ~Z: ~S
 oldspace: ~Z, newspace: ~Z, i: ~D"
-			   old old new new oldspace newspace i))))))))
+			   old old new new oldspace newspace i))))))
+	  (map-heap-words (lambda (x y)
+			    (declare (ignore y))
+			    (when (location-in-object-p (space-other (%run-time-context-slot 'nursery-space))
+							(object-location x))
+			      (break "Seeing old object in values-vector: ~Z" x))
+			    x)
+			  #x38 #xb8)
+	  (let* ((stack (%run-time-context-slot 'muerte::nursery-space))
+		 (stack-start (- (length stack) (muerte::current-control-stack-depth))))
+	    (do ((i 0 (+ i 3)))
+		((>= i (length a)))
+	      (when (find (aref a i) stack :start stack-start)
+		(break "Seeing old object ~S in current stack!"
+		       (aref a i)))))))
 
       ;; GC completed, oldspace is evacuated.
       (unless *gc-quiet*

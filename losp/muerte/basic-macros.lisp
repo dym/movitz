@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.39 2004/09/15 10:22:59 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.40 2004/09/21 13:06:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1077,19 +1077,24 @@ busy-waiting loop on P4."
     `(let ((,size-var ,size-form))
        (with-inline-assembly (:returns :eax :labels (retry-alloc retry-jumper ,@labels))
 	 (:declare-label-set retry-jumper (retry-alloc))
+	 ;; Set up atomically continuation.
+	 (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+	 (:pushl 'retry-jumper)
+	 ;; ..this allows us to detect recursive atomicallies.
+	 (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+	 (:pushl :ebp)
 	retry-alloc
-	 (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
-	 (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
-			    'retry-jumper)
-			  (:edi (:edi-offset atomically-status))))
+	 (:movl (:esp) :ebp)
 	 (:load-lexical (:lexical-binding ,size-var) :eax)
+	 (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+	 ;; Now inside atomically section.
 	 (:call-local-pf get-cons-pointer)
 	 ,@code
 	 ,@(when fixed-size-p
 	     `((:load-lexical (:lexical-binding ,size-var) :ecx)))
 	 (:call-local-pf cons-commit)
-	 (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-			  (:edi (:edi-offset atomically-status))))))))
+	 (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+	 (:leal (:esp 16) :esp)))))
 
 (defmacro with-non-pointer-allocation-assembly
     ((size-form &key object-register size-register fixed-size-p labels) &body code)
@@ -1099,19 +1104,24 @@ busy-waiting loop on P4."
     `(let ((,size-var ,size-form))
        (with-inline-assembly (:returns :eax :labels (retry-alloc retry-jumper ,@labels))
 	 (:declare-label-set retry-jumper (retry-alloc))
+	 ;; Set up atomically continuation.
+	 (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+	 (:pushl 'retry-jumper)
+	 ;; ..this allows us to detect recursive atomicallies.
+	 (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+	 (:pushl :ebp)
 	retry-alloc
-	 (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
-	 (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
-			    'retry-jumper)
-			  (:edi (:edi-offset atomically-status))))
+	 (:movl (:esp) :ebp)
 	 (:load-lexical (:lexical-binding ,size-var) :eax)
+	 (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+	 ;; Now inside atomically section.
 	 (:call-local-pf get-cons-pointer-non-pointer)
 	 ,@code
 	 ,@(when fixed-size-p
 	     `((:load-lexical (:lexical-binding ,size-var) :ecx)))
-	 (:call-local-pf cons-commit-non-pointer)
-	 (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-			  (:edi (:edi-offset atomically-status))))))))
+	 (:call-local-pf cons-commit)
+	 (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+	 (:leal (:esp 16) :esp)))))
 
 (require :muerte/setf)
 

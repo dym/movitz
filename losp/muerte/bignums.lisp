@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 19:42:57 2004
 ;;;;                
-;;;; $Id: bignums.lisp,v 1.7 2004/09/15 10:22:59 ffjeld Exp $
+;;;; $Id: bignums.lisp,v 1.8 2004/09/21 13:06:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -102,8 +102,7 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
   (check-type delta fixnum)
   (macrolet
       ((do-it ()
-	 `(with-inline-assembly (:returns :eax :labels (retry-not-size1
-							not-size1
+	 `(with-inline-assembly (:returns :eax :labels (not-size1
 							copy-bignum-loop
 							add-bignum-loop
 							add-bignum-done
@@ -111,25 +110,33 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 							pfix-pbig-done))
 	    (:compile-two-forms (:eax :ebx) bignum delta)
 	    (:testl :ebx :ebx)
-	    (:jz 'pfix-pbig-done)
+	    (:jz 'pfix-pbig-done)	; EBX=0 => nothing to do.
 	    (:movzxw (:eax (:offset movitz-bignum length)) :ecx)
 	    (:cmpl ,movitz:+movitz-fixnum-factor+ :ecx)
 	    (:jne 'not-size1)
 	    (:compile-form (:result-mode :ecx) delta)
 	    (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 	    (:addl (:eax (:offset movitz-bignum bigit0)) :ecx)
-	    (:jc 'retry-not-size1)
+	    (:jc 'not-size1)
 	    (:call-local-pf box-u32-ecx)
 	    (:jmp 'pfix-pbig-done)
-	   retry-not-size1
+
+	   not-size1
+	    ;; Set up atomically continuation.
+	    (:declare-label-set restart-jumper (restart-addition))
+	    (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+	    (:pushl 'restart-jumper)
+	    ;; ..this allows us to detect recursive atomicallies.
+	    (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+	    (:pushl :ebp)
+	   restart-addition
+
+	    (:movl (:esp) :ebp)
 	    (:compile-form (:result-mode :eax) bignum)
 	    (:movzxw (:eax (:offset movitz-bignum length)) :ecx)
-	   not-size1
-	    (:declare-label-set retry-jumper (retry-not-size1))
-	    (:locally (:movl :esp (:edi (:edi-offset atomically-esp))))
-	    (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
-			       'retry-jumper)
-			     (:edi (:edi-offset atomically-status))))
+
+	    (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+	    ;; Now inside atomically section.
 	    (:leal ((:ecx 1) ,(* 2 movitz:+movitz-fixnum-factor+))
 		   :eax)		; Number of words
 	    (:call-local-pf get-cons-pointer)
@@ -162,9 +169,10 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	    (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
 	   no-expansion
 	    (:call-local-pf cons-commit)
-	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-			     (:edi (:edi-offset atomically-status))))
-		   
+	    ;; Exit atomically block.
+	    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+	    (:leal (:esp 16) :esp)
+	    
 	   pfix-pbig-done)))
     (do-it)))
 
