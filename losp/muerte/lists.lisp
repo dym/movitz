@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.9 2004/08/12 16:58:19 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.10 2004/11/19 20:13:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -61,7 +61,7 @@
     (:ret)))
 
 (defun endp (x)
-  (endp x))				; compiler-macro
+  (compiler-macro-call endp x))
 
 (defun assoc (item alist &key (test 'eql) (key 'identity))
   (numargs-case
