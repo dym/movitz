@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Apr 15 22:47:13 2002
 ;;;;                
-;;;; $Id: cpu-id.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: cpu-id.lisp,v 1.3 2004/04/14 22:49:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -91,53 +91,50 @@
 octets in c0, c1, c2, and c3. The 16 values returned represent the individual
 octets of EAX, EBX, EDX, and ECX, also in little-endian order."
   (when (cpu-586-class-p)
-    (with-inline-assembly (:returns :multiple-values) pack octets
-      ;; c0-c1-c2-c3 into eax..
-      (:compile-form (:result-mode :eax) c3)
-      (:compile-form (:result-mode :ecx) c2)
-      (:shll 8 :eax)
-      (:xorl :ecx :eax)
-      (:compile-form (:result-mode :ecx) c1)
-      (:shll 8 :eax)
-      (:xorl :ecx :eax)
-      (:compile-form (:result-mode :ecx) c0)
-      (:shll #.(cl:- 8 movitz::+movitz-fixnum-shift+) :eax)
-      (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
-      (:xorl :ecx :eax)
-      ;; do actual cpu-id instruction
-      (:cpuid)
-      ;; unpack eax, ebx, edx, ecx to 16 values..
-      (:call '(:sub-program (unpack-eax)
-	       (:popl (:esp -20))	; return address
-	       (:pushl :eax)
-	       (:andl #x000000ff (:esp))
-	       (:shll #.movitz::+movitz-fixnum-shift+ (:esp))
-	       (:pushl :eax)
-	       (:andl #x0000ff00 (:esp))
-	       (:shrl #.(cl:- 8 movitz::+movitz-fixnum-shift+) (:esp))
-	       (:pushl :eax)
-	       (:andl #x00ff0000 (:esp))
-	       (:shrl #.(cl:- 16 movitz::+movitz-fixnum-shift+) (:esp))
-	       (:pushl :eax)
-	       (:andl #xff000000 (:esp))
-	       (:shrl #.(cl:- 24 movitz::+movitz-fixnum-shift+) (:esp))
-	       (:subl 4 :esp)
-	       (:ret)))
-      (:movl :ebx :eax)
-      (:call 'unpack-eax)
-      (:movl :edx :eax)
-      (:call 'unpack-eax)
-      (:movl :ecx :eax)
-      (:call 'unpack-eax)
-      ;; return multiple-values (16 values, actually..)
-      (:movl (:esp #.(cl:* 4 (cl:- 16 1))) :eax)
-      (:movl (:esp #.(cl:* 4 (cl:- 16 2))) :ebx)
-      ;; (:leal (:esp #.(cl:* 4 (cl:- 16 3))) :edx)
-      (:movb 16 :cl)
-      (:load-constant muerte.cl::values :edx)
-      (:movl (:edx #.(bt:slot-offset 'movitz::movitz-symbol 'movitz::function-value))
-	     :esi)			; load new funobj from symbol into ESI
-      (:call (:esi #.(bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector))))))
+    (macrolet
+	((do-it ()
+	   (flet ((make-register-push (register)
+		    `((:pushl ,register)
+		      (:andl #x000000ff (:esp))
+		      (:shll #.movitz::+movitz-fixnum-shift+ (:esp))
+		      (:pushl ,register)
+		      (:andl #x0000ff00 (:esp))
+		      (:shrl #.(cl:- 8 movitz::+movitz-fixnum-shift+) (:esp))
+		      (:pushl ,register)
+		      (:andl #x00ff0000 (:esp))
+		      (:shrl #.(cl:- 16 movitz::+movitz-fixnum-shift+) (:esp))
+		      (:pushl ,register)
+		      (:andl #xff000000 (:esp))
+		      (:shrl #.(cl:- 24 movitz::+movitz-fixnum-shift+) (:esp)))))
+	     `(with-inline-assembly (:returns :multiple-values) pack octets
+		;; c0-c1-c2-c3 into eax..
+		(:compile-form (:result-mode :eax) c3)
+		(:compile-form (:result-mode :ecx) c2)
+		(:shll 8 :eax)
+		(:xorl :ecx :eax)
+		(:compile-form (:result-mode :ecx) c1)
+		(:shll 8 :eax)
+		(:xorl :ecx :eax)
+		(:compile-form (:result-mode :ecx) c0)
+		(:shll #.(cl:- 8 movitz::+movitz-fixnum-shift+) :eax)
+		(:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
+		(:xorl :ecx :eax)
+		;; do actual cpu-id instruction
+		(:cpuid)
+		;; unpack eax, ebx, edx, ecx to 16 values..
+		,@(make-register-push :eax)
+		,@(make-register-push :ebx)
+		,@(make-register-push :edx)
+		,@(make-register-push :ecx)
+		;; return multiple-values (16 values, actually..)
+		(:movl (:esp #.(cl:* 4 (cl:- 16 1))) :eax)
+		(:movl (:esp #.(cl:* 4 (cl:- 16 2))) :ebx)
+		(:movb 16 :cl)
+		(:load-constant muerte.cl::values :edx)
+		(:movl (:edx #.(bt:slot-offset 'movitz::movitz-symbol 'movitz::function-value))
+		       :esi)		; load new funobj from symbol into ESI
+		(:call (:esi #.(bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector)))))))
+      (do-it))))
 
 
 (defconstant +cpu-id-feature-map+
