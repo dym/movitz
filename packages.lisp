@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.38 2004/09/22 17:59:44 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.39 2004/11/11 19:29:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1084,7 +1084,7 @@
 	   yes-or-no-p
 	   zerop))
 
-(defpackage #:muerte
+(defpackage muerte
   (:use muerte.mop muerte.common-lisp)
   (:import-from common-lisp cl:nil)
   (:shadow get-setf-expansion)
@@ -1128,7 +1128,8 @@
 	   #:stack-frame-call-site
 	   #:stack-frame-ref
 	   #:check-stack-limit
-	   #:interrupt-frame-ref
+	   #:dit-frame-ref
+	   #:interrupt-default-handler
 	   #:exception-handler
 
 	   #:*build-number*
@@ -1186,6 +1187,9 @@
 	   find-restart-from-context
 	   map-active-restarts
 	   with-basic-restart
+	   
+	   #:dynamic-variable-install
+	   #:dynamic-variable-uninstall
 
 	   #:code-vector
 	   #:vector-u8
