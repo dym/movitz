@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.3 2004/02/26 13:44:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -331,14 +331,14 @@
   (getf (load-global-constant global-properties) property))
 
 (define-compiler-macro object-location (object)
-  `(with-inline-assembly (:returns :eax)
-     (:compile-form (:result-mode :eax) ,object)
-     (:andb #xf8 :al)))
+  `(with-inline-assembly (:returns :register)
+     (:compile-form (:result-mode :register) ,object)
+     (:andl ,(* -2 movitz::+movitz-fixnum-factor+) (:result-register))))
+
   
 (defun object-location (object)
   "The location is the object's address divided by fixnum-factor."
   (object-location object))
-
 
 (defun halt-cpu ()
   (halt-cpu))
