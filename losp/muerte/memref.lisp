@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.24 2004/08/09 14:39:41 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.25 2004/08/10 12:58:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,8 +18,10 @@
 
 (in-package muerte)
 
-(define-compiler-macro memref (&whole form object offset index type &environment env)
-  (if (not (movitz:movitz-constantp type env))
+(define-compiler-macro memref (&whole form object offset index type &key (localp nil)
+			       &environment env)
+  (if (or (not (movitz:movitz-constantp type env))
+	  (not (movitz:movitz-constantp localp env)))
       form
     (labels ((sub-extract-constant-delta (form)
 	       "Try to extract at compile-time an integer offset from form."
@@ -220,32 +222,36 @@
 			    (:addl :ebx :ecx)
 			    (:movl (:eax :ecx ,(offset-by 4)) :ecx)))))))
 		(:lisp
-		 (cond
-		  ((and (eql 0 index) (eql 0 offset))
-		   `(with-inline-assembly (:returns :register)
-		      (:compile-form (:result-mode :register) ,object)
-		      (:movl ((:result-register) ,(offset-by 4)) (:result-register))))
-		  ((eql 0 offset)
-		   `(with-inline-assembly (:returns :eax)
-		      (:compile-two-forms (:eax :ecx) ,object ,index)
-		      ,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
-			  `((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ecx))
-		      (:movl (:eax :ecx ,(offset-by 4)) :eax)))
-		  ((eql 0 index)
-		   `(with-inline-assembly (:returns :eax)
-		      (:compile-two-forms (:eax :untagged-fixnum-ecx) ,object ,offset)
-		      (:movl (:eax :ecx ,(offset-by 4)) :eax)))
-		  (t (assert (not (movitz:movitz-constantp offset env)))
-		     (assert (not (movitz:movitz-constantp index env)))
-		     (let ((object-var (gensym "memref-object-")))
-		       (assert (= 4 movitz:+movitz-fixnum-factor+))
-		       `(let ((,object-var ,object))
-			  (with-inline-assembly (:returns :eax)
-			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
-			    (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
-			    (:load-lexical (:lexical-binding ,object-var) :eax)
-			    (:addl :ebx :ecx)
-			    (:movl (:eax :ecx ,(offset-by 4)) :eax)))))))
+		 (let* ((localp (movitz:movitz-eval localp env))
+			(prefixes (if localp
+				      nil
+				    movitz:*compiler-nonlocal-lispval-read-segment-prefix*)))
+		   (cond
+		    ((and (eql 0 index) (eql 0 offset))
+		     `(with-inline-assembly (:returns :register)
+			(:compile-form (:result-mode :register) ,object)
+			(,prefixes :movl ((:result-register) ,(offset-by 4)) (:result-register))))
+		    ((eql 0 offset)
+		     `(with-inline-assembly (:returns :eax)
+			(:compile-two-forms (:eax :ecx) ,object ,index)
+			,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
+			    `((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ecx))
+			(,prefixes :movl (:eax :ecx ,(offset-by 4)) :eax)))
+		    ((eql 0 index)
+		     `(with-inline-assembly (:returns :eax)
+			(:compile-two-forms (:eax :untagged-fixnum-ecx) ,object ,offset)
+			(,prefixes :movl (:eax :ecx ,(offset-by 4)) :eax)))
+		    (t (assert (not (movitz:movitz-constantp offset env)))
+		       (assert (not (movitz:movitz-constantp index env)))
+		       (let ((object-var (gensym "memref-object-")))
+			 (assert (= 4 movitz:+movitz-fixnum-factor+))
+			 `(let ((,object-var ,object))
+			    (with-inline-assembly (:returns :eax)
+			      (:compile-two-forms (:ecx :ebx) ,offset ,index)
+			      (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
+			      (:load-lexical (:lexical-binding ,object-var) :eax)
+			      (:addl :ebx :ecx)
+			      (,prefixes :movl (:eax :ecx ,(offset-by 4)) :eax))))))))
 		(:code-vector
 		 ;; A code-vector is like a normal lisp word pointer,
 		 ;; except it's known to point to a code-vector, and
@@ -297,8 +303,10 @@
     (:signed-byte30+2   (memref object offset index :signed-byte30+2))
     (:unsigned-byte29+3 (memref object offset index :unsigned-byte29+3))))
 
-(define-compiler-macro (setf memref) (&whole form &environment env value object offset index type)
-  (if (not (movitz:movitz-constantp type env))
+(define-compiler-macro (setf memref) (&whole form &environment env value object offset index type
+				      &key (localp nil))
+  (if (or (not (movitz:movitz-constantp type env))
+	  (not (movitz:movitz-constantp localp env)))
       form
     (case (movitz::eval-form type)
       (:character
@@ -544,33 +552,37 @@
 		  (:movb :ah (:ebx :ecx)))
 		,value-var)))))
       (:lisp
-       (cond
-	((and (movitz:movitz-constantp offset env)
-	      (movitz:movitz-constantp index env))
-	 `(with-inline-assembly (:returns :eax)
-	    (:compile-two-forms (:eax :ebx) ,value ,object)
-	    (:movl :eax (:ebx ,(+ (movitz:movitz-eval offset env)
-				  (* 4 (movitz:movitz-eval index env)))))))
-	((movitz:movitz-constantp offset env)
-	 (let ((value-var (gensym "memref-value-")))
-	   `(let ((,value-var ,value))
-	      (with-inline-assembly (:returns :eax)
-		(:compile-two-forms (:ebx :ecx) ,object ,index)
-		(:load-lexical (:lexical-binding ,value-var) :eax)
-		,@(when (plusp (- movitz:+movitz-fixnum-shift+ 2))
-		    `((:sarl ,(- movitz:+movitz-fixnum-shift+ 2)) :ecx))
-		(:movl :eax (:ebx :ecx ,(movitz:movitz-eval offset env)))))))
-	(t (let ((value-var (gensym "memref-value-"))
-		 (object-var (gensym "memref-object-")))
-	     `(let ((,value-var ,value) (,object-var ,object))
+       (let* ((localp (movitz:movitz-eval localp env))
+	      (prefixes (if localp
+			    nil
+			  movitz:*compiler-nonlocal-lispval-write-segment-prefix*)))
+	 (cond
+	  ((and (movitz:movitz-constantp offset env)
+		(movitz:movitz-constantp index env))
+	   `(with-inline-assembly (:returns :eax)
+	      (:compile-two-forms (:eax :ebx) ,value ,object)
+	      (,prefixes :movl :eax (:ebx ,(+ (movitz:movitz-eval offset env)
+					      (* 4 (movitz:movitz-eval index env)))))))
+	  ((movitz:movitz-constantp offset env)
+	   (let ((value-var (gensym "memref-value-")))
+	     `(let ((,value-var ,value))
 		(with-inline-assembly (:returns :eax)
-		  (:compile-two-forms (:untagged-fixnum-ecx :ebx) ,offset ,index)
+		  (:compile-two-forms (:ebx :ecx) ,object ,index)
 		  (:load-lexical (:lexical-binding ,value-var) :eax)
-		  ,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
-		      `((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ebx))
-		  (:addl :ebx :ecx)	; index += offset
-		  (:load-lexical (:lexical-binding ,object-var) :ebx)
-		  (:movl :eax (:ebx :ecx))))))))
+		  ,@(when (plusp (- movitz:+movitz-fixnum-shift+ 2))
+		      `((:sarl ,(- movitz:+movitz-fixnum-shift+ 2)) :ecx))
+		  (,prefixes :movl :eax (:ebx :ecx ,(movitz:movitz-eval offset env)))))))
+	  (t (let ((value-var (gensym "memref-value-"))
+		   (object-var (gensym "memref-object-")))
+	       `(let ((,value-var ,value) (,object-var ,object))
+		  (with-inline-assembly (:returns :eax)
+		    (:compile-two-forms (:untagged-fixnum-ecx :ebx) ,offset ,index)
+		    (:load-lexical (:lexical-binding ,value-var) :eax)
+		    ,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
+			`((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ebx))
+		    (:addl :ebx :ecx)	; index += offset
+		    (:load-lexical (:lexical-binding ,object-var) :ebx)
+		    (,prefixes :movl :eax (:ebx :ecx)))))))))
       (:code-vector
        (cond
 	((and (movitz:movitz-constantp offset env)
