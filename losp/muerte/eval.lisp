@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.11 2004/09/21 13:02:57 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.12 2004/10/21 20:45:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -102,6 +102,9 @@
     ((throw)
      (throw (eval-form (second form) env)
        (eval-form (third form) env)))
+    ((unwind-protect)
+     (unwind-protect (eval-form (second form) env)
+       (eval-progn (cddr form) env)))
     (t (eval-funcall form env))))
 
 (defun eval-progn (forms env)
