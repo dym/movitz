@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.5 2004/03/28 17:33:46 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.6 2004/03/29 01:57:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -137,7 +137,7 @@
      (not (eq (movitz-accessor symbol movitz-symbol function-value)
 	      (load-global-constant movitz::unbound-function))))))
 
-(defun create-symbol (name &optional (package nil)
+(defun %create-symbol (name &optional (package nil)
 				     (plist nil)
 				     (value (load-global-constant unbound-value))
 				     (function (load-global-constant movitz::unbound-function))
@@ -146,16 +146,17 @@
     (assert (= 1 (- (movitz:tag :symbol) (movitz:tag :other)))))
   (let ((symbol (%word-offset (malloc-clumps 3) 1)))
     (setf-movitz-accessor (symbol movitz-symbol package) package)
+    (setf-movitz-accessor (symbol movitz-symbol name) name)
     (setf-movitz-accessor (symbol movitz-symbol hash-key) (sxhash name))
     (setf (symbol-flags symbol) flags
 	  (symbol-plist symbol) plist
 	  (symbol-function symbol) function
-	  (symbol-name symbol) name
 	  (symbol-value symbol) value)
     symbol))
 
 (defun make-symbol (name)
-  (create-symbol name))
+  (check-type name string "a symbol name")
+  (%create-symbol name))
 
 (defun copy-symbol (symbol &optional copy-properties) 
   "copy-symbol returns a fresh, uninterned symbol, the name of which
@@ -163,13 +164,13 @@
   symbol."
   (if (or (eq nil symbol)
 	  (not copy-properties))
-      (create-symbol (symbol-name symbol))
-    (create-symbol (symbol-name symbol)
-		   nil
-		   (symbol-plist symbol)
-		   (%unbounded-symbol-value symbol)
-		   (%unbounded-symbol-function symbol)
-		   (symbol-flags symbol))))
+      (%create-symbol (symbol-name symbol))
+    (%create-symbol (symbol-name symbol)
+		    nil
+		    (symbol-plist symbol)
+		    (%unbounded-symbol-value symbol)
+		    (%unbounded-symbol-function symbol)
+		    (symbol-flags symbol))))
 
 (defun symbol-flags (symbol)
   (etypecase symbol
