@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.31 2004/09/21 13:01:33 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.32 2004/09/21 13:56:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -155,132 +155,133 @@ at the start-stack-frame location."
 								  (stack-frame-uplink stack frame))
       while (plusp frame)
       do (setf next-frame nil next-nether-frame nil)
-      do (let ((funobj (funcall function (stack-frame-funobj stack frame) frame)))
-	   ;; If nether-frame is a DIT-frame, there are 4 more words to be skipped.
-	   (when (eq 0 (stack-frame-ref stack nether-frame -1))
-	     (incf nether-frame 4))
-	   (typecase funobj
-	     ((or function null)
-	      (assert (= 0 (funobj-frame-num-unboxed funobj)))
-	      (map-heap-words function (+ nether-frame 2) frame))
-	     ((eql 0)			; A dit interrupt-frame?
-	      (let* ((dit-frame frame)
-		     (casf-frame (dit-frame-casf stack dit-frame)))
-		;; 1. Scavenge the dit-frame
-		(cond
-		 ((let ((atomically (dit-frame-ref stack dit-frame :atomically-continuation
-						   :unsigned-byte32)))
-		    (and (not (= 0 atomically))
-			 (= 0 (ldb (byte 2 0) atomically))))
-		  ;; Interrupt occurred inside an (non-pf) atomically, so none of the
-		  ;; registers are active.
-		  (map-heap-words function (+ nether-frame 2)
-				  (+ dit-frame 1 (dit-frame-index :tail-marker))))
-		 ((logbitp 10 (dit-frame-ref stack dit-frame :eflags :unsigned-byte32))
-		  ;; DF flag was 1, so EAX and EDX are not GC roots.
-		  #+ignore (warn "Interrupt in uncommon mode at ~S"
-				 (dit-frame-ref stack dit-frame :eip :unsigned-byte32))
-		  (map-heap-words function ; Assume nothing in the dit-frame above the location ..
-				  (+ nether-frame 2) ; ..of EDX holds pointers.
-				  (+ dit-frame (dit-frame-index :edx))))
-		 (t #+ignore (warn "Interrupt in COMMON mode!")
-		    (map-heap-words function ; Assume nothing in the dit-frame above the location ..
-				    (+ nether-frame 2) ; ..of ECX holds pointers.
-				    (+ dit-frame (dit-frame-index :ecx)))))
-		;; 2. Pop to (dit-)frame's CASF
-		(setf nether-frame dit-frame
-		      frame (dit-frame-casf stack frame))
-		(let ((casf-funobj (funcall function (stack-frame-funobj stack frame) frame))
-		      (interrupted-ebp (dit-frame-ref stack dit-frame :ebp))
-		      (interrupted-esp (dit-frame-esp stack dit-frame)))
+      do (flet ((scavenge-funobj-code-vector (funobj)
+		  "Funobj 0 is assumed to be the DIT code-vector."
+		  (if (eq 0 funobj)
+		      (symbol-value 'default-interrupt-trampoline)
+		    (funobj-code-vector funobj))))
+	   (let ((funobj (funcall function (stack-frame-funobj stack frame) frame)))
+	     ;; If nether-frame is a DIT-frame, there are 4 more words to be skipped.
+	     (when (eq 0 (stack-frame-ref stack nether-frame -1))
+	       (incf nether-frame 4))
+	     (typecase funobj
+	       ((or function null)
+		(assert (= 0 (funobj-frame-num-unboxed funobj)))
+		(map-heap-words function (+ nether-frame 2) frame))
+	       ((eql 0)			; A dit interrupt-frame?
+		(let* ((dit-frame frame)
+		       (casf-frame (dit-frame-casf stack dit-frame)))
+		  ;; 1. Scavenge the dit-frame
 		  (cond
-		   #+ignore
-		   ((eq nil casf-funobj)
-		    (warn "Scanning interrupt in PF: ~S"
-			  (dit-frame-ref stack dit-frame :eip :unsigned-byte32)))
-;;;		   ((eq 0 casf-funobj)
-;;;		    (warn "Interrupt (presumably) in interrupt trampoline: ~S"
-;;;			  (dit-frame-ref stack dit-frame :eip :unsigned-byte32)))
-		   ((or (eq 0 casf-funobj)
-			(typep casf-funobj 'function))
-		    (let ((casf-code-vector (if (eq 0 casf-funobj)
-						(symbol-value 'default-interrupt-trampoline)
-					      (funobj-code-vector casf-funobj))))
-		      ;; 3. Scavenge the interrupted frame, according to one of i. ii. or iii.
-		      (cond
-		       ((< interrupted-ebp interrupted-esp)
+		   ((let ((atomically (dit-frame-ref stack dit-frame :atomically-continuation
+						     :unsigned-byte32)))
+		      (and (not (= 0 atomically))
+			   (= 0 (ldb (byte 2 0) atomically))))
+		    ;; Interrupt occurred inside an (non-pf) atomically, so none of the
+		    ;; registers are active.
+		    (map-heap-words function (+ nether-frame 2)
+				    (+ dit-frame 1 (dit-frame-index :tail-marker))))
+		   ((logbitp 10 (dit-frame-ref stack dit-frame :eflags :unsigned-byte32))
+		    ;; DF flag was 1, so EAX and EDX are not GC roots.
+		    #+ignore (warn "Interrupt in uncommon mode at ~S"
+				   (dit-frame-ref stack dit-frame :eip :unsigned-byte32))
+		    (map-heap-words function ; Assume nothing in the dit-frame above the location ..
+				    (+ nether-frame 2) ; ..of EDX holds pointers.
+				    (+ dit-frame (dit-frame-index :edx))))
+		   (t #+ignore (warn "Interrupt in COMMON mode!")
+		      (map-heap-words function ; Assume nothing in the dit-frame above the location ..
+				      (+ nether-frame 2) ; ..of ECX holds pointers.
+				      (+ dit-frame (dit-frame-index :ecx)))))
+		  ;; 2. Pop to (dit-)frame's CASF
+		  (setf nether-frame dit-frame
+			frame (dit-frame-casf stack frame))
+		  (let ((casf-funobj (funcall function (stack-frame-funobj stack frame) frame))
+			(interrupted-ebp (dit-frame-ref stack dit-frame :ebp))
+			(interrupted-esp (dit-frame-esp stack dit-frame)))
+		    (cond
+		     #+ignore
+		     ((eq nil casf-funobj)
+		      (warn "Scanning interrupt in PF: ~S"
+			    (dit-frame-ref stack dit-frame :eip :unsigned-byte32)))
+		     ((or (eq 0 casf-funobj)
+			  (typep casf-funobj 'function))
+		      (let ((casf-code-vector (scavenge-funobj-code-vector casf-funobj)))
+			;; 3. Scavenge the interrupted frame, according to one of i. ii. or iii.
 			(cond
+			 ((< interrupted-ebp interrupted-esp)
+			  (cond
+			   ((location-in-object-p casf-code-vector
+						  (dit-frame-ref stack dit-frame :eip :location))
+			    (warn "DIT at throw situation, in target EIP=~S"
+				  (dit-frame-ref stack dit-frame :eip :unsigned-byte32))
+			    (map-heap-words function interrupted-esp frame))
+			   ((location-in-object-p (scavenge-funobj-code-vector (dit-frame-ref stack
+											      dit-frame
+											      :scratch1))
+						  (dit-frame-ref stack dit-frame :eip :location))
+			    (warn "DIT at throw situation, in thrower EIP=~S"
+				  (dit-frame-ref stack dit-frame :eip :unsigned-byte32))
+			    (map-heap-words function interrupted-esp frame))
+			   (t (error "DIT with EBP<ESP, EBP=~S, ESP=~S"
+				     interrupted-ebp
+				     interrupted-esp))))
 			 ((location-in-object-p casf-code-vector
 						(dit-frame-ref stack dit-frame :eip :location))
-			  (warn "DIT at throw situation, in target EIP=~S"
-				(dit-frame-ref stack dit-frame :eip :unsigned-byte32))
-			  (map-heap-words function interrupted-esp frame))
-			 ((location-in-object-p (funobj-code-vector (dit-frame-ref stack dit-frame
-										   :scratch1))
-						(dit-frame-ref stack dit-frame :eip :location))
-			  (warn "DIT at throw situation, in thrower EIP=~S"
-				(dit-frame-ref stack dit-frame :eip :unsigned-byte32))
-			  (map-heap-words function interrupted-esp frame))
-			 (t (error "DIT with EBP<ESP, EBP=~S, ESP=~S"
-				   interrupted-ebp
-				   interrupted-esp))))
-		       ((location-in-object-p casf-code-vector
-					      (dit-frame-ref stack dit-frame :eip :location))
-			(cond
-			 ((let ((x0-tag (ldb (byte 3 0)
-					     (memref interrupted-esp 0 0 :unsigned-byte8))))
-			    (and (member x0-tag '(1 5 6 7))
-				 (location-in-object-p casf-code-vector
-						       (memref interrupted-esp 0 0 :location))))
-			  ;; When code-vector migration is implemented...
-			  (warn "Scanning at ~S X0 call ~S in ~S."
-				(dit-frame-ref stack dit-frame :eip :unsigned-byte32)
-				(memref interrupted-esp 0 0 :unsigned-byte32)
-				(funobj-name casf-funobj))
-			  #+ignore (map-heap-words function (+ interrupted-esp 1) frame)
-			  (when (eq 0 (stack-frame-ref stack frame -1))
-			    (break "X1 call in DIT-frame."))
-			  (setf next-frame frame
-				next-nether-frame (+ interrupted-esp 1 -2)))
-			 ((let ((x1-tag (ldb (byte 3 0)
-					     (memref interrupted-esp 4 0 :unsigned-byte8))))
-			    (and (member x1-tag '(1 5 6 7))
-				 (location-in-object-p casf-code-vector
-						       (memref interrupted-esp 0 1 :location))))
-			  ;; When code-vector migration is implemented...
-			  (warn "Scanning at ~S X1 call ~S in ~S."
-				(dit-frame-ref stack dit-frame :eip :unsigned-byte32)
-				(memref interrupted-esp 0 1 :unsigned-byte32)
-				(funobj-name casf-funobj))
-			  (when (eq 0 (stack-frame-ref stack frame -1))
-			    (break "X1 call in DIT-frame."))
+			  (cond
+			   ((let ((x0-tag (ldb (byte 3 0)
+					       (memref interrupted-esp 0 0 :unsigned-byte8))))
+			      (and (member x0-tag '(1 5 6 7))
+				   (location-in-object-p casf-code-vector
+							 (memref interrupted-esp 0 0 :location))))
+			    ;; When code-vector migration is implemented...
+			    (warn "Scanning at ~S X0 call ~S in ~S."
+				  (dit-frame-ref stack dit-frame :eip :unsigned-byte32)
+				  (memref interrupted-esp 0 0 :unsigned-byte32)
+				  (funobj-name casf-funobj))
+			    #+ignore (map-heap-words function (+ interrupted-esp 1) frame)
+			    (when (eq 0 (stack-frame-ref stack frame -1))
+			      (break "X1 call in DIT-frame."))
+			    (setf next-frame frame
+				  next-nether-frame (+ interrupted-esp 1 -2)))
+			   ((let ((x1-tag (ldb (byte 3 0)
+					       (memref interrupted-esp 4 0 :unsigned-byte8))))
+			      (and (member x1-tag '(1 5 6 7))
+				   (location-in-object-p casf-code-vector
+							 (memref interrupted-esp 0 1 :location))))
+			    ;; When code-vector migration is implemented...
+			    (warn "Scanning at ~S X1 call ~S in ~S."
+				  (dit-frame-ref stack dit-frame :eip :unsigned-byte32)
+				  (memref interrupted-esp 0 1 :unsigned-byte32)
+				  (funobj-name casf-funobj))
+			    (when (eq 0 (stack-frame-ref stack frame -1))
+			      (break "X1 call in DIT-frame."))
+			    #+ignore (map-heap-words function (+ interrupted-esp 2) frame)
+			    (setf next-frame frame
+				  next-nether-frame (+ interrupted-esp 2 -2)))
+			   (t ;; Situation i. Nothing special on stack, scavenge frame normally.
+			    ;; (map-heap-words function interrupted-esp frame)
+			    (setf next-frame frame
+				  next-nether-frame (- interrupted-esp 2))
+			    )))
+			 ((eq casf-frame (memref interrupted-esp 0 0 :location))
+			  ;; Situation ii. esp(0)=CASF, esp(1)=code-vector
+			  (assert (location-in-object-p casf-code-vector
+							(memref interrupted-esp 0 1 :location))
+
+			      () "Stack discipline situation ii. invariant broken. CASF=#x~X, ESP=~S, EBP=~S"
+			      casf-frame interrupted-esp interrupted-ebp)
 			  #+ignore (map-heap-words function (+ interrupted-esp 2) frame)
 			  (setf next-frame frame
 				next-nether-frame (+ interrupted-esp 2 -2)))
-			 (t ;; Situation i. Nothing special on stack, scavenge frame normally.
-			  ;; (map-heap-words function interrupted-esp frame)
+			 (t ;; Situation iii. esp(0)=code-vector.
+			  (assert (location-in-object-p casf-code-vector
+							(memref interrupted-esp 0 0 :location))
+			      () "Stack discipline situation iii. invariant broken. CASF=#x~X"
+			      casf-frame)
+			  #+ignore (map-heap-words function (+ interrupted-esp 1) frame)
 			  (setf next-frame frame
-				next-nether-frame (- interrupted-esp 2))
-			  )))
-		       ((eq casf-frame (memref interrupted-esp 0 0 :location))
-			;; Situation ii. esp(0)=CASF, esp(1)=code-vector
-			(assert (location-in-object-p casf-code-vector
-						      (memref interrupted-esp 0 1 :location))
-
-			    () "Stack discipline situation ii. invariant broken. CASF=#x~X, ESP=~S, EBP=~S"
-			    casf-frame interrupted-esp interrupted-ebp)
-			#+ignore (map-heap-words function (+ interrupted-esp 2) frame)
-			(setf next-frame frame
-			      next-nether-frame (+ interrupted-esp 2 -2)))
-		       (t ;; Situation iii. esp(0)=code-vector.
-			(assert (location-in-object-p casf-code-vector
-						      (memref interrupted-esp 0 0 :location))
-			    () "Stack discipline situation iii. invariant broken. CASF=#x~X"
-			    casf-frame)
-			#+ignore (map-heap-words function (+ interrupted-esp 1) frame)
-			(setf next-frame frame
-			      next-nether-frame (+ interrupted-esp 1 -2))))))
-		   (t (error "DIT-frame interrupted unknown CASF funobj: ~S" casf-funobj))))))
-	     (t (error "Don't know how to scavenge across frame ~S of kind ~S." frame funobj)))))
+				next-nether-frame (+ interrupted-esp 1 -2))))))
+		     (t (error "DIT-frame interrupted unknown CASF funobj: ~S" casf-funobj))))))
+	       (t (error "Don't know how to scavenge across frame ~S of kind ~S." frame funobj))))))
   (values))
 
