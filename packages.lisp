@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.3 2004/02/08 23:05:59 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.4 2004/02/09 23:42:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1114,6 +1114,10 @@
 	   
 	   *error-no-condition-for-debugger*
 	   formatted-error
+
+	   #:package-object-use-list
+	   #:package-object-internal-symbols
+	   #:package-object-external-symbols
 	   
 	   vector-element-type
 	   vector-element-size
