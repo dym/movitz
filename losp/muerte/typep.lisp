@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.15 2004/06/09 20:13:16 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.16 2004/06/09 23:05:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -253,7 +253,8 @@
 		     (when deriver-function
 		       `(typep ,object ',(funcall deriver-function)))))))
 	     ((consp type)
-	      (let ((deriver-function (gethash (car type) *compiler-derived-typespecs*)))
+	      (let ((deriver-function (gethash (translate-program (car type) :cl :muerte.cl)
+					       *compiler-derived-typespecs*)))
 		(if deriver-function
 		    `(typep ,object ',(apply deriver-function (cdr type)))
 		  (case (car type)
@@ -372,7 +373,8 @@
 			(,(car type)
 			 ,@(loop for subtype in (cdr type)
 			       collect `(typep typep-object ',subtype)))))
-		    (t (warn "compiling typep ~A" type)))))))
+		    (t (warn "compiling typep ~S [~A]" type
+			     (package-name (symbol-package (car type))))))))))
 	    form)))))
 
 #+ignore
