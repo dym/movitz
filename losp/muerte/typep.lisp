@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.27 2004/07/19 00:54:34 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.28 2004/07/21 12:28:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -426,10 +426,11 @@
 	     (list 'typep x '',tname))
 	   (defun ,fname ,lambda ,@body)))))
 
-(defmacro deftype (name lambda &body body)
+(defmacro deftype (&whole form name lambda &body body)
   (let ((fname (intern (format nil "~A-~A" 'deftype name))))
     `(progn
        (eval-when (:compile-toplevel)
+	 ,form
 	 (setf (gethash (translate-program ',name :cl :muerte.cl)
 			*compiler-derived-typespecs*)
 	   (lambda ,lambda ,@body))
