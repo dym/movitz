@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.10 2004/02/03 19:17:24 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.11 2004/02/04 10:33:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -108,7 +108,7 @@ compile, using the host compiler, the code rather than just using eval.")
 
 (defconstant +code-vector-entry-factor+ 1)
 
-(defclass movitz-funobj-pass1 (movitz-heap-object)
+(defclass movitz-funobj-pass1 ()
   ((name
     :initarg :name
     :accessor movitz-funobj-name)
@@ -119,12 +119,13 @@ compile, using the host compiler, the code rather than just using eval.")
     :accessor function-envs)
    (funobj-env
     :initarg :funobj-env
-    :accessor funobj-env)
-   (body-compiler-values
-    :accessor body-compiler-values))
+    :accessor funobj-env))
   (:documentation "This class is used for funobjs during the first compiler pass.
 Before the second pass, such objects will be change-class-ed to proper movitz-funobjs.
 This way, we ensure that no undue side-effects on the funobj occur during pass 1."))
+
+(defclass movitz-funobj-pass1-numargs-case (movitz-funobj-pass1) ())
+(defclass movitz-funobj-pass1-1req1opt (movitz-funobj-pass1) ())
 
 (defmethod print-object ((object movitz-funobj-pass1) stream)
   (print-unreadable-object (object stream :type t :identity t)
@@ -140,6 +141,7 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
     (coerce lambda-form 'function)))
 
 (defun make-compiled-funobj (name lambda-list declarations form env top-level-p funobj)
+  "Compiler entry-point for making a (lexically) top-level function."
   (handler-bind (((or warning error)
 		  (lambda (c)
 		    (declare (ignore c))
@@ -151,22 +153,32 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
 			      name muerte.cl:*compile-file-pathname*)))))
     (register-function-code-size
      (make-compiled-funobj-pass2
-      (make-compiled-funobj-pass1 name lambda-list declarations form env top-level-p funobj)))))
+      (make-compiled-funobj-pass1 name lambda-list declarations
+				  form env top-level-p funobj)))))
 
 (defun make-compiled-funobj-pass1 (name lambda-list declarations form env top-level-p funobj)
   "Entry-point for first-pass compilation."
   (with-retries-until-true (retry-pass1 "Retry first-pass compilation of ~S." name)
     ;; First-pass is mostly functional, so it can safely be restarted.
-    (funcall (cond
-	      ((let ((sub-form (cddr form)))
-		 (and (consp (car sub-form))
-		      (eq 'muerte::numargs-case (caar sub-form))))
-	       'make-compiled-function-pass1-numarg-case)
-	      (t 'make-compiled-function-pass1))
-	     name lambda-list declarations form env top-level-p funobj)))
+    (multiple-value-bind (required-vars optional-vars rest-var key-vars)
+	(decode-normal-lambda-list lambda-list)
+      ;; There are several main branches through the function
+      ;; compiler, and this is where we decide which to take.
+      (funcall (cond
+		((let ((sub-form (cddr form)))
+		   (and (consp (car sub-form))
+			(eq 'muerte::numargs-case (caar sub-form))))
+		 'make-compiled-function-pass1-numarg-case)
+		((and (= 1 (length required-vars))
+		      (= 1 (length optional-vars))
+		      (null key-vars)
+		      (not rest-var))
+		 'make-compiled-function-pass1)
+		(t 'make-compiled-function-pass1))
+	       name lambda-list declarations form env top-level-p funobj))))
 
 (defun make-compiled-function-pass1-numarg-case (name lambda-list declarations form env top-level-p funobj)
-  (let* ((funobj (or funobj (make-instance 'movitz-funobj-pass1)))
+  (let* ((funobj (or funobj (make-instance 'movitz-funobj-pass1-numargs-case)))
 	 (funobj-env (make-local-movitz-environment env funobj :type 'funobj-env)))
     (setf (movitz-funobj-name funobj) name
 	  (movitz-funobj-lambda-list funobj) (movitz-read (lambda-list-simplify lambda-list))
@@ -244,6 +256,7 @@ This way, we ensure that no undue side-effects on the funobj occur during pass 1
      (resolve-sub-functions funobj)))))
 
 (defun analyze-bindings (toplevel-funobj)
+  "Figure out usage of bindings in a toplevel funobj."
   (let ((bindings ()))
     (labels ((type-is-t (type-specifier)
 	       (or (eq type-specifier t)
