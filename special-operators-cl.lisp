@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.3 2004/01/19 11:23:41 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.4 2004/02/02 14:52:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -264,25 +264,30 @@ where zot is not in foo's scope, but _is_ in foo's extent."
   (destructuring-bind (macrolet-specs &body declarations-and-body)
       (cdr form)
     (multiple-value-bind (body declarations)
-	declarations-and-body
+	(parse-declarations-and-body declarations-and-body)
       (let ((local-env (make-local-movitz-environment env funobj
-						   :type 'operator-env
-						   :declarations declarations)))
-	(loop for (name local-lambda-list . local-body) in macrolet-specs
+						      :type 'operator-env
+						      :declarations declarations)))
+	(loop for (name local-lambda-list . local-body-decl-doc) in macrolet-specs
 	    as cl-local-lambda-list = (translate-program local-lambda-list :muerte.cl :cl)
+	    as (local-body local-declarations) =
+	      (multiple-value-list (parse-docstring-declarations-and-body local-body-decl-doc))
 	    as cl-local-body = (translate-program local-body :muerte.cl :cl)
+	    as cl-local-declarations = (translate-program local-declarations :muerte.cl :cl)
 	    as expander = `(lambda (form env)
 			     (declare (ignorable env))
 			     (destructuring-bind ,cl-local-lambda-list
 				 (translate-program (rest form) :muerte.cl :cl)
+			       (declare ,@cl-local-declarations)
 			       (translate-program (block ,name (let () ,@cl-local-body))
 						  :cl :muerte.cl)))
-	    do (movitz-env-add-binding local-env
-				    (make-instance 'macro-binding
-				      :name name
-				      :expander (movitz-macro-expander-make-function expander
-										     :name name
-										     :type :macrolet))))
+	    do (movitz-env-add-binding
+		local-env
+		(make-instance 'macro-binding
+		  :name name
+		  :expander (movitz-macro-expander-make-function expander
+								 :name name
+								 :type :macrolet))))
 	(compiler-values-bind (&all body-values &code body-code)
 	    (compiler-call #'compile-implicit-progn
 	      :defaults forward
