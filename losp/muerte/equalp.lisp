@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 13 17:09:08 2001
 ;;;;                
-;;;; $Id: equalp.lisp,v 1.5 2004/06/09 01:16:52 ffjeld Exp $
+;;;; $Id: equalp.lisp,v 1.6 2004/07/22 01:07:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,7 +22,7 @@
 (in-package muerte)
 
 (defun eql (x y)
-  (eql x y))
+  (compiler-macro-call eql x y))
 
 (defun equal (x y)
   (typecase x
