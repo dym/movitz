@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.22 2004/06/10 19:28:19 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.23 2004/06/16 07:35:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -472,6 +472,11 @@ Returns list in EAX and preserves numargs in ECX."
     (:jnz '(:sub-program ()
 	    (:int 107)))
     (:shrl 1 :eax)))
+
+(defun malloc-end ()
+  "Return the last location of the (dynamically allocated) heap area."
+  (+ (malloc-buffer-start)
+     (* 2 (malloc-cons-pointer))))
 
 (define-primitive-function fast-cons ()
   "Allocate a cons cell. Call with car in eax and cdr in ebx."
