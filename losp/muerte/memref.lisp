@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.14 2004/06/06 11:32:09 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.15 2004/07/11 23:00:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -326,12 +326,16 @@
 		(:movl ,value (:ebx :ecx ,(movitz:movitz-eval offset env))))
 	      ,value)))
 	((movitz:movitz-constantp offset env)
-	 (let ((value-var (gensym "memref-value-")))
-	   `(let ((,value-var ,value))
+	 (let ((value-var (gensym "memref-value-"))
+	       (object-var (gensym "memref-object-"))
+	       (index-var (gensym "memref-index-")))
+	   `(let ((,value-var ,value)
+		  (,object-var ,object)
+		  (,index-var ,index))
 	      (with-inline-assembly (:returns :untagged-fixnum-ecx)
-		(:compile-two-forms (:ebx :eax) ,object ,index)
-		(:load-lexical (:lexical-binding ,value-var) :ecx)
-		(:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		(:load-lexical (:lexical-binding ,value-var) :eax)
+		(:call-global-constant unbox-u32)
+		(:compile-two-forms (:ebx :eax) ,object-var ,index-var)
 		(:movl :ecx (:eax :ebx ,(movitz:movitz-eval offset env)))))))
 	(t (let ((value-var (gensym "memref-value-"))
 		 (object-var (gensym "memref-object-"))
@@ -342,14 +346,16 @@
 		    (,object-var ,object)
 		    (,offset-var ,offset)
 		    (,index-var ,index))
-		(with-inline-assembly (:returns :eax)
-		  (:compile-two-forms (:edx :untagged-fixnum-ecx) ,index-var ,offset-var)
-		  (:addl :edx :ecx)	; offset+index in ECX
-		  (:compile-two-forms (:eax :ebx) ,value-var ,object-var)
+		(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		  (:load-lexical (:lexical-binding ,value-var) :eax)
+		  (:call-global-constant unbox-u32)
+		  (:compile-two-forms (:eax :edx) ,index-var ,offset-var)
+		  (:load-lexical (:lexical-binding ,object-var) :ebx)
 		  (:std)
-		  (:shrl ,movitz::+movitz-fixnum-shift+ :eax)
-		  (:movl :eax (:ebx :ecx))
-		  (:shll ,movitz:+movitz-fixnum-shift+ :eax)
+		  (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+		  (:addl :eax :edx) ; EDX = offset+index
+		  (:movl :ecx (:ebx :edx))
+		  (:movl :edi :edx)
 		  (:cld)))))))
       (:unsigned-byte16
        (cond
