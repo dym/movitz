@@ -1,15 +1,15 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 20012000, 2002-2004,
+;;;;    Copyright (C) 2000-2005,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      cons.lisp
-;;;; Description:   
+;;;; Description:   Cons-cell functionality.
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.8 2004/10/21 20:33:59 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.9 2005/02/03 09:15:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
