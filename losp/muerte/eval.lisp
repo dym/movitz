@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.12 2004/10/21 20:45:48 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.13 2004/10/22 12:31:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -151,6 +151,16 @@ second the list of declaration-specifiers."
        (values p declarations))
     (dolist (d (cdar p))
       (push d declarations))))
+
+(defun parse-docstring-declarations-and-body (forms)
+  "From the list of FORMS, return first the list of non-declaration forms, ~
+second the list of declaration-specifiers, third any docstring."
+  (if (or (not (cdr forms))
+	  (not (stringp (car forms))))
+      (parse-declarations-and-body forms)
+    (multiple-value-call #'values
+      (parse-declarations-and-body (cdr forms))
+      (car forms))))
 
 (defun declared-special-p (var declarations)
   (dolist (d declarations nil)
@@ -315,7 +325,7 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 	(symbol-function (lookup-setf-function (second function-name))))
        ((lambda)
 	(let ((lambda-list (cadr function-name))
-	      (lambda-body (cddr function-name)))
+	      (lambda-body (parse-docstring-declarations-and-body (cddr function-name))))
 	  (install-funobj-name :anonymous-lambda
 			       (lambda (&rest args)
 				 (declare (dynamic-extent args))
