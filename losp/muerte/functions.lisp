@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.15 2004/07/13 22:41:48 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.16 2004/07/15 21:06:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -351,8 +351,8 @@ as that vector."
        (make-array (length code-vector)
 		   :element-type 'code
 		   :initial-contents code-vector))))
-  (let ((funobj (malloc-words (+ #.(cl:truncate (bt:sizeof 'movitz:movitz-funobj) 4)
-				 (length constants)))))
+  (let ((funobj (malloc-pointer-words (+ #.(cl:truncate (bt:sizeof 'movitz:movitz-funobj) 4)
+					 (length constants)))))
     (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:type) 0 :unsigned-byte16)
       #.(movitz:tag :funobj))
     (setf (funobj-name funobj) name
@@ -395,8 +395,8 @@ so that we can be reasonably sure of dst's size."
 
 (defun copy-funobj (old-funobj &optional (name (funobj-name old-funobj)))
   (let* ((num-constants (funobj-num-constants old-funobj))
-	 (funobj (malloc-words (+ -2 #.(cl:truncate (bt:sizeof 'movitz:movitz-funobj) 4)
-				  num-constants))))
+	 (funobj (malloc-pointer-words (+ #.(cl:truncate (bt:sizeof 'movitz:movitz-funobj) 4)
+					  num-constants))))
     (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:type) 0 :unsigned-byte16)
       (memref old-funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:type) 0 :unsigned-byte16))
     (setf (funobj-num-constants funobj) num-constants)

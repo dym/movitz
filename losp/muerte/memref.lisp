@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.15 2004/07/11 23:00:41 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.16 2004/07/15 21:07:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -334,7 +334,7 @@
 		  (,index-var ,index))
 	      (with-inline-assembly (:returns :untagged-fixnum-ecx)
 		(:load-lexical (:lexical-binding ,value-var) :eax)
-		(:call-global-constant unbox-u32)
+		(:call-global-pf unbox-u32)
 		(:compile-two-forms (:ebx :eax) ,object-var ,index-var)
 		(:movl :ecx (:eax :ebx ,(movitz:movitz-eval offset env)))))))
 	(t (let ((value-var (gensym "memref-value-"))
@@ -348,7 +348,7 @@
 		    (,index-var ,index))
 		(with-inline-assembly (:returns :untagged-fixnum-ecx)
 		  (:load-lexical (:lexical-binding ,value-var) :eax)
-		  (:call-global-constant unbox-u32)
+		  (:call-global-pf unbox-u32)
 		  (:compile-two-forms (:eax :edx) ,index-var ,offset-var)
 		  (:load-lexical (:lexical-binding ,object-var) :ebx)
 		  (:std)
@@ -609,7 +609,7 @@
 	    (:addl :ecx :eax)
 	    (:shrl ,movitz::+movitz-fixnum-shift+ :eax) ; scale down address
 	    (,prefixes :movl (:eax) :ecx)
-	    (:call-global-constant box-u32-ecx)))
+	    (:call-local-pf box-u32-ecx)))
 	(:unsigned-byte16
 	 (cond
 	  ((and (eq 0 offset) (eq 0 index))

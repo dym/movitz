@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.27 2004/07/15 00:29:19 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.28 2004/07/15 21:06:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -553,11 +553,16 @@ The valid parameters are~{ ~S~}."
 				   (setq side-effects t))
 				 (setq modifies (modifies-union modifies sub-modifies))
 				 code))))
-		       (setf (assembly-macro-expander :call-global-constant amenv)
+		       (setf (assembly-macro-expander :call-global-pf amenv)
 			 #'(lambda (expr)
 			     (destructuring-bind (name)
 				 (cdr expr)
 			       `((:globally (:call (:edi (:edi-offset ,name))))))))
+		       (setf (assembly-macro-expander :call-local-pf amenv)
+			 #'(lambda (expr)
+			     (destructuring-bind (name)
+				 (cdr expr)
+			       `((:locally (:call (:edi (:edi-offset ,name))))))))
 		       (setf (assembly-macro-expander :warn amenv)
 			 #'(lambda (expr)
 			     (apply #'warn (cdr expr))

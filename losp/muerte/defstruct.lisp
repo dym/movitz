@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.8 2004/05/21 09:41:39 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.9 2004/07/15 21:06:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -26,7 +26,7 @@
 (defun copy-structure (object)
   (check-type object structure-object)
   (let* ((length (structure-object-length object))
-	 (copy (malloc-words length)))
+	 (copy (malloc-pointer-words (+ 2 length))))
     (setf (memref copy -6 0 :lisp)
       (memref object -6 0 :lisp))
     (setf (memref copy -6 1 :unsigned-byte32)
@@ -231,20 +231,20 @@ Parameters: struct-name."
 		      if (and constructor (symbolp constructor))
 		      collect
 			`(defun ,constructor (&key ,@key-lambda)
-			   (let ((s (malloc-words ,(length slot-names))))
+			   (let ((s (malloc-pointer-words ,(+ 2 (length slot-names)))))
 			     (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)
-						    0 :lisp)
+					   0 :lisp)
 			       ',struct-name)
 			     (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::type)
-						    0 :unsigned-byte8)
+					   0 :unsigned-byte8)
 			       #.(movitz::tag :defstruct))
 			     (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::length)
-						    0 :unsigned-byte16)
+					   0 :unsigned-byte16)
 			       ,(length slot-names))
 			     ,@(loop for slot-name in slot-names as i upfrom 0 collecting
 				     `(setf (memref s #.(bt:slot-offset 'movitz::movitz-struct
-										 'movitz::slot0)
-							     ,i :lisp)
+									'movitz::slot0)
+						    ,i :lisp)
 					,slot-name))
 			     s))
 		      else if (and constructor (listp constructor))
@@ -253,7 +253,7 @@ Parameters: struct-name."
 			       (boa-lambda-list (cdr constructor))
 			       (boa-variables (movitz::list-normal-lambda-list-variables boa-lambda-list)))
 			  `(defun ,boa-constructor ,boa-lambda-list
-			     (let ((s (malloc-words ,(length slot-names))))
+			     (let ((s (malloc-pointer-words ,(+ 2 (length slot-names)))))
 			       (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)
 						      0 :lisp)
 				 ',struct-name)

@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.46 2004/07/13 12:59:33 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.47 2004/07/15 21:06:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -300,14 +300,19 @@
     :initform 0)
    (values
     :binary-type #.(* 4 +movitz-multiple-values-limit+))
-   (malloc
+   (malloc-pointer-words
     :binary-type code-vector-word
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
-   (malloc-buffer
-    :binary-type lu32
-    :initform 0)
+   (malloc-non-pointer-words
+    :binary-type code-vector-word
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)
+;;;   (malloc-buffer
+;;;    :binary-type lu32
+;;;    :initform 0)
    (default-interrupt-trampoline
        :map-binary-write 'movitz-intern-code-vector
      :binary-tag :primitive-function

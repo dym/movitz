@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Oct 11 16:32:11 2001
 ;;;;                
-;;;; $Id: memory.lisp,v 1.3 2004/01/19 11:23:52 ffjeld Exp $
+;;;; $Id: memory.lisp,v 1.4 2004/07/15 21:07:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,6 +20,7 @@
 (in-package muerte.x86-pc)
 
 (defun memory-size ()
+  "Return memory size in megabytes."
   (let ((kilobyte-memsize
 	 (+ #x400
 	    (prog1
@@ -30,4 +31,4 @@
 		     (progn
 		       (setf (io-port #x70 :unsigned-byte8) #x17)
 		       (io-port #x71 :unsigned-byte8)))))))
-    (truncate kilobyte-memsize 1024)))
+    (values (truncate kilobyte-memsize 1024))))

@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.26 2004/07/11 23:04:14 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.27 2004/07/15 21:06:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -434,7 +434,7 @@
     `(eq ',x ,y))
    (t `(with-inline-assembly (:returns :boolean-zf=1)
 	 (:compile-two-forms (:eax :ebx) ,x ,y)
-	 (:call-global-constant fast-eql)))))
+	 (:call-global-pf fast-eql)))))
 
 (define-compiler-macro values (&rest sub-forms)
   `(inline-values ,@sub-forms))
@@ -522,23 +522,6 @@
 						    (movitz::translate-program ',expansion
 									     :cl :muerte.cl)))))
      ',symbol))
-
-  
-
-(defmacro inline-malloc (size &key (tag :other) other-tag wide-other-tag)
-  (assert (not (and (not other-tag) wide-other-tag)))
-  `(with-inline-assembly (:returns :eax :side-effects t)
-     ,@(if (integerp size)
-	   `((:movl ,size :ebx))
-	 `((:compile-form (:result-mode :ebx) ,size)
-	   (:shrl ,movitz::+movitz-fixnum-shift+ :ebx)))
-     (:globally (:call (:edi (:edi-offset malloc))))
-     (:addl ,(if (integerp tag) tag (movitz::tag tag)) :eax)
-     ,@(when (and (eq tag :other) other-tag (not wide-other-tag))
-	 `((:movb ,(movitz::tag other-tag) (:eax ,movitz:+other-type-offset+))))
-     ,@(when (and (eq tag :other) other-tag wide-other-tag)
-	 `((:movw ,(dpb wide-other-tag (byte 8 8) (movitz:tag other-tag))
-		  (:eax ,movitz:+other-type-offset+))))))
 
 (defmacro check-type (place type &optional type-string)
   (if (not (stringp type-string))
@@ -1051,7 +1034,7 @@ busy-waiting loop on P4."
        (:compile-form (:result-mode :eax) ,symbol)
        (:cmpl :edi :eax)
        (:je 'boundp-done)		; if ZF=0, then CF=0
-       (:call-global-constant dynamic-find-binding)
+       (:call-local-pf dynamic-find-binding)
        (:jc 'boundp-done)
        (:movl (:eax #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::value)) :eax)
        (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax))

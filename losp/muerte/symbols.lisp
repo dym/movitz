@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.16 2004/07/13 14:06:56 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.17 2004/07/15 21:07:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,14 +28,14 @@
     (symbol
      (with-inline-assembly (:returns :eax)
        (:compile-form (:result-mode :eax) symbol)
-       (:call-global-constant dynamic-load)))))
+       (:call-local-pf dynamic-load)))))
 
 (defun %unbounded-symbol-value (symbol)
   "Return the symbol's value without checking if it's bound or not."
   (check-type symbol symbol)
   (with-inline-assembly (:returns :eax)
     (:compile-form (:result-mode :eax) symbol)
-    (:call-global-constant dynamic-find-binding)
+    (:call-local-pf dynamic-find-binding)
     (:jnc 'no-local-binding)
     (:movl (:eax) :eax)
     (:jmp 'done)
@@ -51,7 +51,7 @@
      (with-inline-assembly (:returns :ebx)
        (:compile-form (:result-mode :eax) symbol)
        (:compile-form (:result-mode :ebx) value)
-       (:call-global-constant dynamic-store)))))
+       (:call-local-pf dynamic-store)))))
 
 (defun set (symbol value)
   (setf (symbol-value symbol) value))
@@ -147,7 +147,7 @@
 				      (flags 0))
   (eval-when (:compile-toplevel)
     (assert (= 1 (- (movitz:tag :symbol) (movitz:tag :other)))))
-  (let ((symbol (%word-offset (malloc-clumps 3) 1)))
+  (let ((symbol (%word-offset (malloc-pointer-words 6) 1)))
     (setf-movitz-accessor (symbol movitz-symbol package) package)
     (setf-movitz-accessor (symbol movitz-symbol name) name)
     (setf (memref symbol #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::hash-key)
@@ -170,7 +170,7 @@
   (if (or (eq nil symbol)
 	  (not copy-properties))
       (%create-symbol (symbol-name symbol))
-    (let ((x (%word-offset (malloc-clumps 3) 1)))
+    (let ((x (%word-offset (malloc-pointer-words 6) 1)))
       (dotimes (i 6)
 	(setf (memref x #.(cl:- (movitz:tag :symbol)) i :lisp)
 	  (memref symbol #.(cl:- (movitz:tag :symbol)) i :lisp)))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.35 2004/07/11 23:02:33 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.36 2004/07/15 21:06:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -236,7 +236,7 @@
 		  :u32
 		   (:movl (:eax :ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))
 			  :ecx)
-		   (:call-global-constant box-u32-ecx)
+		   (:call-local-pf box-u32-ecx)
 		   (:jmp 'return)
 		  :u8 :code
 		   (:movl :ebx :ecx)
@@ -336,7 +336,7 @@
 		   ;; u32?
 		   (:cmpl ,(movitz:basic-vector-type-tag :u32) :ecx)
 		   (:jne 'not-u32-vector)
-		   (:call-global-constant unbox-u32)
+		   (:call-local-pf unbox-u32)
 		   (:movl :ecx
 			  (:ebx :edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
 		   (:jmp 'return)
@@ -547,7 +547,7 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 	    `(funcall%unsafe ,reader ,@args))))
 
 (defun make-basic-vector%character (dimensions fill-pointer initial-element initial-contents)
-  (let ((array (malloc-data-words (truncate (+ dimensions 3) 4))))
+  (let ((array (malloc-non-pointer-words (+ 2 (truncate (+ dimensions 3) 4)))))
     (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
 		  0 :lisp)
       dimensions)
@@ -570,7 +570,7 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
     array))
 
 (defun make-basic-vector%u32 (dimensions fill-pointer initial-element initial-contents)
-  (let ((array (malloc-data-words dimensions)))
+  (let ((array (malloc-non-pointer-words (+ 2 dimensions))))
     (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
 		  0 :lisp)
       dimensions)
@@ -592,7 +592,7 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
     array))
 
 (defun make-basic-vector%u8 (length fill-pointer initial-element initial-contents)
-  (let ((array (malloc-data-words (truncate (+ length 3) 4))))
+  (let ((array (malloc-non-pointer-words (+ 2 (truncate (+ length 3) 4)))))
     (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
 		  0 :lisp)
       length)
@@ -614,7 +614,7 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
     array))
 
 (defun make-basic-vector%bit (length fill-pointer initial-element initial-contents)
-  (let ((array (malloc-data-words (truncate (+ length 31) 32))))
+  (let ((array (malloc-non-pointer-words (+ 2 (truncate (+ length 31) 32)))))
     (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
 		  0 :lisp)
       length)
@@ -636,7 +636,7 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
     array))
 
 (defun make-basic-vector%code (dimensions fill-pointer initial-element initial-contents)
-  (let ((array (malloc-data-words (truncate (+ dimensions 3) 4))))
+  (let ((array (malloc-non-pointer-words (+ 2 (truncate (+ dimensions 3) 4)))))
     (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
 		  0 :lisp)
       dimensions)
@@ -659,7 +659,7 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 
 (defun make-basic-vector%t (dimensions fill-pointer initial-element initial-contents)
   (check-type dimensions (and fixnum (integer 0 *)))
-  (let ((array (malloc-words dimensions)))
+  (let ((array (malloc-pointer-words (+ 2 dimensions))))
     (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
 		  0 :lisp)
       dimensions)

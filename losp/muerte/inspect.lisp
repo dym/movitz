@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.20 2004/07/13 22:42:38 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.21 2004/07/15 21:07:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,6 +18,17 @@
 (provide :muerte/inspect)
 
 (in-package muerte)
+
+(define-global-variable %memory-map%
+    '((0 . #x80000))			; 0-2 MB
+  "This is a list of the active memory ranges. Each element is a cons-cell
+where the car is the start-location and the cdr the end-location.
+A 'location' is a fixnum interpreted as a pointer (i.e. the pointer value
+with the lower two bits masked off).
+This variable should be initialized during bootup initialization.")
+
+(defvar %memory-map-roots% '((0 . #x80000))
+  "The memory-map that is to be scanned for pointer roots.")
 
 (define-compiler-macro check-stack-limit ()
   `(with-inline-assembly (:returns :nothing)
@@ -183,45 +194,16 @@ after the point that called this stack-frame."
     (symbol
      (copy-symbol old t))
     (vector
-     (make-array (array-dimension old 0)
-		 :element-type (array-element-type old)
-		 :initial-contents old
-		 :fill-pointer (fill-pointer old)))
+     (let ((new (make-array (array-dimension old 0)
+			    :element-type (array-element-type old)
+			    :initial-contents old)))
+       (when (array-has-fill-pointer-p old)
+	 (setf (fill-pointer new) (fill-pointer old)))
+       new))
     (function
      (copy-funobj old))
     (structure-object
      (copy-structure old))))
-
-(defun malloc-clumps (clumps)
-  "Allocate general-purpose memory, i.e. including pointers.
-The unit clump is 8 bytes, or two words."
-  (let ((x (with-inline-assembly (:returns :eax :side-effects t)
-	     (:compile-form (:result-mode :ebx) clumps)
-	     (:shll 1 :ebx)
-	     (:globally (:call (:edi (:edi-offset malloc))))
-	     (:addl #.(movitz::tag :other) :eax)
-	     (:xorl :ecx :ecx)
-	    reset-loop
-	     (:movl :edi (:eax :ecx -6))
-	     (:addl 4 :ecx)
-	     (:cmpl :ecx :ebx)
-	     (:jae 'reset-loop))))
-    #+ignore
-    (dotimes (i (* 2 clumps))
-      (setf (memref x -6 i :lisp) nil))
-    x))
-
-(defun malloc-data-clumps (clumps)
-  "Allocate memory for non-pointer data (i.e. doesn't require initialization)."
-  ;; Never mind, this is the stupid default implementation.
-  (malloc-clumps clumps))
-
-(defun malloc-words (words)
-  "Allocate space for at least (+ 2 words) cells/words."
-  (malloc-clumps (1+ (truncate (1+ words) 2))))
-
-(defun malloc-data-words (words)
-  (malloc-data-clumps (1+ (truncate (1+ words) 2))))
 
 (defun location-in-object-p (object location)
   "Is location inside object?"
@@ -315,7 +297,7 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 (defun copy-bignum (old)
   (check-type old bignum)
   (let* ((length (%bignum-bigits old))
-	 (new (malloc-data-clumps (1+ (truncate length 2)))))
+	 (new (malloc-non-pointer-words (1+ length))))
     (with-inline-assembly (:returns :eax)
       (:compile-two-forms (:eax :ebx) new old)
       (:compile-form (:result-mode :edx) length)

@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.4 2004/04/17 15:34:03 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.5 2004/07/15 21:06:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -244,4 +244,4 @@ Cons cell is in EBX, which is preserved."
   (with-inline-assembly (:returns :eax)
     (:compile-form (:result-mode :eax) car)
     (:compile-form (:result-mode :ebx) cdr)
-    (:call-global-constant fast-cons)))
+    (:call-local-pf fast-cons)))

@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.65 2004/07/15 00:26:26 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.66 2004/07/15 21:07:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -44,7 +44,7 @@
 (define-compiler-macro evenp (x)
   `(with-inline-assembly (:returns :boolean-zf=1)
      (:compile-form (:result-mode :eax) ,x)
-     (:call-global-constant unbox-u32)
+     (:call-global-pf unbox-u32)
      (:testb 1 :cl)))
 
 (defun evenp (x)
@@ -53,7 +53,7 @@
 (define-compiler-macro oddp (x)
   `(with-inline-assembly (:returns :boolean-zf=0)
      (:compile-form (:result-mode :eax) ,x)
-     (:call-global-constant unbox-u32)
+     (:call-global-pf unbox-u32)
      (:testb 1 :cl)))
 
 (defun oddp (x)
@@ -139,13 +139,13 @@
 			  (:movl :eax :ecx)
 			  (:jns 'fix-fix-negative)
 			  (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
-			  (:call-global-constant box-u32-ecx)
+			  (:call-local-pf box-u32-ecx)
 			  (:jmp 'fix-fix-ok)
 			  fix-fix-negative
 			  (:jz 'fix-double-negative)
 			  (:negl :ecx)
 			  (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
-			  (:call-global-constant box-u32-ecx)
+			  (:call-local-pf box-u32-ecx)
 			  (:movl ,(dpb 1 (byte 16 16)
 				   (movitz:tag :bignum #xff))
 			   (:eax ,movitz:+other-type-offset+))
@@ -175,7 +175,7 @@
 		   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
 		   (:addl (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)) :ecx)
 		   (:jc 'retry-not-size1)
-		   (:call-global-constant box-u32-ecx)
+		   (:call-local-pf box-u32-ecx)
 		   (:jmp 'pfix-pbig-done)
 		  retry-not-size1
 		   (:compile-form (:result-mode :eax) y)
@@ -188,7 +188,7 @@
 				    (:edi (:edi-offset atomically-status))))
 		   (:leal ((:ecx 1) ,(* 2 movitz:+movitz-fixnum-factor+))
 			  :eax)		; Number of words
-		   (:call-global-constant get-cons-pointer)
+		   (:call-local-pf get-cons-pointer)
 		   (:load-lexical (:lexical-binding y) :ebx) ; bignum
 		   (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
 		   (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
@@ -219,7 +219,7 @@
 		   (:addl #x40000 (:eax ,movitz:+other-type-offset+))
 		   (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
 		  no-expansion
-		   (:call-global-constant cons-commit)
+		   (:call-local-pf cons-commit)
 		   (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 				    (:edi (:edi-offset atomically-status))))
 		   
@@ -241,7 +241,7 @@
 		   (:compile-form (:result-mode :ecx) x)
 		   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)
 		   (:addl (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)) :ecx)
-		   (:call-global-constant box-u32-ecx)
+		   (:call-local-pf box-u32-ecx)
 		   (:jmp 'pfix-pbig-done)
 		  retry-not-size1
 		   (:compile-form (:result-mode :eax) y)
@@ -254,7 +254,7 @@
 				    (:edi (:edi-offset atomically-status))))
 		   (:leal ((:ecx 1) ,(* 1 movitz:+movitz-fixnum-factor+))
 			  :eax)		; Number of words
-		   (:call-global-constant get-cons-pointer)
+		   (:call-local-pf get-cons-pointer)
 		   (:load-lexical (:lexical-binding y) :ebx) ; bignum
 		   (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
 		   (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
@@ -285,7 +285,7 @@
 		   (:subl #x40000 (:eax ,movitz:+other-type-offset+))
 		   (:subl ,movitz:+movitz-fixnum-factor+ :ecx)
 		  no-expansion
-		   (:call-global-constant cons-commit)
+		   (:call-local-pf cons-commit)
 		   (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 				    (:edi (:edi-offset atomically-status))))
 		   
@@ -310,7 +310,7 @@
 		     (:movl (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)) :ecx)
 		     (:addl (:eax ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::bigit0)) :ecx)
 		     (:jc 'retry-not-size1)
-		     (:call-global-constant box-u32-ecx)
+		     (:call-local-pf box-u32-ecx)
 		     (:jmp 'pfix-pbig-done)
 		    retry-not-size1
 		     (:compile-form (:result-mode :eax) y)
@@ -323,7 +323,7 @@
 				      (:edi (:edi-offset atomically-status))))
 		     (:leal ((:ecx 1) ,(* 2 movitz:+movitz-fixnum-factor+))
 			    :eax)	; Number of words
-		     (:call-global-constant get-cons-pointer)
+		     (:call-local-pf get-cons-pointer)
 		     (:load-lexical (:lexical-binding y) :ebx) ; bignum
 		     (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length)) :ecx)
 		     (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
@@ -374,7 +374,7 @@
 		     (:addl #x40000 (:eax ,movitz:+other-type-offset+))
 		     (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
 		    no-expansion
-		     (:call-global-constant cons-commit)
+		     (:call-local-pf cons-commit)
 		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 				      (:edi (:edi-offset atomically-status))))
 		    pfix-pbig-done)
@@ -842,16 +842,16 @@ Preserve EAX and EBX."
 	       (check-type n1 (signed-byte 30))
 	       `(with-inline-assembly (:returns ,,condition :side-effects nil)
 		  (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-		  (:call-global-constant fast-compare-fixnum-real))))
+		  (:call-global-pf fast-compare-fixnum-real))))
 	    ((movitz:movitz-constantp n2)
 	     (let ((n2 (movitz::movitz-eval n2)))
 	       (check-type n2 (signed-byte 30))
 	       `(with-inline-assembly (:returns ,,condition :side-effects nil)
 		  (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-		  (:call-global-constant fast-compare-real-fixnum))))
+		  (:call-global-pf fast-compare-real-fixnum))))
 	    (t `(with-inline-assembly (:returns ,,condition :side-effects nil)
 		  (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-		  (:call-global-constant fast-compare-two-reals))))))
+		  (:call-global-pf fast-compare-two-reals))))))
 
      (defun ,2op-name (n1 n2)
        (,2op-name n1 n2))
@@ -917,7 +917,7 @@ Preserve EAX and EBX."
 (define-compiler-macro =%2op (n1 n2 &environment env)
   (cond
    ((movitz:movitz-constantp n1 env)
-    (let ((n1 (movitz::movitz-eval n1 env)))
+    (let ((n1 (movitz:movitz-eval n1 env)))
       (etypecase n1
 	((eql 0)
 	 `(do-result-mode-case ()
@@ -931,16 +931,16 @@ Preserve EAX and EBX."
 	((signed-byte 30)
 	 `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
 	    (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-	    (:call-global-constant fast-compare-fixnum-real))))))
+	    (:call-global-pf fast-compare-fixnum-real)))
+	(integer
+	 `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
+	    (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+	    (:call-global-pf fast-compare-two-reals))))))
    ((movitz:movitz-constantp n2 env)
-    (let ((n2 (movitz::movitz-eval n2 env)))
-      (check-type n2 (signed-byte 30))
-      `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
-	 (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-	 (:call-global-constant fast-compare-real-fixnum))))
+    `(=%2op ,n2 ,n1))
    (t `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
 	 (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-	 (:call-global-constant fast-compare-two-reals)))))
+	 (:call-global-pf fast-compare-two-reals)))))
 
 (define-number-relational = =%2op nil :defun-p nil)
 
@@ -1191,7 +1191,7 @@ Preserve EAX and EBX."
 		     (:store-lexical (:lexical-binding d0) :eax :type fixnum)
 		     (:store-lexical (:lexical-binding d1) :edx :type fixnum)
 		     (:compile-form (:result-mode :eax)
-				    (malloc-data-words 3))
+				    (malloc-non-pointer-words 3))
 		     (:movl ,(dpb (* 2 movitz:+movitz-fixnum-factor+)
 				  (byte 16 16) (movitz:tag :bignum 0))
 			    (:eax ,movitz:+other-type-offset+))
@@ -1219,7 +1219,7 @@ Preserve EAX and EBX."
 		     (:shrdl ,movitz::+movitz-fixnum-shift+ :edx :ecx)
 		     (:movl :edi :edx)
 		     (:cld)
-		     (:call-global-constant box-u32-ecx)
+		     (:call-local-pf box-u32-ecx)
 		     (:jmp 'fixnum-done)
 		     
 		    u32-negative-result
@@ -1228,7 +1228,7 @@ Preserve EAX and EBX."
 		     (:movl :edi :edx)
 		     (:cld)
 		     (:negl :ecx)
-		     (:call-global-constant box-u32-ecx)
+		     (:call-local-pf box-u32-ecx)
 		     (:xorl #xff00 (:eax ,movitz:+other-type-offset+))
 		     (:jmp 'fixnum-done)
 
@@ -1255,7 +1255,7 @@ Preserve EAX and EBX."
 			      :ecx)
 		     (:leal ((:ecx 1) ,(* 2 movitz:+movitz-fixnum-factor+))
 			    :eax)
-		     (:call-global-constant get-cons-pointer) ; New bignum into EAX
+		     (:call-local-pf get-cons-pointer) ; New bignum into EAX
 
 		     (:load-lexical (:lexical-binding y) :ebx) ; bignum
 		     (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
@@ -1301,7 +1301,7 @@ Preserve EAX and EBX."
 		     (:cld)		; EAX, EDX, and ESI are GC roots again.
 		     (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
 			    :ecx)
-		     (:call-global-constant cons-commit)
+		     (:call-local-pf cons-commit)
 		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 				      (:edi (:edi-offset atomically-status))))
 		     (:compile-form (:result-mode :ebx) x)
@@ -1373,7 +1373,7 @@ Preserve EAX and EBX."
 		     (:movl :edi :eax)
 		     (:cld)
 		     (:pushl :edx)
-		     (:call-global-constant box-u32-ecx)
+		     (:call-local-pf box-u32-ecx)
 		     (:popl :ebx)
 		     (:jmp 'done)
 		    not-size1
@@ -1388,7 +1388,7 @@ Preserve EAX and EBX."
 				      (:edi (:edi-offset atomically-status))))
 
 		     (:leal ((:ecx 1) 4) :eax) ; Number of words
-		     (:call-global-constant get-cons-pointer) ; New bignum into EAX
+		     (:call-local-pf get-cons-pointer) ; New bignum into EAX
 		     
 
 		     (:store-lexical (:lexical-binding r) :eax :type bignum)
@@ -1440,7 +1440,7 @@ Preserve EAX and EBX."
 		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
 		     (:jmp 'fixnum-result) ; don't commit the bignum
 		    no-more-shrinkage
-		     (:call-global-constant cons-commit)
+		     (:call-local-pf cons-commit)
 		    fixnum-result
 		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 				      (:edi (:edi-offset atomically-status))))	     
@@ -1639,14 +1639,14 @@ Preserve EAX and EBX."
 		((positive-bignum positive-fixnum)
 		 (with-inline-assembly (:returns :eax)
 		   (:compile-form (:result-mode :eax) x)
-		   (:call-global-constant unbox-u32)
+		   (:call-global-pf unbox-u32)
 		   (:compile-form (:result-mode :eax) y)
 		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :ecx)
 		   (:andl :ecx :eax)))
 		((positive-fixnum positive-bignum)
 		 (with-inline-assembly (:returns :eax)
 		   (:compile-form (:result-mode :eax) y)
-		   (:call-global-constant unbox-u32)
+		   (:call-global-pf unbox-u32)
 		   (:compile-form (:result-mode :eax) x)
 		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :ecx)
 		   (:andl :ecx :eax)))
@@ -1681,7 +1681,7 @@ Preserve EAX and EBX."
 	    ((t positive-fixnum)
 	     (with-inline-assembly (:returns :eax :type fixnum)
 	       (:compile-form (:result-mode :eax) integer1)
-	       (:call-global-constant unbox-u32)
+	       (:call-global-pf unbox-u32)
 	       (:shll ,movitz:+movitz-fixnum-shift+ :ecx)
 	       (:compile-form (:result-mode :eax) integer2)
 	       (:notl :ecx)
@@ -1896,7 +1896,7 @@ Preserve EAX and EBX."
 	       (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t :esp)
 				  'retry-jumper-ones-expanded-bignum)
 				(:edi (:edi-offset atomically-status))))
-	       (:call-global-constant get-cons-pointer)
+	       (:call-local-pf get-cons-pointer)
 	       (:shll 16 :ecx)
 	       (:addl ,(dpb 1 (byte 16 16) (movitz:tag :bignum 0)) :ecx) ; add 1 for index->size
 	       (:movl :ecx (:eax ,movitz:+other-type-offset+))
@@ -1904,7 +1904,7 @@ Preserve EAX and EBX."
 	       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
 		       ,(* 1 movitz:+movitz-fixnum-factor+)) ; add 1 for header.
 		      :ecx)
-	       (:call-global-constant cons-commit)
+	       (:call-local-pf cons-commit)
 	       (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 				(:edi (:edi-offset atomically-status))))
 	       ;; Have fresh bignum in EAX, now fill it with ones.
@@ -2013,7 +2013,7 @@ Preserve EAX and EBX."
 		 (:movl :ebx :eax)
 		 (:jmp 'done-u32)
 		cant-return-same
-		 (:call-global-constant box-u32-ecx)
+		 (:call-local-pf box-u32-ecx)
 		done-u32
 		 )))
 	 (do-it)))
@@ -2097,7 +2097,7 @@ Preserve EAX and EBX."
 		     ;; Now add 1 for index->size, 1 for header, and 1 for tmp storage before shift.
 		     (:addl ,(* 3 movitz:+movitz-fixnum-factor+) :eax)
 		     (:pushl :eax)
-		     (:call-global-constant get-cons-pointer)
+		     (:call-local-pf get-cons-pointer)
 		     ;; (:store-lexical (:lexical-binding r) :eax :type t)
 		     (:popl :ecx)
 		     (:subl ,(* 2 movitz:+movitz-fixnum-factor+) :ecx) ; for tmp storage and header.
@@ -2200,7 +2200,7 @@ Preserve EAX and EBX."
 		     (:movl :ebx :eax)
 		     (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
 			    :ecx)
-		     (:call-global-constant cons-commit)
+		     (:call-local-pf cons-commit)
 		    return-fixnum
 		     (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
 				      (:edi (:edi-offset atomically-status))))
@@ -2231,7 +2231,7 @@ Preserve EAX and EBX."
 	`(with-inline-assembly (:returns :register
 					 :type ,result-type)
 	   (:compile-form (:result-mode :eax) ,integer)
-	   (:call-global-constant unbox-u32)
+	   (:call-global-pf unbox-u32)
 	   (:andl ,(mask-field (byte size position) -1) :ecx)
 	   ,@(unless (zerop position)
 	       `((:shrl ,position :ecx)))
@@ -2263,15 +2263,15 @@ Preserve EAX and EBX."
 		   (:jz 'done)
 		   (:andl ,(mask-field (byte size 0) -1)
 			  :ecx)
-		   (:call-global-constant box-u32-ecx)
+		   (:call-local-pf box-u32-ecx)
 		   (:jmp 'done))))
 	    nix
-	     (:call-global-constant unbox-u32)
+	     (:call-global-pf unbox-u32)
 	     ,@(unless (= 32 (- size position))
 		 `((:andl ,(mask-field (byte size position) -1) :ecx)))
 	     ,@(unless (zerop position)
 		 `((:shrl ,position :ecx)))
-	     (:call-global-constant box-u32-ecx)
+	     (:call-local-pf box-u32-ecx)
 	    done)))
        (t form))))
    (t form)))

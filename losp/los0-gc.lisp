@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.27 2004/07/15 11:22:08 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.28 2004/07/15 21:06:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -182,71 +182,67 @@ Preserve EAX and EBX."
 	    (:ret))))
     (do-it)))
 
-(defun los0-malloc-clumps (clumps)
-  (check-type clumps (integer 0 160000))
+(define-primitive-function los0-malloc-pointer-words (words)
+  "Number of words in EAX/fixnum. Result in EAX with tag :other."
   (macrolet
       ((do-it ()
-	 `(with-inline-assembly (:returns :eax)
+	 `(with-inline-assembly (:returns :multiple-values)
+	    (:addl 4 :eax)
+	    (:andl -8 :eax)
+	    (:movl :eax :ebx)		; Save count for later
 	   retry
-	    (:compile-form (:result-mode :ebx) clumps)
-	    (:declare-label-set retry-jumper (retry))
-	    (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t)
-			       'retry-jumper)
-			     (:edi (:edi-offset atomically-status))))
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :ecx)
-	    (:leal ((:ebx 2) :ecx) :eax)
+	    (:leal (:ecx :eax) :eax)
 	    (:cmpl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
 		   :eax)
 	    (:ja '(:sub-program ()
-		   (:int 113)))
+		   (:int 113)
+		   (:movl :ebx :eax)	; Restore count in EAX before retry
+		   (:jmp 'retry)))
 	    (:movl :eax (:edx 2))
-	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-			     (:edi (:edi-offset atomically-status))))
-	    (:movl ,(movitz:tag :infant-object) (:edx :ecx 6))
+	    (:movl ,(movitz:tag :infant-object) (:edx :ecx ,(+ 8 movitz:+other-type-offset+)))
 	    (:leal (:edx :ecx 8) :eax)		
 	    (:xorl :ecx :ecx)
-	   init-loop			; Now init eax number of clumps.
-	    (:movl :edi (:eax (:ecx 2) -6))
-	    (:movl :edi (:eax (:ecx 2) -2))
+	   init-loop			; Now init ebx number of words
+	    (:movl :edi (:eax :ecx ,(- (movitz:tag :other))))
 	    (:addl 4 :ecx)
 	    (:cmpl :ebx :ecx)
-	    (:jb 'init-loop))))
+	    (:jb 'init-loop)
+	    (:ret))))
     (do-it)))
 
-(defun los0-malloc-data-clumps (clumps)
-  (check-type clumps (integer 0 160000))
+(define-primitive-function los0-malloc-non-pointer-words (words)
+  "Number of words in EAX/fixnum. Result in EAX with tag :other."
   (macrolet
       ((do-it ()
-	 `(with-inline-assembly (:returns :eax)
+	 `(with-inline-assembly (:returns :multiple-values)
+	    (:addl 4 :eax)
+	    (:andl -8 :eax)
+	    (:movl :eax :ebx)		; Save count for later
 	   retry
-	    (:compile-form (:result-mode :ebx) clumps)
-	    (:declare-label-set retry-jumper (retry))
-	    (:locally (:movl '(:funcall ,(movitz::atomically-status-jumper-fn t)
-			       'retry-jumper)
-			     (:edi (:edi-offset atomically-status))))
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :ecx)
-	    (:leal ((:ebx 2) :ecx) :eax)
+	    (:leal (:ecx :eax) :eax)
 	    (:cmpl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
 		   :eax)
 	    (:ja '(:sub-program ()
-		   (:int 113)))
+		   (:int 113)
+		   (:movl :ebx :eax)	; Restore count in EAX before retry
+		   (:jmp 'retry)))
 	    (:movl :eax (:edx 2))
-	    (:locally (:movl ,(bt:enum-value 'movitz::atomically-status :inactive)
-			     (:edi (:edi-offset atomically-status))))
-
-	    (:movl #.(movitz:tag :infant-object) (:edx :ecx 6))
-	    (:leal (:edx :ecx 8) :eax))))
+	    (:movl ,(movitz:tag :infant-object) (:edx :ecx ,(+ 8 movitz:+other-type-offset+)))
+	    (:leal (:edx :ecx 8) :eax)	; Now EAX is a valid pointer
+	    (:ret))))
     (do-it)))
 
-(defun install-los0-consing (&key (run-time-context (current-run-time-context))
+
+(defun install-los0-consing (&key (context (current-run-time-context))
 				  (kb-size 1024)
 				  duo-space)
-  "Install the 'Los0' GC architecture on run-time-context."
-  (setf (%run-time-context-slot 'nursery-space run-time-context)
-    (or duo-space
-	(allocate-duo-space (* kb-size #x100))))
+  "Install the 'Los0' GC architecture on run-time-context CONTEXT.
+Either use an explicitly provided DUO-SPACE, or allocate a fresh
+duo-space where each space is KB-SIZE kilobytes."
   (setf (exception-handler 113)
     (lambda (exception interrupt-frame)
       (declare (ignore exception interrupt-frame))
@@ -259,41 +255,30 @@ Preserve EAX and EBX."
 	   (break "Los0 GC keyboard poll."))
 	  ((nil)
 	   (return))))))
-  (flet ((install-primitive (name slot)
-	   (let ((code-vector (symbol-value name)))
-	     (check-type code-vector code-vector)
-	     (setf (%run-time-context-slot slot run-time-context) code-vector))))
-    (install-primitive 'los0-fast-cons 'muerte::fast-cons)
-    (install-primitive 'los0-box-u32-ecx 'muerte::box-u32-ecx)
-    (install-primitive 'los0-get-cons-pointer 'muerte::get-cons-pointer)
-    (install-primitive 'los0-cons-commit 'muerte::cons-commit))
-  (let ((old-malloc (symbol-function 'muerte:malloc-clumps)))
-    (setf (symbol-function 'muerte:malloc-clumps)
-      (symbol-function 'los0-malloc-clumps))
-    (setf (symbol-function 'los0-malloc-clumps)
-      old-malloc))
-  (let ((old-malloc-data (symbol-function 'muerte:malloc-data-clumps)))
-    (setf (symbol-function 'muerte:malloc-data-clumps)
-      (symbol-function 'los0-malloc-data-clumps))
-    (setf (symbol-function 'los0-malloc-data-clumps)
-      old-malloc-data))
-  (values))
-
-(defun install-old-consing ()
-  (let ((conser (symbol-value 'muerte::fast-cons)))
-    (check-type conser vector)
-    (setf (%run-time-context-slot 'muerte::fast-cons)
-      conser))
-  (let ((old-malloc (symbol-function 'muerte:malloc-clumps)))
-    (setf (symbol-function 'muerte:malloc-clumps)
-      (symbol-function 'los0-malloc-clumps))
-    (setf (symbol-function 'los0-malloc-clumps)
-      old-malloc))
-  (let ((old-malloc-data (symbol-function 'muerte:malloc-data-clumps)))
-    (setf (symbol-function 'muerte:malloc-data-clumps)
-      (symbol-function 'los0-malloc-data-clumps))
-    (setf (symbol-function 'los0-malloc-data-clumps)
-      old-malloc-data))
+  (let* ((actual-duo-space (or duo-space
+			       (allocate-duo-space (* kb-size #x100))))
+	 (last-location (object-location (cons 1 2))))
+    (macrolet ((install-primitive (name slot)
+		 `(let ((code-vector (symbol-value ',name)))
+		    (check-type code-vector code-vector)
+		    (if (eq context (current-run-time-context))
+			;; The point of this is to not trigger CLOS bootstrapping.
+			(setf (%run-time-context-slot ',slot) code-vector)
+		      (setf (%run-time-context-slot ',slot context) code-vector)))))
+      (install-primitive los0-fast-cons muerte::fast-cons)
+      (install-primitive los0-box-u32-ecx muerte::box-u32-ecx)
+      (install-primitive los0-get-cons-pointer muerte::get-cons-pointer)
+      (install-primitive los0-cons-commit muerte::cons-commit)
+      (install-primitive los0-malloc-pointer-words muerte::malloc-pointer-words)
+      (install-primitive los0-malloc-non-pointer-words muerte::malloc-non-pointer-words))
+    (if (eq context (current-run-time-context))
+	(setf (%run-time-context-slot 'muerte::nursery-space)
+	  actual-duo-space)
+      (setf (%run-time-context-slot 'muerte::nursery-space context)
+	actual-duo-space))
+    ;; Pretend that the heap stops here, so that we don't have to scan
+    ;; the entire tail end of memory, which isn't going to be used.
+    (setf (cdar muerte::%memory-map-roots%) last-location))
   (values))
 
 (defun object-in-space-p (space object)
@@ -387,8 +372,8 @@ Preserve EAX and EBX."
 			     (setf (memref (object-location x) 0 0 :lisp) forward-x)
 			     forward-x)))))))))
 	;; Scavenge roots
-	(map-heap-words evacuator 0 (+ (malloc-buffer-start)
-				       (* 2 (malloc-cons-pointer))))
+	(dolist (range muerte::%memory-map-roots%)
+	  (map-heap-words evacuator (car range) (cdr range)))
 	(map-stack-words evacuator (current-stack-frame))
 	;; Scan newspace, Cheney style.
 	(loop with newspace-location = (+ 2 (object-location newspace))
