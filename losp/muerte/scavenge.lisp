@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.33 2004/10/11 13:53:25 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.34 2004/10/22 07:57:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -48,12 +48,13 @@ start-location and end-location."
 	((>= scan end-location))
       (with-simple-restart (continue-map-heap-words
 			    "Continue map-heap-words at location ~S." (1+ scan))
-	(let ((*scan* scan)
-	      (x (memref scan 0 :type :unsigned-byte16)))
-	  (declare (special *scan*))
+	(let ((x (memref scan 0 :type :unsigned-byte16))
+	      (x2 (memref scan 1 :type :unsigned-byte16)))
 	  (when verbose
 	    (format *terminal-io* " [at ~S: ~S]" scan x))
 	  (cond
+	   ((or (and (= 0 x2) (= 2 x))
+		(and (= #xffff x2) (= #xfffe x))))
 	   ((let ((tag (ldb (byte 3 0) x)))
 	      (or (= tag #.(movitz:tag :null))
 		  (= tag #.(movitz:tag :even-fixnum))
