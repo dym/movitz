@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.24 2004/09/21 13:06:02 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.25 2004/09/21 20:46:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -124,20 +124,6 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 
 	    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 	    
-;;;	    ;; See if ESP/EBP signalled a throwing situation
-;;;	    (:leal (:ebp 24) :edx)	; Interrupted ESP
-;;;	    (:cmpl :edx (:ebp))		; cmp ESP EBP
-;;;	    (:jae 'not-throwing)
-;;;	    (:movl (:edx) :edx)
-;;;	    (:movl :edx (:ebp))
-;;;	   not-throwing
-
-	    ;; rearrange stack for return
-;;;	    (:movl (:ebp 12) :eax)	; load return address
-;;;	    (:movl (:ebp 20) :ebx)	; load EFLAGS
-;;;	    (:movl :ebx (:ebp 16))	; EFLAGS at next-to-bottom of stack
-;;;	    (:movl :eax (:ebp 20))	; return address at bottom of stack
-
 	    (:xorl :eax :eax)		; Ensure safe value
 	    (:xorl :edx :edx)		; Ensure safe value
 
@@ -207,6 +193,14 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0))))
 	    (:movl (:ebp ,(dit-frame-offset :scratch1)) :eax)
 	    (:locally (:movl :eax (:edi (:edi-offset scratch1))))
+
+	    ;; Load the DF flag from the interruptee before we restore
+	    ;; its register contents.
+	    (:testl #x400 (:ebp ,(dit-frame-offset :eflags))) ; was DF set?
+	    (:jz 'df-not-set)
+	    (:std)
+	   df-not-set
+	    
 	    (:movl (:ebp ,(dit-frame-offset :edi)) :edi)
 	    (:movl (:ebp ,(dit-frame-offset :esi)) :esi)
 	    (:movl (:ebp ,(dit-frame-offset :ebx)) :ebx)
