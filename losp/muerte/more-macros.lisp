@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.7 2004/04/19 22:38:33 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.8 2004/06/04 13:32:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -310,3 +310,4 @@ respect to multiple threads."
 			       slot-entries)
        (let ((,object-var ,instance-form))
 	 ,@declarations-and-forms))))
+
