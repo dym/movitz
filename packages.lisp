@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.6 2004/02/26 11:31:31 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.7 2004/03/17 16:36:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1118,7 +1118,7 @@
 	   #:package-object-use-list
 	   #:package-object-internal-symbols
 	   #:package-object-external-symbols
-	   
+
 	   vector-element-type
 	   vector-element-size
 	   with-subvector-accessor
@@ -1268,6 +1268,8 @@
 	   #:code-vector%1op
 	   #:code-vector%2op
 	   #:code-vector%3op
+	   #:code-vector-word
+	   #:lu32
 	   
 	   #:+movitz-fixnum-factor+
 	   #:+movitz-fixnum-shift+
@@ -1280,6 +1282,7 @@
 	   #:movitz-vector-num-elements
 	   #:movitz-vector-element-type
 	   #:movitz-vector-symbolic-data
+	   #:vector-type-tag
 	   
 	   #:movitz-symbol
 	   #:movitz-string
