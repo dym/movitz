@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.12 2004/07/08 18:53:52 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.13 2004/07/13 02:31:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -577,9 +577,6 @@ knowing there are EQL specialized methods."
 		 (third active-specializers)
 		 emfun)
 	  (std-gf-classes-to-emf-table gf))
-;;;    (when (< 4 (length (std-gf-classes-to-emf-table gf)))
-;;;      (warn "method cache size for ~S: ~D"
-;;;	    gf (length (std-gf-classes-to-emf-table gf))))
     (apply emfun args)))
 
 (defun cached-lookup-failed-map1111 (gf &rest args)
@@ -592,9 +589,6 @@ knowing there are EQL specialized methods."
 		 (fourth active-specializers)
 		 emfun)
 	  (std-gf-classes-to-emf-table gf))
-;;;    (when (< 4 (length (std-gf-classes-to-emf-table gf)))
-;;;      (warn "method cache size for ~S: ~D"
-;;;	    gf (length (std-gf-classes-to-emf-table gf))))
     (apply emfun args)))
 
 (defun discriminating-function-map1-no-eqls (&edx gf arg0 &rest optional-args)
@@ -604,19 +598,19 @@ knowing there are EQL specialized methods."
 	(dolist (entry (std-gf-classes-to-emf-table gf)
 		  (cached-lookup-failed-map1 gf arg0 class))
 	  (when (eq class (car entry))
-	    (return (funcall%unsafe (cdr entry) arg0))))))
+	    (return (funcall (cdr entry) arg0))))))
    (2 (&edx gf arg0 optional1)
       (let ((class (class-of arg0)))
 	(dolist (entry (std-gf-classes-to-emf-table gf)
 		  (cached-lookup-failed-map1 gf arg0 class optional1))
 	  (when (eq class (car entry))
-	    (return (funcall%unsafe (cdr entry) arg0 optional1))))))
+	    (return (funcall (cdr entry) arg0 optional1))))))
    (3 (&edx gf arg0 optional1 optional2)
       (let ((class (class-of arg0)))
 	(dolist (entry (std-gf-classes-to-emf-table gf)
 		  (cached-lookup-failed-map1 gf arg0 class optional1 optional2))
 	  (when (eq class (car entry))
-	    (return (funcall%unsafe (cdr entry) arg0 optional1 optional2))))))
+	    (return (funcall (cdr entry) arg0 optional1 optional2))))))
    (t (&edx gf arg0 &rest optional-args)
       (declare (dynamic-extent optional-args))
       (let ((class (class-of arg0)))
@@ -634,7 +628,7 @@ knowing there are EQL specialized methods."
 	(dolist (entry (std-gf-classes-to-emf-table gf)
 		  (cached-lookup-failed-map1 gf arg0 specializer))
 	  (when (eq specializer (car entry))
-	    (return (funcall%unsafe (cdr entry) arg0))))))
+	    (return (funcall (cdr entry) arg0))))))
    (2 (&edx gf arg0 optional1)
       (let* ((es-table (car (std-gf-eql-specializer-table gf)))
 	     (specializer (or (and es-table (gethash arg0 es-table))
@@ -642,7 +636,7 @@ knowing there are EQL specialized methods."
 	(dolist (entry (std-gf-classes-to-emf-table gf)
 		  (cached-lookup-failed-map1 gf arg0 specializer optional1))
 	  (when (eq specializer (car entry))
-	    (return (funcall%unsafe (cdr entry) arg0 optional1))))))
+	    (return (funcall (cdr entry) arg0 optional1))))))
    (t (&edx gf arg0 &rest optional-args)
       (declare (dynamic-extent optional-args))
       (let* ((es-table (car (std-gf-eql-specializer-table gf)))
@@ -661,13 +655,13 @@ knowing there are EQL specialized methods."
 	(dolist (entry (std-gf-classes-to-emf-table gf)
 		  (cached-lookup-failed-map10 gf arg0 arg1 (class-of arg0) class))
 	  (when (eq class (car entry))
-	    (return (funcall%unsafe (cdr entry) arg0 arg1))))))
+	    (return (funcall (cdr entry) arg0 arg1))))))
    (3 (&edx gf arg0 arg1 optional2)
       (let ((class (class-of arg1)))
 	(dolist (entry (std-gf-classes-to-emf-table gf)
 		  (cached-lookup-failed-map10 gf arg0 arg1 (class-of arg0) class optional2))
 	  (when (eq class (car entry))
-	    (return (funcall%unsafe (cdr entry) arg0 arg1 optional2))))))
+	    (return (funcall (cdr entry) arg0 arg1 optional2))))))
    (t (&edx gf arg0 arg1 &rest optional-args)
       (declare (dynamic-extent optional-args))
       (let ((class (class-of arg1)))
@@ -688,7 +682,7 @@ knowing there are EQL specialized methods."
 	  (let ((e entry))
 	    (when (and (eq class0 (pop e))
 		       (eq class1 (pop e)))
-	      (return (funcall%unsafe e arg0 arg1)))))))
+	      (return (funcall e arg0 arg1)))))))
    (3 (&edx gf arg0 arg1 optional2)
       (let ((class0 (class-of arg0))
 	    (class1 (class-of arg1)))
@@ -697,7 +691,7 @@ knowing there are EQL specialized methods."
 	  (let ((e entry))
 	    (when (and (eq class0 (pop e))
 		       (eq class1 (pop e)))
-	      (return (funcall%unsafe e arg0 arg1 optional2)))))))
+	      (return (funcall e arg0 arg1 optional2)))))))
    (t (&edx gf arg0 arg1 &rest optional-args)
       (declare (dynamic-extent optional-args))
       (let ((class0 (class-of arg0))
@@ -720,7 +714,7 @@ knowing there are EQL specialized methods."
 	  (let ((e entry))
 	    (when (and (eq class0 (pop e))
 		       (eq class2 (pop e)))
-	      (return (funcall%unsafe e arg0 arg1 arg2)))))))
+	      (return (funcall e arg0 arg1 arg2)))))))
    (t (&edx gf arg0 arg1 arg2 &rest optional-args)
       (declare (dynamic-extent optional-args))
       (let ((class0 (class-of arg0))
