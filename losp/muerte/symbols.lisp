@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.3 2004/03/22 16:38:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -120,8 +120,20 @@
      (not (eq (movitz-accessor symbol movitz-symbol function-value)
 	      (load-global-constant movitz::unbound-function))))))
 
+(defun %other-to-symbol (x)
+  (with-inline-assembly (:returns :eax)
+    (:compile-form (:result-mode :eax) x)
+    (:leal (:eax 2) :ecx)
+    (:testb 7 :cl)
+    (:jnz '(:sub-program ()
+	    (:compile-form (:result-mode :ignore)
+	     (error "Not an other heap-object: ~S" x))
+	    (:jmp 'continue)))
+   continue
+    (:addl 1 :eax)))
+
 (defun make-symbol (name)
-  (let ((symbol (inline-malloc #.(bt:sizeof 'movitz::movitz-symbol) :tag :symbol)))
+  (let ((symbol (%other-to-symbol (malloc-clumps 3))))
     (setf-movitz-accessor (symbol movitz-symbol package) nil)
     (setf-movitz-accessor (symbol movitz-symbol hash-key) (sxhash name))
     (setf (symbol-flags symbol) 0

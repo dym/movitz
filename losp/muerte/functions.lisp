@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.3 2004/03/22 16:38:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -265,12 +265,16 @@ as that vector."
 
 (defun funobj-num-jumpers (funobj)
   (check-type funobj compiled-function)
-  (movitz-accessor-u16 funobj movitz-funobj num-jumpers))
+  (with-inline-assembly (:returns :eax)
+    (:compile-form (:result-mode :eax) funobj)
+    (:movzxw (:eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::num-jumpers)) :eax)))
 
 (defun (setf funobj-num-jumpers) (num-jumpers funobj)
   (check-type funobj compiled-function)
-  (check-type num-jumpers (unsigned-byte 16))
-  (set-movitz-accessor-u16 funobj movitz-funobj num-jumpers num-jumpers))
+  (check-type num-jumpers (unsigned-byte 14))
+  (with-inline-assembly (:returns :eax)
+    (:compile-two-forms (:eax :ebx) num-jumpers funobj)
+    (:movw :ax (:ebx #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::num-jumpers)))))
 
 (defun funobj-constant-ref (funobj index)
   (check-type funobj compiled-function)
@@ -333,9 +337,10 @@ as that vector."
        (make-array (length code-vector)
 		   :element-type 'u8
 		   :initial-contents code-vector))))
-  (let ((funobj (inline-malloc (+ #.(bt:sizeof 'movitz:movitz-funobj)
-				  (* 4 (length constants)))
-			       :other-tag :funobj)))
+  (let ((funobj (malloc-words (+ #.(cl:truncate (bt:sizeof 'movitz:movitz-funobj) 4)
+				 (length constants)))))
+    (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:type) 0 :unsigned-byte16)
+      #.(movitz:tag :funobj))
     (setf (funobj-name funobj) name
 	  (funobj-code-vector funobj) code-vector
 	  ;; revert to default trampolines for now..
@@ -376,9 +381,10 @@ so that we can be reasonably sure of dst's size."
 
 (defun copy-funobj (old-funobj &optional (name (funobj-name old-funobj)))
   (let* ((num-constants (funobj-num-constants old-funobj))
-	 (funobj (inline-malloc (+ #.(bt:sizeof 'movitz:movitz-funobj)
-				   (* 4 num-constants))
-				:other-tag :funobj)))
+	 (funobj (malloc-words (+ #.(cl:truncate (bt:sizeof 'movitz:movitz-funobj) 4)
+				  num-constants))))
+    (setf (memref funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:type) 0 :unsigned-byte16)
+      (memref old-funobj #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:type) 0 :unsigned-byte16))
     (setf (funobj-num-constants funobj) num-constants)
     (replace-funobj funobj old-funobj name)))
 

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.5 2004/02/26 11:40:44 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.6 2004/03/22 16:38:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -119,7 +119,7 @@
 
 
 (defun allocate-std-instance (class slots)
-  (let ((instance (inline-malloc #.(bt:sizeof 'movitz:movitz-std-instance) :tag :other)))
+  (let ((instance (malloc-clumps 2)))
     (setf (memref instance #.(bt:slot-offset 'movitz:movitz-struct 'movitz:type)
 		  0 :unsigned-byte8)
       #.(movitz:tag :std-instance))
@@ -1137,9 +1137,7 @@ next-emf as its target for call-next-method."
     (check-type class structure-class)
     (let* ((slots (structure-slots class))
 	   (num-slots (length slots))
-	   (struct (inline-malloc (+ #.(bt:sizeof 'movitz::movitz-struct)
-				     (* 4 num-slots)
-				     (if (evenp num-slots) 0 1)))))
+	   (struct (malloc-words num-slots)))
       (setf (memref struct #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)
 		    0 :lisp)
 	(class-name class))

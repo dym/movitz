@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.3 2004/03/22 16:37:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -212,8 +212,7 @@ Parameters: struct-name."
 		      if (and constructor (symbolp constructor))
 		      collect
 			`(defun ,constructor (&key ,@key-lambda)
-			   (let ((s (inline-malloc ,(logand -8 (+ #.(bt:sizeof 'movitz::movitz-struct)
-								  (* 4 (1+ (length slot-names))))))))
+			   (let ((s (malloc-words ,(length slot-names))))
 			     (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)
 						    0 :lisp)
 			       ',struct-name)
@@ -235,8 +234,7 @@ Parameters: struct-name."
 			       (boa-lambda-list (cdr constructor))
 			       (boa-variables (movitz::list-normal-lambda-list-variables boa-lambda-list)))
 			  `(defun ,boa-constructor ,boa-lambda-list
-			     (let ((s (inline-malloc ,(logand -8 (+ #.(bt:sizeof 'movitz::movitz-struct)
-								  (* 4 (1+ (length slot-names))))))))
+			     (let ((s (malloc-words ,(length slot-names))))
 			       (setf (memref s #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)
 						      0 :lisp)
 				 ',struct-name)

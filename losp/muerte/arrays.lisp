@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.6 2004/03/18 09:19:45 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.7 2004/03/22 16:37:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -549,19 +549,26 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 	  (initial-contents
 	   (replace a initial-contents)))
 	 a))
-      (t (let ((a (inline-malloc (+ #.(bt:sizeof 'movitz::movitz-vector) (* 4 dimensions))
-				 :other-tag :vector
-				 :wide-other-tag #.(bt:enum-value 'movitz::movitz-vector-element-type
-								  :any-t))))
-	   (setf (memref a #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
+      (t (let ((array (malloc-words dimensions)
+		      #+ignore
+		      (inline-malloc (+ #.(bt:sizeof 'movitz::movitz-vector) (* 4 dimensions))
+				     :other-tag :vector
+				     :wide-other-tag #.(bt:enum-value 'movitz::movitz-vector-element-type
+								      :any-t))))
+	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
+			 0 :unsigned-byte16)
+	     #.(movitz:vector-type-tag :any-t))
+	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
 			 0 :unsigned-byte16)
 	     dimensions)
-	   (setf (fill-pointer a) fill-pointer)
-	   (if initial-contents
-	       (replace a initial-contents)
+	   (setf (fill-pointer array) fill-pointer)
+	   (cond
+	    (initial-contents
+	     (replace array initial-contents))
+	    (initial-element
 	     (dotimes (i dimensions)
-	       (setf (svref%unsafe a i) initial-element)))
-	   a))))))
+	       (setf (svref%unsafe array i) initial-element))))
+	   array))))))
 
 (defun vector (&rest objects)
   "=> vector"
