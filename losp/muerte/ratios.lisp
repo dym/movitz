@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 20 00:39:59 2004
 ;;;;                
-;;;; $Id: ratios.lisp,v 1.1 2004/07/27 13:54:12 ffjeld Exp $
+;;;; $Id: ratios.lisp,v 1.2 2004/07/29 16:20:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -51,3 +51,5 @@
   (etypecase x
     (integer 1)
     (ratio (ratio-denominator x))))
+
+(defconstant pi #xea7632a/4aa1a8b)
