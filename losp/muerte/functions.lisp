@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.12 2004/06/10 12:09:15 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.13 2004/06/10 19:26:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -312,16 +312,16 @@ as that vector."
       (assert (below value (length (funobj-code-vector funobj))) (value)
 	"The jumper value ~D is invalid because the code-vector's size is ~D."
 	value (length (funobj-code-vector funobj)))
-      (progn ;; without-gc
+      (progn ;; XXX without-gc
        (with-inline-assembly (:returns :nothing)
-	 (:compile-two-forms (:eax :ecx) funobj index)
-	 (:leal (:ecx :eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0))
-		:ebx)			; dest. address into ebx.
-	 (:compile-form (:result-mode :untagged-fixnum-ecx) value)
+	 (:compile-two-forms (:eax :edx) funobj index)
+	 (:compile-form (:result-mode :ecx) value)
+	 (:movl #.movitz:+code-vector-transient-word+ :ebx)
 	 (:addl (:eax #.(bt:slot-offset 'movitz:movitz-funobj 'movitz:code-vector))
-		:ecx)
-	 (:movl :ecx (:ebx))
-	 (:xorl :ebx :ebx)))
+		:ebx)			; code-vector (word) into ebx
+	 (:shrl #.movitz:+movitz-fixnum-shift+ :ecx) ; value
+	 (:movl :ecx (:eax :edx #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
+	 (:addl :ebx (:eax :edx #.(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))))
       value)))
 
 (defun funobj-debug-info (funobj)
