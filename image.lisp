@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.59 2004/07/31 23:34:52 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.60 2004/08/01 00:37:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -289,6 +289,12 @@
     :binary-tag :primitive-function)
    (+
     :initform 'muerte.cl:+
+    :binary-type word
+    :binary-tag :global-function
+    :map-binary-write 'movitz-intern
+    :map-binary-read-delayed 'movitz-word)
+   (complicated-eql
+    :initform 'muerte::complicated-eql
     :binary-type word
     :binary-tag :global-function
     :map-binary-write 'movitz-intern

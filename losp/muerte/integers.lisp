@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.89 2004/07/30 22:10:59 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.90 2004/08/01 00:37:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -138,6 +138,57 @@
 	   negative-upper-16-decisive
 	    (:ret))))
     (do-it)))
+
+(defun complicated-eql (x y)
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :multiple-values) ; well..
+	    (:compile-two-forms (:eax :ebx) x y)
+	    (:cmpl :eax :ebx)		; EQ?
+	    (:je 'done)
+	    (:leal (:eax ,(- (movitz:tag :other))) :ecx)
+	    (:testb 7 :cl)
+	    (:jne 'done)
+	    (:leal (:ebx ,(- (movitz:tag :other))) :ecx)
+	    (:testb 7 :cl)
+	    (:jne 'done)
+	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
+	    (:cmpb ,(movitz:tag :bignum) :cl)
+	    (:jne 'not-bignum)
+	    (:cmpl :ecx (:ebx ,movitz:+other-type-offset+))
+	    (:jne 'done)
+	    ;; Ok.. we have two bignums of identical sign and size.
+	    (:shrl 16 :ecx)
+	    (:movl :ecx :edx)		; counter
+	   compare-loop
+	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
+	    (:jz 'done)
+	    (:movl (:eax :edx (:offset movitz-bignum bigit0 -4)) :ecx)
+	    (:cmpl :ecx (:ebx :edx (:offset movitz-bignum bigit0 -4)))
+	    (:je 'compare-loop)
+	    (:jmp 'done)
+	   not-bignum
+	    (:cmpb ,(movitz:tag :ratio) :cl)
+	    (:jne 'not-ratio)
+	    (:cmpl :ecx (:ebx ,movitz:+other-type-offset+))
+	    (:jne 'done)
+	    (:movl (:eax (:offset movitz-ratio numerator)) :eax)
+	    (:movl (:ebx (:offset movitz-ratio numerator)) :ebx)
+	    (:call (:esi (:offset movitz-funobj code-vector%2op)))
+	    (:jne 'done)
+	    (:compile-two-forms (:eax :ebx) x y)
+	    (:movl (:eax (:offset movitz-ratio denominator)) :eax)
+	    (:movl (:ebx (:offset movitz-ratio denominator)) :ebx)
+	    (:call (:esi (:offset movitz-funobj code-vector%2op)))
+	    (:jmp 'done)
+	   not-ratio
+	    
+	   done
+	    (:movl :edi :eax)
+	    (:clc)
+	    )))
+    (do-it)))
+
 
 (define-primitive-function fast-eql (x y)
   "Compare EAX and EBX under EQL, result in ZF.
@@ -337,9 +388,7 @@ Preserve EAX and EBX."
 	    (:call-global-pf fast-compare-two-reals))))))
    ((movitz:movitz-constantp n2 env)
     `(=%2op ,n2 ,n1))
-   (t `(with-inline-assembly (:returns :boolean-zf=1 :side-effects nil)
-	 (:compile-two-forms (:eax :ebx) ,n1 ,n2)
-	 (:call-global-pf fast-compare-two-reals)))))
+   (t `(eql ,n1 ,n2))))
 
 (define-number-relational = =%2op nil :defun-p nil)
 
@@ -349,7 +398,10 @@ Preserve EAX and EBX."
     (unless (= first-number n)
       (return nil))))
 
-(define-number-relational /= /=%2op :boolean-zf=0 :defun-p nil)
+(define-compiler-macro /=%2op (n1 n2)
+  `(not (= ,n1 ,n2)))
+
+(define-number-relational /= /=%2op nil :defun-p nil)
 
 (defun /= (&rest numbers)
   (declare (dynamic-extent numbers))
@@ -724,9 +776,9 @@ Preserve EAX and EBX."
 			(:testb 7 :cl)
 			(:jnz '(:sub-program (not-a-number)
 				(:compile-form (:result-mode :ignore)
-				 (if (ratio-p x)
-				     (make-rational (- (ratio-numerator x))
-				      (ratio-denominator x))
+				 (if (typep x 'ratio)
+				     (make-rational (- (%ratio-numerator x))
+				      (%ratio-denominator x))
 				   (error 'type-error :expected-type 'number :datum x)))))
 			(:movl (:eax ,movitz:+other-type-offset+) :ecx)
 			(:cmpb ,(movitz:tag :bignum) :cl)
@@ -1212,21 +1264,21 @@ Preserve EAX and EBX."
 (defun truncate (number &optional (divisor 1))
   (numargs-case
    (1 (number)
-      (if (not (ratio-p number))
+      (if (not (typep number 'ratio))
 	  (values number 0)
 	(multiple-value-bind (q r)
-	    (truncate (ratio-numerator number)
-		      (ratio-denominator number))
-	  (values q (make-rational r (ratio-denominator number))))))
+	    (truncate (%ratio-numerator number)
+		      (%ratio-denominator number))
+	  (values q (make-rational r (%ratio-denominator number))))))
    (t (number divisor)
       (number-double-dispatch (number divisor)
 	((t (eql 1))
-	 (if (not (ratio-p number))
+	 (if (not (typep number 'ratio))
 	     (values number 0)
 	   (multiple-value-bind (q r)
-	       (truncate (ratio-numerator number)
-			 (ratio-denominator number))
-	     (values q (make-rational r (ratio-denominator number))))))
+	       (truncate (%ratio-numerator number)
+			 (%ratio-denominator number))
+	     (values q (make-rational r (%ratio-denominator number))))))
 	((fixnum fixnum)
 	 (with-inline-assembly (:returns :multiple-values)
 	   (:compile-form (:result-mode :eax) number)
@@ -1414,10 +1466,10 @@ Preserve EAX and EBX."
 (defun / (number &rest denominators)
   (numargs-case
    (1 (x)
-      (if (not (ratio-p x))
+      (if (not (typep x 'ratio))
 	  (make-rational 1 x)
-	(make-rational (ratio-denominator x)
-		       (ratio-numerator x))))
+	(make-rational (%ratio-denominator x)
+		       (%ratio-numerator x))))
    (2 (x y)
       (multiple-value-bind (q r)
 	  (truncate x y)
@@ -2172,11 +2224,11 @@ Preserve EAX and EBX."
   "This is floor written in terms of truncate."
   (numargs-case
    (1 (n)
-      (if (not (ratio-p n))
+      (if (not (typep n 'ratio))
 	  (values n 0)
 	(multiple-value-bind (r q)
-	    (floor (ratio-numerator n) (ratio-denominator n))
-	  (values r (make-rational q (ratio-denominator n))))))
+	    (floor (%ratio-numerator n) (%ratio-denominator n))
+	  (values r (%make-rational q (%ratio-denominator n))))))
    (2 (n divisor)
       (multiple-value-bind (q r)
 	  (truncate n divisor)
