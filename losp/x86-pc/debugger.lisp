@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.4 2004/03/24 13:34:53 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.5 2004/04/06 14:45:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -140,27 +140,30 @@
 
 (defun stack-frame-numargs (stack-frame)
   "Try to determine how many arguments was presented to the stack-frame."
-  (multiple-value-bind (call-site code)
-      (stack-frame-call-site stack-frame)
-    (when (and call-site code)
-      (dolist (map +call-site-numargs-maps+
-		(warn "no match at ~D for ~S."
-		      call-site
-		      (stack-frame-funobj (stack-frame-uplink stack-frame))))
-	(when (not (mismatch code (cdr map)
-			     :start1 (- call-site (length (cdr map)))
-			     :end1 call-site))
-	  (return
-	    (cond
-	     ((integerp (car map))
-	      (car map))
-	     ((eq :ecx (car map))
+  (if (eq (stack-frame-funobj stack-frame)
+	  (load-global-constant complicated-class-of))
+      1
+    (multiple-value-bind (call-site code)
+	(stack-frame-call-site stack-frame)
+      (when (and call-site code)
+	(dolist (map +call-site-numargs-maps+
+		  (warn "no match at ~D for ~S."
+			call-site
+			(stack-frame-funobj (stack-frame-uplink stack-frame))))
+	  (when (not (mismatch code (cdr map)
+			       :start1 (- call-site (length (cdr map)))
+			       :end1 call-site))
+	    (return
 	      (cond
-	       ((= #xb1 (aref code (- call-site 5)))
-		;; Assume it's a (:movb x :cl) instruction
-		(aref code (- call-site 4)))
-	       (t ;; now we should search further for where ecx may be set..
-		nil))))))))))
+	       ((integerp (car map))
+		(car map))
+	       ((eq :ecx (car map))
+		(cond
+		 ((= #xb1 (aref code (- call-site 5)))
+		  ;; Assume it's a (:movb x :cl) instruction
+		  (aref code (- call-site 4)))
+		 (t ;; now we should search further for where ecx may be set..
+		  nil)))))))))))
 
 (defun signed8-index (s8)
   "Convert a 8-bit twos-complement signed integer bitpattern to
@@ -371,7 +374,6 @@ be provided for those cases."
 	   (when (match-code-pattern (car pattern-map) code-vector setup-start)
 	     (return pattern-map))))))
 
-
 (defun print-stack-frame-arglist (stack-frame stack-frame-map
 				  &key (numargs (stack-frame-numargs stack-frame))
 				       (edx-p nil))
@@ -440,6 +442,12 @@ be provided for those cases."
 	       (debug-write (stack-frame-ref stack-frame i))))))
   (values))
 
+(defun safe-print-stack-frame-arglist (&rest args)
+  (declare (dynamic-extent args))
+  (handler-case (apply #'print-stack-frame-arglist args)
+    (t (conditon)
+      (write-string "#<error printing frame>"))))
+
 (defun backtrace (&key ((:frame initial-stack-frame)
 			(or *debugger-invoked-stack-frame*
 			    (current-stack-frame)))
@@ -447,8 +455,10 @@ be provided for those cases."
 		       ((:fresh-lines *backtrace-do-fresh-lines*) *backtrace-do-fresh-lines*)
 		       (conflate *backtrace-do-conflate*)
 		       (length *backtrace-length*)
+		       print-returns
 		       ((:print-frames *backtrace-print-frames*) *backtrace-print-frames*))
-  (let ((*standard-output* *debug-io*)
+  (let ((*print-safely* t)
+	(*standard-output* *debug-io*)
 	(*print-length* *backtrace-print-length*)
 	(*print-level* *backtrace-print-level*))
     (loop with conflate-count = 0 with count = 0
@@ -465,11 +475,13 @@ be provided for those cases."
 			(write-string "="))
 		      (write-char #\space))
 		     (t (format t "~& |= ")))
+		    (when print-returns
+		      (format t "{< ~D}" (stack-frame-call-site stack-frame)))
 		    (when *backtrace-print-frames*
 		      (format t "#x~X " stack-frame))))
 	     (typecase funobj
 	       (integer
-		(let* ((int-frame funobj)
+		(let* ((int-frame stack-frame)
 		       (funobj (int-frame-ref int-frame :esi :lisp)))
 		  (if (and conflate
 			   ;; When the interrupted function has a stack-frame, conflate it.
@@ -522,12 +534,12 @@ be provided for those cases."
 			     ((typep gf 'muerte::standard-gf-instance)
 			      (format t "{gf ~S}" (funobj-name gf)))
 			     (t (write-string "[not a gf??]")))
-			    (print-stack-frame-arglist stack-frame map :numargs numargs)))
+			    (safe-print-stack-frame-arglist stack-frame map :numargs numargs)))
 			 (t (write name)
-			    (print-stack-frame-arglist stack-frame map
-						       :numargs numargs
-						       :edx-p (eq 'muerte::&edx
-								  (car (funobj-lambda-list funobj)))))))
+			    (safe-print-stack-frame-arglist stack-frame map
+							    :numargs numargs
+							    :edx-p (eq 'muerte::&edx
+								       (car (funobj-lambda-list funobj)))))))
 		      (write-char #\))
 		      (when (and (symbolp name)
 				 (string= name 'toplevel-function))
