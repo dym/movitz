@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.14 2004/08/06 14:43:51 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.15 2004/08/12 15:42:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -109,7 +109,7 @@
     (cons (mapcar #'movitz-print expr))
     ((not movitz-object)
      expr)
-    ((or movitz-nil movitz-run-time-context) nil)
+    ((or movitz-null movitz-run-time-context) nil)
     (movitz-std-instance expr)
     (movitz-symbol
      (intern (movitz-print (movitz-symbol-name expr))))
