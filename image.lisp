@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.19 2004/03/24 18:39:42 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.20 2004/03/26 01:44:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -128,6 +128,12 @@
    (stack-top				; stack-top must be right after stack-bottom
     :binary-type word			; in order for the bound instruction to work.
     :initform #x100000)
+   (bochs-flags
+    :binary-type lu32
+    :initform 0)
+   (bochs-flags2
+    :binary-type lu32
+    :initform 0)
    ;;
    (unbound-value
     :binary-type word
