@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.40 2004/11/12 14:51:37 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.41 2004/11/23 16:10:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1151,6 +1151,8 @@
 	   
 	   #:%symbol-global-value
 	   #:define-global-variable
+	   
+	   #:movitz-type-slot-offset
 	   
 	   vector-element-type
 	   vector-element-size
