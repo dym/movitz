@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.33 2004/07/15 21:06:24 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.34 2004/07/20 12:39:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1243,7 +1243,9 @@
 	   runtime-context-slot
 	   movitz-accessor
 	   halt-cpu
-	   fixnum-word
+	   #:%object-lispval
+	   #:%lispval-object
+	   #:objects-equalp
 	   word-nibble
 	   &edx
 	   
