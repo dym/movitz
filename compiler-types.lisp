@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.6 2004/02/14 13:56:19 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.7 2004/02/14 22:11:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -56,47 +56,8 @@
 (defun type-specifier-singleton (type-specifier)
   "If type-specifier is a singleton type, return a singleton list
 with the single member of <type-specifier>."
-  (let ((old-result (cond
-		     ((eq 'null type-specifier)
-		      ;; The type NULL is a singleton.
-		      (list (movitz-read nil)))
-		     ((listp type-specifier)
-		      (case (car type-specifier)
-			(eql
-			 (cdr type-specifier))
-			(member
-			 (when (= 1 (length (cdr type-specifier)))
-			   (cdr type-specifier)))
-			(integer
-			 (when (and (integerp (second type-specifier))
-				    (integerp (third type-specifier))
-				    (= (second type-specifier)
-				       (third type-specifier)))
-			   (second type-specifier)))))))
-	(new-result
-	 (multiple-value-bind (code intscope members include complement)
-	     (type-specifier-encode type-specifier)
-	   (cond
-	    ((or complement include (not (= 0 code)))
-	     nil)
-	    ((= 1 (length members))
-	     members)
-	    ((and (= 1 (length intscope))
-		  (caar intscope)
-		  (eql (caar intscope)
-		       (cdar intscope)))
-	     (list (movitz-read (caar intscope))))))))
-    (check-type old-result list)
-    (check-type new-result list)
-    (cond
-     ((and old-result new-result)
-      (assert (movitz-eql (car old-result) (car new-result)))
-      new-result)
-     ((and (not old-result) (not new-result))
-      nil)
-     (t (warn "ts-singleton different result: old ~S, new: ~S"
-	      old-result new-result)
-	new-result))))
+  (multiple-value-call #'encoded-type-singleton
+    (type-specifier-encode type-specifier)))
       
 ;;;
 
@@ -444,7 +405,16 @@ with the single member of <type-specifier>."
 			 (union members0 members1 :test #'movitz-eql))
 	      (union include0 include1 :test #'equal)
 	      nil)))
-   (t (error "Not implemented"))))
+   ((and (not complement0) complement1)
+    (values code0
+	    integer-range0
+	    members0
+	    (cons (encoded-type-decode code1 integer-range1 members1 include1 complement1)
+		  include0)
+	    nil))
+   (t (error "Not implemented: ~S or ~S"
+	     (encoded-type-decode code0 integer-range0 members0 include0 complement0)
+	     (encoded-type-decode code1 integer-range1 members1 include1 complement1)))))
 
 
 (defun type-specifier-encode (type-specifier)
@@ -583,13 +553,13 @@ If it isn't, also return wether we _know_ it isn't."
        ((encoded-allp code1 integer-range1 members1 include1 complement1)
 	;; type1 is t.
 	(result-is t t))
-       ((and (encoded-emptyp code1 integer-range1 members1 include1 complement1)
-	     (not (encoded-emptyp code0 integer-range0 members0 include0 complement0)))
-	;; type1 is nil and type0 isn't.
-	(result-is nil t))
        ((encoded-emptyp code0 integer-range0 members0 include0 complement0)
 	;; type0 is nil, which is a subtype of anything.
 	(result-is t t))
+       ((and (encoded-emptyp code1 integer-range1 members1 include1 complement1)
+	     #+ignore (not (encoded-emptyp code0 integer-range0 members0 include0 complement0)))
+	;; type1 is nil and type0 isn't.
+	(result-is nil t))
        ((and (encoded-allp code0 integer-range0 members0 include0 complement0)
 	     (multiple-value-bind (all1 confident)
 		 (encoded-allp code1 integer-range1 members1 include1 complement1)
@@ -611,14 +581,29 @@ If it isn't, also return wether we _know_ it isn't."
 	    ((:unknown)
 	     (result-is nil nil))
 	    ((t) nil)))
-	(when include0
-	  (result-is nil nil))
-	(result-is t t))
+	(if include0
+	    (result-is nil nil)
+	  (result-is t t)))
        ((and complement0 complement1)
 	(encoded-subtypep code1 integer-range1 members1 include1 nil
 			  code0 integer-range0 members0 include0 nil))
        (t (result-is nil nil))))))
-			
+
+(defun encoded-type-singleton (code intscope members include complement)
+  "If the encoded type is a singleton, return that element in a list."
+  (cond
+   ((or complement include (not (= 0 code)))
+    nil)
+   ((= 1 (length members))
+    members)
+   ((and (= 1 (length intscope))
+	 (caar intscope)
+	 (eql (caar intscope)
+	      (cdar intscope)))
+    (list (movitz-read (caar intscope))))
+   ((and (null members) (null intscope))
+    (warn "Not singleton, nulloton."))))
+
 (defun movitz-subtypep (type1 type2)
   "Compile-time subtypep."
   (multiple-value-call #'encoded-subtypep
