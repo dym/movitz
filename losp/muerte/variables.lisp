@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov  5 21:53:34 2003
 ;;;;                
-;;;; $Id: variables.lisp,v 1.3 2004/03/24 23:42:49 ffjeld Exp $
+;;;; $Id: variables.lisp,v 1.4 2004/04/06 14:31:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -35,6 +35,7 @@
 (defvar +++ nil)
 
 (defparameter *debugger-hook* nil)
+(defvar *active-condition-handlers* nil)
 
 (defvar internal-time-units-per-second)
 
