@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.23 2004/10/11 13:51:55 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.24 2004/11/11 19:28:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -45,6 +45,29 @@
 (require :los0-gc)			; Must come after defpackage.
 
 (in-package muerte.init)
+
+
+(defun test0 ()
+  (ash 1 -1000000000000))
+
+(defun test1 ()
+  (unwind-protect 0 (the integer 1)))
+
+(defun test2 ()
+  (funcall
+   (compile
+    nil
+    '(lambda (a) (declare (notinline > *))
+      (declare (optimize (compilation-speed 0) (safety 2) (speed 2) (debug 0) (space 3)))
+      (catch 'ct1 (* a (throw 'ct1 (if (> 0) a 0))))))
+   5445205692802))
+
+(defun test3 ()
+  (loop for x below 2 count (not (not (typep x t)))))
+
+(defun test4 ()
+  (let ((a 1)) (if (not (/= a 0)) a 0)))
+
 
 (defun test-floppy ()
   (muerte.x86-pc::fd-start-disk)	; to initialize the controller and spin the drive up.
@@ -1095,6 +1118,14 @@ s#+ignore
 	(:stc))
     (values eax ebx ecx edx p1 p2)))
 
+(defun null-primitive-function (x)
+  "This function is just like identity, except it also calls a null primitive function.
+Can be used to measure the overhead of primitive function."
+  (with-inline-assembly (:returns :eax)
+    (:load-lexical (:lexical-binding x) :eax)
+    (% bytes 8 #xff #x97)		; (:call-local-pf ret-trampoline)
+    (% bytes 32 #.(bt:slot-offset 'movitz::movitz-run-time-context 'movitz::ret-trampoline))))
+
 (defun my-test-labels (x)
   (labels (#+ignore (p () (print x))
 		    (q (y) (list x y)))
@@ -1223,6 +1254,7 @@ s#+ignore
     (:ret)))
 
 (defun genesis ()
+  (install-shallow-binding)
   (let ((extended-memsize 0))
     ;;  Find out how much extended memory we have 
     (setf (io-port #x70 :unsigned-byte8) #x18)
@@ -1295,9 +1327,14 @@ s#+ignore
 
 #+ignore
 (defun progntest ()
-  (unwind-protect
-      (progn (print 'x) 'foo (error "bar"))
-    (print 'y)))
+  (prog ()
+    (unwind-protect
+	(progn
+	  (print 'x) 
+	  (go mumbo)
+	  (error "bar"))
+      (print 'y))
+   mumbo))
 
 #+ignore
 (defun test-restart (x)
@@ -1355,4 +1392,173 @@ s#+ignore
 	   (#\esc (break "Under the bridge."))
 	   (#\e (error "this is an error!"))))))))
 
+
+(defparameter *write-barrier* nil)
+
+(defun show-writes ()
+  (loop with num = (length *write-barrier*)
+      for i from 0 below num by 4
+      initially (format t "~&Number of writes: ~D" (truncate num 4))
+      do (format t "~&~D ~S: [~Z] Write to ~S: ~S."
+		 i (aref *write-barrier* (+ i 3))
+		 (aref *write-barrier* i)
+		 (aref *write-barrier* i) (aref *write-barrier* (+ i 2))))
+  (values))
+
+(defun es-test (&optional (barrier-size 1000))
+  (setf *write-barrier* (or *write-barrier*
+			    (make-array (* 4 barrier-size) :fill-pointer 0))
+	(fill-pointer *write-barrier*) 0
+	(exception-handler 13) #'general-protection-handler
+	(segment-register :es) 0)
+  (values))
+
+(defun general-protection-handler (vector dit-frame)
+  (assert (= vector 13))
+  (let ((eip (dit-frame-ref nil dit-frame :eip :unsigned-byte32)))
+    (assert (= #x26 (memref-int eip 0 0 :unsigned-byte8))) ; ES override prefix?
+    (let ((opcode (memref-int eip 1 0 :unsigned-byte8))
+	  (mod/rm (memref-int eip 2 0 :unsigned-byte8)))
+      (if (not (= #x89 opcode))
+	  (interrupt-default-handler vector dit-frame)
+	(let ((value (ecase (ldb (byte 3 3) mod/rm)
+		       (0 (dit-frame-ref nil dit-frame :eax :lisp))
+		       (3 (dit-frame-ref nil dit-frame :ebx :lisp)))))
+	  ;; If we return, don't execute with the ES override prefix:
+	  (setf (dit-frame-ref nil dit-frame :eip :unsigned-byte32) (1+ eip))
+	  ;; If value isn't a pointer, we don't care..
+	  (when (typep value 'pointer)
+	    (multiple-value-bind (object offset)
+		(case (logand mod/rm #xc7)
+		  (#x40			; (:movl <value> (:eax <disp8>))
+		   (values (dit-frame-ref nil dit-frame :eax)
+			   (memref-int eip 3 0 :signed-byte8)))
+		  (#x43			; (:movl <value> (:ebx <disp8>))
+		   (values (dit-frame-ref nil dit-frame :ebx)
+			   (memref-int eip 3 0 :signed-byte8)))
+		  (#x44			; the disp8/SIB case
+		   (let ((sib (memref-int eip 3 0 :unsigned-byte8)))
+		     (case sib
+		       ((#x19 #x0b)
+			(values (dit-frame-ref nil dit-frame :ebx)
+				(+ (dit-frame-ref nil dit-frame :ecx :unsigned-byte8)
+				   (memref-int eip 4 0 :signed-byte8))))
+		       ((#x1a)
+			(values (dit-frame-ref nil dit-frame :ebx)
+				(+ (dit-frame-ref nil dit-frame :edx :unsigned-byte8)
+				   (memref-int eip 4 0 :signed-byte8))))))))
+	      (when (not object)
+		(setf (segment-register :es) (segment-register :ds))
+		(break "[~S] With value ~S, unknown movl at ~S: ~S ~S ~S ~S"
+		       dit-frame value eip
+		       (memref-int eip 1 0 :unsigned-byte8)
+		       (memref-int eip 2 0 :unsigned-byte8)
+		       (memref-int eip 3 0 :unsigned-byte8)
+		       (memref-int eip 4 0 :unsigned-byte8)))
+	      (check-type object pointer)
+	      (check-type offset fixnum)
+	      (let ((write-barrier *write-barrier*)
+		    (location (object-location object)))
+		(assert (not (location-in-object-p
+			      (los0::space-other (%run-time-context-slot 'nursery-space))
+			      location)) ()
+		  "Write ~S to old-space at ~S." value location)
+		(unless (or (eq object write-barrier)
+			    #+ignore
+			    (location-in-object-p (%run-time-context-slot 'nursery-space)
+						  location)
+			    (location-in-object-p (%run-time-context-slot 'stack-vector)
+						  location))
+		  (if (location-in-object-p (%run-time-context-slot 'nursery-space)
+					    location)
+		      (vector-push 'stack-actually write-barrier)		      
+		    (vector-push object write-barrier))
+		  (vector-push offset write-barrier)
+		  (vector-push value write-barrier)
+		  (unless (vector-push eip write-barrier)
+		    (setf (segment-register :es) (segment-register :ds))
+		    (break "Write-barrier is full: ~D" (length write-barrier))))))))))))
+
+;;;;;;;;;;;;;;;;;; Shallow binding
+
+(define-primitive-function dynamic-variable-install-shallow ()
+  "Install each dynamic binding entry between that in ESP (offset by 4 due to
+the call to this primitive-function!) and current dynamic-env.
+Preserve EDX."
+  (with-inline-assembly (:returns :nothing)
+    (:leal (:esp 4) :ecx)
+   install-loop
+    (:locally (:cmpl :ecx (:edi (:edi-offset dynamic-env))))
+    (:je 'install-completed)
+    (:movl (:ecx 0) :eax)		; symbol
+    (:movl (:ecx 8) :ebx)		; new value
+    (:xchgl :ebx (:eax (:offset movitz-symbol value))) ; exchange new and old value
+    (:movl :ebx (:ecx 8))
+    (:movl (:ecx 12) :ecx)
+    (:jmp 'install-loop)
+   install-completed
+    (:ret)))
+
+(define-primitive-function dynamic-variable-uninstall-shallow (dynamic-env)
+  "Uninstall each dynamic binding between 'here' (i.e. the current 
+dynamic environment pointer) and the dynamic-env pointer provided in EDX.
+This must be done without affecting 'current values'! (i.e. eax, ebx, ecx, or CF),
+and also EDX must be preserved."
+  (with-inline-assembly (:returns :nothing)
+    (:jc 'ecx-ok)
+    (:movl 1 :ecx)
+   ecx-ok
+    (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0))))
+    (:locally (:movl :eax (:edi (:edi-offset scratch1))))
+    (:locally (:movl :ebx (:edi (:edi-offset scratch2))))
+    
+    (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
+   uninstall-loop
+    (:cmpl :edx :ecx)
+    (:je 'uninstall-completed)
+    (:movl (:ecx 0) :eax)		; symbol
+    (:movl (:ecx 8) :ebx)		; old value
+    (:movl :ebx (:eax (:offset movitz-symbol value))) ; reload old value
+    (:movl (:ecx 12) :ecx)
+    (:jmp 'uninstall-loop)
+   uninstall-completed
+
+    (:locally (:movl (:edi (:edi-offset raw-scratch0)) :ecx))
+    (:locally (:movl (:edi (:edi-offset scratch1)) :eax))
+    (:locally (:movl (:edi (:edi-offset scratch2)) :ebx))
+    (:stc)
+    (:ret)))
+
+(define-primitive-function dynamic-load-shallow (symbol)
+  "Load the dynamic value of SYMBOL into EAX."
+  (with-inline-assembly (:returns :multiple-values)
+    (:movl (:eax (:offset movitz-symbol value)) :eax)
+    (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax))
+    (:je '(:sub-program (unbound) (:int 99)))
+    (:ret)))
+
+(define-primitive-function dynamic-load-unprotected-shallow (symbol)
+  "Load the dynamic value of SYMBOL into EAX."
+  (with-inline-assembly (:returns :multiple-values)
+    (:movl (:eax (:offset movitz-symbol value)) :eax)
+    (:ret)))
+
+(define-primitive-function dynamic-store-shallow (symbol value)
+  "Store VALUE (ebx) in the dynamic binding of SYMBOL (eax).
+   Preserves EBX and EAX."
+  (with-inline-assembly (:returns :multiple-values)
+    (:movl :ebx (:eax (:offset movitz-symbol value)))
+    (:ret)))
+
+(defun install-shallow-binding ()
+  (macrolet ((install (slot function)
+	       `(setf (%run-time-context-slot ',slot) (symbol-value ',function))))
+    (install muerte:dynamic-variable-install dynamic-variable-install-shallow)
+    (install muerte:dynamic-variable-uninstall dynamic-variable-uninstall-shallow)
+    (install muerte::dynamic-store dynamic-store-shallow)
+    (install muerte::dynamic-load-unprotected dynamic-load-unprotected-shallow)
+    (install muerte::dynamic-load dynamic-load-shallow))
+  (values))
+
 (genesis)
+
