@@ -9,12 +9,11 @@
 ;;;; Created at:    Wed Nov  8 18:41:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: common-lisp.lisp,v 1.9 2004/07/17 19:30:14 ffjeld Exp $
+;;;; $Id: common-lisp.lisp,v 1.10 2004/07/17 21:27:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (require :muerte/basic-macros)
-
 (require :muerte/setf)
 (require :muerte/more-macros)
 (require :muerte/arithmetic-macros)
