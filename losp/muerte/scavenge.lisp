@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.24 2004/07/20 14:13:36 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.25 2004/07/23 15:27:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,6 +28,7 @@
 ;; etc. involved.
 
 (defvar *scan*)
+(defvar *map-heap-words-verbose* nil)
 
 (defun map-heap-words (function start-location end-location)
   "Map function over each potential pointer word between
@@ -51,13 +52,16 @@ start-location and end-location."
 		  (:shrl 16 :eax)
 		  (:testb ,movitz:+movitz-fixnum-zmask+ :al)
 		  (:jnz '(:sub-program () (:int 63))))))
-    (do ((*scan-last* nil)		; Last scanned object, for debugging.
+    (do ((verbose *map-heap-words-verbose*)
+	 (*scan-last* nil)		; Last scanned object, for debugging.
 	 (scan start-location (1+ scan)))
 	((>= scan end-location))
       (declare (special *scan-last*))
       (let ((*scan* scan)
 	    (x (memref scan 0 0 :lisp)))
 	(declare (special *scan*))
+	(when verbose
+	  (format *terminal-io* "~&MHW scanning at ~S: ~Z" scan x))
 	(cond
 	 ((typep x '(or null fixnum character)))
 	 ((scavenge-typep x :illegal)
@@ -132,6 +136,8 @@ start-location and end-location."
 	    (incf scan delta)))
 	 ((typep x 'pointer)
 	  (let ((new (funcall function x scan)))
+	    (when verbose
+	      (format *terminal-io* " [~Z => ~Z]" x new))
 	    (unless (eq new x)
 	      (setf (memref scan 0 0 :lisp) new))))))))
   (values))
@@ -203,6 +209,8 @@ at the start-stack-frame location."
   "Is stack-frame in a primitive-function?
 If so, return the primitive-function's code-vector."
   (declare (ignore eip-location))
+  ;; XXXX Really we should make comparisons against :call-local-pf
+  ;;      such that we find the active set of local-pf's from the stack-location!
   (let ((return-address (memref stack-location 0 0 :unsigned-byte32))
 	(code-vector (funobj-code-vector funobj)))
     (multiple-value-bind (return-location return-delta)
