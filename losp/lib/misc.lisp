@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon May 12 17:13:31 2003
 ;;;;                
-;;;; $Id: misc.lisp,v 1.5 2004/08/14 17:52:35 ffjeld Exp $
+;;;; $Id: misc.lisp,v 1.6 2004/11/24 10:05:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -62,6 +62,32 @@
 		    sum (packet-ref (1+ i)) into lo
 		    finally (return (+ lo (ash hi 8))))
 		(ash (packet-ref (1- end)) 8))))))))
+
+(defun add-u16-ones-complement (&rest integers)
+  (numargs-case
+   (1 (x)
+      (if (= 0 x)
+	  #xffff
+	(ldb (byte 16 0) x)))
+   (2 (x y)
+      (with-inline-assembly (:returns :eax)
+	(:compile-two-forms (:eax :ebx) x y)
+	(:andl #.(cl:* movitz:+movitz-fixnum-factor+ #xffff) :eax)
+	(:andl #.(cl:* movitz:+movitz-fixnum-factor+ #xffff) :ebx)
+	(:addl :ebx :eax)
+	(:jz '(:sub-program (fix-zero)
+	       (:movl #.(cl:* movitz:+movitz-fixnum-factor+ #xffff) :eax)
+	       (:jmp 'done)))
+	(:testl #.(cl:* movitz:+movitz-fixnum-factor+ #x10000) :eax)
+	(:jz 'done)
+	(:addl #.movitz:+movitz-fixnum-factor+ :eax)
+	(:andl #.(cl:* movitz:+movitz-fixnum-factor+ #xffff) :eax)
+	(:jz 'fix-zero)
+       done))
+   (t (&rest integers)
+      (declare (dynamic-extent integers))
+      (reduce #'add-u16-ones-complement integers :initial-value 0))))
+
 
 
 (defstruct (counter-u32 (:constructor make-counter-u32-object)) lo hi)
