@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.88 2004/07/30 21:06:27 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.89 2004/07/30 22:10:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -690,14 +690,10 @@ Preserve EAX and EBX."
 		 (- x (- y)))
 		(((integer * -1) (integer * -1))
 		 (%negatef (+ (- x) (- y)) x y))
-		((ratio t)
-		 (make-rational (+ (* (ratio-numerator x) (denominator y))
-				   (* (numerator y) (ratio-denominator x)))
-				(* (ratio-denominator x) (denominator y))))
-		((integer ratio)
-		 (make-rational (+ (* x (denominator y))
-				   (* (ratio-numerator y) x))
-				(denominator y)))
+		((rational rational)
+		 (/ (+ (* (numerator x) (denominator y))
+		       (* (numerator y) (denominator x)))
+		    (* (denominator x) (denominator y))))
 		)))
 	(do-it)))
    (t (&rest terms)
@@ -728,7 +724,10 @@ Preserve EAX and EBX."
 			(:testb 7 :cl)
 			(:jnz '(:sub-program (not-a-number)
 				(:compile-form (:result-mode :ignore)
-				 (error 'type-error :expected-type 'number :datum x))))
+				 (if (ratio-p x)
+				     (make-rational (- (ratio-numerator x))
+				      (ratio-denominator x))
+				   (error 'type-error :expected-type 'number :datum x)))))
 			(:movl (:eax ,movitz:+other-type-offset+) :ecx)
 			(:cmpb ,(movitz:tag :bignum) :cl)
 			(:jne 'not-a-number)
@@ -834,6 +833,10 @@ Preserve EAX and EBX."
 		 (%negatef (+ (- minuend) subtrahend) minuend subtrahend))
 		(((integer * -1) (integer * -1))
 		 (+ minuend (- subtrahend)))
+		((rational rational)
+		 (/ (- (* (numerator minuend) (denominator subtrahend))
+		       (* (numerator subtrahend) (denominator minuend)))
+		    (* (denominator minuend) (denominator subtrahend))))
 		)))
 	(do-it)))
    (t (minuend &rest subtrahends)
@@ -1218,7 +1221,12 @@ Preserve EAX and EBX."
    (t (number divisor)
       (number-double-dispatch (number divisor)
 	((t (eql 1))
-	 (values number 0))
+	 (if (not (ratio-p number))
+	     (values number 0)
+	   (multiple-value-bind (q r)
+	       (truncate (ratio-numerator number)
+			 (ratio-denominator number))
+	     (values q (make-rational r (ratio-denominator number))))))
 	((fixnum fixnum)
 	 (with-inline-assembly (:returns :multiple-values)
 	   (:compile-form (:result-mode :eax) number)
