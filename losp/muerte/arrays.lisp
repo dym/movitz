@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.10 2004/03/26 10:45:00 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.11 2004/03/26 13:56:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -509,6 +509,9 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 			       :other-tag :vector
 			       :wide-other-tag #.(bt:enum-value 'movitz::movitz-vector-element-type
 								:character))))
+	 (setf (memref a #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
+		       0 :unsigned-byte16)
+	   0)
 	 (setf (memref a #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
 		       0 :unsigned-byte16)
 	   dimensions)
@@ -522,6 +525,9 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 			       :other-tag :vector
 			       :wide-other-tag #.(bt:enum-value 'movitz::movitz-vector-element-type
 								:u8))))
+	 (setf (memref a #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
+		       0 :unsigned-byte16)
+	   0)
 	 (setf (memref a #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
 		       0 :unsigned-byte16)
 	   dimensions)
@@ -538,6 +544,9 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 			       :other-tag :vector
 			       :wide-other-tag #.(bt:enum-value 'movitz::movitz-vector-element-type
 								:u32))))
+	 (setf (memref a #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
+		       0 :unsigned-byte16)
+	   0)
 	 (setf (memref a #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
 		       0 :unsigned-byte16)
 	   dimensions)
