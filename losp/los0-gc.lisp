@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.32 2004/07/23 16:44:07 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.33 2004/07/27 13:53:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -292,15 +292,15 @@ duo-space where each space is KB-SIZE kilobytes."
 	(let ((*gc-running* t))
 	  (unless *gc-quiet*
 	    (format t "~&;; GC.. "))
-	  (stop-and-copy)
-	  (if *gc-break*
-	      (break "GC break.")
-	    (loop			; This is  a nice opportunity to poll the keyboard..
-	      (case (muerte.x86-pc.keyboard:poll-char)
-		((#\esc)
-		 (break "Los0 GC keyboard poll."))
-		((nil)
-		 (return)))))))))
+	  (stop-and-copy))
+	(if *gc-break*
+	    (break "GC break.")
+	  (loop				; This is  a nice opportunity to poll the keyboard..
+	    (case (muerte.x86-pc.keyboard:poll-char)
+	      ((#\esc)
+	       (break "Los0 GC keyboard poll."))
+	      ((nil)
+	       (return))))))))
   (let* ((actual-duo-space (or duo-space
 			       (allocate-duo-space (* kb-size #x100))))
 	 (last-location (object-location (cons 1 2))))
