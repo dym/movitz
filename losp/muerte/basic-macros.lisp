@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.48 2004/11/18 23:49:13 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.49 2004/11/19 23:07:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -446,50 +446,12 @@
 	 (:compile-two-forms (:eax :ebx) ,x ,y)
 	 (:cmpl :eax :ebx)))))
 
-#+ignore
-(define-compiler-macro eql (&whole form x y &environment env)
+(define-compiler-macro eql (x y)
   `(let ((x ,x) (y ,y))
-     (with-inline-assembly (:returns :boolean-zf=1)
-       (:eql (:lexical-binding x) (:lexical-binding y)))))
-
-(define-compiler-macro eql (&whole form x y &environment env)
-  (cond
-   ((and (movitz:movitz-constantp x env)
-	 (movitz:movitz-constantp y env))
-    (eql (movitz:movitz-eval x env)
-	 (movitz:movitz-eval y env)))
-   ((movitz:movitz-constantp y env)
-    `(eql ,y ,x))
-   ((and (movitz:movitz-constantp x env)
-	 (not (typep (movitz:movitz-eval x env)
-		     '(and number (not fixnum)))))
-    `(eq ',(movitz:movitz-eval x env) ,y))
-   (t `(with-inline-assembly (:returns :boolean-zf=1 :labels (eql-done))
-	 (:compile-two-forms (:eax :ebx) ,x ,y)
-	 (:cmpl :eax :ebx)
-	 (:je 'eql-done)
-	 (:globally (:movl (:edi (:edi-offset complicated-eql)) :esi))
-	 (:call (:esi (:offset movitz-funobj code-vector%2op)))
-	eql-done))))
+     (eql%b x y)))
 
 (define-compiler-macro values (&rest sub-forms)
   `(inline-values ,@sub-forms))
-
-#+ignore
-(define-compiler-macro values (&whole form &rest sub-forms)
-  (case (length sub-forms)
-    (0 `(with-inline-assembly (:returns :multiple-values :side-effects nil :type (values))
-	  (:movl :edi :eax)
-	  (:xorl :ecx :ecx)
-	  (:stc)))
-    (1 `(with-inline-assembly (:returns :eax :side-effects nil :type (values t))
-	  (:compile-form (:result-mode :eax) ,(first sub-forms))))
-    (2 `(with-inline-assembly (:returns :multiple-values :side-effects nil :type (values t t))
-	  (:compile-two-forms (:eax :ebx) ,(first sub-forms) ,(second sub-forms))
-	  (:xorl :ecx :ecx)
-	  (:movb 2 :cl)
-	  (:stc)))
-    (t form)))
 
 (defmacro multiple-value-list (form)
   `(multiple-value-call #'list ,form))
