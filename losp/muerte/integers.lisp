@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.98 2004/10/11 13:52:50 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.99 2004/10/12 10:51:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -688,44 +688,23 @@
   (declare (dynamic-extent subtrahends))
   (numargs-case
    (1 (x)
-      (macrolet
-	  ((do-it ()
-	     `(with-inline-assembly (:returns :eax)
-		(:compile-form (:result-mode :eax) x)
-		(:testb ,movitz:+movitz-fixnum-zmask+ :al)
-		(:jnz '(:sub-program (not-fixnum)
-			(:leal (:eax ,(- (movitz:tag :other))) :ecx)
-			(:testb 7 :cl)
-			(:jnz '(:sub-program (not-a-number)
-				(:compile-form (:result-mode :ignore)
-				 (if (typep x 'ratio)
-				     (make-rational (- (%ratio-numerator x))
-				      (%ratio-denominator x))
-				   (error 'type-error :expected-type 'number :datum x)))))
-			(:movl (:eax ,movitz:+other-type-offset+) :ecx)
-			(:cmpb ,(movitz:tag :bignum) :cl)
-			(:jne 'not-a-number)
-			(:cmpl ,(dpb 4 (byte 16 16) (movitz:tag :bignum 0)) :ecx)
-			(:jne 'not-most-negative-fixnum)
-			(:cmpl ,(- most-negative-fixnum) (:eax (:offset movitz-bignum bigit0)))
-			(:jne 'not-most-negative-fixnum)
-			(:movl ,(ldb (byte 32 0)
-				 (* most-negative-fixnum movitz::+movitz-fixnum-factor+))
-			 :eax)
-			(:jmp 'fix-ok)
-			not-most-negative-fixnum
-			(:compile-form (:result-mode :eax)
-			 (copy-bignum x))
-			(:notb (:eax (:offset movitz-bignum sign)))
-			(:jmp 'fix-ok)))
-		(:negl :eax)
-		(:jo '(:sub-program (fix-overflow)
-		       (:compile-form (:result-mode :eax)
-			,(1+ movitz:+movitz-most-positive-fixnum+))
-		       (:jmp 'fix-ok)))
-	       fix-ok
-		)))
-	(do-it)))
+      (etypecase x
+	(fixnum
+	 (macrolet
+	     ((do-it ()
+		`(with-inline-assembly (:returns :eax)
+		   (:compile-form (:result-mode :eax) x)
+		   (:negl :eax)
+		   (:jo '(:sub-program (fix-overflow)
+			  (:compile-form (:result-mode :eax)
+			   ,(1+ movitz:+movitz-most-positive-fixnum+))
+			  (:jmp 'fix-ok)))
+		  fix-ok)))
+	   (do-it)))
+	(bignum
+	 (%bignum-negate (copy-bignum x)))
+	(ratio
+	 (make-ratio (- (ratio-numerator x)) (ratio-denominator x)))))
    (2 (minuend subtrahend)
       (macrolet
 	  ((do-it ()
@@ -1421,9 +1400,11 @@
    (2 (x y)
       (multiple-value-bind (q r)
 	  (truncate x y)
-	(if (= 0 r)
-	    q
-	  (make-rational x y))))
+	(cond
+	 ((= 0 r)
+	  q)
+	 (t (make-rational (* (numerator x) (denominator y))
+			   (* (denominator x) (numerator y)))))))
    (t (number &rest denominators)
       (declare (dynamic-extent denominators))
       (cond
