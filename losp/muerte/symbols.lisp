@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.25 2004/11/18 17:59:11 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.26 2004/11/23 16:09:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -44,16 +44,18 @@
     (null nil)
     (symbol
      (with-inline-assembly (:returns :eax)
-       (:compile-form (:result-mode :eax) symbol)
+       (:compile-form (:result-mode :ebx) symbol)
        (:call-local-pf dynamic-variable-lookup)
-       (:locally (:cmpl :eax (:edi (:edi-offset unbound-value))))
-       (:je '(:sub-program (unbound) (:int 99)))))))
+       (:cmpl -1 :eax)
+       (:into)))))
+;;;       (:locally (:cmpl :eax (:edi (:edi-offset unbound-value))))
+;;;       (:je '(:sub-program (unbound) (:int 99)))))))
 
 (defun %unbounded-symbol-value (symbol)
   "Return the symbol's value without checking if it's bound or not."
   (check-type symbol symbol)
   (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) symbol)
+    (:compile-form (:result-mode :ebx) symbol)
     (:call-local-pf dynamic-variable-lookup)
    done))
 
@@ -129,7 +131,7 @@
 
 (defun makunbound (symbol)
   (setf (symbol-value symbol)
-    (load-global-constant unbound-value))
+    (load-global-constant new-unbound-value))
   symbol)
 
 (defun fboundp (symbol)
@@ -138,7 +140,7 @@
 
 (defun %create-symbol (name &optional (package nil)
 				      (plist nil)
-				      (value (load-global-constant unbound-value))
+				      (value (load-global-constant new-unbound-value))
 				      (function (load-global-constant movitz::unbound-function))
 				      (flags 0))
   (eval-when (:compile-toplevel)
