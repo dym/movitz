@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.40 2004/07/22 01:09:44 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.41 2004/07/27 13:46:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -367,6 +367,7 @@
 		   ;; u8?
 		   (:cmpl ,(movitz:basic-vector-type-tag :u8) :ecx)
 		   (:jne 'not-u8-vector)
+		  code-vector
 		   (:testl ,(logxor #xffffffff (* #xff movitz:+movitz-fixnum-factor+))
 			   :eax)
 		   (:jne '(:sub-program (not-an-u8)
@@ -376,9 +377,14 @@
 		   (:movl :edx :ecx)
 		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 		   (:movb :ah (:ebx :ecx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+		   (:shrl ,(- 8 movitz:+movitz-fixnum-shift+) :eax)
 		   (:jmp 'return)
 
 		  not-u8-vector
+		   ;; Code?
+		   (:cmpl ,(movitz:basic-vector-type-tag :code) :ecx)
+		   (:je 'code-vector)
+		   
 		   ;; u32?
 		   (:cmpl ,(movitz:basic-vector-type-tag :u32) :ecx)
 		   (:jne 'not-u32-vector)
@@ -390,7 +396,7 @@
 		  not-u32-vector
 		   ;; bit?
 		   (:cmpl ,(movitz:basic-vector-type-tag :bit) :ecx)
-		   (:jne 'not-u8-vector)
+		   (:jne 'not-bit-vector)
 		   (:testl ,(logxor #xffffffff (* #x1 movitz:+movitz-fixnum-factor+))
 			   :eax)
 		   (:jne '(:sub-program (not-a-bit)
