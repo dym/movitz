@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.21 2004/08/12 17:26:49 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.22 2004/09/02 09:27:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -389,7 +389,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	   (numargs-binding (movitz-env-add-binding local-env
 						 (make-instance 'located-binding
 						   :name (gensym "m-v-numargs-"))))
-	   (arg-code (loop for subform in subforms collecting
+	   (arg-code (loop for subform in subforms
+			 collecting
 			   (compiler-values-bind (&code subform-code &returns subform-returns)
 			       (compiler-call #'compile-form-unprotected
 				 :defaults all
@@ -400,10 +401,10 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			       (:multiple-values
 				`(:multiple
 				  ,@subform-code
-				  (:globally (:call (:edi (:edi-offset push-current-values))))
+				  ,@(make-compiled-push-current-values)
 				  (:load-lexical ,numargs-binding :eax)
-				  (:leal ((:ecx ,+movitz-fixnum-factor+) :eax) :eax)
-				  (:store-lexical ,numargs-binding :eax :type t)))
+				  (:addl :ecx :eax)
+				  (:store-lexical ,numargs-binding :eax :type fixnum)))
 			       (t (list :single ; marker, used below
 					subform))))))
 	   (number-of-multiple-value-subforms (count :multiple arg-code :key #'car))
@@ -416,7 +417,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
        (t (compiler-values ()
 	    :returns :multiple-values
 	    :code (append `((:load-constant ,(1+ number-of-single-value-subforms) :eax)
-			    (:store-lexical ,numargs-binding :eax :type t))
+			    (:store-lexical ,numargs-binding :eax :type fixnum))
 			  (compiler-call #'compile-form
 			    :defaults all
 			    :env local-env
@@ -433,16 +434,17 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				       (:multiple
 					(cdr ac))))
 			  `((:load-lexical ,numargs-binding :ecx)
+			    ;; (:store-lexical ,numargs-binding :ecx :type t)
+			    (:movl (:esp (:ecx 1) -4) :eax)
+			    (:movl (:esp (:ecx 1) -8) :ebx)
 			    (:shrl ,+movitz-fixnum-shift+ :ecx)
-			    (:store-lexical ,numargs-binding :ecx :type t)
-			    (:movl (:esp (:ecx 4) -4) :eax)
-			    (:movl (:esp (:ecx 4) -8) :ebx)
 			    (:load-constant muerte.cl::funcall :edx)
 			    (:movl (:edx ,(slot-offset 'movitz-symbol 'function-value))
 				   :esi) ; load new funobj from symbol into ESI
 			    (:call (:esi ,(slot-offset 'movitz-funobj 'code-vector)))
 			    (:load-lexical ,numargs-binding :edx)
-			    (:leal (:esp (:edx 4)) :esp)))))))))
+			    ;; Use LEA so as not to modify CF
+			    (:leal (:esp :edx) :esp)))))))))
 
 
 			    
