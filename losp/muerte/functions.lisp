@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.26 2005/01/25 13:46:54 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.27 2005/01/31 15:47:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -133,20 +133,19 @@ represented as that vector."
    retry
 
     (:movl (:esp) :ebp)
-    (:compile-form (:result-mode :ebx) funobj)
-    (:movl (:ebx (:offset movitz-funobj code-vector)) :eax) ; EAX = code-vector
-
     (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
     ;; Now inside atomically section.
     
+    (:compile-form (:result-mode :ebx) funobj)
+    (:movl (:ebx (:offset movitz-funobj code-vector)) :eax) ; EAX = code-vector
     (:movl (:ebx (:offset movitz-funobj code-vector%1op)) :ecx)
-    ;; determine if ECX is a pointer into EBX
+    ;; determine if ECX is a pointer into EAX
     (:subl :eax :ecx)
     (:jl 'return-vector)
     (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :ecx)
-    (:cmpl (:ebx (:offset movitz-basic-vector num-elements)) :ecx)
-    (:jg 'return-vector)
-    ;; return the integer offset EAX-EBX
+    (:cmpl (:eax (:offset movitz-basic-vector num-elements -2)) :ecx)
+    (:jnc 'return-vector)
+    ;; return the integer offset
     (:movl :ecx :eax)
     (:jmp 'done)
    return-vector
@@ -191,21 +190,19 @@ represented as that vector."
     (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
     (:pushl :ebp)
    retry
-
     (:movl (:esp) :ebp)
-    (:compile-form (:result-mode :ebx) funobj)
-    (:movl (:ebx (:offset movitz-funobj code-vector)) :eax) ; EAX = code-vector
-
     (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
     ;; Now inside atomically section.
-    
+
+    (:compile-form (:result-mode :ebx) funobj)
+    (:movl (:ebx (:offset movitz-funobj code-vector)) :eax) ; EAX = code-vector
     (:movl (:ebx (:offset movitz-funobj code-vector%2op)) :ecx)
-    ;; determine if ECX is a pointer into EBX
+    ;; determine if ECX is a pointer into EAX
     (:subl :eax :ecx)
     (:jl 'return-vector)
     (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :ecx)
-    (:cmpl (:ebx (:offset movitz-basic-vector num-elements)) :ecx)
-    (:jg 'return-vector)
+    (:cmpl (:eax (:offset movitz-basic-vector num-elements -2)) :ecx)
+    (:jnc 'return-vector)
     ;; return the integer offset EAX-EBX
     (:movl :ecx :eax)
     (:jmp 'done)
@@ -251,21 +248,19 @@ represented as that vector."
     (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
     (:pushl :ebp)
    retry
-
     (:movl (:esp) :ebp)
-    (:compile-form (:result-mode :ebx) funobj)
-    (:movl (:ebx (:offset movitz-funobj code-vector)) :eax) ; EAX = code-vector
-
     (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
     ;; Now inside atomically section.
     
+    (:compile-form (:result-mode :ebx) funobj)
+    (:movl (:ebx (:offset movitz-funobj code-vector)) :eax) ; EAX = code-vector
     (:movl (:ebx (:offset movitz-funobj code-vector%3op)) :ecx)
-    ;; determine if ECX is a pointer into EBX
+    ;; determine if ECX is a pointer into EAX
     (:subl :eax :ecx)
     (:jl 'return-vector)
     (:leal ((:ecx #.movitz:+movitz-fixnum-factor+)) :ecx)
-    (:cmpl (:ebx (:offset movitz-basic-vector num-elements)) :ecx)
-    (:jg 'return-vector)
+    (:cmpl (:eax (:offset movitz-basic-vector num-elements -2)) :ecx)
+    (:jnc 'return-vector)
     ;; return the integer offset EAX-EBX
     (:movl :ecx :eax)
     (:jmp 'done)
