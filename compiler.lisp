@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.94 2004/08/14 17:47:04 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.95 2004/08/16 08:24:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -72,7 +72,7 @@ compile, using the host compiler, the code rather than just using eval.")
   "Spend time and effort performing type inference and optimization.")
 
 (defvar *compiler-produce-defensive-code* t
-  "Try make code be extra cautious.")
+  "Try to make code be extra cautious.")
 
 (defvar *compiler-trust-user-type-declarations-p* t)
 
@@ -381,7 +381,24 @@ Otherwise coerce funobj to class."
 (defun analyze-bindings (toplevel-funobj)
   "Figure out usage of bindings in a toplevel funobj.
 Side-effects each binding's binding-store-type."
-  (when *compiler-do-type-inference*
+  (if (not *compiler-do-type-inference*)
+      (labels
+	  ((analyze-code (code)
+	     (dolist (instruction code)
+	       (when (listp instruction)
+		 (let ((binding
+			(find-written-binding-and-type instruction)))
+		   (when binding
+		     (setf (binding-store-type binding)
+		       (multiple-value-list (type-specifier-encode t)))))
+		 (analyze-code (instruction-sub-program instruction)))))
+	   (analyze-funobj (funobj)
+	     (loop for (nil . function-env) in (function-envs funobj)
+		 do (analyze-code (extended-code function-env)))
+	     (loop for function-binding in (sub-function-binding-usage funobj) by #'cddr
+		 do (analyze-funobj (function-binding-funobj function-binding)))
+	     funobj))
+	(analyze-funobj toplevel-funobj))
     (let ((binding-usage (make-hash-table :test 'eq)))
       (labels ((binding-resolved-p (binding)
 		 (let ((analysis (gethash binding binding-usage)))
@@ -6283,9 +6300,9 @@ and a list of any intervening unwind-protect environment-slots."
 	   ((and (type-specifier-singleton type0)
 		 (symbolp loc1)
 		 (integerp destination-location))
-	    `((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
-		     ,loc1)
-	      (:movl ,loc1 (:ebp ,(stack-frame-offset destination-location)))))
+	    (append `((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
+			     ,loc1))
+		    (make-store-lexical destination loc1 nil frame-map)))
 	   (t
 ;;;	    (warn "ADD: ~A/~S = ~A/~S + ~A/~S,~%~A ~A"
 ;;;		  destination-location
