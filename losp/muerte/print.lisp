@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.4 2004/03/30 21:32:12 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.5 2004/04/06 14:29:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -32,6 +32,8 @@
 (defvar *print-level* 3)
 (defvar *print-pretty* t)
 (defvar *print-circle* nil)
+
+(defvar *print-safely* nil)
 
 (defvar *standard-output* #'muerte.x86-pc::textmode-console)
 (defvar *standard-input* #'muerte.x86-pc::textmode-console)
@@ -148,18 +150,24 @@
   (write-char #\Newline stream)
   string)
 
-(defun write (object &key stream case circle
-			  (array *print-array*) (base *print-base*)
-			  ((:escape *print-escape*) *print-escape*)
-			  ((:gensym *print-gensym*) *print-gensym*)
-			  (length *print-length*)
-			  (level *print-level*) lines miser-width pprint-dispatch
-			  (pretty *print-pretty*) (radix *print-radix*)
-			  ((:readably *print-readably*) *print-readably*)
-			  right-margin)
-  (declare (special *read-base* *package*)
+(defun write (object &rest key-args
+	      &key stream case circle safe-recursive-call
+		   (array *print-array*) (base *print-base*)
+		   ((:escape *print-escape*) *print-escape*)
+		   ((:gensym *print-gensym*) *print-gensym*)
+		   (length *print-length*)
+		   (level *print-level*) lines miser-width pprint-dispatch
+		   (pretty *print-pretty*) (radix *print-radix*)
+		   ((:readably *print-readably*) *print-readably*)
+		   right-margin)
+  (declare (dynamic-extent key-args)
+	   (special *read-base* *package*)
 	   (ignore case circle pprint-dispatch miser-width right-margin lines))
   (cond
+   ((and *print-safely* (not safe-recursive-call))
+    (handler-case (apply #'write object :safe-recursive-call t key-args)
+      (t (condition)
+	(write-string "#<printer error>" stream))))
    ((and (not pretty)
 	 (not *never-use-print-object*))
     (print-object object stream))
