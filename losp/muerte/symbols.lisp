@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.8 2004/04/14 20:03:38 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.9 2004/04/16 19:23:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -56,13 +56,8 @@
 (defun set (symbol value)
   (setf (symbol-value symbol) value))
 
-(defun symbol-global-value (symbol)
-  (if symbol
-      (let ((x (movitz-accessor symbol movitz-symbol value)))
-	(if (eq x (load-global-constant unbound-value))
-	    (error 'unbound-value :name symbol)
-	  x))
-    nil))
+(defmacro %symbol-global-value (symbol)
+  `(memref ,symbol ,(bt:slot-offset 'movitz:movitz-symbol 'movitz::value) 0 :lisp))
 
 (defun symbol-function (symbol)
   (let ((function-value
