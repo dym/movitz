@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Dec 14 22:33:42 2003
 ;;;;                
-;;;; $Id: pci.lisp,v 1.6 2004/11/25 02:11:34 ffjeld Exp $
+;;;; $Id: pci.lisp,v 1.7 2004/11/26 00:02:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -52,6 +52,74 @@
 
 (defvar *bios32-base* nil)
 (defvar *pcibios-entry* nil)
+
+(defun pci-far-call (address &key (cs 8) (eax 0) (ebx 0) (ecx 0) (edx 0) (esi 0) (edi 0))
+  "Make a 'far call' to cs:address with the provided values for eax and ebx.
+Returns the values of registers EAX, EBX, ECX, and EDX, and status of CF.
+The stack discipline is broken during this call, so we disable interrupts
+in a somewhat feeble attempt to avoid trouble."
+  (check-type address (unsigned-byte 32))
+  (without-interrupts
+    (with-inline-assembly (:returns :multiple-values)
+      ;; Enter atomically mode
+      (:declare-label-set restart-pci-far-call (restart))
+      (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
+      (:pushl 'restart-pci-far-call)
+      (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
+      (:pushl :ebp)
+     restart
+      (:movl (:esp) :ebp)
+      (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+      (:pushl :edi)			; Save EDI so we can restore it later.
+      (:load-lexical (:lexical-binding cs) :untagged-fixnum-ecx)
+      (:pushl :ecx)			; Code segment
+      (:load-lexical (:lexical-binding address) :untagged-fixnum-ecx)
+      (:pushl :ecx)			; Code address
+      (:load-lexical (:lexical-binding eax) :untagged-fixnum-ecx)
+      (:pushl :ecx)			; push EAX
+      (:load-lexical (:lexical-binding ebx) :untagged-fixnum-ecx)
+      (:pushl :ecx)			; push EBX
+      (:load-lexical (:lexical-binding edx) :untagged-fixnum-ecx)
+      (:pushl :ecx)			; push EDX
+      (:load-lexical (:lexical-binding esi) :untagged-fixnum-ecx)
+      (:pushl :ecx)			; push ESI
+      (:load-lexical (:lexical-binding edi) :untagged-fixnum-ecx)
+      (:pushl :ecx)			; push EDI
+      (:load-lexical (:lexical-binding ecx) :untagged-fixnum-ecx)
+      (:popl :edi)
+      (:popl :esi)
+      (:popl :edx)
+      (:popl :ebx)
+      (:popl :eax)
+      (:call-segment (:esp))
+      (:leal (:esp 8) :esp)		; Skip cs:address
+      (:popl :edi)			; First of all, restore EDI!
+      (:locally (:movl :edi (:edi (:edi-offset values) 8)))
+      (:jnc 'cf=0)
+      (:locally (:pushl (:edi (:edi-offset t-symbol))))
+      (:locally (:popl (:edi (:edi-offset values) 8)))
+     cf=0
+      (:pushl :eax)
+      (:pushl :ebx)
+      (:pushl :edx)
+      (:locally (:movl 3 (:edi (:edi-offset num-values))))
+      (:call-local-pf box-u32-ecx)	; ECX
+      (:locally (:movl :eax (:edi (:edi-offset values) 0)))
+      (:popl :ecx)			; EDX
+      (:call-local-pf box-u32-ecx)
+      (:locally (:movl :eax (:edi (:edi-offset values) 4)))
+      (:popl :ecx)			; EBX
+      (:call-local-pf box-u32-ecx)
+      (:locally (:movl :eax (:edi (:edi-offset scratch1))))
+      (:popl :ecx)			; EAX
+      (:call-local-pf box-u32-ecx)
+      (:locally (:movl (:edi (:edi-offset scratch1)) :ebx))
+      (:movl 5 :ecx)
+      (:movl (:ebp -4) :esi)
+      (:stc)
+      ;; Exit atomical-mode
+      (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+      (:leal (:esp 16) :esp))))
 
 (defun find-bios32-pci ()
   (let ((bios32-base (find-bios32-base)))
@@ -102,72 +170,103 @@
       (values (ldb (byte 8 8) ebx)	; Bus
 	      (ldb (byte 5 3) ebx)	; Device
 	      (ldb (byte 3 0) ebx)	; Function
-	      (ecase (ldb (byte 8 8) eax)
-		(#x00 :successful)
-		(#x86 :device-not-found))))))
+	      (pci-return-code eax)))))
 
+(defun pci-return-code (code)
+  (ecase (ldb (byte 8 8) code)
+    (#x00 :successful)
+    (#x81 :function-not-supported)
+    (#x83 :bad-vendor-id)
+    (#x86 :device-not-found)
+    (#x87 :bad-register-number)))
 
-(defun pci-far-call (address &key (cs 8) (eax 0) (ebx 0) (ecx 0) (edx 0) (esi 0))
-  "Make a 'far call' to cs:address with the provided values for eax and ebx.
-Returns the values of registers AL, EBX, ECX, and EDX, and status of CF.
- (NB: For now only the lower 30 bits of registers are actually returned.)
-The stack discipline is broken during this call, so we disable interrupts
-in a somewhat feeble attempt to avoid trouble."
-  (check-type address (unsigned-byte 32))
-  (without-interrupts
-    (with-inline-assembly (:returns :multiple-values)
-      ;; Enter atomically mode
-      (:declare-label-set restart-pci-far-call (restart))
-      (:locally (:pushl (:edi (:edi-offset :dynamic-env))))
-      (:pushl 'restart-pci-far-call)
-      (:locally (:pushl (:edi (:edi-offset :atomically-continuation))))
-      (:pushl :ebp)
-     restart
-      (:movl (:esp) :ebp)
-      (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
+(defun pci-location (bus device function)
+  "Compute 16-bit location from bus, device, and function numbers."
+  (dpb bus (byte 8 8) (dpb device (byte 5 3) (ldb (byte 3 0) function))))
 
-      (:load-lexical (:lexical-binding cs) :untagged-fixnum-ecx)
-      (:pushl :ecx)			; Code segment
-      (:load-lexical (:lexical-binding address) :untagged-fixnum-ecx)
-      (:pushl :ecx)			; Code address
-      (:load-lexical (:lexical-binding eax) :untagged-fixnum-ecx)
-      (:pushl :ecx)			; push EAX
-      (:load-lexical (:lexical-binding ebx) :untagged-fixnum-ecx)
-      (:pushl :ecx)			; push EBX
-      (:load-lexical (:lexical-binding edx) :untagged-fixnum-ecx)
-      (:pushl :ecx)			; push EDX
-      (:load-lexical (:lexical-binding esi) :untagged-fixnum-ecx)
-      (:pushl :ecx)			; push ESI
-      (:load-lexical (:lexical-binding ecx) :untagged-fixnum-ecx)
-      (:popl :esi)
-      (:popl :edx)
-      (:popl :ebx)
-      (:popl :eax)
-      (:call-segment (:esp))
-      (:leal (:esp 8) :esp)
-      (:locally (:movl :edi (:edi (:edi-offset values) 8)))
-      (:jnc 'cf=0)
-      (:locally (:pushl (:edi (:edi-offset t-symbol))))
-      (:locally (:popl (:edi (:edi-offset values) 8)))
-     cf=0
-      (:pushl :eax)
-      (:pushl :ebx)
-      (:pushl :edx)
-      (:locally (:movl 3 (:edi (:edi-offset num-values))))
-      (:call-local-pf box-u32-ecx)	; ECX
-      (:locally (:movl :eax (:edi (:edi-offset values) 0)))
-      (:popl :ecx)			; EDX
-      (:call-local-pf box-u32-ecx)
-      (:locally (:movl :eax (:edi (:edi-offset values) 4)))
-      (:popl :ecx)			; EBX
-      (:call-local-pf box-u32-ecx)
-      (:locally (:movl :eax (:edi (:edi-offset scratch1))))
-      (:popl :ecx)			; EAX
-      (:call-local-pf box-u32-ecx)
-      (:locally (:movl (:edi (:edi-offset scratch1)) :ebx))
-      (:movl 5 :ecx)
-      (:movl (:ebp -4) :esi)
-      (:stc)
-      ;; Exit atomical-mode
-      (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
-      (:leal (:esp 16) :esp))))
+(defun pci-class (code)
+  "Return the symbolic class-code sub-class code, and interface, if known."
+  (let* ((decode-table
+	  #((:pre-pci2.0-device
+	     :non-vga :vga-compatible)
+	    (:mass-storage
+	     :scsi :ide :floppy :ipi :raid)
+	    (:network
+	     :ethernet :token-ring :fddi :atm)
+	    (:display
+	     (:non-xga :vga :8514) :xga)
+	    (:multimedia
+	     :video :audio)
+	    (:memory
+	     :ram :flash)
+	    (:bridge
+	     :host/pci :pci/isa :pci/eisa :pci/micro-channel
+	     :pci/pci :pci/pcmcia :pci/nubus :pci/cardbus)
+	    (:simple-communication
+	     (:serial-port :xt :16450 :16550)
+	     (:parallel-port :generic :bi-directional :ecp-1.x))
+	    (:base-system-peripheral
+	     (:pic :generic :isa :eisa)
+	     (:dma :generic :isa :eisa)
+	     (:timer :generic :isa :eisa)
+	     (:rtc :generic :isa))
+	    (:input
+	     :keyboard :digitizer :mouse)
+	    (:docking-station
+	     :generic)
+	    (:processor
+	     :386 :486 :pentium nil nil nil nil nil nil nil nil nil nil nil nil nil
+	     :alpha nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil
+	     :powerpc nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil
+	     :co-processor)
+	    (:serial-bus
+	     :firewire :access.bus :ssa :usb :fibre-channel)))
+	 (class-code (ldb (byte 8 16) code))
+	 (class-table (and (< class-code (length decode-table))
+			   (svref decode-table class-code)))
+	 (sub-class-table (nth (ldb (byte 8 8) code) (cdr class-table)))
+	 (sub-class sub-class-table)
+	 (sub-class-if (when (consp sub-class)
+			 (setf sub-class (pop sub-class-table))
+			 (nth (ldb (byte 8 0) code) sub-class-table))))
+    (values (car class-table) sub-class sub-class-if)))
+
+(defun pci-bios-read-configuration-word (bus device function register)
+  (multiple-value-bind (eax ebx ecx edx cf)
+      (pci-far-call (find-bios32-pci)
+		    :eax #xb109
+		    :ebx (pci-location bus device function)
+		    :edi register)
+    (declare (ignore ebx edx))
+    (unless cf
+      (values (ldb (byte 16 0) ecx) (pci-return-code eax)))))
+
+(defun pci-bios-read-configuration-dword (bus device function register)
+  (multiple-value-bind (eax ebx ecx edx cf)
+      (pci-far-call (find-bios32-pci)
+		    :eax #xb10a
+		    :ebx (pci-location bus device function)
+		    :edi register)
+    (declare (ignore ebx edx))
+    (unless cf
+      (values ecx (pci-return-code eax)))))
+
+(defun scan-pci-bus (bus)
+  (loop for device from 0 to 31
+      do (multiple-value-bind (vendor-id return-code)
+	     (pci-bios-read-configuration-word bus device 0 0)
+	   (when (and vendor-id
+		      (not (= vendor-id #xffff))
+		      (eq :successful return-code))
+	     (let ((device-id (pci-bios-read-configuration-word bus device 0 2))
+		   (status (pci-bios-read-configuration-word bus device 0 6))
+		   (class-rev (pci-bios-read-configuration-dword bus device 0 8)))
+	       (format *query-io*
+		       "~&~D: Vendor #x~X, ID #x~X, Class #x~X, Rev. ~D, Status #x~X.~%"
+		       device vendor-id device-id
+		       (ldb (byte 24 8) class-rev)
+		       (ldb (byte 8 0) class-rev)
+		       status)
+	       (format *query-io* "    Class:~{ ~@[~A~]~}"
+		       (multiple-value-list (pci-class (ldb (byte 24 8) class-rev))))))))
+  (values))
