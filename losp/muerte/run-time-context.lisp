@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.1 2004/01/13 11:05:06 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.2 2004/03/18 09:23:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -67,13 +67,18 @@
       form
     (let ((slot-name (movitz::eval-form slot-name env)))
       (ecase (bt:binary-slot-type 'movitz::movitz-constant-block (intern (symbol-name slot-name) :movitz))
-	(movitz::word
+	(movitz:word
 	 `(with-inline-assembly (:returns :eax)
 	    (:compile-form (:result-mode :eax) ,value)
 	    (:locally (:movl :eax (:edi (:edi-offset ,slot-name))))))
-	(movitz::lu32
+	(movitz:lu32
 	 `(with-inline-assembly (:returns :untagged-fixnum-ecx)
 	    (:compile-form (:result-mode :untagged-fixnum-ecx) ,value)
+	    (:locally (:movl :ecx (:edi (:edi-offset ,slot-name))))))
+	(movitz:code-vector-word
+	 `(with-inline-assembly (:returns :eax)
+	    (:compile-form (:result-mode :eax) ,value)
+	    (:leal (:eax ,(bt:slot-offset 'movitz:movitz-vector 'movitz::data)) :ecx)
 	    (:locally (:movl :ecx (:edi (:edi-offset ,slot-name))))))))))
 
 (defun (setf %run-time-context-slot) (value slot-name &optional (context (current-run-time-context)))
@@ -83,6 +88,8 @@
       (word
        (setf (memref context -6 (third slot) :lisp) value))
       (lu32
+       (setf (memref context -6 (third slot) :unsigned-byte32) value))
+      (code-vector-word
        (setf (memref context -6 (third slot) :unsigned-byte32) value)))))
 
 (defun %run-time-context-segment-base (slot-name
