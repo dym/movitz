@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.6 2004/02/04 16:01:26 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.7 2004/02/08 23:27:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -359,7 +359,7 @@ The valid parameters are~{ ~S~}."
 				    (values-list
 				     (translate-program (multiple-value-list (block ,access-fn ,@cl-body))
 							:cl :muerte.cl)))))))
-	      (movitz-macro-expander-make-function expander :type :setf)))))))
+	      (movitz-macro-expander-make-function expander :type :setf :name access-fn)))))))
   (compiler-values ()))
 
 (define-special-operator muerte::defmacro-compile-time (&form form)
@@ -977,12 +977,15 @@ on the current result."
 		   :form term-form)
 	       (assert term2-type)
 	       (let ((term2-type (type-specifier-primary term2-type)))
+;;;		 (warn "t2-type: ~S, t2-ret: ~S, rm: ~S"
+;;;		       term2-type term2-returns result-mode)
 		 (case term2-returns
 		   (:untagged-fixnum-eax
 		    (case result-mode
 		      (:untagged-fixnum-eax
 		       (compiler-values ()
 			 :returns :untagged-fixnum-eax
+			 :type 'integer
 			 :functional-p term2-functional-p
 			 :modifies term2-modifies
 			 :code (append term2-code
@@ -1009,20 +1012,23 @@ on the current result."
 			    :returns add-register
 			    :functional-p term2-functional-p
 			    :modifies term2-modifies
+			    :type 'integer
 			    :code (append
 				   new-load-term-code
-				   (unless nil #+ignore (subtypep (translate-program term2-type :muerte.cl :cl)
-								  `(integer ,+movitz-most-negative-fixnum+
-									    ,+movitz-most-positive-fixnum+))
+				   (unless nil
+				     #+ignore (subtypep (translate-program term2-type :muerte.cl :cl)
+							`(integer ,+movitz-most-negative-fixnum+
+								  ,+movitz-most-positive-fixnum+))
 				     `((:testb ,+movitz-fixnum-zmask+
 					       ,(register32-to-low8 add-register))
 				       (:jnz '(:sub-program (,label) (:int 107) (:jmp (:pc+ -4))))))
 				   `((:addl ,(* constant-term +movitz-fixnum-factor+) ,add-register))
-				   (unless nil #+ignore (subtypep (translate-program term2-type :muerte.cl :cl)
-								  `(integer ,(+ +movitz-most-negative-fixnum+
-										constant-term)
-									    ,(+ +movitz-most-positive-fixnum+
-										constant-term)))
+				   (unless nil
+				     #+ignore (subtypep (translate-program term2-type :muerte.cl :cl)
+							`(integer ,(+ +movitz-most-negative-fixnum+
+								      constant-term)
+								  ,(+ +movitz-most-positive-fixnum+
+								      constant-term)))
 				     '((:into)))))))))))))
       (cond
        ((and (movitz-constantp term1 env)
