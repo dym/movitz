@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.54 2004/11/17 13:33:34 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.55 2004/11/23 16:08:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -162,53 +162,53 @@ and also EDX must be preserved."
     ;; Default binding strategy is naive deep binding, so this is a NOP.
     (:ret)))
     
-(define-primitive-function dynamic-variable-lookup (symbol)
-  "Load the dynamic value of SYMBOL into EAX."
-  (with-inline-assembly (:returns :multiple-values)
-    (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
-    (:jecxz 'no-stack-binding)
-    ;; Be defensive: Verify that ECX is within stack.
-    (:locally (:bound (:edi (:edi-offset stack-bottom)) :ecx))
-    (:cmpl :eax (:ecx))
-    (:je 'success)
-   search-loop
-    (:movl (:ecx 12) :ecx)		; parent
-    (:jecxz 'no-stack-binding)
-    ;; Be defensive: Verify that ECX is within stack.
-    (:locally (:bound (:edi (:edi-offset stack-bottom)) :ecx))
-    (:cmpl :eax (:ecx))			; compare name
-    (:jne 'search-loop)
-    ;; fall through on success
-   success
-    (:movl :eax :edx)			; Keep symbol in case it's unbound.
-    (:movl (:ecx 8) :eax)
-    (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax))
-    (:je '(:sub-program (unbound) (:int 99)))
-    (:ret)
-   no-stack-binding
-    ;; take the global value of SYMBOL, compare it against unbond-value
-    (:movl :eax :edx)			; Keep symbol in case it's unbound.
-    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
-     :movl (:eax (:offset movitz-symbol value)) :eax)
-    (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax))
-    (:je '(:sub-program (unbound) (:int 99)))
-    (:ret)))
+;;;(define-primitive-function dynamic-variable-lookup (symbol)
+;;;  "Load the dynamic value of SYMBOL into EAX."
+;;;  (with-inline-assembly (:returns :multiple-values)
+;;;    (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
+;;;    (:jecxz 'no-stack-binding)
+;;;    ;; Be defensive: Verify that ECX is within stack.
+;;;    (:locally (:bound (:edi (:edi-offset stack-bottom)) :ecx))
+;;;    (:cmpl :eax (:ecx))
+;;;    (:je 'success)
+;;;   search-loop
+;;;    (:movl (:ecx 12) :ecx)		; parent
+;;;    (:jecxz 'no-stack-binding)
+;;;    ;; Be defensive: Verify that ECX is within stack.
+;;;    (:locally (:bound (:edi (:edi-offset stack-bottom)) :ecx))
+;;;    (:cmpl :eax (:ecx))			; compare name
+;;;    (:jne 'search-loop)
+;;;    ;; fall through on success
+;;;   success
+;;;    (:movl :eax :edx)			; Keep symbol in case it's unbound.
+;;;    (:movl (:ecx 8) :eax)
+;;;    (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax))
+;;;    (:je '(:sub-program (unbound) (:int 99)))
+;;;    (:ret)
+;;;   no-stack-binding
+;;;    ;; take the global value of SYMBOL, compare it against unbond-value
+;;;    (:movl :eax :edx)			; Keep symbol in case it's unbound.
+;;;    (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+;;;     :movl (:eax (:offset movitz-symbol value)) :eax)
+;;;    (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax))
+;;;    (:je '(:sub-program (unbound) (:int 99)))
+;;;    (:ret)))
 
-(define-primitive-function dynamic-variable-lookup-unbound (symbol)
-  "Load the dynamic value of SYMBOL into EAX. If unbound, return unbound-value."
+(define-primitive-function dynamic-variable-lookup (symbol)
+  "Load the dynamic value of SYMBOL/EBX into EAX. If unbound, return unbound-value."
   (with-inline-assembly (:returns :multiple-values)
     (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
     (:jecxz 'no-stack-binding)
     ;; Be defensive: Verify that ECX is within stack.
     (:locally (:bound (:edi (:edi-offset stack-bottom)) :ecx))
-    (:cmpl :eax (:ecx))
+    (:cmpl :ebx (:ecx))
     (:je 'success)
    search-loop
     (:movl (:ecx 12) :ecx)		; parent
     (:jecxz 'no-stack-binding)
     ;; Be defensive: Verify that ECX is within stack.
     (:locally (:bound (:edi (:edi-offset stack-bottom)) :ecx))
-    (:cmpl :eax (:ecx))			; compare name
+    (:cmpl :ebx (:ecx))			; compare name
     (:jne 'search-loop)
     ;; fall through on success
    success
@@ -217,7 +217,7 @@ and also EDX must be preserved."
    no-stack-binding
     ;; take the global value of SYMBOL, compare it against unbond-value
     (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
-     :movl (:eax (:offset movitz-symbol value)) :eax)
+     :movl (:ebx (:offset movitz-symbol value)) :eax)
     (:ret)))
 
 (define-primitive-function dynamic-variable-store (symbol value)
