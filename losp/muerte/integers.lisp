@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.7 2004/04/16 19:22:21 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.8 2004/04/23 13:02:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -49,7 +49,7 @@
     (t (let ((operands
 	      (loop for operand in operands
 		  if (movitz:movitz-constantp operand env)
-		  sum (movitz::eval-form operand env)
+		  sum (movitz:movitz-eval operand env)
 		  into constant-term
 		  else collect operand
 		  into non-constant-operands
@@ -71,24 +71,24 @@
 (define-compiler-macro +%2op (&whole form term1 term2)
   (cond
    ((and (movitz:movitz-constantp term1)	; first operand zero?
-	 (zerop (movitz::eval-form term1)))
+	 (zerop (movitz:movitz-eval term1)))
     term2)				; (+ 0 x) => x
    ((and (movitz:movitz-constantp term2)	; second operand zero?
-	 (zerop (movitz::eval-form term2)))
+	 (zerop (movitz:movitz-eval term2)))
     term1)				; (+ x 0) => x
    ((and (movitz:movitz-constantp term1)
 	 (movitz:movitz-constantp term2))
-    (+ (movitz::eval-form term1)
-       (movitz::eval-form term2)))	; compile-time constant folding.
+    (+ (movitz:movitz-eval term1)
+       (movitz:movitz-eval term2)))	; compile-time constant folding.
    ((movitz:movitz-constantp term1)
-    (let ((constant-term1 (movitz::eval-form term1)))
+    (let ((constant-term1 (movitz:movitz-eval term1)))
       (check-type constant-term1 (signed-byte 30))
       `(with-inline-assembly (:returns :register :side-effects nil) ; inline
 	 (:compile-form (:result-mode :register) ,term2)
 	 (:addl ,(* movitz::+movitz-fixnum-factor+ constant-term1) (:result-register))
 	 (:into))))
    ((movitz:movitz-constantp term2)
-    (let ((constant-term2 (movitz::eval-form term2)))
+    (let ((constant-term2 (movitz:movitz-eval term2)))
       (check-type constant-term2 (signed-byte 30))
       `(with-inline-assembly (:returns :register :side-effects nil) ; inline
 	 (:compile-form (:result-mode :register) ,term1)
@@ -164,20 +164,20 @@
 (define-compiler-macro -%2op (&whole form minuend subtrahend)
   (cond
    ((and (movitz:movitz-constantp minuend)	; first operand zero?
-	 (zerop (movitz::eval-form minuend)))
+	 (zerop (movitz:movitz-eval minuend)))
     `(with-inline-assembly (:returns :register :side-effects nil)
        (:compile-form (:result-mode :register) ,subtrahend)
        (:negl (:result-register))	; (- 0 x) => -x
        (:into)))
    ((and (movitz:movitz-constantp subtrahend) ; second operand zero?
-	 (zerop (movitz::eval-form subtrahend)))
-    (movitz::eval-form minuend))		; (- x 0) => x
+	 (zerop (movitz:movitz-eval subtrahend)))
+    (movitz:movitz-eval minuend))		; (- x 0) => x
    ((and (movitz:movitz-constantp minuend)
 	 (movitz:movitz-constantp subtrahend))
-    (- (movitz::eval-form minuend)
-       (movitz::eval-form subtrahend)))	; compile-time constant folding.
+    (- (movitz:movitz-eval minuend)
+       (movitz:movitz-eval subtrahend)))	; compile-time constant folding.
    ((movitz:movitz-constantp minuend)
-    (let ((constant-minuend (movitz::eval-form minuend)))
+    (let ((constant-minuend (movitz:movitz-eval minuend)))
       (check-type constant-minuend (signed-byte 30))
       `(with-inline-assembly (:returns :register :side-effects nil) ; inline
 	 (:compile-form (:result-mode :register) ,subtrahend)
@@ -186,7 +186,7 @@
 	 (:into)
 	 (:negl (:result-register)))))
    ((movitz:movitz-constantp subtrahend)
-    (let ((constant-subtrahend (movitz::eval-form subtrahend)))
+    (let ((constant-subtrahend (movitz:movitz-eval subtrahend)))
       (check-type constant-subtrahend (signed-byte 30))
       `(+%2op ,minuend ,(- constant-subtrahend))))
    (t `(with-inline-assembly (:returns :eax :side-effects nil)
@@ -254,14 +254,14 @@
   (cond
    ((and (movitz:movitz-constantp min env)
 	 (movitz:movitz-constantp max env))
-    (let ((min (movitz::eval-form min env))
-	  (max (movitz::eval-form max env)))
+    (let ((min (movitz:movitz-eval min env))
+	  (max (movitz:movitz-eval max env)))
       (check-type min integer)
       (check-type max integer)
       ;; (warn "~D -- ~D" min max)
       (cond
        ((movitz:movitz-constantp x env)
-	(<= min (movitz::eval-form x env) max))
+	(<= min (movitz:movitz-eval x env) max))
        ((< max min)
 	nil)
        ((= max min)
@@ -295,7 +295,7 @@
 		  (:adcl 0 :ecx))))))))
    #+ignore				; this is buggy.
    ((movitz:movitz-constantp min env)
-    (let ((min (movitz::eval-form min env)))
+    (let ((min (movitz:movitz-eval min env)))
       (check-type min integer)
       (cond
        ((minusp min)
@@ -396,7 +396,7 @@
 	   (:compile-form (:result-mode :eax) ,x)
 	   (:testb ,movitz::+movitz-fixnum-zmask+ :al)
 	   (:jnz '(:sub-program (,below-not-integer) (:int 107)))
-	   (:cmpl ,(* (movitz::eval-form max env)
+	   (:cmpl ,(* (movitz:movitz-eval max env)
 		      movitz::+movitz-fixnum-factor+)
 		  :eax))
       `(with-inline-assembly (:returns :boolean-cf=1)
@@ -607,8 +607,11 @@
 	     ((> 0 count #.(cl:- (cl:1- movitz::+movitz-fixnum-bits+)))
 	      `(with-inline-assembly (:returns :register :side-effects nil :type integer)
 		 ,@load-integer
-		 (:sarl ,(- count) (:result-register))
-		 (:andb #.(cl:logxor #xff movitz::+movitz-fixnum-zmask+) (:result-register-low8))))
+		 (:andl ,(ldb (byte 32 0)
+			      (ash movitz:+movitz-most-positive-fixnum+
+				   (- movitz:+movitz-fixnum-shift+ count)))
+			(:result-register))
+		 (:sarl ,(- count) (:result-register))))
 	     ((minusp count)
 	      `(if (minusp ,integer) -1 0))
 	     (t `(if (= 0 ,integer) 0 (with-inline-assembly (:returns :non-local-exit) (:int 4)))))))))))
@@ -641,12 +644,12 @@
   (cond
    ((and (movitz:movitz-constantp factor1 env)
 	 (movitz:movitz-constantp factor2 env))
-    (* (movitz::eval-form factor1 env)
-       (movitz::eval-form factor2 env)))
+    (* (movitz:movitz-eval factor1 env)
+       (movitz:movitz-eval factor2 env)))
    ((movitz:movitz-constantp factor2 env)
-    `(*%2op ,(movitz::eval-form factor2 env) ,factor1))
+    `(*%2op ,(movitz:movitz-eval factor2 env) ,factor1))
    ((movitz:movitz-constantp factor1 env)
-    (let ((f1 (movitz::eval-form factor1 env)))
+    (let ((f1 (movitz:movitz-eval factor1 env)))
       (check-type f1 integer)
       (case f1
 	(0 `(progn ,factor2 0))
@@ -658,17 +661,17 @@
 	      (:jnz '(:sub-program () (:int 107)))
 	      (:imull ,f1 :eax :eax)
 	      (:into))))))
-   (t form)))
+   (t `(no-macro-call * ,factor1 ,factor2))))
 
-(defun *%2op (factor1 factor2)
-  (check-type factor1 fixnum)
-  (check-type factor2 fixnum)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) factor1)
-    (:compile-form (:result-mode :ebx) factor2)
-    (:sarl #.movitz::+movitz-fixnum-shift+ :eax)
-    (:imull :ebx :eax :edx)
-    (:into)))
+;;;(defun *%2op (factor1 factor2)
+;;;  (check-type factor1 fixnum)
+;;;  (check-type factor2 fixnum)
+;;;  (with-inline-assembly (:returns :eax)
+;;;    (:compile-form (:result-mode :eax) factor1)
+;;;    (:compile-form (:result-mode :ebx) factor2)
+;;;    (:sarl #.movitz::+movitz-fixnum-shift+ :eax)
+;;;    (:imull :ebx :eax :edx)
+;;;    (:into)))
 
 (define-compiler-macro * (&whole form &rest operands)
   (case (length operands)
@@ -723,7 +726,7 @@
 (define-compiler-macro truncate%2ops%1ret (&whole form &environment env number divisor)
   (cond
    ((movitz:movitz-constantp divisor env)
-    (let ((d (movitz::eval-form divisor env)))
+    (let ((d (movitz:movitz-eval divisor env)))
       (check-type d number)
       (case d
 	(0 (error "Truncate by zero."))
@@ -1008,12 +1011,12 @@
     (cond
      ((and (constant-bytespec-p bytespec)
 	   (movitz:movitz-constantp integer env))
-      (ldb (byte (movitz::eval-form (second bytespec) env)
-		 (movitz::eval-form (third bytespec) env))
-	   (movitz::eval-form integer env))) ; constant folding
+      (ldb (byte (movitz:movitz-eval (second bytespec) env)
+		 (movitz:movitz-eval (third bytespec) env))
+	   (movitz:movitz-eval integer env))) ; constant folding
      ((constant-bytespec-p bytespec)
-      (let ((size (movitz::eval-form (second bytespec) env))
-	    (position (movitz::eval-form (third bytespec) env)))
+      (let ((size (movitz:movitz-eval (second bytespec) env))
+	    (position (movitz:movitz-eval (third bytespec) env)))
 	(assert (<= (+ size position) 30))
 	`(with-inline-assembly (:returns :register :type integer)
 	   (:compile-form (:result-mode :register) ,integer)
@@ -1022,7 +1025,6 @@
 	   ,@(unless (zerop position)
 	       `((:shrl ,position (:result-register)))))))
      (t form))))
-
 
 (define-setf-expander ldb (bytespec int &environment env)
   "Stolen from the Hyperspec example in the define-setf-expander entry."
