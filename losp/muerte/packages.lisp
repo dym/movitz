@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 30 15:19:43 2001
 ;;;;                
-;;;; $Id: packages.lisp,v 1.3 2004/04/13 14:21:09 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.4 2004/09/25 15:36:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -48,7 +48,7 @@
 
 (defun assert-package (name)
   (or (find-package name)
-      (error "There is no package named ~S." name)))
+      (error "There is no package named ~S." (string name))))
 
 (defun find-symbol-string (name start end key &optional (package *package*))
   (check-type name string)
