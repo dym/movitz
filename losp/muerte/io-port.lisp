@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 21 22:14:08 2001
 ;;;;                
-;;;; $Id: io-port.lisp,v 1.12 2004/09/22 17:43:35 ffjeld Exp $
+;;;; $Id: io-port.lisp,v 1.13 2005/03/02 17:15:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -165,7 +165,6 @@
 	      (:load-lexical (:lexical-binding ,value-var) :eax)
 	      (:std)
 	      (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
-	      (:shrl ,movitz::+movitz-fixnum-shift+ :eax)
 	      (:shrl 8 :eax)
 	      (:outb :al :dx)
 	      (:movl :edi :edx)
