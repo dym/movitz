@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.41 2004/09/23 09:32:15 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.42 2004/09/24 09:33:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -178,12 +178,24 @@ Otherwise, stack-frame is an absolute location."
     (:cmpl :esi :edx)
     (:jne 'copy-loop)
     (:movl (:ebp -4) :esi)
-;;;    ;; Copy tag from EBX onto EAX
-;;;    (:movl :ebx :ecx)
-;;;    (:andl 7 :ecx)
-;;;    (:andl -8 :eax)
-;;;    (:orl :ecx :eax)
-    ;; Load word-count into ECX
+    (:movl :edx :ecx)))
+
+(defun %shallow-copy-non-pointer-object (object word-count)
+  "Copy any object with size word-count."
+  (check-type word-count (integer 2 *))
+  (with-non-pointer-allocation-assembly (word-count
+					 :object-register :eax
+					 :size-register :ecx)
+    (:load-lexical (:lexical-binding object) :ebx)
+    (:load-lexical (:lexical-binding word-count) :edx)
+    (:xorl :esi :esi)			; counter
+    copy-loop
+    (:movl (:ebx :esi #.movitz:+other-type-offset+) :ecx)
+    (:movl :ecx (:eax :esi #.movitz:+other-type-offset+))
+    (:addl 4 :esi)
+    (:cmpl :esi :edx)
+    (:jne 'copy-loop)
+    (:movl (:ebp -4) :esi)
     (:movl :edx :ecx)))
 
 (defun shallow-copy (old)
@@ -199,12 +211,7 @@ Otherwise, stack-frame is an absolute location."
     (symbol
      (copy-symbol old t))
     (vector
-     (let ((new (make-array (array-dimension old 0)
-			    :element-type (array-element-type old)
-			    :initial-contents old)))
-       (when (array-has-fill-pointer-p old)
-	 (setf (fill-pointer new) (fill-pointer old)))
-       new))
+     (copy-vector old))
     (function
      (copy-funobj old))
     (structure-object
