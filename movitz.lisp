@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:52:58 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: movitz.lisp,v 1.5 2004/02/13 22:07:21 ffjeld Exp $
+;;;; $Id: movitz.lisp,v 1.6 2004/04/14 12:37:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -24,6 +24,10 @@
 (define-unsigned lu32 4 :little-endian)
 
 (defconstant +code-vector-word-offset+ 2)
+(defconstant +code-vector-transient-word+
+    (ldb (byte 32 0)
+	 (- +code-vector-word-offset+)))
+
 (defconstant +movitz-multiple-values-limit+ 127)
 
 (defvar *bq-level* 0)
