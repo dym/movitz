@@ -4,12 +4,12 @@
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      textmode.lisp
-;;;; Description:   A primitive 80x25 text-mode console driver.
+;;;; Description:   A primitive VGA text-mode console driver.
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Nov  9 15:38:56 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: textmode.lisp,v 1.5 2004/04/16 19:17:22 ffjeld Exp $
+;;;; $Id: textmode.lisp,v 1.6 2004/04/21 16:24:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -26,21 +26,21 @@
 (define-global-variable *screen* 
     (vga-memory-map))
 
-(define-global-variable *cursor-x*
-    (rem (vga-cursor-location) 80))
-
-(define-global-variable *cursor-y*
-    (truncate (vga-cursor-location) 80))
-
 (define-global-variable *screen-width*
     (vga-horizontal-display-end))
+
+(define-global-variable *screen-stride*
+    (vga-horizontal-display-end))
+
+(define-global-variable *cursor-x*
+    (rem (vga-cursor-location) *screen-stride*))
+
+(define-global-variable *cursor-y*
+    (truncate (vga-cursor-location) *screen-stride*))
 
 (define-global-variable *screen-height*
     (truncate (vga-vertical-display-end)
 	      (vga-character-height)))
-
-(define-global-variable *screen-stride*
-    (vga-horizontal-display-end))
 
 (defun move-vga-cursor (x y)
   (let ((dest (+ x (* y *screen-stride*))))
@@ -102,26 +102,26 @@
   nil)
 
 (defun textmode-copy-line (destination source count)
-  (check-type count (integer 0 511))
+  (check-type count (and (integer 0 511) (satisfies evenp)))
   (check-type source (unsigned-byte 20))
   (check-type destination (unsigned-byte 20))
   (with-inline-assembly (:returns :nothing)
     (:compile-form (:result-mode :eax) source)
-    (:compile-form (:result-mode :ebx) destination)
-    (:compile-form (:result-mode :edx) count)
-    (:andl #x-16 :eax)
-    (:andl #x-16 :ebx)
-    (:andl #x-8 :edx)
+    (:compile-form (:result-mode :edx) destination)
+    (:compile-form (:result-mode :ebx) count)
+    (:std)				; Only EBX is now (potential) GC root
+    (:andl #x-8 :ebx)			; ..so make sure EBX is a fixnum
     (:shrl 2 :eax)
-    (:shrl 2 :ebx)
-    (:shrl 1 :edx)
+    (:shrl 2 :edx)
+    (:shrl 1 :ebx)
     (:jz 'end-copy-loop)
    copy-loop
-    ((:gs-override) :movl (:eax :edx -4) :ecx)
-    ((:gs-override) :movl :ecx (:ebx :edx -4))
-    (:subl 4 :edx)
+    ((:gs-override) :movl (:eax :ebx -4) :ecx)
+    ((:gs-override) :movl :ecx (:edx :ebx -4))
+    (:subl 4 :ebx)
     (:ja 'copy-loop)
-   end-copy-loop))
+   end-copy-loop
+    (:cld)))
 
 (defun textmode-scroll-down ()
   (declare (special muerte.lib::*scroll-offset*))
@@ -133,12 +133,12 @@
       do (textmode-copy-line dst src *screen-width*)))
 
 (defun textmode-clear-line (from-column line)
-  (let ((dest (+ *screen* (* line 80 2) (* from-column 2))))
-    (dotimes (i (- 80 from-column))
+  (let ((dest (+ *screen* (* line *screen-width* 2) (* from-column 2))))
+    (dotimes (i (- *screen-width* from-column))
       (setf (memref-int dest 0 i :unsigned-byte16 t) #x0720))))
       
 (defun write-word (word)
-  (let ((dest (+ *screen* (* *cursor-x* 2) (* *cursor-y* 160))))
+  (let ((dest (+ *screen* (* *cursor-x* 2) (* *cursor-y* *screen-width* 2))))
     (setf (memref-int dest 0 0 :unsigned-byte16 t) #x0723
 	  (memref-int dest 0 1 :unsigned-byte16 t) #x0778)
     (write-word-lowlevel word (+ dest 4))
@@ -238,3 +238,22 @@
 	   (cursor-x (setf (cursor-column) (car args)))
 	   (cursor-y (setf (cursor-row) (car args)))))
 	(t (error "Unknown op: ~S" op))))))
+
+  
+(defun set-textmode (mode-state)
+  (setf (vga-state) mode-state)
+  (ecase (vga-character-height)
+    (8 (write-font +vga-font-8x8+ 8))
+    (16 (write-font +vga-font-8x16+ 16)))
+  (setf *screen-width*
+    (vga-horizontal-display-end))
+  (setf *screen-height*
+    (truncate (vga-vertical-display-end)
+	      (vga-character-height)))
+  (setf *screen-stride*
+    (vga-horizontal-display-end))
+  (setf *cursor-x*
+    (min (1- *screen-width*) *cursor-x*))
+  (setf *cursor-y*
+    (min (1- *screen-height*) *cursor-y*))
+  (values))
