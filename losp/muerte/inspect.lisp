@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.18 2004/07/13 02:21:08 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.19 2004/07/13 14:29:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -322,7 +322,7 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
      copy-bignum-loop
       (:movl (:ebx :edx #.movitz:+other-type-offset+) :ecx)
       (:movl :ecx (:eax :edx #.movitz:+other-type-offset+))
-      (:subl #.movitz:+movitz-fixnum-factor+ :edx)
+      (:subl 4 :edx)
       (:jnc 'copy-bignum-loop))))
 
 (defun print-bignum (x)
