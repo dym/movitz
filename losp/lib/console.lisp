@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 14 18:14:16 2003
 ;;;;                
-;;;; $Id: console.lisp,v 1.5 2004/07/12 09:11:56 ffjeld Exp $
+;;;; $Id: console.lisp,v 1.6 2004/11/24 16:23:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,7 +28,7 @@
        (let ((,x-var (cursor-x ,stream-var))
 	     (,y-var (cursor-y ,stream-var))
 	     (,scroll-var *scroll-offset*))
-	 (multiple-value-prog1 (progn ,@body)
+	 (unwind-protect (progn ,@body)
 	   (setf (cursor-x ,stream-var) ,x-var
 		 (cursor-y ,stream-var) (- ,y-var (- *scroll-offset* ,scroll-var))))))))
 
