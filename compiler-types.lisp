@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.19 2004/07/29 00:12:48 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.20 2004/09/15 10:19:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -251,7 +251,7 @@ and any element of range1."
     (symbol
      (typep x 'movitz-symbol))
     ((vector array)
-     (typep x '(or movitz-basic-vector movitz-vector)))
+     (typep x 'movitz-basic-vector))
     (fixnum
      (typep x 'movitz-fixnum))
     (bignum
