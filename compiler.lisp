@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.124 2005/01/03 11:55:04 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.125 2005/01/04 11:35:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -649,6 +649,10 @@ of all function-bindings seen."
 		   (case (car instruction)
 		     (:call-lexical
 		      (process-binding funobj (second instruction) '(:call)))
+		     (:stack-cons
+		      (destructuring-bind (proto-cons dynamic-scope)
+			  (cdr instruction)
+			(push proto-cons (dynamic-extent-scope-members dynamic-scope))))
 		     (:load-lambda
 		      (destructuring-bind (lambda-binding lambda-result-mode capture-env)
 			  (cdr instruction)
@@ -656,15 +660,13 @@ of all function-bindings seen."
 			(assert (eq funobj (binding-funobj lambda-binding)) ()
 			  "A non-local lambda doesn't make sense. There must be a bug.")
 			(let ((lambda-funobj (function-binding-funobj lambda-binding)))
-			  (let ((dynamic-extent (dynamic-extent-allocation capture-env)))
-			    (when dynamic-extent
-			      (let ((dynamic-scope (allocation-env-scope dynamic-extent)))
-				;; (warn "Adding ~S to ~S/~S" lambda-funobj dynamic-extent dynamic-scope)
-				(setf (movitz-funobj-extent lambda-funobj) :dynamic-extent
-				      (movitz-allocation lambda-funobj) dynamic-scope)
-				(push lambda-funobj
-				      (dynamic-extent-scope-members (allocation-env-scope dynamic-extent)))
-				(process-binding funobj (base-binding dynamic-scope) '(:read)))))
+			  (let ((dynamic-scope (find-dynamic-extent-scope capture-env)))
+			    (when dynamic-scope
+			      ;; (warn "Adding ~S to ~S/~S" lambda-funobj dynamic-extent dynamic-scope)
+			      (setf (movitz-funobj-extent lambda-funobj) :dynamic-extent
+				    (movitz-allocation lambda-funobj) dynamic-scope)
+			      (push lambda-funobj (dynamic-extent-scope-members dynamic-scope))
+			      (process-binding funobj (base-binding dynamic-scope) '(:read))))
 			  (resolve-sub-funobj funobj lambda-funobj)
 			  (process-binding funobj lambda-binding '(:read))
 			  ;; This funobj is effectively using every binding that the lambda
@@ -3841,7 +3843,6 @@ loading borrowed bindings."
 		 (destructuring-bind (function-binding register capture-env)
 		     (operands instruction)
 		   (declare (ignore capture-env))
-		   ;; (warn "load-lambda not completed for ~S" function-binding)
 		   (finalize-code
 		    (let* ((sub-funobj (function-binding-funobj function-binding))
 			   (lend-code (loop for bb in (borrowed-bindings sub-funobj)
@@ -6896,6 +6897,9 @@ and a list of any intervening unwind-protect environment-slots."
 	      (loop for object in (reverse (dynamic-extent-scope-members scope-env))
 		  appending
 		    (etypecase object
+		      (movitz-cons
+		       `((:pushl :edi)
+			 (:pushl :edi)))
 		      (movitz-funobj
 		       (append (unless (zerop (mod (sizeof object) 8))
 				 `((:pushl :edi)))
@@ -6932,3 +6936,19 @@ and a list of any intervening unwind-protect environment-slots."
     (when (eq t distance)
       (values (list (movitz-binding (save-esp-variable to-env) to-env nil))
 	      (list :esp)))))
+
+(define-find-read-bindings :stack-cons (proto-cons scope-env)
+  (declare (ignore proto-cons))
+  (values (list (base-binding scope-env))
+	  (list :edx)))
+
+(define-extended-code-expander :stack-cons (instruction funobj frame-map)
+  (destructuring-bind (proto-cons dynamic-scope)
+      (cdr instruction)
+    (append (make-load-lexical (base-binding dynamic-scope) :edx
+			       funobj nil frame-map)
+	    `((:movl :eax (:edx ,(dynamic-extent-object-offset dynamic-scope proto-cons)))
+	      (:movl :ebx (:edx ,(+ 4 (dynamic-extent-object-offset dynamic-scope proto-cons))))
+	      (:leal (:edx ,(+ (tag :cons) (dynamic-extent-object-offset dynamic-scope proto-cons)))
+		     :eax)))))
+

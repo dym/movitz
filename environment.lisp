@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.11 2005/01/03 11:55:13 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.12 2005/01/04 11:35:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -142,11 +142,11 @@ integer: that many words pushed on stack."
     :initform nil
     :accessor dynamic-extent-scope-members)))
 
-(defun dynamic-extent-allocation (env)
+(defun find-dynamic-extent-scope (env)
   (loop for e = env then (movitz-environment-uplink e)
       while e
       do (when (typep e 'with-dynamic-extent-allocation-env)
-	   (return e))))
+	   (return (allocation-env-scope e)))))
 
 (defun dynamic-extent-object-offset (scope-env object)
   (loop with offset = 0

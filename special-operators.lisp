@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.46 2005/01/03 11:55:36 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.47 2005/01/04 11:35:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1370,3 +1370,23 @@ is zero (i.e. not found)."
 	:env allocation-env))))
 						       
   
+(define-special-operator muerte::compiled-cons
+    (&all all &form form &env env &funobj funobj)
+  (destructuring-bind (car cdr)
+      (cdr form)
+    (let ((dynamic-extent-scope (find-dynamic-extent-scope env)))
+      (cond
+       (dynamic-extent-scope
+	(compiler-values ()
+	  :returns :eax
+	  :functional-p t
+	  :type 'cons
+	  :code (append (make-compiled-two-forms-into-registers car :eax cdr :ebx funobj env)
+			`((:stack-cons ,(make-instance 'movitz-cons)
+				       ,dynamic-extent-scope)))))
+       (t (compiler-values ()
+	    :returns :eax
+	    :functional-p t
+	    :type 'cons
+	    :code (append (make-compiled-two-forms-into-registers car :eax cdr :ebx funobj env)
+			  `((:globally (:call (:edi (:edi-offset fast-cons))))))))))))
