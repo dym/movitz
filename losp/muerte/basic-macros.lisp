@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.11 2004/04/16 18:55:07 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.12 2004/04/16 19:25:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -520,13 +520,15 @@
 	 `((:movw ,(dpb wide-other-tag (byte 8 8) (movitz::tag other-tag)) (:eax -2))))))
 
 (defmacro check-type (place type &optional type-string)
-  (declare (ignore type-string))
-  `(let ((place-value ,place))
-     (unless (typep place-value ',type)
-       (error "Place ~A is not of type ~A, its value is {~Z}."
-	      ',place ',type place-value))))
+  (if (not (stringp type-string))
+      `(let ((place-value ,place))
+	 (unless (typep place-value ',type)
+	   (check-type-failed place-value ',type ',place)))
+    `(let ((place-value ,place))
+       (unless (typep place-value ',type)
+	 (check-type-failed place-value ',type ',place ,type-string)))))
 
-(define-compiler-macro check-type (place type &optional type-string &environment env)
+(define-compiler-macro check-type (&whole form place type &optional type-string &environment env)
   (declare (ignore type-string))
   (cond
    ((movitz:movitz-constantp place env)
@@ -538,10 +540,7 @@
 	  `(unless (typep ,place ',type)
 	     (with-inline-assembly (:returns :non-local-exit)
 	       (:int 66)))
-	`(let ((place-value ,place))
-	   (unless (typep place-value ',type)
-	     (error "Place ~A is not of type ~A, its value is ~Z."
-		    ',place ',type place-value)))))))
+	form))))
 
 (defmacro assert (test-form &optional places datum-form &rest argument-forms)
   (declare (ignore places))

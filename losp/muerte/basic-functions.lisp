@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.10 2004/04/07 00:20:12 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.11 2004/04/16 19:25:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -369,5 +369,12 @@
 (defun %word-offset (word offset)
   (%word-offset word offset))
 
-
-
+(defun check-type-failed (value type &optional place-name type-description)
+  (cond
+   ((and place-name type-description)
+    (error "The value of ~S, ~S, is not ~A."
+	   place-name value type-description))
+   (place-name
+    (error "The value of ~S, ~S, is not of type ~S."
+	   place-name value type))
+   (t (error "~S is not of type ~S." value type))))
