@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Jan 15 18:40:58 2004
 ;;;;                
-;;;; $Id: load.lisp,v 1.4 2004/01/16 16:22:42 ffjeld Exp $
+;;;; $Id: load.lisp,v 1.5 2004/01/16 18:22:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,16 +18,15 @@
 
 (load (compile-file #p"../binary-types/binary-types"))
 
-(let ((*default-pathname-defaults* #p"../ia-x86/"))
-  #+(or cmu sbcl)
-  (let ((pwd (ext:default-directory)))
-    (progn
-      (unwind-protect
-	  (progn
-	    (setf (ext:default-directory) #p"../ia-x86/")
-	    (load "load"))
-	(setf (ext:default-directory) pwd))))
-  #-(or cmu sbcl) (load "load"))
+(let ((*default-pathname-defaults* (merge-pathnames #p"../ia-x86/")))
+  #+(or cmu) (let ((pwd (ext:default-directory)))
+	       (progn
+		 (unwind-protect
+		     (progn
+		       (setf (ext:default-directory) #p"../ia-x86/")
+		       (load "load"))
+		   (setf (ext:default-directory) pwd))))
+  #-(or cmu) (load "load"))
 
 #+allegro (progn
 	    (load (compile-file #p"../infunix/procfs"))
@@ -65,4 +64,6 @@
 			    ;; "procfs-image"
 			    "assembly-syntax"
 			    "compiler-protocol"
-			    "compiler" "special-operators" "special-operators-cl"))))))
+			    "compiler"
+			    "special-operators"
+			    "special-operators-cl"))))))
