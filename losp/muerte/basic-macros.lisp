@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.8 2004/04/14 12:21:53 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.9 2004/04/14 20:03:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1026,6 +1026,20 @@ busy-waiting loop on P4."
      (:compile-form (:result-mode :eax) ,word-form)
      (:shrl ,(* 4 nibble) :eax)
      (:andl #xf :eax)))
+
+(define-compiler-macro boundp (symbol)
+  `(with-inline-assembly-case ()
+     (do-case (t :boolean-cf=1 :labels (boundp-done))
+       (:compile-form (:result-mode :eax) ,symbol)
+       (:cmpl :edi :eax)
+       (:je 'boundp-done)		; if ZF=0, then CF=0
+       (:call-global-constant dynamic-find-binding)
+       (:jc 'boundp-done)
+       (:movl (:eax #.(bt:slot-offset 'movitz:movitz-symbol 'movitz::value)) :eax)
+       (:globally (:cmpl (:edi (:edi-offset unbound-value)) :eax))
+       (:je 'boundp-done)
+       (:stc)
+      boundp-done)))
 
 (require :muerte/setf)
 

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.7 2004/04/06 14:30:48 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.8 2004/04/14 20:03:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -121,10 +121,7 @@
      (movitz-accessor symbol movitz-symbol package))))
 
 (defun boundp (symbol)
-  (etypecase symbol
-    (null nil)
-    (symbol
-     (not (eq (movitz-accessor symbol movitz-symbol value) 'unbound)))))
+  (boundp symbol))
 
 (defun makunbound (symbol)
   (setf (symbol-value symbol)
