@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.4 2004/07/20 08:53:50 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.5 2004/07/23 15:35:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -57,7 +57,13 @@
 		  finally (return (if (zerop constant-term)
 				      non-constant-operands
 				    (cons constant-term non-constant-operands))))))
-	 `(+ (+ ,(first operands) ,(second operands)) ,@(cddr operands))))))
+	 (cond
+	  ((null operands)
+	   0)
+	  ((not (cdr operands))
+	   (check-type (car operands) integer)
+	   (car operands))
+	  (t `(+ (+ ,(first operands) ,(second operands)) ,@(cddr operands))))))))
 
 (define-compiler-macro 1+ (number)
   `(+ 1 ,number))
