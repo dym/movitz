@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.43 2005/01/27 09:01:27 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.44 2005/01/28 08:47:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -173,17 +173,17 @@ at the start-stack-frame location."
 	   (cond
 	    ((not (typep funobj 'function))
 	     nil)
-	    ((let ((x (funobj-code-vector casf-funobj)))
+	    ((let ((x (funobj-code-vector funobj)))
 	       (and (location-in-object-p x location) x)))
-	    ((let ((x (funobj-code-vector%1op casf-funobj)))
+	    ((let ((x (funobj-code-vector%1op funobj)))
 	       (and (typep x 'vector)
 		    (location-in-object-p x location)
 		    x)))
-	    ((let ((x (funobj-code-vector%2op casf-funobj)))
+	    ((let ((x (funobj-code-vector%2op funobj)))
 	       (and (typep x 'vector)
 		    (location-in-object-p x location)
 		    x)))
-	    ((let ((x (funobj-code-vector%3op casf-funobj)))
+	    ((let ((x (funobj-code-vector%3op funobj)))
 	       (and (typep x 'vector)
 		    (location-in-object-p x location)
 		    x))))))
@@ -340,145 +340,4 @@ assuming the pointer refers to old-code-vector."
       old)
      (t (setf (stack-frame-ref nil index 0) nil)))))
 
-
-#+ignore
-(defun old-map-stack-vector (function stack start-frame &optional (map-region #'map-header-vals))
-  "Map function over the potential pointer words of a stack, starting
-at the start-stack-frame location."
-  (with-funcallable (map-region)
-    (loop with next-frame with next-nether-frame
-	for nether-frame = start-frame then (or next-nether-frame frame)
-	and frame = (stack-frame-uplink stack start-frame) then (or next-frame
-								    (stack-frame-uplink stack frame))
-	while (plusp frame)
-	do (setf next-frame nil next-nether-frame nil)
-	do (flet ((scavenge-funobj-code-vector (funobj)
-		    "Funobj 0 is assumed to be the DIT code-vector."
-		    (if (eq 0 funobj)
-			(symbol-value 'default-interrupt-trampoline)
-		      (funobj-code-vector funobj))))
-	     (let ((funobj (funcall function (stack-frame-funobj stack frame) frame)))
-	       ;; If nether-frame is a DIT-frame, there are 4 more words to be skipped.
-	       (when (eq 0 (stack-frame-ref stack nether-frame -1))
-		 (incf nether-frame 4))
-	       (typecase funobj
-		 ((or function null)
-		  (assert (= 0 (funobj-frame-raw-locals funobj)))
-		  (map-region function (+ nether-frame 2) frame))
-		 ((eql 0)		; A dit interrupt-frame?
-		  (let* ((dit-frame frame)
-			 (casf-frame (dit-frame-casf stack dit-frame)))
-		    ;; 1. Scavenge the dit-frame
-		    (cond
-		     ((let ((atomically (dit-frame-ref stack dit-frame :atomically-continuation
-						       :unsigned-byte32)))
-			(and (not (= 0 atomically))
-			     (= 0 (ldb (byte 2 0) atomically))))
-		      ;; Interrupt occurred inside an (non-pf) atomically, so none of the
-		      ;; registers are active.
-		      (map-region function (+ nether-frame 2)
-				  (+ dit-frame 1 (dit-frame-index :tail-marker))))
-		     ((logbitp 10 (dit-frame-ref stack dit-frame :eflags :unsigned-byte32))
-		      ;; DF flag was 1, so EAX and EDX are not GC roots.
-		      #+ignore (warn "Interrupt in uncommon mode at ~S"
-				     (dit-frame-ref stack dit-frame :eip :unsigned-byte32))
-		      (map-region function ; Assume nothing in the dit-frame above the location ..
-				  (+ nether-frame 2) ; ..of EDX holds pointers.
-				  (+ dit-frame (dit-frame-index :edx))))
-		     (t #+ignore (warn "Interrupt in COMMON mode!")
-			(map-region function ; Assume nothing in the dit-frame above the location ..
-				    (+ nether-frame 2) ; ..of ECX holds pointers.
-				    (+ dit-frame (dit-frame-index :ecx)))))
-		    ;; 2. Pop to (dit-)frame's CASF
-		    (setf nether-frame dit-frame
-			  frame casf-frame #+ignore (dit-frame-casf stack frame))
-		    (let ((eip-location (dit-frame-ref stack dit-frame :eip :location))
-			  (interrupted-esp (dit-frame-esp stack dit-frame))
-			  (interrupted-ebp (dit-frame-ref stack dit-frame :ebp))
-			  (casf-funobj (funcall function (stack-frame-funobj stack frame) frame)))
-		      (cond
-		       ((or (eq 0 casf-funobj)
-			    (typep casf-funobj 'function))
-			(let ((casf-code-vector (scavenge-funobj-code-vector casf-funobj)))
-			  ;; 3. Scavenge the interrupted frame, according to one of i. ii. or iii.
-			  (cond
-			   ((eq nil interrupted-ebp)
-			    (cond
-			     ((location-in-object-p casf-code-vector eip-location)
-			      (warn "DIT at throw situation, in target ~S at ~S"
-				    casf-funobj
-				    (dit-frame-ref stack dit-frame :eip :unsigned-byte32))
-			      (map-region function interrupted-esp frame))
-			     ((location-in-object-p (%run-time-context-slot 'dynamic-jump-next)
-						    eip-location)
-			      (warn "DIT at throw situation, in dynamic-jump-next.")
-			      (let ((dynamic-env (dit-frame-ref stack dit-frame :dynamic-env)))
-				(assert (< dynamic-env frame))
-				(map-region function dynamic-env frame)))
-			     (t (error "Unknown throw situation with EBP=~S, ESP=~S"
-				       interrupted-ebp interrupted-esp))))
-			   ((location-in-object-p casf-code-vector
-						  (dit-frame-ref stack dit-frame :eip :location))
-			    (cond
-			     ((let ((x0-tag (ldb (byte 3 0)
-						 (memref interrupted-esp 0 :type :unsigned-byte8))))
-				(and (member x0-tag '(1 5 6 7))
-				     (location-in-object-p casf-code-vector
-							   (memref interrupted-esp 0 :type :location))))
-			      ;; When code-vector migration is implemented...
-			      (warn "Scanning at ~S X0 call ~S in ~S."
-				    (dit-frame-ref stack dit-frame :eip :unsigned-byte32)
-				    (memref interrupted-esp 0 :type :unsigned-byte32)
-				    (funobj-name casf-funobj))
-			      (when (eq 0 (stack-frame-ref stack frame -1))
-				(break "X1 call in DIT-frame."))
-			      (map-region function (+ interrupted-esp 1) frame)
-			      (setf next-frame frame
-				    next-nether-frame (+ interrupted-esp 1 -2)))
-			     ((let ((x1-tag (ldb (byte 3 0)
-						 (memref interrupted-esp 4 :type :unsigned-byte8))))
-				(and (member x1-tag '(1 5 6 7))
-				     (location-in-object-p casf-code-vector
-							   (memref interrupted-esp 4 :type :location))))
-			      ;; When code-vector migration is implemented...
-			      (warn "Scanning at ~S X1 call ~S in ~S."
-				    (dit-frame-ref stack dit-frame :eip :unsigned-byte32)
-				    (memref interrupted-esp 4 :type :unsigned-byte32)
-				    (funobj-name casf-funobj))
-			      (when (eq 0 (stack-frame-ref stack frame -1))
-				(break "X1 call in DIT-frame."))
-			      (map-region function (+ interrupted-esp 2) frame)
-			      (setf next-frame frame
-				    next-nether-frame (+ interrupted-esp 2 -2)))
-			     (t ;; Situation i. Nothing special on stack, scavenge frame normally.
-			      ;; (map-region function interrupted-esp frame)
-			      (setf next-frame frame
-				    next-nether-frame (- interrupted-esp 2))
-			      )))
-			   ((eq casf-frame (memref interrupted-esp 0 :type :location))
-			    ;; Situation ii. esp(0)=CASF, esp(1)=code-vector
-			    (assert (location-in-object-p casf-code-vector
-							  (memref interrupted-esp 4 :type :location))
-
-				() "Stack discipline situation ii. invariant broken. CASF=#x~X, ESP=~S, EBP=~S"
-				casf-frame interrupted-esp interrupted-ebp)
-			    (when (eq 0 (stack-frame-ref stack frame -1))
-			      (break "X1 ii call in DIT-frame."))
-			    (map-region function (+ interrupted-esp 2) frame)
-			    (setf next-frame frame
-				  next-nether-frame (+ interrupted-esp 2 -2)))
-			   (t ;; Situation iii. esp(0)=code-vector.
-			    (assert (location-in-object-p casf-code-vector
-							  (memref interrupted-esp 0 :type :location))
-				() "Stack discipline situation iii. invariant broken. CASF=#x~X"
-				casf-frame)
-			    (when (eq 0 (stack-frame-ref stack frame -1))
-			      (break "X1 iii call in DIT-frame."))
-			    (map-region function (+ interrupted-esp 1) frame)
-			    (setf next-frame frame
-				  next-nether-frame (+ interrupted-esp 1 -2))))))
-		       (t (error "DIT-frame interrupted unknown CASF funobj: ~Z, CASF ~S"
-				 casf-funobj casf-frame))))))
-		 (t (error "Don't know how to scavenge across frame ~S of kind ~S." frame funobj)))))))
-  (values))
 
