@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.10 2004/02/13 22:08:33 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.11 2004/02/14 17:33:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -137,131 +137,142 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		       :env local-env))))
 	    (compiler-values-bind (&all body-values &code body-code &returns body-returns)
 		(compile-body)
-	      (cond
-	       ;; Is this (let ((#:foo <form>)) (setq bar #:foo)) ?
-	       ;; If so, make it into (setq bar <form>)
-	       ((and (= 1 (length binding-var-codes))
-		     (typep (movitz-binding (caar binding-var-codes) local-env nil)
-			    'lexical-binding)
-		     (instruction-is (first body-code) :load-lexical)
-		     (instruction-is (second body-code) :store-lexical)
-		     (null (cddr body-code))
-		     (eq (movitz-binding (caar binding-var-codes) local-env nil) ; same binding?
-			 (second (first body-code)))
-		     (eq (third (first body-code)) ; same register?
-			 (third (second body-code))))
-		(let ((dest-binding (second (second body-code))))
-		  (check-type dest-binding lexical-binding)
-		  (compiler-call #'compile-form
-		    :forward all
-		    :result-mode dest-binding
-		    :form (second (first binding-var-codes)))))
-	       #+ignore
-	       ((and (= 1 (length binding-var-codes))
-		     (typep (movitz-binding (caar binding-var-codes) local-env nil)
-			    'lexical-binding)
-		     (instruction-is (first body-code) :load-lexical)
-		     (not (code-uses-binding-p (rest body-code) (second (first body-code))
-					       :load t :store nil))
-		     (eq (movitz-binding (caar binding-var-codes) local-env nil) ; same binding?
-			 (second (first body-code))))
-		(let ((tmp-binding (second (first body-code))))
-		  (print-code 'body body-code)
-		  (break "Yuhu: tmp ~S" tmp-binding)))
-	       (t (let ((code (append
-			       (loop
-				   for ((var init-form init-code functional-p type init-register)
-					. rest-codes)
-				   on binding-var-codes
-				   as binding = (movitz-binding var local-env nil)
-						;;  for bb in binding-var-codes
-						;; do (warn "bind: ~S" bb)
-				   do (assert type)
-				      (assert (not (binding-lended-p binding)))
-				   appending
-				     (cond
-				      ;; #+ignore
-				      ((and (typep binding 'located-binding)
-					    (not (binding-lended-p binding))
-					    (= 1 (length init-code))
-					    (eq :load-lexical (first (first init-code)))
-					    (let* ((target-binding (second (first init-code))))
-					      (and (typep target-binding 'lexical-binding)
-						   (eq (binding-funobj binding)
-						       (binding-funobj target-binding))
-						   (or (and (not (code-uses-binding-p body-code
-										      binding
-										      :load nil
-										      :store t))
-							    (not (code-uses-binding-p body-code
-										      target-binding
-										      :load nil
-										      :store t)))
-						       ;; This is the best we can do now to determine
-						       ;; if target-binding is ever used again.
-						       (and (eq result-mode :function)
-							    (not (code-uses-binding-p body-code
-										      target-binding
-										      :load t
-										      :store t))
-							    (notany (lambda (code)
-								      (code-uses-binding-p (third code)
-											   target-binding
-											   :load t
-											   :store t))
-								    rest-codes))))))
-				       ;; replace read-only lexical binding with the outer lexical binding
-				       ;; (warn "replace ~S with outer ~S" var (second (first init-code)))
-				       (change-class binding 'forwarding-binding 
-						     :target-binding (second (first init-code)))
-				       nil)
-				      ((and (typep binding 'located-binding)
-					    (type-specifier-singleton type)
-					    (not (code-uses-binding-p body-code binding :load nil :store t)))
-				       ;; replace read-only lexical binding with
-				       ;; side-effect-free form
-				       #+ignore (warn "Constant binding: ~S => ~S => ~S"
-						      (binding-name binding)
-						      init-form
-						      (car (type-specifier-singleton type)))
-				       (when (code-uses-binding-p body-code binding :load t)
-					 (setf recompile-body-p t))
-				       (change-class binding 'constant-object-binding
-						     :object (car (type-specifier-singleton type)))
-				       (if functional-p
-					   nil ; only inject code if it's got side-effects.
-					 (compiler-call #'compile-form-unprotected
-					   :env init-env
-					   :defaults all
-					   :form init-form
-					   :result-mode :ignore
-					   :modify-accumulate let-modifies)))
-				      ((typep binding 'lexical-binding)
-				       (let ((init (type-specifier-singleton
-						    (type-specifier-primary type))))
-					 (if (and init (eq *movitz-nil* (car init)))
-					     `((:init-lexvar ,binding
-							     :init-with-register :edi
-							     :init-with-type null))
-					   (append `((:init-lexvar ,binding))
-						   init-code
-						   `((:store-lexical ,binding ,init-register
-								     :type ,(type-specifier-primary type)))))))
-				      (t init-code)))
-			       (when (plusp (num-specials local-env))
-				 `((:locally (:movl :esp (:edi (:edi-offset dynamic-env))))))
-			       (if (not recompile-body-p)
-				   body-code
-				 (progn #+ignore (warn "recompile..")
-					(compile-body)))
-			       (when (plusp (num-specials local-env))
-				 `((:leal (:esp ,(+ -4 (* 16 (num-specials local-env)))) :esp)
-				   (:locally (:popl (:edi (:edi-offset dynamic-env)))))))))
-		    (compiler-values (body-values)
-		      :returns body-returns
-		      :producer (default-compiler-values-producer)
-		      :modifies let-modifies
-		      :code code)))))))))))
+;;;	      (print-code 'body body-code)
+	      (let ((first-binding (movitz-binding (caar binding-var-codes) local-env nil)))
+		(cond
+		 ;; Is this (let ((#:foo <form>)) (setq bar #:foo)) ?
+		 ;; If so, make it into (setq bar <form>)
+		 ((and (= 1 (length binding-var-codes))
+		       (typep first-binding 'lexical-binding)
+		       (instruction-is (first body-code) :load-lexical)
+		       (instruction-is (second body-code) :store-lexical)
+		       (null (cddr body-code))
+		       (eq first-binding ; same binding?
+			   (second (first body-code)))
+		       (eq (third (first body-code)) ; same register?
+			   (third (second body-code))))
+		  (let ((dest-binding (second (second body-code))))
+		    (check-type dest-binding lexical-binding)
+		    (compiler-call #'compile-form
+		      :forward all
+		      :result-mode dest-binding
+		      :form (second (first binding-var-codes)))))
+		 #+ignore
+		 ((and (= 1 (length binding-var-codes))
+		       (typep (movitz-binding (caar binding-var-codes) local-env nil)
+			      'lexical-binding)
+		       (member (movitz-binding (caar binding-var-codes) local-env nil)
+			       (find-read-bindings (first body-code)))
+		       (not (code-uses-binding-p (rest body-code) (second (first body-code))
+						 :load t :store nil)))
+		  (let ((tmp-binding (second (first body-code))))
+		    (print-code 'body body-code)
+		    (break "Yuhu: tmp ~S" tmp-binding)
+		    
+		    ))
+		 (t (let ((code (append
+				 (loop
+				     for ((var init-form init-code functional-p type init-register)
+					  . rest-codes)
+				     on binding-var-codes
+				     as binding = (movitz-binding var local-env nil)
+						  ;;  for bb in binding-var-codes
+						  ;; do (warn "bind: ~S" bb)
+				     do (assert type)
+					(assert (not (binding-lended-p binding)))
+				     appending
+				       (cond
+					;; #+ignore
+					((and (typep binding 'located-binding)
+					      (not (binding-lended-p binding))
+					      (= 1 (length init-code))
+					      (eq :load-lexical (first (first init-code)))
+					      (let* ((target-binding (second (first init-code))))
+						(and (typep target-binding 'lexical-binding)
+						     (eq (binding-funobj binding)
+							 (binding-funobj target-binding))
+						     (or (and (not (code-uses-binding-p body-code
+											binding
+											:load nil
+											:store t))
+							      (not (code-uses-binding-p body-code
+											target-binding
+											:load nil
+											:store t)))
+							 ;; This is the best we can do now to determine
+							 ;; if target-binding is ever used again.
+							 (and (eq result-mode :function)
+							      (not (code-uses-binding-p body-code
+											target-binding
+											:load t
+											:store t))
+							      (notany (lambda (code)
+									(code-uses-binding-p (third code)
+											     target-binding
+											     :load t
+											     :store t))
+								      rest-codes))))))
+					 ;; replace read-only lexical binding with the outer lexical binding
+					 ;; (warn "replace ~S with outer ~S" var (second (first init-code)))
+					 (change-class binding 'forwarding-binding 
+						       :target-binding (second (first init-code)))
+					 nil)
+					((and (typep binding 'located-binding)
+					      (type-specifier-singleton type)
+					      (not (code-uses-binding-p body-code binding :load nil :store t)))
+					 ;; replace read-only lexical binding with
+					 ;; side-effect-free form
+					 #+ignore (warn "Constant binding: ~S => ~S => ~S"
+							(binding-name binding)
+							init-form
+							(car (type-specifier-singleton type)))
+					 (when (code-uses-binding-p body-code binding :load t)
+					   (setf recompile-body-p t))
+					 (change-class binding 'constant-object-binding
+						       :object (car (type-specifier-singleton type)))
+					 (if functional-p
+					     nil ; only inject code if it's got side-effects.
+					   (compiler-call #'compile-form-unprotected
+					     :env init-env
+					     :defaults all
+					     :form init-form
+					     :result-mode :ignore
+					     :modify-accumulate let-modifies)))
+					((typep binding 'lexical-binding)
+					 (let ((init (type-specifier-singleton
+						      (type-specifier-primary type))))
+					   (if (and init (eq *movitz-nil* (car init)))
+					       (append (if functional-p
+							   nil
+							 (compiler-call #'compile-form-unprotected
+							   :env init-env
+							   :defaults all
+							   :form init-form
+							   :result-mode :ignore
+							   :modify-accumulate let-modifies))
+						       `((:init-lexvar ,binding
+								       :init-with-register :edi
+								       :init-with-type null)))
+					     (append init-code
+						     `((:init-lexvar
+							,binding
+							:init-with-register ,init-register
+							:init-with-type ,(type-specifier-primary type)))))))
+					(t init-code)))
+				 (when (plusp (num-specials local-env))
+				   `((:locally (:movl :esp (:edi (:edi-offset dynamic-env))))))
+				 (if (not recompile-body-p)
+				     body-code
+				   (progn #+ignore (warn "recompile..")
+					  (compile-body)))
+				 (when (plusp (num-specials local-env))
+				   `((:leal (:esp ,(+ -4 (* 16 (num-specials local-env)))) :esp)
+				     (:locally (:popl (:edi (:edi-offset dynamic-env)))))))))
+		      (compiler-values (body-values)
+			:returns body-returns
+			:producer (default-compiler-values-producer)
+			:modifies let-modifies
+			:code code))))))))))))
 
 (define-special-operator symbol-macrolet (&all forward &form form &env env &funobj funobj)
   (destructuring-bind (symbol-expansions &body declarations-and-body)
