@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.20 2004/03/26 01:44:46 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.21 2004/04/14 12:40:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1434,6 +1434,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 			  `(muerte.cl:progn
 			     (muerte::with-inline-assembly (:returns :nothing)
 			       (:cli)
+			       (:cld)	; clear direction flag => "normal" register GC roots.
 
 			       (:movw ,(1- (* 8 8)) (:esp -6))
 			       (:movl ,(+ (image-ds-segment-base *image*)
