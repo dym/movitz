@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.7 2004/02/10 00:41:42 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.8 2004/02/10 00:42:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -847,6 +847,10 @@
       (loop for i upfrom 0 as slot in effective-slots
 	  do (setf (slot-definition-location slot) i))
       effective-slots))
+  
+  (defun compute-slots (class)
+    (error "Don't know how to compute-slots for class ~S of class ~S."
+	   class (class-of class)))
       
   (defun std-compute-effective-slot-definition (class name direct-slots)
     (declare (ignore name))
