@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.11 2004/06/02 14:31:01 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.12 2004/06/04 13:33:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -82,6 +82,7 @@
 	    (:pushl :edi)		; -28
 	    (:movl ':nil-value :edi)	; We want NIL!
 	    (:locally (:pushl (:edi (:edi-offset atomically-status)))) ; -32
+	    (:locally (:pushl (:edi (:edi-offset atomically-esp)))) ; -36
 
 	    (:locally (:movl 0 (:edi (:edi-offset atomically-status))))
 
@@ -145,12 +146,18 @@
 	    ;; Interrupted code was non-atomical, the normal case.
 	   normal-return		; With atomically-status-to-restore in ECX
 	    (:locally (:movl :ecx (:edi (:edi-offset atomically-status))))
+	    (:movl (:ebp -36) :ecx)	; Load interruptee's atomically-esp..
+	    (:locally (:movl :ecx (:edi (:edi-offset atomically-esp)))) ; ..and restore it.
 	    (:movl (:ebp -28) :edi)
 	    (:movl (:ebp -24) :esi)
 	    (:movl (:ebp -20) :ebx)
 	    (:movl (:ebp -16) :edx)
 	    (:movl (:ebp -12) :eax)
 	    (:movl (:ebp -8)  :ecx)
+	    ;; Make stack safe before we exit interrupt-frame..
+	    (:movl :edi (:ebp 4))
+	    (:movl :edi (:ebp 8))
+	    (:movl :edi (:ebp 12))
 	    (:leave)
 	    (:addl 12 :esp)
 	    (:popfl)			; pop EFLAGS
@@ -175,20 +182,42 @@
 	   not-simple-atomical-pf-restart
 	    (:cmpb ,(bt:enum-value 'movitz::atomically-status :restart-jumper) :cl)
 	    (:jne 'not-simple-restart-jumper)
-	    (:testl ,(bt:enum-value 'movitz::atomically-status '(:eax :ebx :ecx :edx))
+	    (:testl ,(bt:enum-value 'movitz::atomically-status :esp)
 		    :ecx)		; map of registers to restore
-	    (:jnz 'not-simple-restart-jumper)
-	    (:shrl 16 :ecx)		; move atomically-status data into ECX
-	    (:movl (:ebp -24) :eax)	; This is the interruptee's ESI/funobj
-	    (:movl (:eax (:ecx 4) ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0))
-		   :ecx)		; This is the EIP to restart
-	    (:movl :ecx (:ebp 20))
+	    (:jnz 'atomically-esp-ok)
+	    ;; Generate the correct ESP for interruptee's atomically-esp
+	    (:leal (:ebp 24) :ecx)
+	    (:movl :ecx (:ebp -36))
+	   atomically-esp-ok
 	    (:movl (:ebp -32) :ecx)
 	    (:testl ,(bt:enum-value 'movitz::atomically-status :reset-status-p)
 		    :ecx)		; Should we reset status to zero?
-	    (:jnz 'normal-return)
+	    (:jnz 'atomically-jumper-return)
 	    (:xorl :ecx :ecx)		; Do reset status to zero.
-	    (:jmp 'normal-return)
+	    
+	   atomically-jumper-return
+	    (:locally (:movl :ecx (:edi (:edi-offset atomically-status))))
+	    (:movl (:ebp -36) :ecx)	; Load interruptee's atomically-esp..
+	    (:locally (:movl :ecx (:edi (:edi-offset atomically-esp)))) ; ..and restore it.
+	    (:movl (:ebp -28) :edi)
+	    (:movl (:ebp -24) :esi)
+	    (:movl (:ebp -16) :edx)
+	    (:movl (:ebp -12) :eax)
+	    (:movl (:ebp -8)  :ecx)
+
+	    (:movl (:ebp -32) :ebx)	; atomically-status..
+	    (:shrl ,(- 16 movitz:+movitz-fixnum-shift+) :ebx)
+
+	    ;; Make stack safe before we exit interrupt-frame..
+	    (:movl :edi (:ebp 4))
+	    (:movl :edi (:ebp 8))
+	    (:movl :edi (:ebp 12))
+	    (:movl :edi (:ebp 16))
+	    (:movl :edi (:ebp 20))
+	    (:movl (:ebp 0) :ebp)	; pop stack-frame
+	    (:locally (:movl (:edi (:edi-offset atomically-esp)) :esp)) ; restore ESP
+	    (:jmp (:esi :ebx ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
+
 	   not-simple-restart-jumper
 	    ;; Don't know what to do.
 	    (:halt)
