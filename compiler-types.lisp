@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.12 2004/04/19 00:29:35 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.13 2004/06/07 22:09:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -45,9 +45,10 @@
 	 ((< number (length reqs))
 	  (nth number reqs))
 	 ((< number (+ (length reqs) (length opts)))
-	  `(or null ,(nth (- number (length reqs)) opts)))
+	  (let ((x (nth (- number (length reqs)) opts)))
+	    (if (eq x t) t `(or null ,x))))
 	 (rest
-	  `(or null ,rest))
+	  (if (eq rest t) t `(or null ,rest)))
 	 (t 'null))))))
 
 (defun type-specifier-primary (type-specifier)
