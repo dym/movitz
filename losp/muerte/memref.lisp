@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.35 2004/10/21 16:31:35 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.36 2004/10/21 20:47:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -634,6 +634,37 @@
 		  (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
 		  (:movb :ah (:ebx :ecx)))
 		,value-var)))))
+      (:unsigned-byte14
+       (cond
+	((and (movitz:movitz-constantp offset env)
+	      (movitz:movitz-constantp index env))
+	 `(with-inline-assembly (:returns :eax)
+	    (:compile-two-forms (:eax :ebx) ,value ,object)
+	    (:andl ,(mask-field (byte 14 2) -1) :eax)
+	    (:movw :ax (:ebx ,(+ (movitz:movitz-eval offset env)
+				 (* 4 (movitz:movitz-eval index env)))))))
+	((movitz:movitz-constantp offset env)
+	 (let ((value-var (gensym "memref-value-")))
+	   `(let ((,value-var ,value))
+	      (with-inline-assembly (:returns :eax)
+		(:compile-two-forms (:ebx :ecx) ,object ,index)
+		(:load-lexical (:lexical-binding ,value-var) :eax)
+		,@(when (plusp (- movitz:+movitz-fixnum-shift+ 2))
+		    `((:sarl ,(- movitz:+movitz-fixnum-shift+ 2)) :ecx))
+		(:andl ,(mask-field (byte 14 2) -1) :eax)
+		(:movw :ax (:ebx :ecx ,(movitz:movitz-eval offset env)))))))
+	(t (let ((value-var (gensym "memref-value-"))
+		 (object-var (gensym "memref-object-")))
+	     `(let ((,value-var ,value) (,object-var ,object))
+		(with-inline-assembly (:returns :eax)
+		  (:compile-two-forms (:untagged-fixnum-ecx :ebx) ,offset ,index)
+		  (:load-lexical (:lexical-binding ,value-var) :eax)
+		  ,@(when (cl:plusp (cl:- movitz::+movitz-fixnum-shift+ 2))
+		      `((:sarl ,(cl:- movitz::+movitz-fixnum-shift+ 2)) :ebx))
+		  (:addl :ebx :ecx)	; index += offset
+		  (:load-lexical (:lexical-binding ,object-var) :ebx)
+		  (:andl ,(mask-field (byte 14 2) -1) :eax)
+		  (:movl :ax (:ebx :ecx))))))))
       (:lisp
        (let* ((localp (movitz:movitz-eval localp env))
 	      (prefixes (if localp
