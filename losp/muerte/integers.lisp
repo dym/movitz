@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.103 2004/11/24 10:08:41 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.104 2004/11/25 18:05:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -526,7 +526,7 @@
 
 		   (:leal ((:ecx 1) ,(* 1 movitz:+movitz-fixnum-factor+))
 			  :eax)		; Number of words
-		   (:call-local-pf get-cons-pointer)
+		   (:call-local-pf cons-pointer)
 		   (:load-lexical (:lexical-binding y) :ebx) ; bignum
 		   (:movzxw (:ebx (:offset movitz-bignum length)) :ecx)
 		   (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
@@ -557,7 +557,7 @@
 		   (:subl #x40000 (:eax ,movitz:+other-type-offset+))
 		   (:subl ,movitz:+movitz-fixnum-factor+ :ecx)
 		  no-expansion
-		   (:call-local-pf cons-commit)
+		   (:call-local-pf cons-commit-non-pointer)
 		   (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 		   (:leal (:esp 16) :esp)
 		   
@@ -607,7 +607,7 @@
 		     (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
 		     ;; Now inside atomically section.
 		     
-		     (:call-local-pf get-cons-pointer)
+		     (:call-local-pf cons-non-pointer)
 		     (:load-lexical (:lexical-binding y) :ebx) ; bignum
 		     (:movzxw (:ebx (:offset movitz-bignum length)) :ecx)
 		     (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
@@ -658,7 +658,7 @@
 		     (:addl #x40000 (:eax ,movitz:+other-type-offset+))
 		     (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
 		    no-expansion
-		     (:call-local-pf cons-commit)
+		     (:call-local-pf cons-commit-non-pointer)
 		     (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 		     (:leal (:esp 16) :esp)
 		    pfix-pbig-done)
@@ -1080,7 +1080,7 @@
 		     (:leal (:eax :ebx ,(* 4 (+ 31 32))) :eax)
 		     (:andl ,(logxor #xffffffff (* 31 4)) :eax)
 		     (:shrl 5 :eax)
-		     (:call-local-pf get-cons-pointer) ; New bignum into EAX
+		     (:call-local-pf cons-non-pointer) ; New bignum into EAX
 
 		     (:load-lexical (:lexical-binding y) :ebx) ; bignum
 		     (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
@@ -1121,7 +1121,7 @@
 		     (:movl :ebx :eax)
 		     (:movl :edi :edx)
 		     (:cld)		; EAX, EDX, and ESI are GC roots again.
-		     (:call-local-pf cons-commit)
+		     (:call-local-pf cons-commit-non-pointer)
 		     (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 		     (:leal (:esp 16) :esp)
 		     (:compile-form (:result-mode :ebx) x)
@@ -1255,7 +1255,7 @@
 		     (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
 		     ;; Now inside atomically section.
 		     
-		     (:call-local-pf get-cons-pointer) ; New bignum into EAX
+		     (:call-local-pf cons-non-pointer) ; New bignum into EAX
 
 		     (:store-lexical (:lexical-binding r) :eax :type bignum) ; XXX breaks GC invariant!
 		     (:compile-form (:result-mode :ebx) number)
@@ -1307,7 +1307,7 @@
 		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
 		     (:jmp 'fixnum-result) ; don't commit the bignum
 		    no-more-shrinkage
-		     (:call-local-pf cons-commit)
+		     (:call-local-pf cons-commit-non-pointer)
 		    fixnum-result
 		     ;; Exit atomically block.
 		     (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
@@ -1772,7 +1772,7 @@
 	       (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
 	       ;; Now inside atomically section.
 	       
-	       (:call-local-pf get-cons-pointer)
+	       (:call-local-pf cons-non-pointer)
 	       (:shll 16 :ecx)
 	       (:orl ,(movitz:tag :bignum 0) :ecx)
 	       (:movl :ecx (:eax ,movitz:+other-type-offset+))
@@ -1780,7 +1780,7 @@
 	       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
 		       ,(* 1 movitz:+movitz-fixnum-factor+)) ; add 1 for header.
 		      :ecx)
-	       (:call-local-pf cons-commit)
+	       (:call-local-pf cons-commit-non-pointer)
 	       (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 	       (:leal (:esp 16) :esp)
 	       ;; Have fresh bignum in EAX, now fill it with ones.
@@ -1982,7 +1982,7 @@
 		     ;; Now add 1 for index->size, 1 for header, and 1 for tmp storage before shift.
 		     (:addl ,(* 3 movitz:+movitz-fixnum-factor+) :eax)
 		     (:pushl :eax)
-		     (:call-local-pf get-cons-pointer)
+		     (:call-local-pf cons-non-pointer)
 		     ;; (:store-lexical (:lexical-binding r) :eax :type t)
 		     (:popl :ecx)
 		     (:subl ,(* 2 movitz:+movitz-fixnum-factor+) :ecx) ; for tmp storage and header.
@@ -2088,7 +2088,7 @@
 		     (:movl :ebx :eax)
 		     (:leal (:ecx ,movitz:+movitz-fixnum-factor+)
 			    :ecx)
-		     (:call-local-pf cons-commit)
+		     (:call-local-pf cons-commit-non-pointer)
 		    return-fixnum
 		     (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 		     (:leal (:esp 16) :esp)

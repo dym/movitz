@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.51 2004/11/25 16:45:33 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.52 2004/11/25 18:05:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1078,7 +1078,7 @@ busy-waiting loop on P4."
 	 (:load-lexical (:lexical-binding ,size-var) :eax)
 	 (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
 	 ;; Now inside atomically section.
-	 (:call-local-pf get-cons-pointer)
+	 (:call-local-pf cons-pointer)
 	 ,@code
 	 ,@(when fixed-size-p
 	     `((:load-lexical (:lexical-binding ,size-var) :ecx)))
@@ -1105,7 +1105,7 @@ busy-waiting loop on P4."
 	 (:load-lexical (:lexical-binding ,size-var) :eax)
 	 (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
 	 ;; Now inside atomically section.
-	 (:call-local-pf get-cons-pointer-non-pointer)
+	 (:call-local-pf cons-non-pointer)
 	 ,@code
 	 ,@(when fixed-size-p
 	     `((:load-lexical (:lexical-binding ,size-var) :ecx)))
@@ -1132,7 +1132,7 @@ busy-waiting loop on P4."
 	 (:load-lexical (:lexical-binding ,size-var) :eax)
 	 (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
 	 ;; Now inside atomically section.
-	 (:call-local-pf get-cons-pointer-non-header)
+	 (:call-local-pf cons-non-header)
 	 ,@code
 	 ,@(when fixed-size-p
 	     `((:load-lexical (:lexical-binding ,size-var) :ecx)))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.56 2004/11/25 16:45:47 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.57 2004/11/25 18:06:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -262,7 +262,7 @@ and also EDX must be preserved."
 
 ;;;;;;;;;;;;;; Heap allocation protocol
 
-(define-primitive-function get-cons-pointer ()
+(define-primitive-function cons-pointer ()
   "Return in EAX the next object location with space for EAX words, with tag 6.
 Preserve ECX."
   (macrolet
@@ -296,17 +296,17 @@ Preserve ECX."
 Preserve EAX and EBX."
   (macrolet
       ((do-it ()
-	 ;; Since get-cons-pointer is implemented as an (already committed)
+	 ;; Since cons-pointer is implemented as an (already committed)
 	 ;; malloc, this is a no-op.
 	 `(with-inline-assembly (:returns :multiple-values)
 	    (:ret))))
     (do-it)))
 
-(define-primitive-function get-cons-pointer-non-pointer ()
+(define-primitive-function cons-non-pointer ()
   "Return in EAX the next object location with space for EAX non-pointer words, with tag 6.
 Preserve ECX."
   (with-inline-assembly (:returns :multiple-values)
-    (:locally (:jmp (:edi (:edi-offset get-cons-pointer))))))
+    (:locally (:jmp (:edi (:edi-offset cons-pointer))))))
 
 (define-primitive-function cons-commit-non-pointer ()
   "Return in EAX the next object location with space for EAX non-pointer words, with tag 6.
@@ -314,11 +314,11 @@ Preserve ECX."
   (with-inline-assembly (:returns :multiple-values)
     (:locally (:jmp (:edi (:edi-offset cons-commit))))))
 
-(define-primitive-function get-cons-pointer-non-header ()
+(define-primitive-function cons-non-header ()
   "Return in EAX the next object location with space for EAX non-pointer words, with tag 6.
 Preserve ECX."
   (with-inline-assembly (:returns :multiple-values)
-    (:locally (:jmp (:edi (:edi-offset get-cons-pointer))))))
+    (:locally (:jmp (:edi (:edi-offset cons-pointer))))))
 
 (define-primitive-function cons-commit-non-header ()
   "Return in EAX the next object location with space for EAX non-pointer words, with tag 6.

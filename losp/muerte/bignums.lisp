@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 19:42:57 2004
 ;;;;                
-;;;; $Id: bignums.lisp,v 1.12 2004/10/11 13:52:21 ffjeld Exp $
+;;;; $Id: bignums.lisp,v 1.13 2004/11/25 18:05:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -129,7 +129,7 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	    ;; Now inside atomically section.
 	    (:leal ((:ecx 1) ,(* 2 movitz:+movitz-fixnum-factor+))
 		   :eax)		; Number of words
-	    (:call-local-pf get-cons-pointer)
+	    (:call-local-pf cons-non-pointer)
 	    (:load-lexical (:lexical-binding bignum) :ebx) ; bignum
 	    (:movzxw (:ebx (:offset movitz-bignum length)) :ecx)
 	    (:leal ((:ecx 1) ,movitz:+movitz-fixnum-factor+)
@@ -158,7 +158,7 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
 	    (:addl #x40000 (:eax ,movitz:+other-type-offset+))
 	    (:addl ,movitz:+movitz-fixnum-factor+ :ecx)
 	   no-expansion
-	    (:call-local-pf cons-commit)
+	    (:call-local-pf cons-commit-non-pointer)
 	    ;; Exit atomically block.
 	    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 	    (:leal (:esp 16) :esp)
