@@ -270,7 +270,7 @@ signalled; if ERRORP is nil then the key itself is returned."
 ;;;
 ;;; The read syntax is `#e"ff:00:1:2:3:4'.
 ;;;
-(eval-when (:compile-toplevel #-movitz :load-toplevel #-movitz :execute)
+(eval-when (:compile-toplevel :load-toplevel :execute)
   (defstruct (ethernet-address (:conc-name #:ethernet-address.)
                                (:print-function print-ethernet-address))
     "48-bit Ethernet MAC address."
@@ -291,7 +291,8 @@ signalled; if ERRORP is nil then the key itself is returned."
               (setf (elt vec i) octet))))
         (unless *read-suppress*
           (make-ethernet-address :octets vec)))))
-  
+
+  #-movitz
   (set-dispatch-macro-character #\# #\e 'read-ethernet-address)
 
   (defun print-ethernet-address (address stream depth)
@@ -397,7 +398,7 @@ signalled; if ERRORP is nil then the key itself is returned."
 ;;;
 ;;; IP addresses also have a special read-syntax: `@10.0.0.1'.
 ;;;
-(eval-when (:compile-toplevel #-movitz :load-toplevel #-movitz :execute)
+(eval-when (:compile-toplevel :load-toplevel :execute)
   (defstruct (ipv4-address (:conc-name #:ipv4-address.)
                            (:print-function print-ipv4-address))
     (octets 0 :type (array octet (4))))
@@ -416,6 +417,7 @@ signalled; if ERRORP is nil then the key itself is returned."
         (unless *read-suppress*
           (make-ipv4-address :octets vec)))))
   
+  #-movitz
   (set-macro-character #\@ 'read-ipv4-address t)
 
   (defun print-ipv4-address (address stream depth)
