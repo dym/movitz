@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.5 2004/03/29 14:33:29 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.6 2004/03/29 15:26:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -185,7 +185,8 @@ after the point that called this stack-frame."
 		 :fill-pointer (fill-pointer old)))
     (function
      (copy-funobj old))
-    ))
+    (structure-object
+     (copy-structure old))))
 
 (defun malloc-words (words)
   (malloc-clumps (1+ (truncate (1+ words) 2))))
