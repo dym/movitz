@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.83 2004/11/25 18:05:17 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.84 2004/12/09 14:04:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -846,6 +846,16 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	 *i* (when (boundp '*image*) *image*))
   *image*)
 
+(defun set-file-position (stream position &optional who)
+  (or (ignore-errors (file-position stream position))
+      (let* ((end (file-position stream :end))
+	     (diff (- position end)))
+	(assert (< 0 diff 10000))
+	(dotimes (i diff)
+	  (write-byte 0 stream))
+	(assert (= position (file-position stream)))))
+  (values))
+
 (defun dump-image (&key (path *default-image-file*) ((:image *image*) *image*)
 			(multiboot-p t) ignore-dump-count)
   "When <multiboot-p> is true, include a MultiBoot-compliant header in the image."
@@ -959,8 +969,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 				  :direction :output
 				  :if-exists :supersede
 				  :if-does-not-exist :create)
-	  (assert (file-position stream 512) () ; leave room for bootblock.
-	    "Couldn't set file-position for ~W." (pathname stream))
+	  (set-file-position stream 512) ; leave room for bootblock.
 	  (let* ((stack-vector (make-instance 'movitz-basic-vector
 				 :num-elements #x3ffe
 				 :fill-pointer 0
@@ -978,12 +987,12 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		   (kernel-size (- image-end image-start)))
 	      (format t "~&;; Kernel size: ~D octets.~%" kernel-size)
 	      (unless (zerop (mod image-end 512)) ; Ensure image is multiple of 512 octets
-		(file-position stream (+ image-end (- 511 (mod image-end 512))))
+		(set-file-position stream (+ image-end (- 511 (mod image-end 512))) 'pad-image-tail)
 		(write-byte #x0 stream))
 	      (format t "~&;; Image file size: ~D octets.~%" image-end)
 	      ;; Write simple stage1 bootblock into sector 0..
 	      (format t "~&;; Dump count: ~D." (incf (dump-count *image*)))
-	      (assert (file-position stream 0))
+	      (set-file-position stream 0)
 	      (flet ((global-slot-position (slot-name)
 		       (+ 512
 			  (image-nil-word *image*)
@@ -1004,13 +1013,12 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		    #+ignore(warn "stack-v-pos: ~S => ~S" 
 				  stack-vector-position
 				  stack-vector-word)
-		    (assert (file-position stream (global-slot-position 'stack-vector)
-					   #+ignore stack-vector-position))
+		    (set-file-position stream (global-slot-position 'stack-vector) 'stack-vector)
 		    (write-binary 'word stream stack-vector-word)
-		    (assert (file-position stream (global-slot-position 'stack-bottom)))
+		    (set-file-position stream (global-slot-position 'stack-bottom) 'stack-bottom)
 		    (write-binary 'lu32 stream (+ 8 (* 4 4096) ; cushion
 						  (- stack-vector-word (tag :other))))
-		    (assert (file-position stream (global-slot-position 'stack-top)))
+		    (set-file-position stream (global-slot-position 'stack-top) 'stack-top)
 		    (write-binary 'lu32 stream (+ 8 (- stack-vector-word (tag :other))
 						  (* 4 (movitz-vector-num-elements stack-vector)))))
 		  (if (not multiboot-p)
@@ -1030,10 +1038,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 			(warn "Multiboot header at position ~D is above the 8KB mark, ~
 this image will not be Multiboot compatible."
 			      (+ mb-file-position (sizeof mb))))
-		      (assert (file-position stream mb-file-position) ()
-			"Couldn't set file-position for ~W to ~W."
-			(pathname stream)
-			mb-file-position)
+		      (set-file-position stream mb-file-position 'multiboot-header)
 		      ;; (format t "~&;; Multiboot load-address: #x~X." load-address)
 		      (setf (header-address mb) mb-address
 			    (load-address mb) load-address
@@ -1077,7 +1082,7 @@ this image will not be Multiboot compatible."
 		      (assert (<= 0 pad-delta 31) ()
 			"pad-delta ~S for ~S, p: ~S, new-pos: ~S" pad-delta obj p new-pos))
 		    (incf pad-size pad-delta))
-		  (assert (file-position stream new-pos)))
+		  (set-file-position stream new-pos obj))
 		;; (warn "Dump at address #x~X, filepos #x~X: ~A" p (file-position stream) obj)
 		(let ((old-pos (file-position stream))
 		      (write-size (write-binary-record obj stream)))
@@ -1109,10 +1114,10 @@ this image will not be Multiboot compatible."
 		(sum (+ symbols-size conses-size funobjs-size strings-size
 			simple-vectors-size code-vectors-size pad-size)))
 	    (format t "~&;;~%;; ~D symbols (~D gensyms) (~,1F KB ~~ ~,1F%), ~D conses (~,1F KB ~~ ~,1F%),
-;; ~D funobjs (~,1F KB ~~ ~,1F%), ~D strings (~,1F KB ~~ ~,1F%),
-;; ~D simple-vectors (~,1F KB ~~ ~,1F%), ~D code-vectors (~,1F KB ~~ ~,1F%).
-;; ~,1F KB (~,1F%) of padding.
-;; In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
+~D funobjs (~,1F KB ~~ ~,1F%), ~D strings (~,1F KB ~~ ~,1F%),
+~D simple-vectors (~,1F KB ~~ ~,1F%), ~D code-vectors (~,1F KB ~~ ~,1F%).
+~,1F KB (~,1F%) of padding.
+In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 		    symbols-numof gensyms-numof
 		    (/ symbols-size 1024) (/ (* symbols-size 100) total-size)
 		    conses-numof (/ conses-size 1024) (/ (* conses-size 100) total-size)
@@ -1160,13 +1165,13 @@ this image will not be Multiboot compatible."
 		(t #+ignore (warn "Package ~S ~@[for symbol ~S ~]is not a Movitz package."
 				  name symbol)
 		   name)))
-	     (ensure-package (package-name lisp-package)
+	     (ensure-package (package-name lisp-package &optional context)
 	       (assert (not (member (package-name lisp-package)
 				    #+allegro '(excl common-lisp sys aclmop)
 				    #-allegro '(common-lisp)
 				    :test #'string=)) ()
-		 "I don't think you really want to dump the package ~A with Movitz."
-		 lisp-package)
+		 "I don't think you really want to dump the package ~A ~@[for symbol ~S~] with Movitz."
+		 lisp-package context)
 	       (setf (gethash lisp-package lisp-to-movitz-package)
 		 (or (gethash package-name packages-hash nil)
 		     (let ((p (funcall 'muerte::make-package-object
@@ -1175,7 +1180,8 @@ this image will not be Multiboot compatible."
 				       :external-symbols (make-hash-table :test #'equal)
 				       :internal-symbols (make-hash-table :test #'equal)
 				       :use-list (mapcar #'(lambda (up) 
-							     (ensure-package (movitz-package-name (package-name up)) up))
+							     (ensure-package (movitz-package-name (package-name up))
+									     up context))
 							 (package-use-list lisp-package)))))
 		       (setf (gethash package-name packages-hash) p)
 		       p)))))
@@ -1188,7 +1194,7 @@ this image will not be Multiboot compatible."
 	  as package-name = (and lisp-package
 				 (movitz-package-name (package-name lisp-package) symbol))
 	  when package-name
-	  do (let* ((movitz-package (ensure-package package-name lisp-package)))
+	  do (let* ((movitz-package (ensure-package package-name lisp-package symbol)))
 	       (multiple-value-bind (symbol status)
 		   (find-symbol (symbol-name symbol) (symbol-package symbol))
 		 (ecase status
@@ -1219,7 +1225,7 @@ this image will not be Multiboot compatible."
 ;;;	    do (when (string= symbol :method)
 ;;;		 (warn "XXXX ~S ~S ~S" symbol lisp-package package-name))
 	    when package-name
-	    do (let* ((movitz-package (ensure-package package-name lisp-package)))
+	    do (let* ((movitz-package (ensure-package package-name lisp-package symbol)))
 		 (setf (movitz-symbol-package (movitz-read symbol))
 		   (movitz-read movitz-package))))
 	movitz-packages))))
