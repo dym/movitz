@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Aug 27 14:46:50 2001
 ;;;;                
-;;;; $Id: stream-image.lisp,v 1.2 2004/01/19 11:23:41 ffjeld Exp $
+;;;; $Id: stream-image.lisp,v 1.3 2004/02/10 00:23:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -33,6 +33,10 @@
     :initarg :nil-word
     :initform #x65
     :reader image-nil-word)))
+
+(defmethod image-register32 ((image stream-image) register-name)
+  (declare (ignorable image) (ignore register-name))
+  (error "A stream-image has no CPU state."))
 
 (defmethod (setf image-stream-position) (value (image stream-image) &optional physicalp)
   (check-type value (integer 0 *))
