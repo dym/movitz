@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.27 2004/06/23 10:15:10 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.28 2004/06/29 23:21:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -122,7 +122,7 @@
      (assert (%basic-vector-has-fill-pointer-p vector) (vector)
        "Vector has no fill-pointer.")
      (%basic-vector-fill-pointer vector))
-    (vector
+    (old-vector
      (memref vector #.(bt:slot-offset 'movitz:movitz-vector 'movitz::fill-pointer) 0
 	     :unsigned-byte16))))
 
