@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.55 2004/07/29 01:37:10 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.56 2004/07/29 01:59:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -519,7 +519,8 @@
     (if (not (eq slot-name 'unbound-function))
 	(slot-offset 'movitz-run-time-context slot-name)
       (+ (slot-offset 'movitz-run-time-context 'null-symbol)
-	 (slot-offset 'movitz-symbol 'function-value)))))
+	 (slot-offset 'movitz-symbol 'function-value)
+	 (tag :symbol)))))
 
 (defun make-movitz-run-time-context ()
   (make-instance 'movitz-run-time-context
