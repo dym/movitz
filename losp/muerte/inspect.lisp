@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.35 2004/08/23 13:58:25 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.36 2004/08/30 15:16:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -84,14 +84,14 @@ Otherwise, stack-frame is an absolute location."
    (t (memref frame 0 index type))))
 
 (defun current-dynamic-context ()
-  (with-inline-assembly (:returns :untagged-fixnum-ecx)
-    (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))))
+  (with-inline-assembly (:returns :eax)
+    (:locally (:movl (:edi (:edi-offset dynamic-env)) :eax))))
 
 (defun dynamic-context-uplink (dynamic-context)
-  (stack-ref dynamic-context 12 0 :unsigned-byte32))
+  (stack-frame-ref nil dynamic-context 3 :lisp))
 
 (defun dynamic-context-tag (dynamic-context)
-  (stack-ref dynamic-context 4 0 :lisp))
+  (stack-frame-ref nil dynamic-context 1 :lisp))
 
 (defmacro with-each-dynamic-context ((&optional start-context result) &rest clauses)
   "Only use this if you know what you're doing. See run-time.lisp."
@@ -103,15 +103,15 @@ Otherwise, stack-frame is an absolute location."
 	(basic-restart-clause (find :basic-restart clauses :key #'caar)))
     `(do ((,context ,(if start-context start-context '(current-dynamic-context))
 		    (dynamic-context-uplink ,context)))
-	 ((not (stack-ref-p ,context)) ,result)
+	 ((not (plusp ,context)) ,result)
        (let ((,tag (dynamic-context-tag ,context)))
 	 (cond
 	  ,@(when bind-clause
 	      `(((eq ,tag (load-global-constant unbound-value))
 		 (multiple-value-bind ,(cdar bind-clause)
 		     (values ,context
-			     (stack-ref ,context 0 0 :lisp)
-			     (stack-ref ,context 8 0 :lisp))
+			     (stack-frame-ref nil ,context 0 :lisp)
+			     (stack-frame-ref nil ,context 2 :lisp))
 		   ,@(rest bind-clause)))))
 	  ,@(when up-clause
 	      `(((eq ,tag (load-global-constant unwind-protect-tag))
@@ -120,14 +120,14 @@ Otherwise, stack-frame is an absolute location."
 		   ,@(rest up-clause)))))
 	  ,@(when basic-restart-clause
 	      `(((eq ,tag (load-global-constant restart-tag))
-		 (macrolet ((rc-function (c) `(stack-ref ,c 0 -2 :lisp))
-			    (rc-interactive (c) `(stack-ref ,c 0 -3 :lisp))
-			    (rc-test (c) `(stack-ref ,c 0 -4 :lisp))
-			    (rc-format (c) `(stack-ref ,c 0 -5 :lisp))
-			    (rc-args (c) `(stack-ref ,c 0 -6 :lisp)))
+		 (macrolet ((rc-function (c) `(stack-frame-ref nil ,c -2 :lisp))
+			    (rc-interactive (c) `(stack-frame-ref nil ,c -3 :lisp))
+			    (rc-test (c) `(stack-frame-ref nil ,c -4 :lisp))
+			    (rc-format (c) `(stack-frame-ref nil ,c -5 :lisp))
+			    (rc-args (c) `(stack-frame-ref nil ,c -6 :lisp)))
 		   (multiple-value-bind ,(cdar basic-restart-clause)
 		       (values ,@(subseq `(,context
-					   (stack-ref ,context 0 -1 :lisp)) ; name
+					   (stack-frame-ref nil ,context -1 :lisp)) ; name
 					 0 (length (cdar basic-restart-clause))))
 		     ,@(rest basic-restart-clause))))))
 	  ,@(when catch-clause
@@ -135,13 +135,12 @@ Otherwise, stack-frame is an absolute location."
 		       (values ,context ,tag)
 		     ,@(rest catch-clause))))))))))
 
-#+ignore
 (defun pdc (&rest types)
   (declare (dynamic-extent types))
   (let ((types (or types '(:restarts :bindings :catch))))
     (with-each-dynamic-context ()
       ((:basic-restart context name)
-       (when (member :restart types)
+       (when (member :restarts types)
 	 (format t "~&restart: ~S fmt: ~S/~S [#x~X]" name
 		 (rc-format context)
 		 (rc-args context)
