@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.4 2004/03/26 01:50:32 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.5 2004/04/06 14:05:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -216,3 +216,79 @@ respect to multiple threads."
 
   
   
+
+(defmacro handler-bind (bindings &body forms)
+  (if (null bindings)
+      `(progn ,@forms)
+    (labels ((make-handler (binding)
+	       (destructuring-bind (type handler)
+		   binding
+		 (cond
+		  #+ignore
+		  ((and (listp handler)
+			(eq 'lambda (first handler))
+			(= 1 (length (second handler))))
+		   `(cons t (lambda (x)
+			      (when (typep x ',type)
+				(let ((,(first (second handler)) x))
+				  ,@(cddr handler)))
+			      nil)))
+		  #+ignore
+		  ((and (listp handler)
+			(eq 'function (first handler))
+			(listp (second handler))
+			(eq 'lambda (first (second handler)))
+			(= 1 (length (second (second handler)))))
+		   (make-handler (list type (second handler))))
+		  (t `(cons ',type ,handler))))))
+      `(let ((*active-condition-handlers*
+	      (cons (list ,@(mapcar #'make-handler #+ignore (lambda (binding)
+							      `(cons ',(first binding)
+								     ,(second binding)))
+				    bindings))
+		    *active-condition-handlers*)))
+	 ,@forms))))
+
+(defmacro handler-case (expression &rest clauses)
+  (multiple-value-bind (normal-clauses no-error-clauses)
+      (loop for clause in clauses
+	  if (eq :no-error (car clause))
+	  collect clause into no-error-clauses
+	  else collect clause into normal-clauses
+	  finally (return (values normal-clauses no-error-clauses)))
+    (case (length no-error-clauses)
+      (0 (let ((block-name (gensym "handler-case-block-"))
+	       (var-name (gensym "handler-case-var-"))
+	       (temp-name (gensym "handler-case-temp-var-"))
+	       (specs (mapcar (lambda (clause)
+				(list clause (gensym "handler-case-clause-tag-")))
+			      normal-clauses)))
+	   `(block ,block-name
+	      (let (,var-name)
+		(tagbody
+		  (handler-bind ,(mapcar (lambda (clause-spec)
+					   (let* ((clause (first clause-spec))
+						  (go-tag (second clause-spec))
+						  (typespec (first clause)))
+					     `(,typespec (lambda (,temp-name)
+							   (setq ,var-name ,temp-name)
+							   (go ,go-tag)))))
+				  specs)
+		    (return-from ,block-name ,expression))
+		  ,@(mapcan (lambda (clause-spec)
+			      (let* ((clause (first clause-spec))
+				     (go-tag (second clause-spec))
+				     (var (first (second clause)))
+				     (body (cddr clause)))
+				(if (not var)
+				    `(,go-tag (return-from ,block-name
+						(let () ,@body)))
+				  `(,go-tag (return-from ,block-name
+					      (let ((,var ,var-name))
+						,@body))))))
+			    specs))))))
+      (t (error "Too many no-error clauses.")))))
+
+(defmacro ignore-errors (&body body)
+  `(handler-case (progn ,@body)
+     (error (c) (values nil c))))
