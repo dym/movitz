@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.3 2004/02/20 15:38:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -129,26 +129,15 @@
        ,@declarations-and-body)))
 
 (defmacro dolist ((var list-form &optional result-form) &body declarations-and-body)
-  (let ((cons-var (gensym "dolist-cons-var-"))
+  (let ((cons-var (gensym (format nil "dolist-cons-var-~A-" var)))
 	(loop-tag (gensym "dolist-loop-tag-")))
-    (multiple-value-bind (body declarations)
-	(movitz::parse-declarations-and-body declarations-and-body 'muerte.cl:declare)
-      `(let ((,cons-var ,list-form) ,var)
-	 (declare ,@declarations)
-	 (block nil
-	   (tagbody
-	     ,loop-tag
-	     (when ,cons-var
-	       (setq ,var (pop ,cons-var))
-	       ,@body
-	       (go ,loop-tag)))
-	   ,result-form))
-      #+ignore
-      `(do* ((,cons-var ,list-form (cdr ,cons-var))
-	     (,var (car ,cons-var) (car ,cons-var)))
-	   ((null ,cons-var) ,result-form)
-	 ,@declarations-and-body))))
-
+    `(prog ((,cons-var ,list-form))
+       ,loop-tag
+       (when ,cons-var
+	 (let ((,var (pop ,cons-var)))
+	   ,@declarations-and-body)
+	 (go ,loop-tag))
+       ,(when result-form `(return ,result-form)))))
 
 (defmacro letf* (bindings &body body &environment env)
   "Does what one might expect, saving the old values and setting the generalized
