@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.32 2004/10/11 13:53:01 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.33 2004/10/12 14:52:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -98,7 +98,8 @@
 					  (:big `((:xchgb :cl :ch))))))
 		   (cond
 		    ((and (eq 0 offset) (eq 0 index))
-		     `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		     `(with-inline-assembly (:returns :untagged-fixnum-ecx
+						      :type (unsigned-byte 16))
 			(:compile-form (:result-mode :eax) ,object)
 			(:movzxw (:eax ,(offset-by 2)) :ecx)
 			,@endian-fix-ecx))
@@ -118,7 +119,8 @@
 			 `(let ((,object-var ,object)
 				(,offset-var ,offset)
 				(,index-var ,index))
-			    (with-inline-assembly (:returns :untagged-fixnum-ecx)
+			    (with-inline-assembly (:returns :untagged-fixnum-ecx
+							    :type (unsigned-byte 16))
 			      (:compile-two-forms (:ecx :ebx) ,offset-var ,index-var)
 			      (:leal (:ecx (:ebx 2)) :ecx)
 			      (:load-lexical (:lexical-binding ,object-var) :eax)
@@ -217,18 +219,18 @@
 		 (assert (= 4 movitz::+movitz-fixnum-factor+))
 		 (cond
 		  ((and (eq 0 offset) (eq 0 index))
-		   `(with-inline-assembly (:returns :ecx)
+		   `(with-inline-assembly (:returns :ecx :type (unsigned-byte 29))
 		      (:compile-form (:result-mode :eax) ,object)
 		      (:movl (:eax ,(offset-by 4)) :ecx)
 		      (:andl -4 :ecx)))
 		  ((eq 0 offset)
-		   `(with-inline-assembly (:returns :ecx)
+		   `(with-inline-assembly (:returns :ecx :type (unsigned-byte 29))
 		      (:compile-two-forms (:eax :ecx) ,object ,index)
 		      (:movl (:eax :ecx ,(offset-by 4)) :ecx)
 		      (:andl -4 :ecx)))
 		  (t (let ((object-var (gensym "memref-object-")))
 		       `(let ((,object-var ,object))
-			  (with-inline-assembly (:returns :ecx)
+			  (with-inline-assembly (:returns :ecx :type (unsigned-byte 29))
 			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
 			    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
 			    (:load-lexical (:lexical-binding ,object-var) :eax)
@@ -241,16 +243,19 @@
 		 (assert (= 4 movitz::+movitz-fixnum-factor+))
 		 (cond
 		  ((and (eq 0 offset) (eq 0 index))
-		   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		   `(with-inline-assembly (:returns :untagged-fixnum-ecx
+						    :type (unsigned-byte 32))
 		      (:compile-form (:result-mode :eax) ,object)
 		      (:movl (:eax ,(offset-by 4)) :ecx)))
 		  ((eq 0 offset)
-		   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		   `(with-inline-assembly (:returns :untagged-fixnum-ecx
+						    :type (unsigned-byte 32))
 		      (:compile-two-forms (:eax :ecx) ,object ,index)
 		      (:movl (:eax :ecx ,(offset-by 4)) :ecx)))
 		  (t (let ((object-var (gensym "memref-object-")))
 		       `(let ((,object-var ,object))
-			  (with-inline-assembly (:returns :untagged-fixnum-ecx)
+			  (with-inline-assembly (:returns :untagged-fixnum-ecx
+							  :type (unsigned-byte 32))
 			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
 			    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
 			    (:load-lexical (:lexical-binding ,object-var) :eax)
