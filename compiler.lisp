@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.92 2004/08/10 12:56:12 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.93 2004/08/12 17:25:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -73,6 +73,8 @@ compile, using the host compiler, the code rather than just using eval.")
 
 (defvar *compiler-produce-defensive-code* t
   "Try make code be extra cautious.")
+
+(defvar *compiler-trust-user-type-declarations-p* t)
 
 (defvar *compiling-function-name*)
 (defvar muerte.cl:*compile-file-pathname* nil)
@@ -360,25 +362,36 @@ Otherwise coerce funobj to class."
   (thunks)
   (binding-types)
   (encoded-type
-   (multiple-value-list (type-specifier-encode nil))))
+   (multiple-value-list (type-specifier-encode nil)))
+  (declared-encoded-type
+   (multiple-value-list (type-specifier-encode t))))
+
+(defun make-type-analysis-with-declaration (binding)
+  (let ((declared-type
+	 (if (not (and *compiler-trust-user-type-declarations-p*
+		       (movitz-env-get (binding-name binding) :variable-type
+				       nil (binding-env binding) nil)))
+	     (multiple-value-list (type-specifier-encode t))
+	   (multiple-value-list
+	    (type-specifier-encode (movitz-env-get (binding-name binding) :variable-type
+						   t (binding-env binding) nil))))))
+    ;; (warn "~S decl: ~A" binding (apply #'encoded-type-decode declared-type))
+    (make-type-analysis :declared-encoded-type declared-type)))
 
 (defun analyze-bindings (toplevel-funobj)
   "Figure out usage of bindings in a toplevel funobj.
 Side-effects each binding's binding-store-type."
   (when *compiler-do-type-inference*
-    (let ((more-binding-references-p nil)
-	  (binding-usage (make-hash-table :test 'eq)))
+    (let ((binding-usage (make-hash-table :test 'eq)))
       (labels ((binding-resolved-p (binding)
 		 (let ((analysis (gethash binding binding-usage)))
 		   (and analysis
-			(null (type-analysis-binding-types analysis))
 			(null (type-analysis-thunks analysis)))))
 	       (binding-resolve (binding)
 		 (if (not (bindingp binding))
 		     binding
 		   (let ((analysis (gethash binding binding-usage)))
 		     (assert (and (and analysis
-				       (null (type-analysis-binding-types analysis))
 				       (null (type-analysis-thunks analysis))))
 			 (binding)
 		       "Can't resolve unresolved binding ~S." binding)
@@ -395,49 +408,63 @@ Side-effects each binding's binding-store-type."
 		 (assert (or (typep type 'binding)
 			     (eql 1 (type-specifier-num-values type))) ()
 		   "store-lexical with multiple-valued type: ~S for ~S" type binding)
+		 ;; (warn "store ~S type ~S, thunk ~S" binding type thunk)
 		 (let ((analysis (or (gethash binding binding-usage)
 				     (setf (gethash binding binding-usage)
-				       (make-type-analysis)))))
+				       (make-type-analysis-with-declaration binding)))))
 		   (cond
 		    (thunk
 		     (assert (some #'bindingp thunk-args))
+;;;		     (assert (notany (lambda (arg)
+;;;				       (and (bindingp arg)
+;;;					    (binding-eql arg binding)))
+;;;				     thunk-args)
+;;;			 () "A thunk on itself for ~S?" binding)
 		     (push (cons thunk thunk-args) (type-analysis-thunks analysis)))
-		    ((typep binding 'function-argument)
-		     (setf (type-analysis-encoded-type analysis)
-		       (multiple-value-list
-			(type-specifier-encode (etypecase binding
-						 (rest-function-argument 'list)
-						 (supplied-p-function-argument 'boolean)
-						 (function-argument t))))))
-		    ((and (consp type) (eq 'binding-type (car type)))
-		     (let ((target-binding (binding-target (cadr type))))
-		       (cond
-			((eq binding target-binding))
-			((typep binding 'constant-object-binding)
-			 (setf (type-analysis-encoded-type analysis)
-			   (multiple-value-list
-			    (multiple-value-call
-				#'encoded-types-or 
-			      (values-list (type-analysis-encoded-type analysis))
-			      (member-type-encode (constant-object target-binding))))))
-			(t (pushnew target-binding (type-analysis-binding-types analysis))
-			   (setf more-binding-references-p t)))))
+;;;		    ((typep binding 'function-argument)
+;;;		     (setf (type-analysis-encoded-type analysis)
+;;;		       (multiple-value-list
+;;;			(type-specifier-encode (etypecase binding
+;;;						 (rest-function-argument 'list)
+;;;						 (supplied-p-function-argument 'boolean)
+;;;						 (function-argument t))))))
+;;;		    ((and (consp type) (eq 'binding-type (car type)))
+;;;		     (break "Got binding-type.")
+;;;		     (let ((target-binding (binding-target (cadr type))))
+;;;		       (cond
+;;;			((eq binding target-binding))
+;;;			((typep binding 'constant-object-binding)
+;;;			 (setf (type-analysis-encoded-type analysis)
+;;;			   (multiple-value-list
+;;;			    (multiple-value-call
+;;;				#'encoded-types-or 
+;;;			      (values-list (type-analysis-encoded-type analysis))
+;;;			      (member-type-encode (constant-object target-binding))))))
+;;;			(t (pushnew target-binding (type-analysis-binding-types analysis))
+;;;			   ))))
 		    ((and (bindingp type)
 			  (binding-eql type binding))
+		     (break "got binding type")
 		     nil)
 		    (t (setf (type-analysis-encoded-type analysis)
 			 (multiple-value-list
 			  (multiple-value-call
 			      #'encoded-types-or 
 			    (values-list (type-analysis-encoded-type analysis))
-			    (type-specifier-encode type))))))))
+			    (type-specifier-encode type)))))))
+		 #+ignore
+		 (when (typep binding 'forwarding-binding)
+		   (analyze-store (forwarding-binding-target binding) type thunk thunk-args)))
 	       (analyze-code (code)
 		 (dolist (instruction code)
 		   (when (listp instruction)
 		     (multiple-value-bind (store-binding store-type thunk thunk-args)
 			 (find-written-binding-and-type instruction)
 		       (when store-binding
-			 (analyze-store (binding-target store-binding) store-type thunk thunk-args)))
+			 #+ignore
+			 (warn "store: ~S binding ~S type ~S thunk ~S"
+			       instruction store-binding store-type thunk)
+			 (analyze-store store-binding store-type thunk thunk-args)))
 		     (analyze-code (instruction-sub-program instruction)))))
 	       (analyze-funobj (funobj)
 		 (loop for (nil . function-env) in (function-envs funobj)
@@ -448,88 +475,78 @@ Side-effects each binding's binding-store-type."
 	;; 1. Examine each store to lexical bindings.
 	(analyze-funobj toplevel-funobj)
 	;; 2.
-	(loop repeat 10 while more-binding-references-p
-	    doing
-	      (setf more-binding-references-p nil)
-	      (maphash (lambda (binding analysis)
-			 (setf (type-analysis-thunks analysis)
-			   (remove-if (lambda (x)
-					(destructuring-bind (thunk . thunk-args) x
-					  (when (every (lambda (arg)
-							 (or (not (bindingp arg))
-							     (binding-resolved-p arg)))
-						       thunk-args)
-					    (setf more-binding-references-p t)
-					    (setf (type-analysis-encoded-type analysis)
+	(flet ((resolve-thunks ()
+		 (loop with more-thunks-p = t
+		     repeat 20
+		     finally (return t)
+		     do (unless more-thunks-p
+			  (return nil))
+			(setf more-thunks-p nil)
+			(maphash (lambda (binding analysis)
+				   (declare (ignore binding))
+				   (setf (type-analysis-thunks analysis)
+				     (loop for (thunk . thunk-args) in (type-analysis-thunks analysis)
+					 if (not (every #'binding-resolved-p thunk-args))
+					 collect (cons thunk thunk-args)
+					 else
+					 do (setf (type-analysis-encoded-type analysis)
 					      (multiple-value-list
 					       (multiple-value-call
-						   #'encoded-types-or
+						   #'encoded-types-and
 						 (values-list
-						  (type-analysis-encoded-type analysis))
-						 (type-specifier-encode
-						  (apply thunk (mapcar #'binding-resolve
-								       thunk-args)))))))))
-				      (type-analysis-thunks analysis)))
-			 (dolist (target-binding (type-analysis-binding-types analysis))
-			   (let* ((target-analysis
-				   (or (gethash target-binding binding-usage)
-				       (and (typep target-binding 'function-argument)
-					    (make-type-analysis
-					     :encoded-type (multiple-value-list
-							    (type-specifier-encode t))))
-				       (error "Type-reference by ~S to unknown binding ~S"
-					      binding target-binding)))
-				  (new-type (setf (type-analysis-encoded-type analysis)
-					      (multiple-value-list
-					       (multiple-value-call
-						   #'encoded-types-or 
-						 (values-list
-						  (type-analysis-encoded-type analysis))
-						 (values-list
-						  (type-analysis-encoded-type target-analysis)))))))
-			     (cond
-			      ((apply #'encoded-allp new-type)
-			       ;; If the type is already T, no need to look further.
-			       (setf (type-analysis-binding-types analysis) nil))
-			      ((setf (type-analysis-binding-types analysis)
-				 (remove target-binding
-					 (remove binding
-						 (union (type-analysis-binding-types analysis)
-							(type-analysis-binding-types target-analysis)))))
-			       (setf more-binding-references-p t))))))
-		       binding-usage))
-	(when more-binding-references-p
-	  (warn "Unable to remove all binding-references during lexical type analysis."))
+						  (type-analysis-declared-encoded-type analysis))
+						 (multiple-value-call
+						     #'encoded-types-or
+						   (values-list
+						    (type-analysis-encoded-type analysis))
+						   (type-specifier-encode
+						    (apply thunk (mapcar #'binding-resolve
+									 thunk-args)))))))
+					 (setf more-thunks-p t))))
+				 binding-usage))))
+	  (when (and (resolve-thunks)
+		     *compiler-trust-user-type-declarations-p*)
+	    ;; For each unresolved binding, just use the declared type.
+	    (maphash (lambda (binding analysis)
+		       (declare (ignore binding))
+		       (when (and (not (null (type-analysis-thunks analysis)))
+				  (not (apply #'encoded-allp
+					      (type-analysis-declared-encoded-type analysis))))
+			 (setf (type-analysis-encoded-type analysis)
+			   (type-analysis-declared-encoded-type analysis))
+			 (setf (type-analysis-thunks analysis) nil))) ; Ignore remaining thunks.
+		     binding-usage)
+	    ;; Try one more time to resolve thunks.
+	    (resolve-thunks)))
+	#+ignore
+	(maphash (lambda (binding analysis)
+		   (when (type-analysis-thunks analysis)
+		     (warn "Unable to infer type for ~S: ~S" binding
+			   (type-analysis-thunks analysis))))
+		 binding-usage)
 	;; 3.
 	(maphash (lambda (binding analysis)
-;;;		   (loop for (nil . thunk-args) in (type-analysis-thunks analysis)
-;;;		       do (warn "Unable to thunk ~S with args ~S." binding thunk-args))
-		   (assert (null (type-analysis-binding-types analysis)) ()
-		     "binding ~S type ~S still refers to ~S"
-		     binding
-		     (apply #'encoded-type-decode (type-analysis-encoded-type analysis))
-		     (type-analysis-binding-types analysis))
 		   (setf (binding-store-type binding)
 		     (cond
+		      ((and (not (null (type-analysis-thunks analysis)))
+			    *compiler-trust-user-type-declarations-p*
+			    (movitz-env-get (binding-name binding) :variable-type nil
+					    (binding-env binding) nil))
+		       (multiple-value-list
+			(type-specifier-encode (movitz-env-get (binding-name binding) :variable-type
+							       t (binding-env binding) nil))))
+		      ((and *compiler-trust-user-type-declarations-p*
+			    (movitz-env-get (binding-name binding) :variable-type nil
+					    (binding-env binding) nil))
+		       (multiple-value-list
+			(multiple-value-call #'encoded-types-and
+			  (type-specifier-encode (movitz-env-get (binding-name binding) :variable-type
+								 t (binding-env binding) nil))
+			  (values-list (type-analysis-encoded-type analysis)))))
 		      ((not (null (type-analysis-thunks analysis)))
-;;;		       (when (not (rest (type-analysis-thunks analysis)))
-;;;			 (warn "One thunk: ~S for ~S" binding (first (type-analysis-thunks analysis))))
 		       (multiple-value-list (type-specifier-encode t)))
 		      (t (type-analysis-encoded-type analysis))))
-		   #+ignore
-		   (when (apply #'encoded-type-singleton (type-analysis-encoded-type analysis))
-		     (warn "Singleton: ~A" binding))
-		   #+ignore
-		   (when (or t #+ignore (not (apply #'encoded-allp (type-analysis-encoded-type analysis)))
-			     #+ignore (multiple-value-call #'encoded-subtypep
-					(values-list (type-analysis-encoded-type analysis))
-					(type-specifier-encode 'list)))
-		     (warn "Type: ~S => ~A (~A)"
-			   binding
-			   (apply #'encoded-type-decode (type-analysis-encoded-type analysis))
-			   (multiple-value-call #'encoded-subtypep
-			     (values-list (type-analysis-encoded-type analysis))
-			     (type-specifier-encode 'list)))))
+		   #+ignore (warn "Finally: ~S" binding))
 		 binding-usage))))
   toplevel-funobj)
 
@@ -555,10 +572,9 @@ of all function-bindings seen."
 				  'forwarding-binding)
 		       (change-class (borrowed-binding-target borrowing-binding)
 				     'located-binding))
-		     #+ignore
-		     (warn "binding ~S of ~S is not local to ~S, replacing with ~S of ~S."
-			   binding (binding-env binding) funobj
-			   borrowing-binding (binding-env borrowing-binding))
+;;;		     (warn "binding ~S of ~S is not local to ~S, replacing with ~S of ~S."
+;;;			   binding (binding-env binding) funobj
+;;;			   borrowing-binding (binding-env borrowing-binding))
 		     (pushnew borrowing-binding 
 			      (getf (binding-lended-p binding) :lended-to))
 		     (dolist (usage usages)
@@ -5821,24 +5837,28 @@ and a list of any intervening unwind-protect environment-slots."
       (list extended-instruction)
     (let* ((operator (car extended-instruction))
 	   (expander (gethash operator *extended-code-expanders*)))
-      (if expander
-	  (funcall expander extended-instruction funobj frame-map)
-	(list extended-instruction)))))
+      (if (not expander)
+	  (list extended-instruction)
+	(let ((expansion (funcall expander extended-instruction funobj frame-map)))
+	  (mapcan (lambda (e)
+		    (expand-extended-code e funobj frame-map))
+		  expansion))))))
 
 (defun ensure-local-binding (binding funobj)
   "When referencing binding in funobj, ensure we have the binding local to funobj."
   (if (not (typep binding 'binding))
       binding
-    (let ((binding (binding-target binding)))
+    (let ((target-binding (binding-target binding)))
       (cond
-       ((eq funobj (binding-funobj binding))
+       ((eq funobj (binding-funobj target-binding))
 	binding)
-       (t (or (find binding (borrowed-bindings funobj)
+       (t (or (find target-binding (borrowed-bindings funobj)
 		    :key (lambda (binding)
 			   (borrowed-binding-target binding)))
 	      (error "Can't install non-local binding ~W." binding)))))))
 
 (defun binding-type-specifier (binding)
+  (break "nix binding-type-specifier: ~S" binding)
   (etypecase binding
     (forwarding-binding
      (binding-type-specifier (forwarding-binding-target binding)))
@@ -5867,7 +5887,10 @@ and a list of any intervening unwind-protect environment-slots."
   (destructuring-bind (source destination &key &allow-other-keys)
       (cdr instruction)
     (when (typep destination 'binding)
-      (values destination (binding-type-specifier source)))))
+      (values destination t #+ignore (binding-type-specifier source)
+	      (lambda (source-type)
+		source-type)
+	      (list source)))))
 
 (define-find-read-bindings :load-lexical (source destination &key &allow-other-keys)
   (declare (ignore destination))
@@ -5927,8 +5950,13 @@ and a list of any intervening unwind-protect environment-slots."
     (declare (ignore protect-registers protect-carry))
     (cond
      (init-with-register
-      (assert init-with-type)
-      (values binding init-with-type))
+      (cond
+       ((not (typep init-with-register 'binding))
+	(assert init-with-type)
+	(values binding init-with-type)	)
+       (t (values binding t
+		  (lambda (x) x)
+		  (list init-with-register)))))
      ((not (typep binding 'temporary-name))
       (values binding t)))))
 
@@ -5942,8 +5970,6 @@ and a list of any intervening unwind-protect environment-slots."
 				    init-with-register init-with-type)
       (cdr instruction)
     (declare (ignore protect-carry))	; nothing modifies carry anyway.
-    (when (string= (binding-name binding) 'reader-function)
-      (break "init: ~S" instruction))
     ;; (assert (eq binding (ensure-local-binding binding funobj)))
     (assert (eq funobj (binding-funobj binding)))
     (cond
@@ -6049,6 +6075,8 @@ and a list of any intervening unwind-protect environment-slots."
 		       (:movl ,tmp-register
 			      (:ebp ,(stack-frame-offset
 				      (new-binding-location binding frame-map))))))))
+	  ((typep init-with-register 'lexical-binding)
+	   (make-load-lexical init-with-register binding funobj nil frame-map))
 	  (init-with-register
 	   (make-store-lexical binding init-with-register nil frame-map))))))))
 
@@ -6239,41 +6267,59 @@ and a list of any intervening unwind-protect environment-slots."
 		 (bindingp term1)
 		 (member (result-mode-type destination)
 			 '(:lexical-binding :function :multple-values :eax :ebx :ecx :edx))))
-    (let* ((term0 (binding-target term0))
-	   (term1 (binding-target term1))
-	   (destination (if (or (not (bindingp destination))
-				(not (symbolp (new-binding-location destination frame-map :default 0))))
-			    destination
-			  (new-binding-location destination frame-map)))
+    (let* ((destination (ensure-local-binding destination funobj))
+	   (term0 (ensure-local-binding term0 funobj))
+	   (term1 (ensure-local-binding term1 funobj))
+	   (destination-location (if (or (not (bindingp destination))
+					 (typep destination 'borrowed-binding))
+				     destination
+				   (new-binding-location (binding-target destination) frame-map)))
 	   (type0 (apply #'encoded-type-decode (binding-store-type term0)))
 	   (type1 (apply #'encoded-type-decode (binding-store-type term1)))
 	   (result-type (multiple-value-call #'encoded-integer-types-add
 			  (values-list (binding-store-type term0))
 			  (values-list (binding-store-type term1)))))
-      ;; (warn "add for: ~S is ~A." destination result-type)
       (let ((loc0 (new-binding-location term0 frame-map :default nil))
 	    (loc1 (new-binding-location term1 frame-map :default nil)))
+;;;	(warn "add: ~A" instruction)
+;;;	(warn "add for: ~S is ~A, from ~A/~A and ~A/~A."
+;;;	      destination result-type
+;;;	      term0 loc0
+;;;	      term1 loc1)
 	(cond
 	 ((type-specifier-singleton result-type)
 	  ;; (break "constant add: ~S" instruction)
 	  (make-load-constant (car (type-specifier-singleton result-type))
 			      destination funobj frame-map))
-	 ((and (movitz-subtypep type1 'fixnum)
+	 ((and (movitz-subtypep type0 'fixnum)
 	       (movitz-subtypep type1 'fixnum)
 	       (movitz-subtypep result-type 'fixnum))
 	  (cond
 	   ((and (type-specifier-singleton type0)
-		 (eq loc1 destination))
+		 (eq loc1 destination-location))
 	    (cond
-	     ((member destination '(:eax :ebx :ecx :edx))
+	     ((member destination-location '(:eax :ebx :ecx :edx))
 	      `((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
 		       ,destination)))
 	     (t (assert (integerp loc1))
 		(break "check that this is correct..")
 		`((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
 			 (:ebp ,(stack-frame-offset loc1)))))))
+	   ((and (type-specifier-singleton type0)
+		 (eq term1 destination)
+		 (integerp destination-location))
+	    (break "untested")
+	    `((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
+		     (:ebp ,(stack-frame-offset destination-location)))))
+	   ((and (type-specifier-singleton type0)
+		 (symbolp loc1)
+		 (integerp destination-location))
+	    `((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
+		     ,loc1)
+	      (:movl ,loc1 (:ebp ,(stack-frame-offset destination-location)))))
 	   (t
-;;;	    (warn "ADD: ~S = ~A/~S + ~A/~S,~%~A ~A"
+;;;	    (warn "ADD: ~A/~S = ~A/~S + ~A/~S,~%~A ~A"
+;;;		  destination-location
 ;;;		  destination
 ;;;		  loc0 term0
 ;;;		  loc1 term1
@@ -6281,24 +6327,24 @@ and a list of any intervening unwind-protect environment-slots."
 ;;;		  (eq loc1 destination))
 ;;;	     (warn "ADDI: ~S" instruction)
 	    (append (cond
-		       ((and (eq :eax loc0) (eq :ebx loc1))
-			nil)
-		       ((and (eq :ebx loc0) (eq :eax loc1))
-			nil)		; terms order isn't important
-		       ((eq :eax loc1)
-			(append
-			 (make-load-lexical term0 :ebx funobj nil frame-map)))
-		       (t (append
-			   (make-load-lexical term0 :eax funobj nil frame-map)
-			   (make-load-lexical term1 :ebx funobj nil frame-map))))
-		      `((:movl (:edi ,(global-constant-offset '+)) :esi))
-		      (make-compiled-funcall-by-esi 2)
-		      (etypecase destination
-			(symbol
-			 (unless (eq destination :eax)
-			   `((:movl :eax ,destination))))
-			(binding
-			 (make-store-lexical destination :eax nil frame-map)))))))
+		     ((and (eq :eax loc0) (eq :ebx loc1))
+		      nil)
+		     ((and (eq :ebx loc0) (eq :eax loc1))
+		      nil)		; terms order isn't important
+		     ((eq :eax loc1)
+		      (append
+		       (make-load-lexical term0 :ebx funobj nil frame-map)))
+		     (t (append
+			 (make-load-lexical term0 :eax funobj nil frame-map)
+			 (make-load-lexical term1 :ebx funobj nil frame-map))))
+		    `((:movl (:edi ,(global-constant-offset '+)) :esi))
+		    (make-compiled-funcall-by-esi 2)
+		    (etypecase destination
+		      (symbol
+		       (unless (eq destination :eax)
+			 `((:movl :eax ,destination))))
+		      (binding
+		       (make-store-lexical destination :eax nil frame-map)))))))
 	 (t (append (cond
 		     ((and (eq :eax loc0) (eq :ebx loc1))
 		      nil)
