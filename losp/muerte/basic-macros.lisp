@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.22 2004/06/09 01:16:47 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.23 2004/06/09 17:23:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1005,10 +1005,10 @@ busy-waiting loop on P4."
 
 (defmacro load-global-constant (name &key thread-local)
   (if thread-local
-      `(with-inline-assembly (:returns :eax)
-	 (:locally (:movl (:edi (:edi-offset ,name)) :eax)))
-    `(with-inline-assembly (:returns :eax)
-       (:globally (:movl (:edi (:edi-offset ,name)) :eax)))))
+      `(with-inline-assembly (:returns :register)
+	 (:locally (:movl (:edi (:edi-offset ,name)) (:result-register))))
+    `(with-inline-assembly (:returns :register)
+       (:globally (:movl (:edi (:edi-offset ,name)) (:result-register))))))
 
 (defmacro load-global-constant-u32 (name &key thread-local)
   (if thread-local
