@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.45 2004/07/13 02:24:36 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.46 2004/07/13 12:59:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -398,8 +398,11 @@
     :initform 3)
    (protect-non-pointer-count
     :binary-type lu32
-    :initform (* 4 (- (bt:slot-offset 'movitz-constant-block 'non-pointers-end)
-		      (bt:slot-offset 'movitz-constant-block 'non-pointers-start))))
+    :initform nil
+    :map-binary-write (lambda (x type)
+			(declare (ignore x type))
+			(- (bt:slot-offset 'movitz-constant-block 'non-pointers-end)
+			   (bt:slot-offset 'movitz-constant-block 'non-pointers-start))))
    (non-pointers-start :binary-type :label) ; ========= NON-POINTER-START =======
    ;; (align-segment-descriptors :binary-type 4)
    (segment-descriptor-table :binary-type :label)
