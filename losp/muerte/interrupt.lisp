@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.20 2004/08/12 16:57:15 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.21 2004/08/18 22:37:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -239,9 +239,10 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:movl :edi (:ebp 16))
 	    (:movl :edi (:ebp 20))
 	    (:movl (:ebp 0) :ebp)	; pop stack-frame
+	    (:movl (:ebp -4) :esi)	; reset funobj in ESI
 	    (:locally (:movl (:edi (:edi-offset atomically-esp)) :esp)) ; restore ESP
 	    ;; XXXX this state isn't covered in the stack discipline!?!
-	    (:jmp (:esi :ebx ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
+	    (:jmp (:esi :ebx (:offset movitz-funobj constant0)))
 
 	   atomically-jumper-return-dirty-registers
 	    ;; If the interruptee had DF set, then initialize all GP registers with
@@ -264,7 +265,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:movl (:ebp -4) :esi)
 	    (:locally (:movl (:edi (:edi-offset atomically-esp)) :esp)) ; restore ESP
 	    ;; XXXX this state isn't covered in the stack discipline!?!
-	    (:jmp (:esi :ebx ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
+	    (:jmp (:esi :ebx (:offset movitz-funobj constant0)))
 
 	   not-simple-restart-jumper
 	    ;; Don't know what to do.
