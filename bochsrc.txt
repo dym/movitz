@@ -18,6 +18,9 @@ floppya: 1_44=los0-image, status=inserted
 #diskc: file=hd10meg.img, cyl=306, heads=4, spt=17
 #newharddrivesupport: enabled=1
 
+# This is just to make X11 clipboard pasting into bochs work.
+keyboard_mapping: enabled=1, map=../../tmp/bochs-cvs/gui/keymaps/x11-pc-us.map
+
 # choose the boot disk.
 boot: a
 
