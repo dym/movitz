@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.7 2004/07/08 18:53:57 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.8 2004/07/15 11:17:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -90,7 +90,7 @@
       (lu32
        (setf (memref context -6 (third slot) :unsigned-byte32) value))
       (code-vector-word
-       (setf (memref context -6 (third slot) :unsigned-byte32) value)))))
+       (setf (memref context -6 (third slot) :code-vector) value)))))
 
 (defun %run-time-context-segment-base (slot-name
 				      &optional (context (current-run-time-context)))
