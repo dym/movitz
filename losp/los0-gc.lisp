@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.48 2005/01/27 07:48:53 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.49 2005/03/09 07:31:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -335,9 +335,19 @@ duo-space where each space is KB-SIZE kilobytes."
 (defparameter *x* #4000(nil))		; Have this in static space.
 (defparameter *xx* #4000(nil))		; Have this in static space.
 
+(defparameter *code-vector-foo* 0)
+(defvar *old-code-vectors* #250())
+(defvar *new-code-vectors* #250())
+
+(defun debug (location x)
+  (setf (dummy x)
+    (let ((new (shallow-copy x)))
+      (warn "[~S] Migrating code-vector ~Z => ~Z." location x new)
+      new)))
 
 (defun stop-and-copy (&optional evacuator)
   (setf (fill-pointer *x*) 0)
+  (setf (fill-pointer *old-code-vectors*) 0)
   (multiple-value-bind (newspace oldspace)
       (without-interrupts
 	(let* ((space0 (%run-time-context-slot 'nursery-space))
@@ -349,14 +359,37 @@ duo-space where each space is KB-SIZE kilobytes."
 	  (setf (%run-time-context-slot 'nursery-space) space1)
 	  (values space1 space0)))
     ;; Evacuate-oldspace is to be mapped over every potential pointer.
-    (let ((evacuator
+    (let ((*code-vector-foo* (incf *code-vector-foo* 2))
+	  (evacuator
 	   (or evacuator
 	       (lambda (x location)
 		 "If x is in oldspace, migrate it to newspace."
-		 (declare (ignore location))
+		 ;; (declare (ignore location))
 		 (cond
 		  ((null x)
 		   nil)
+		  ((object-in-space-p newspace x)
+		   x)
+		  ((and (typep x 'code-vector)
+			(not (object-in-space-p oldspace x))
+			(not (object-in-space-p newspace x))
+			(= (ldb (byte 12 0) (object-location x))
+			   (ldb (byte 12 0) *code-vector-foo*))
+			(not (eq x (funobj-code-vector #'stop-and-copy)))
+			(not (eq x (symbol-value 'muerte::default-interrupt-trampoline)))
+;;;			(not (eq x (symbol-value 'muerte::ret-trampoline)))
+			(not (muerte::scavenge-find-pf (lambda (x y) x) (object-location x))))
+		   (let ((p (position (object-location x) *old-code-vectors*)))
+		     (if p
+			 (aref *new-code-vectors* p)
+		       (setf (aref *new-code-vectors*
+				   (vector-push (object-location x) *old-code-vectors*))
+			 (let ((new (shallow-copy x)))
+			   (warn "[~S] Migrating ~@[~S ~]~Z => ~Z." 
+				 location
+				 (muerte::locate-function (object-location x))
+				 x new)
+			   new)))))
 		  ((not (object-in-space-p oldspace x))
 		   x)
 		  (t (or (and (eq (object-tag x)
@@ -375,47 +408,57 @@ duo-space where each space is KB-SIZE kilobytes."
 			   (setf (memref (object-location x) 0) forward-x)
 			   forward-x))))))))
       ;; Scavenge roots
-      (dolist (range muerte::%memory-map-roots%)
-	(map-header-vals evacuator (car range) (cdr range)))
-      (map-stack-vector evacuator nil (current-stack-frame))
+      (with-simple-restart (nil "Scanning stack.")
+	(map-stack-vector evacuator nil (current-stack-frame)))
+      (with-simple-restart (nil "Scanning heap.")
+	(dolist (range muerte::%memory-map-roots%)
+	  (map-header-vals evacuator (car range) (cdr range))))
       ;; Scan newspace, Cheney style.
-      (loop with newspace-location = (+ 2 (object-location newspace))
-	  with scan-pointer = 2
-	  as fresh-pointer = (space-fresh-pointer newspace)
-	  while (< scan-pointer fresh-pointer)
-	  do (map-header-vals evacuator
-			      (+ newspace-location scan-pointer)
-			      (+ newspace-location (space-fresh-pointer newspace)))
-	     (setf scan-pointer fresh-pointer))
-
+      (with-simple-restart (nil "Cheney-scanning newspace.")
+	(loop with newspace-location = (+ 2 (object-location newspace))
+	    with scan-pointer = 2
+	    as fresh-pointer = (space-fresh-pointer newspace)
+	    while (< scan-pointer fresh-pointer)
+	    do (map-header-vals evacuator
+				(+ newspace-location scan-pointer)
+				(+ newspace-location (space-fresh-pointer newspace)))
+	       (setf scan-pointer fresh-pointer)))
       ;; Consistency check..
+      (map-stack-vector (lambda (x foo)
+			  (declare (ignore foo))
+			  x)
+			nil
+			(current-stack-frame))
       (when *gc-consitency-check*
-	(without-interrupts
-	  (let ((a *x*))
-	    ;; First, restore the state of old-space
-	    (do ((i 0 (+ i 3)))
-		((>= i (length a)))
-	      (let ((old (%lispval-object (aref a i)))
-		    (old-class (aref a (+ i 1))))
-		(setf (memref (object-location old) 0 :type :unsigned-byte32) old-class)))
-	    ;; Then, check that each migrated object is equalp to its new self.
-	    (do ((i 0 (+ i 3)))
-		((>= i (length a)))
-	      (let ((old (%lispval-object (aref a i)))
-		    (new (%lispval-object (aref a (+ i 2)))))
-		(unless (and (object-in-space-p newspace new)
-			     (object-in-space-p oldspace old)
-			     (objects-equalp old new))
-		  (let ((*old* old)
-			(*new* new)
-			(*old-class* (aref a (+ i 1))))
-		    (declare (special *old* *new* *old-class*))
-		    (with-simple-restart (continue "Ignore failed GC consistency check.")
+	(with-simple-restart (continue "Ignore failed GC consistency check.")
+	  (without-interrupts
+	    (let ((a *x*))
+	      ;; First, restore the state of old-space
+	      (do ((end (- (length a) 2))
+		   (i 0 (+ i 3)))
+		  ((>= i end))
+		(let ((old (%lispval-object (aref a i)))
+		      (old-class (aref a (+ i 1))))
+		  (setf (memref (object-location old) 0 :type :unsigned-byte32) old-class)))
+	      ;; Then, check that each migrated object is equalp to its new self.
+	      (do ((i 0 (+ i 3)))
+		  ((>= i (length a)))
+		(let ((old (%lispval-object (aref a i)))
+		      (new (%lispval-object (aref a (+ i 2)))))
+		  (unless (and (object-in-space-p newspace new)
+			       (not (object-in-space-p newspace old))
+			       (objects-equalp old new))
+		    (let ((*evacuator* evacuator)
+			  (*old* old)
+			  (*new* new)
+			  (*old-class* (aref a (+ i 1))))
+		      (declare (special *old* *new* *old-class* *evacuator*))
 		      (error "GC consistency check failed:
 old object: ~Z: ~S
 new object: ~Z: ~S
+equalp: ~S
 oldspace: ~Z, newspace: ~Z, i: ~D"
-			     old old new new oldspace newspace i))))))
+			     old old new new (objects-equalp old new) oldspace newspace i))))))
 	    (map-header-vals (lambda (x y)
 			       (declare (ignore y))
 			       (when (location-in-object-p (space-other (%run-time-context-slot 'nursery-space))
@@ -442,6 +485,10 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
 				(location-in-object-p oldspace (object-location o)))
 		       (break "Seeing old (unmapped) object ~Z in stack at ~S."
 			      o (+ (object-location stack) i 2))))))))
+      (loop for o across *old-code-vectors*
+	  for n across *new-code-vectors*
+	  do (setf (memref o 0) (memref n -6))
+	     (fill (muerte::%location-object o 6) #xcc))
       ;; GC completed, oldspace is evacuated.
       (unless *gc-quiet*
 	(let ((old-size (truncate (- (space-fresh-pointer oldspace) 2) 2))
@@ -454,9 +501,37 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
       (fill oldspace #x13 :start 2)
       ;; (setf *gc-stack2* *gc-stack*)
       (setf *gc-stack* (muerte::copy-current-control-stack))
-      (setf (fill-pointer *xx*) (fill-pointer *x*))
-      (replace *xx* *x*)))
+      #+ignore (setf (fill-pointer *xx*) (fill-pointer *x*))
+      #+ignore (replace *xx* *x*)))
   (values))
+
+(defun simple-stop-and-copy (newspace oldspace)
+  (flet ((evacuator (x)
+	   "If x is in oldspace, migrate it to newspace."
+	   (if (not (object-in-space-p oldspace x))
+	       x
+	     (or (and (eq (object-tag x)
+			  (memref (object-location x) 0 :type :tag))
+		      (let ((forwarded-x (memref (object-location x) 0)))
+			(and (object-in-space-p newspace forwarded-x)
+			     forwarded-x)))
+		 (setf (memref (object-location x) 0)
+		   (shallow-copy x))))))
+    ;; Scavenge roots
+    (map-stack-vector #'evacuator nil (current-stack-frame))
+    (dolist (range muerte::%memory-map-roots%)
+      (map-header-vals #'evacuator (car range) (cdr range)))
+    ;; Scan newspace, Cheney style.
+    (loop with newspace-location = (+ 2 (object-location newspace))
+	with scan-pointer = 2
+	as fresh-pointer = (space-fresh-pointer newspace)
+	while (< scan-pointer fresh-pointer)
+	do (map-header-vals #'evacuator
+			    (+ newspace-location scan-pointer)
+			    (+ newspace-location (space-fresh-pointer newspace)))
+	   (setf scan-pointer fresh-pointer))
+    (initialize-space oldspace)
+    (values)))
 
 
 (defun find-object-by-location (location &key (continuep t) (breakp nil))
