@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.13 2004/07/13 14:28:05 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.14 2004/07/13 22:44:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -315,6 +315,12 @@ respect to multiple threads."
 	      :eax)
      (:testb 3 :al)			; Just to be sure..
      (:jnz '(:sub-program () (:int 63)))))
+
+(defmacro with-simple-restart ((name format-control &rest format-arguments)
+					    &body body)
+  `(with-basic-restart (,name 'with-simple-restart nil nil
+			      ,format-control ,@format-arguments)
+     ,@body))
 
 ;;; Some macros that aren't implemented, and we want to give compiler errors.
 

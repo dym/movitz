@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct 28 09:27:13 2003
 ;;;;                
-;;;; $Id: restarts.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
+;;;; $Id: restarts.lisp,v 1.3 2004/07/13 22:44:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -198,12 +198,6 @@
 		(restart-format-control restart)
 		(restart-args restart)))))))
   restart)
-
-(defmacro with-simple-restart ((name format-control &rest format-arguments)
-					    &body body)
-  `(with-basic-restart (,name 'with-simple-restart nil nil
-			      ,format-control ,@format-arguments)
-     ,@body))
 
 ;;;;
 
