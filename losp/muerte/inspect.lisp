@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.29 2004/07/21 11:49:48 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.30 2004/07/22 01:08:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -229,12 +229,12 @@ after the point that called this stack-frame."
 		  (dotimes (i (funobj-num-constants x) t)
 		    (unless (test funobj-constant-ref i)))))
 	    (symbol
-	     (and (test memref -7 0 :lisp)
-		  (test memref -7 1 :lisp)
-		  (test memref -7 2 :lisp)
-		  (test memref -7 3 :lisp)
-		  (test memref -7 4 :lisp)
-		  (test memref -7 5 :lisp)))
+	     (and ;; (test memref -7 0 :lisp) ; value
+		  (test memref -7 1 :lisp)    ; function-value
+		  ;; (test memref -7 2 :lisp) ; plist
+		  (test memref -7 3 :lisp)    ; name
+		  ;; (test memref -7 4 :lisp) ; package
+		  (test memref -7 5 :lisp))) ; flags
 	    (vector
 	     (and (typep y 'vector)
 		  (test array-element-type)
