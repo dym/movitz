@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.16 2004/07/08 11:27:19 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.17 2004/07/09 12:48:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -118,15 +118,17 @@ with the single member of <type-specifier>."
 	      (push sub-range new-numscope)
 	    (setf new-min (and new-min (min new-min (car sub-range)))
 		  new-max nil)))
-	 ((cond
+	 ((cond				; is <new-min, new-max> overlapping sub-range?
 	   ((and (not new-min) (not new-max)) t)
 	   ((not new-min) (<= (car sub-range) (+ epsilon new-max)))
 	   ((not new-max) (<= new-min (+ epsilon (cdr sub-range))))
 	   ((<= (- new-min epsilon) (car sub-range) (+ new-max epsilon)) t)
-	   ((<= (- new-min epsilon) (cdr sub-range) (+ new-max epsilon)) t))
+	   ((<= (- new-min epsilon) (cdr sub-range) (+ new-max epsilon)) t)
+	   ((<= (car sub-range) new-min (cdr sub-range))))
 	  (setf new-min (and new-min (min new-min (car sub-range)))
 		new-max (and new-max (max new-max (cdr sub-range)))))
-	 (t (push sub-range new-numscope))))
+	 (t ;; (warn "Unaffected sub-range: ~A for ~D-~D" sub-range new-min new-max)
+	    (push sub-range new-numscope))))
       (sort (cons (cons new-min new-max) new-numscope)
 	    (lambda (x y)
 	      (and x y (< x y)))
