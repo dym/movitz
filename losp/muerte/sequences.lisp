@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.7 2004/04/23 15:02:20 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.8 2004/05/20 17:48:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -290,6 +290,9 @@
 			       (let ((next-i (position-if predicate p :key key :from-end t)))
 				 (if next-i (+ i 1 next-i) i)))))))))))))))
 
+(defun position-if-not (predicate sequence &rest key-args)
+  (declare (dynamic-extent key-args))
+  (apply #'position-if (complement predicate) sequence key-args))
 
 (defun nreverse (sequence)
   (sequence-dispatch sequence
