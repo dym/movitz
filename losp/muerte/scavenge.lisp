@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.40 2005/01/25 13:56:18 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.41 2005/01/26 13:46:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -168,23 +168,11 @@ at the start-stack-frame location."
 	     (+ start-frame 1)
 	     map-region))
 
-;;;(defun map-code-vector-slot (function stack slot casf-funobj)
-;;;  (let ((casf-code-vector (if (eq 0 casf-funobj)
-;;;			      (symbol-value 'default-interrupt-trampoline)
-;;;			    (funobj-code-vector casf-funobj)))
-;;;	(eip-location (stack-frame-ref stack slot 0 :location)))
-;;;    (cond
-;;;     ((location-in-object-p casf-code-vector eip-location)
-;;;      (let ((new (funcall function casf-code-vector nil)))
-;;;	(when (not (eq new casf-code-vector))
-;;;	  ;; Perform some pointer arithmetics..
-;;;	  (let ((offset (- (stack-frame-ref stack slot 0 :unsigned-byte32)
-;;;			   (%object-lispval casf-code-vector))))
-;;;	    (break "Code-vector for ~S moved, offset is ~D." casf-code-vector offset))))))))
-
 (defun scavenge-find-code-vector (location casf-funobj esi &optional searchp)
   (flet ((match-funobj (funobj location)
 	   (cond
+	    ((not (typep funobj 'function))
+	     nil)
 	    ((let ((x (funobj-code-vector casf-funobj)))
 	       (and (location-in-object-p x location) x)))
 	    ((let ((x (funobj-code-vector%1op casf-funobj)))
@@ -202,12 +190,13 @@ at the start-stack-frame location."
     (cond
      ((eq 0 casf-funobj)
       (let ((dit-code-vector (symbol-value 'default-interrupt-trampoline)))
-	(if (location-in-object-p dit-code-vector location)
-	    dit-code-vector
-	  (break "DIT returns outside DIT??"))))
-     ((and (typep esi 'function)
-	   (match-funobj esi location)))
+	(cond
+	 ((location-in-object-p dit-code-vector location)
+	  dit-code-vector)
+	 ((match-funobj esi))
+	 (t (break "DIT returns outside DIT??")))))
      ((match-funobj casf-funobj location))
+     ((match-funobj esi location))
      ((not (typep casf-funobj 'function))
       (break "Unknown funobj/frame-type: ~S" casf-funobj))
      ((when searchp
@@ -275,6 +264,7 @@ at the start-stack-frame location."
 	     (= 0 (ldb (byte 2 0) atomically)))
 	;; Interrupt occurred inside an (non-pf) atomically, so none of the
 	;; GC-root registers are active.
+	#+ignore
 	(setf (dit-frame-ref nil dit-frame :eax) nil
 	      (dit-frame-ref nil dit-frame :ebx) nil
 	      (dit-frame-ref nil dit-frame :edx) nil
