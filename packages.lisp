@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.2 2004/02/02 13:06:39 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.3 2004/02/08 23:05:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1284,7 +1284,15 @@
 	   movitz-read-and-intern
 	   movitz-word
 	   word
-	   
+
+	   #:*warn-function-change-p*
+	   #:*compiler-do-optimize*
+	   #:*compiler-use-cmov-p*
+	   #:*compiler-auto-stack-checks-p*
+	   #:*compiler-local-segment-prefix*
+	   #:*compiler-global-segment-prefix*
+	   #:*compiler-compile-eval-whens*
+	   #:*compiler-compile-macro-expanders*
 	   )
   (:import-from muerte
 		#:translate-program
