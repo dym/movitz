@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.5 2004/03/25 00:55:12 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.6 2004/04/06 13:39:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -189,7 +189,12 @@
 
 (define-compiler-macro do (var-specs (end-test-form &rest result-forms) &body declarations-and-body)
   (flet ((var-spec-let-spec (var-spec)
-	   (if (symbolp var-spec) var-spec (subseq var-spec 0 2)))
+	   (cond
+	    ((symbolp var-spec)
+	     var-spec)
+	    ((cddr var-spec)
+	     (subseq var-spec 0 2))
+	    (t var-spec)))
 	 (var-spec-var (var-spec)
 	   (if (symbolp var-spec) var-spec (car var-spec)))
 	 (var-spec-step-form (var-spec)
@@ -220,7 +225,12 @@
 
 (defmacro do* (var-specs (end-test-form &rest result-forms) &body declarations-and-body)
   (flet ((var-spec-let-spec (var-spec)
-	   (if (symbolp var-spec) var-spec (subseq var-spec 0 2)))
+	   (cond
+	    ((symbolp var-spec)
+	     var-spec)
+	    ((cddr var-spec)
+	     (subseq var-spec 0 2))
+	    (t var-spec)))
 	 (var-spec-var (var-spec)
 	   (if (symbolp var-spec) var-spec (car var-spec)))
 	 (var-spec-step-form (var-spec)
