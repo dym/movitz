@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 19:42:57 2004
 ;;;;                
-;;;; $Id: bignums.lisp,v 1.8 2004/09/21 13:06:45 ffjeld Exp $
+;;;; $Id: bignums.lisp,v 1.9 2004/09/21 14:24:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -81,12 +81,13 @@ that the msb isn't zero. DO NOT APPLY TO NON-BIGNUM VALUES!"
   (assert (plusp bigits))
   (macrolet
       ((do-it ()
-	 `(with-inline-assembly (:returns :eax)
-	    (:compile-two-forms (:eax :ecx) (malloc-non-pointer-words (1+ bigits)) bigits)
-	    (:shll 16 :ecx)
-	    (:orl ,(movitz:tag :bignum 0) :ecx)
-	    (:movl :ecx (:eax ,movitz:+other-type-offset+))
-	    )))
+	 `(let ((words (1+ bigits)))
+	    (with-non-pointer-allocation-assembly (words :fixed-size-p t
+							 :object-register :eax)
+	      (:load-lexical (:lexical-binding bigits) :ecx)
+	      (:shll 16 :ecx)
+	      (:orl ,(movitz:tag :bignum 0) :ecx)
+	      (:movl :ecx (:eax (:offset movitz-bignum type)))))))
     (do-it)))
 
 (defun print-bignum (x)
