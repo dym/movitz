@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.22 2004/10/21 20:34:06 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.23 2004/11/23 16:06:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -134,7 +134,7 @@
 (defun std-allocate-instance (class)
   (allocate-std-instance class
 			 (allocate-slot-storage (count-if 'instance-slot-p (class-slots class))
-						(load-global-constant unbound-value))))
+						(load-global-constant new-unbound-value))))
 
 (defun allocate-slot-storage (size initial-value)
   (make-array size :initial-element initial-value))
@@ -881,9 +881,11 @@ is no unspecialized method was called."))
        (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
 	:movl (:eax (:offset movitz-basic-vector data ,(* location 4))) :eax)
        (#.movitz:*compiler-global-segment-prefix*
-	:cmpl :eax ,(movitz::make-indirect-reference :edi (movitz::global-constant-offset 'unbound-value)))
+	:cmpl :eax ,(movitz::make-indirect-reference :edi (movitz::global-constant-offset
+							   'new-unbound-value)))
        (:je '(:sub-program (unbound)
-	      (:compile-form (:result-mode :multiple-values) (slot-unbound-trampoline instance ,location))
+	      (:compile-form (:result-mode :multiple-values)
+	       (slot-unbound-trampoline instance ,location))
 	      (:jmp 'done)))
        (:clc)
        done)))
@@ -923,13 +925,13 @@ for a slot at position i.")
 	     (symbol-function (svref *standard-effective-slot-readers* slot-location))
 	   (lambda (instance)
 	     (let ((x (standard-instance-access instance slot-location)))
-	       (if (not (eq x (load-global-constant unbound-value)))
+	       (if (not (eq x (load-global-constant new-unbound-value)))
 		   x
 		 (slot-unbound-trampoline instance slot-location))))))
 	(funcallable-standard-class
 	 (lambda (instance)
 	   (let ((x (svref (std-gf-instance-slots instance) slot-location)))
-	     (if (not (eq x (load-global-constant unbound-value)))
+	     (if (not (eq x (load-global-constant new-unbound-value)))
 		 x
 	       (slot-unbound-trampoline instance slot-location)))))))))
 
@@ -1288,7 +1290,7 @@ next-emf as its target for call-next-method."
   (let* ((location (slot-definition-location (find-slot (std-instance-class instance) slot-name)))
          (slots (std-instance-slots instance))
          (val (svref slots location)))
-    (if (eq (load-global-constant unbound-value) val)
+    (if (eq (load-global-constant new-unbound-value) val)
         (error "The slot ~S is unbound in the object ~S."
                slot-name instance)
       val)))
@@ -1299,7 +1301,7 @@ next-emf as its target for call-next-method."
     (let* ((location (slot-definition-location slot))
 	   (slots (std-gf-instance-slots instance))
 	   (val (svref slots location)))
-      (if (eq (load-global-constant unbound-value) val)
+      (if (eq (load-global-constant new-unbound-value) val)
 	  (error "The slot ~S is unbound in the object ~S."
 		 slot-name instance)
 	val))))
@@ -1314,7 +1316,7 @@ next-emf as its target for call-next-method."
 (defmethod slot-value-using-class ((class standard-class) object
 				   (slot standard-effective-slot-definition))
   (let ((x (standard-instance-access object (slot-definition-location slot))))
-    (if (eq x (load-global-constant unbound-value))
+    (if (eq x (load-global-constant new-unbound-value))
 	(slot-unbound class object (slot-definition-name slot))
       x)))
 
@@ -1323,7 +1325,7 @@ next-emf as its target for call-next-method."
   (let* ((location (slot-definition-location slot))
          (slots (std-gf-instance-slots object))
          (val (svref slots location)))
-    (if (eq (load-global-constant unbound-value) val)
+    (if (eq (load-global-constant new-unbound-value) val)
 	(slot-unbound class object (slot-definition-name slot))        
       val)))
 
@@ -1361,11 +1363,11 @@ next-emf as its target for call-next-method."
       (slot-boundp-using-class class object slot))))
 
 (defmethod slot-boundp-using-class ((class standard-class) object (slot standard-effective-slot-definition))
-  (not (eq (load-global-constant unbound-value)
+  (not (eq (load-global-constant new-unbound-value)
 	   (standard-instance-access object (slot-definition-location slot)))))
   
 (defmethod slot-boundp-using-class ((class funcallable-standard-class) object (slot standard-effective-slot-definition))
-  (not (eq (load-global-constant unbound-value)
+  (not (eq (load-global-constant new-unbound-value)
 	   (svref (std-gf-instance-slots object) (slot-definition-location slot)))))
 
 (defmethod slot-boundp-using-class ((class built-in-class) object slot)
@@ -1381,12 +1383,12 @@ next-emf as its target for call-next-method."
 
 (defmethod slot-makunbound-using-class ((class standard-class) object (slot standard-effective-slot-definition))
   (setf (standard-instance-access object (slot-definition-location slot))
-    (load-global-constant unbound-value))
+    (load-global-constant new-unbound-value))
   object)
   
 (defmethod slot-makunbound-using-class ((class funcallable-standard-class) object (slot standard-effective-slot-definition))
   (setf (svref (std-gf-instance-slots object) (slot-definition-location slot))
-    (load-global-constant unbound-value))
+    (load-global-constant new-unbound-value))
   object)
 
 (defmethod slot-makunbound-using-class ((class built-in-class) object slot)
@@ -1748,7 +1750,7 @@ in an instance whose metaclass is standard-class."))
     ;; (warn "access ~S of ~S at ~S" slot-name class-name location)
     (assert location)
     (let ((x (standard-instance-access slot location)))
-      (if (eq x (load-global-constant unbound-value))
+      (if (eq x (load-global-constant new-unbound-value))
 	  (error "The slot ~S is unbound in the ~S ~Z." slot-name class-name slot)
 	x))))
 
