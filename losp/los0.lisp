@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.31 2004/11/23 19:03:15 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.32 2004/11/24 16:24:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1262,6 +1262,27 @@ Can be used to measure the overhead of primitive function."
 		       (incf (memref-int muerte.x86-pc::*screen* :index 80 :type :unsigned-byte16)))))
 	(incf (memref-int muerte.x86-pc::*screen* :index 160 :type :unsigned-byte16))))))
 
+(defun fvf-textmode-screendump ()
+  (muerte.ip4::ip4-init)
+  (let* ((w muerte.x86-pc::*screen-width*)
+	 (h muerte.x86-pc::*screen-height*)
+	 (data (make-array (* w h)
+			   :element-type 'character
+			   :fill-pointer 0)))
+    (loop for y below h
+	do (loop for x below w
+	       do (vector-push (code-char
+				(ldb (byte 8 0)
+				     (memref-int muerte.x86-pc::*screen*
+						 :index (+ x (* y muerte.x86-pc::*screen-stride*))
+						 :type :unsigned-byte16)))
+			       data)))
+    (muerte.ip4:tftp/ethernet-write :129.242.16.151 "movitz-screendump.txt" data
+				    :quiet t
+				    :mac (muerte.ip4::polling-arp :129.242.16.1
+								  (lambda ()
+								    (eql #\esc (muerte.x86-pc.keyboard:poll-char)))))))
+
 (defun mumbojumbo (x)
   (with-inline-assembly (:returns :eax)
     (:compile-form (:result-mode :untagged-fixnum-ecx) x)
@@ -1319,13 +1340,21 @@ Can be used to measure the overhead of primitive function."
 		       *debug-io* s)))
     (let ((* nil) (** nil) (*** nil)
 	  (/ nil) (// nil) (/// nil)
-	  (+ nil) (++ nil) (+++ nil))
+	  (+ nil) (++ nil) (+++ nil)
+	  (*readline-signal-keypresses* t))
       (format t "~&Movitz image Los0 build ~D." *build-number*)
-      (loop
-	(catch :top-level-repl		; If restarts don't work, you can throw this..
-	  (with-simple-restart (abort "Abort to the top command level.")
-	    (read-eval-print))))))
-  
+      (handler-bind 
+	  ((readline-keypress
+	    (lambda (c)
+	      (let ((key (readline-keypress-key c)))
+		(when (eq :f12 key)
+		  (fvf-textmode-screendump)
+		  (format *query-io* "~&Dumped console contents by TFTP."))))))
+	(loop
+	  (catch :top-level-repl	; If restarts don't work, you can throw this..
+	    (with-simple-restart (abort "Abort to the top command level.")
+	      (read-eval-print)))))))
+
   (error "What's up? [~S]" 'hey))
 
 (defun read (&optional input-stream eof-error-p eof-value recursive-p)
