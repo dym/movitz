@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.42 2005/01/04 20:22:00 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.43 2005/01/25 13:44:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -56,8 +56,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	  (compiler-call #'compile-implicit-progn
 	    :forward all
 	    :form body)
-	(let* ((recompile-body-p nil)
-	       (let-modifies nil)
+	(let* ((let-modifies nil)
 	       (let-vars (parse-let-var-specs let-var-specs))
 	       (local-env (make-local-movitz-environment env funobj
 							 :type 'let-env
@@ -242,8 +241,6 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 							(binding-name binding)
 							init-form
 							(car (type-specifier-singleton type)))
-					 (when (code-uses-binding-p body-code binding :load t)
-					   (setf recompile-body-p t))
 					 (change-class binding 'constant-object-binding
 						       :object (car (type-specifier-singleton type)))
 					 (if functional-p
@@ -313,10 +310,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				   `((:locally (:call (:edi ,(bt:slot-offset 'movitz-run-time-context
 									     'dynamic-variable-install))))
 				     (:locally (:movl :esp (:edi (:edi-offset dynamic-env))))))
-				 (if (or nil (not recompile-body-p))
-				     body-code
-				   (progn #+ignore (warn "recompile..") ; XXX
-					  (compile-body)))
+				 body-code
 				 (when (and (plusp (num-specials local-env))
 					    (not (eq :non-local-exit body-returns)))
 				   #+ignore
