@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.3 2004/03/31 16:36:34 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.4 2004/04/06 14:33:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -95,8 +95,8 @@ at the start-stack-frame location."
   (loop for nether-frame = start-stack-frame then frame
       and frame = (stack-frame-uplink start-stack-frame) then (stack-frame-uplink frame)
       while (plusp frame)
-      do (let ((funobj (stack-frame-funobj frame)))
-	   (typecase funobj
+      do (let ((funobj (stack-frame-funobj frame t)))
+	   (etypecase funobj
 	     (integer
 	      (error "Don't know how to scavenge across an interrupt frame."))
 	     (function
