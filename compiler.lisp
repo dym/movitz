@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.99 2004/09/15 10:22:52 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.100 2004/10/08 12:16:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5789,10 +5789,6 @@ in ECX the number of values (as fixnum)."
       (:jne ',push-values-loop)
       ,push-values-done)))
 
-;;;(:load-lexical ,numargs-binding :eax)
-;;;      (:addl :ecx :eax)
-;;;      (:store-lexical ,numargs-binding :eax :type fixnum))))
-
 (defun stack-delta (inner-env outer-env)
   "Calculate the amount of stack-space used (in 32-bit stack slots) at the time
 of <inner-env> since <outer-env>,
@@ -5807,9 +5803,8 @@ and a list of any intervening unwind-protect environment-slots."
 	 (cond
 	  ((eq outer-env env)
 	   ;; Each dynamic-slot is 4 stack-distances, so let's check that..
-	   (unless (>= stack-distance (* 4 num-dynamic-slots))
-	     (print-stack-delta inner-env outer-env))
-	   (assert (>= stack-distance (* 4 num-dynamic-slots)) ()
+	   (assert (or (eq t stack-distance)
+		       (>= stack-distance (* 4 num-dynamic-slots))) ()
 	     "The stack-distance ~D is smaller than number of dynamic-slots ~D, which is inconsistent."
 	     stack-distance num-dynamic-slots)
 	   (values stack-distance num-dynamic-slots unwind-protects))
