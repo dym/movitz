@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.7 2004/03/22 16:37:47 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.8 2004/03/25 11:17:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -555,12 +555,15 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
 				     :other-tag :vector
 				     :wide-other-tag #.(bt:enum-value 'movitz::movitz-vector-element-type
 								      :any-t))))
-	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
-			 0 :unsigned-byte16)
-	     #.(movitz:vector-type-tag :any-t))
 	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::num-elements)
 			 0 :unsigned-byte16)
 	     dimensions)
+	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::flags)
+			 0 :unsigned-byte16)
+	     0)
+	   (setf (memref array #.(bt:slot-offset 'movitz::movitz-vector 'movitz::type)
+			 0 :unsigned-byte16)
+	     #.(movitz:vector-type-tag :any-t))
 	   (setf (fill-pointer array) fill-pointer)
 	   (cond
 	    (initial-contents
