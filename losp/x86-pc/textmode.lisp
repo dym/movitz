@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001,2000, 2002-2004,
+;;;;    Copyright (C) 2000-2004,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      textmode.lisp
@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  9 15:38:56 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: textmode.lisp,v 1.10 2004/08/09 14:39:46 ffjeld Exp $
+;;;; $Id: textmode.lisp,v 1.11 2004/08/12 16:54:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -23,22 +23,22 @@
 
 (in-package muerte.x86-pc)
 
-(define-global-variable *screen* 
+(defvar *screen* 
     (vga-memory-map))
 
-(define-global-variable *screen-width*
+(defvar *screen-width*
     (vga-horizontal-display-end))
 
-(define-global-variable *screen-stride*
+(defvar *screen-stride*
     (vga-horizontal-display-end))
 
-(define-global-variable *cursor-x*
+(defvar *cursor-x*
     (rem (vga-cursor-location) *screen-stride*))
 
-(define-global-variable *cursor-y*
+(defvar *cursor-y*
     (truncate (vga-cursor-location) *screen-stride*))
 
-(define-global-variable *screen-height*
+(defvar *screen-height*
     (truncate (vga-vertical-display-end)
 	      (vga-character-height)))
 
