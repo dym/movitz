@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.15 2004/11/25 15:06:02 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.16 2004/12/08 23:40:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -493,7 +493,7 @@
     (setf *ip4-router* (ip4-address :129.242.16.1)))
   ;; This is to announce our presence on the LAN..
   (assert (polling-arp *ip4-router* (lambda ()
-				      (eql #\esc (muerte.x86-pc.keyboard:poll-char))))
+				      (eql #\space (muerte.x86-pc.keyboard:poll-char))))
       () "Unable to resolve ~/ip4:pprint-ip4/ by ARP." *ip4-router*)
   (values *ip4-nic* *ip4-ip*))
 
@@ -508,11 +508,11 @@
 	      *ip4-router*
 	      (polling-arp *ip4-router* 
 			   (lambda ()
-			     (eql #\esc (muerte.x86-pc.keyboard:poll-char))))))
+			     (eql #\space (muerte.x86-pc.keyboard:poll-char))))))
     (loop
       (case (muerte.x86-pc.keyboard:poll-char)
 	((nil))
-	((#\esc) (break "You broke ip4!"))
+	((#\space) (break "You broke ip4!"))
 	(t (return (values))))
       (let ((packet (and (packet-available-p ethernet)
 			 (receive ethernet))))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.44 2004/11/26 14:59:18 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.45 2004/12/08 23:39:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -234,7 +234,7 @@ duo-space where each space is KB-SIZE kilobytes."
 	      (break "GC break.")
 	    (loop			; This is  a nice opportunity to poll the keyboard..
 	      (case (muerte.x86-pc.keyboard:poll-char)
-		((#\esc)
+		((#\escape)
 		 (break "Los0 GC keyboard poll."))
 		((nil)
 		 (return)))))))))
@@ -310,8 +310,8 @@ duo-space where each space is KB-SIZE kilobytes."
       (values))))
 
 
-(defparameter *x* #4000())		; Have this in static space.
-(defparameter *xx* #4000())		; Have this in static space.
+(defparameter *x* #4000(nil))		; Have this in static space.
+(defparameter *xx* #4000(nil))		; Have this in static space.
 
 
 (defun stop-and-copy (&optional evacuator)

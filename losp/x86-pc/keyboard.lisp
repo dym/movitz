@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep 24 16:04:12 2001
 ;;;;                
-;;;; $Id: keyboard.lisp,v 1.4 2004/11/24 16:20:14 ffjeld Exp $
+;;;; $Id: keyboard.lisp,v 1.5 2004/12/08 23:40:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -42,14 +42,14 @@
       nil      nil      nil      nil      nil    :pause     nil      nil)) ; #x40
 
 (defparameter *scan-codes*
-    #(#\null   #\esc    #\1      #\2      #\3      #\4      #\5      #\6 ; #x00
+    #(#\null   #\escape #\1      #\2      #\3      #\4      #\5      #\6 ; #x00
       #\7      #\8      #\9      #\0      #\-      #\= #\backspace #\tab ; #x08
       #\q      #\w      #\e      #\r      #\t      #\y      #\u      #\i ; #x10
       #\o      #\p      #\[      #\]   #\newline :ctrl-left #\a      #\s ; #x18
 			       
       #\d      #\f      #\g      #\h      #\j      #\k      #\l      #\; ; #x20
       #\'      #\`   :shift-left #\\      #\z      #\x      #\c      #\v ; #x28
-      #\b      #\n      #\m      #\,      #\.      #\/  :shift-right #\esc ; #x30
+      #\b      #\n      #\m      #\,      #\.      #\/  :shift-right #\escape ; #x30
       :alt-left #\space :caps-lock :f1    :f2      :f3      :f4      :f5 ; #x38
 			       
       :f6      :f7      :f8      :f9      :f10   :break :scroll-lock nil ; #x40
@@ -74,7 +74,7 @@
 
       nil      nil      nil      nil      nil      nil      nil    :home ; #xc0
       :up      :page-up nil      :left    nil      :right   nil     :end ; #xc8
-      :down  :page-down :insert  #\delete nil      nil      nil      nil ; #xd0
+      :down  :page-down :insert  nil #+ignore #\delete nil nil      nil      nil      nil ; #xd0
       :alt-right nil    nil      nil      :win     :menu    nil      nil)) ; #xd8
 
 (defun lowlevel-event-p ()

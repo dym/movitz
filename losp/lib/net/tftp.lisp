@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct  6 12:42:51 2004
 ;;;;                
-;;;; $Id: tftp.lisp,v 1.3 2004/11/25 02:09:55 ffjeld Exp $
+;;;; $Id: tftp.lisp,v 1.4 2004/12/08 23:40:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -56,14 +56,14 @@
     (tftp/ethernet-write :129.242.16.151 file-name data
 			 :mac (polling-arp :129.242.16.1
 					   (lambda ()
-					     (eql #\esc (muerte.x86-pc.keyboard:poll-char)))))))
+					     (eql #\space (muerte.x86-pc.keyboard:poll-char)))))))
 
 (defun tftp/ethernet-write (ip file-name data-vector
 			    &key (mode "octet") mac quiet
 				 (timeout 2)
 				 (data-length (length data-vector))
 				 (breaker (lambda ()
-					    (eql #\esc (muerte.x86-pc.keyboard:poll-char)))))
+					    (eql #\space (muerte.x86-pc.keyboard:poll-char)))))
   "TFTP write data-vector to file-name on host ip using *ip4-nic*.
 The host's MAC is looked up by ARP unless provided."
   (let ((speak (if quiet nil *query-io*))
