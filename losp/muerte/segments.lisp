@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu May  8 14:25:06 2003
 ;;;;                
-;;;; $Id: segments.lisp,v 1.3 2004/04/06 14:32:00 ffjeld Exp $
+;;;; $Id: segments.lisp,v 1.4 2004/10/21 20:51:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -90,6 +90,16 @@ This is the setter corresponding to the sgdt getter."
     (:lgdt (:ecx))))
 
 ;;;
+
+(defun control-register (name)
+  (macrolet ((creg (reg)
+	       `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		  (:movcr ,reg :ecx))))
+    (ecase name
+      (:cr0 (creg :cr0))
+      (:cr2 (creg :cr2))
+      (:cr3 (creg :cr3))
+      (:cr4 (creg :cr4)))))
 
 (defun control-register-lo12 (name)
   "Return the low 12 bits of an x86 control register, such as :cr0 or :cr1."
