@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.17 2004/07/09 12:48:01 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.18 2004/07/09 16:10:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -211,11 +211,29 @@ with the single member of <type-specifier>."
     (and x (not (car x)) (not (cdr x)))))
     
 
+(defun numscope-combine (function range0 range1)
+  (let ((result ()))
+    (dolist (sub-range0 range0)
+      (dolist (sub-range1 range1)
+	(setf result
+	  (numscope-union result
+			  (funcall function
+				   (car sub-range0) (cdr sub-range0)
+				   (car sub-range1) (cdr sub-range1))))))
+    result))
+
+(defun numscope-plus (range0 range1)
+  "Return the numscope that covers the sum of any element of range0
+and any element of range1."
+  (numscope-combine (lambda (min0 max0 min1 max1)
+		      (make-numscope (and min0 min1 (+ min0 min1))
+				     (and max0 max1 (+ max0 max1))))
+		    range0 range1))
 
 ;;;
 
 (defparameter *tb-bitmap*
-    '(hash-table character function cons keyword symbol vector array :tail)
+    '(hash-table character function cons keyword symbol vector array integer :tail)
   "The union of these types must be t.")
 
 (defun basic-typep (x type)
@@ -253,37 +271,11 @@ with the single member of <type-specifier>."
 		     (case x
 		       (symbol (logior code (code 'keyword)))
 		       (array  (logior code (code 'vector)))
+		       ;; (number (logior code (code 'integer)))
 		       (t code)))))))
       (reduce #'logior (mapcar #'code types)
 	      :initial-value (code first-type)))))
 
-(defun type-values (codes &key integer-range members include complement)
-  ;; Members: A list of objects explicitly included in type.
-  ;; Include: A list of (non-encodable) type-specs included in type.
-  (check-type include list)
-  (check-type members list)
-  (check-type integer-range list)
-  (let ((new-intscope integer-range)
-	(new-members ()))
-    (dolist (member members)		; move integer members into integer-range
-      (let ((member (movitz-read member)))
-	(etypecase member
-	  (movitz-fixnum
-	   (setf new-intscope
-	     (numscope-union new-intscope	    
-			     (make-numscope (movitz-fixnum-value member)
-					    (movitz-fixnum-value member)))))
-	  (movitz-object
-	   (pushnew member new-members :test #'movitz-eql)))))
-    (let ((new-code (if (atom codes)
-			(type-code codes)
-		      (apply #'type-code codes))))
-      (values new-code
-	      new-intscope
-	      new-members
-	      include
-	      complement))))
-		  
 (defun encoded-type-decode (code integer-range members include complement)
   (if (let ((mask (1- (ash 1 (position :tail *tb-bitmap*)))))
 	(= mask (logand mask code)))
@@ -313,6 +305,38 @@ with the single member of <type-specifier>."
        (t (if (not complement)
 	      (cons 'or sub-specs)
 	    (list 'not (cons 'or sub-specs))))))))
+		  
+(defun type-values (codes &key integer-range members include complement)
+  ;; Members: A list of objects explicitly included in type.
+  ;; Include: A list of (non-encodable) type-specs included in type.
+  (check-type include list)
+  (check-type members list)
+  (check-type integer-range list)
+  (let ((new-intscope integer-range)
+	(new-members ()))
+    (dolist (member members)		; move integer members into integer-range
+      (let ((member (movitz-read member)))
+	(etypecase member
+	  (movitz-fixnum
+	   (setf new-intscope
+	     (numscope-union new-intscope	    
+			     (make-numscope (movitz-fixnum-value member)
+					    (movitz-fixnum-value member)))))
+	  (movitz-object
+	   (pushnew member new-members :test #'movitz-eql)))))
+    (let ((new-code (logior (if (atom codes)
+				(type-code codes)
+			      (apply #'type-code codes))
+			    (if (numscope-allp new-intscope)
+				(type-code 'integer)
+			      0))))
+      (values new-code
+	      (if (type-code-p 'integer new-code)
+		  (make-numscope nil nil)
+		new-intscope)
+	      new-members
+	      include
+	      complement))))
 
 (defun star-is-t (x)
   (if (eq x '*) t x))
@@ -330,9 +354,13 @@ with the single member of <type-specifier>."
 		((typep x 'movitz-nil)
 		 (type-code-p 'symbol code))
 		((basic-typep x 'fixnum)
-		 (numscope-memberp integer-range (movitz-fixnum-value x)))
+		 (or (type-code-p 'integer code)
+		     (and integer-range
+			  (numscope-memberp integer-range (movitz-fixnum-value x)))))
 		((basic-typep x 'bignum)
-		 (numscope-memberp integer-range (movitz-bignum-value x)))
+		 (or (type-code-p 'integer code)
+		     (and integer-range
+			  (numscope-memberp integer-range (movitz-bignum-value x)))))
 		(t (dolist (bt '(symbol character function cons hash-table vector)
 			     (error "Cant decide typep for ~S." x))
 		     (when (basic-typep x bt)
@@ -411,9 +439,13 @@ with the single member of <type-specifier>."
     (values code0 integer-range0 members0 include0 complement0))
    ((and (not complement0) (not complement1))
     (let* ((new-inumscope (numscope-union integer-range0 integer-range1))
-	   (new-code (logior code0 code1)))
+	   (new-code (logior code0 code1 (if (numscope-allp new-inumscope)
+					     (type-code 'integer)
+					   0))))
       (values new-code
-	      new-inumscope
+	      (if (type-code-p 'integer new-code)
+		  nil
+		new-inumscope)
 	      (remove-if (lambda (x)
 			   (or (encoded-typep nil t x code0 integer-range0 nil include0 nil)
 			       (encoded-typep nil t x code1 integer-range1 nil include1 nil)))
@@ -443,10 +475,8 @@ with the single member of <type-specifier>."
 	(bignum
 	 (type-specifier-encode `(or (integer * ,(1- +movitz-most-negative-fixnum+))
 				     (integer ,(1+ +movitz-most-positive-fixnum+) *))))
-	((t nil cons symbol keyword function array vector hash-table character)
+	((t nil cons symbol keyword function array vector integer hash-table character)
 	 (type-values type-specifier))
-	((integer)
-	 (type-values () :integer-range (make-numscope)))
 	(null
 	 (type-values () :members '(nil)))
 	(list
@@ -573,10 +603,10 @@ If it isn't, also return wether we _know_ it isn't."
     (values nil t))
    (t (values nil nil))))
 
-(defun encoded-integerp (code integer-range members include complement)
-  "Is the encoded-type a subset/subtype of integer?"
-  (declare (ignore integer-range))
-  (and (= 0 code) (null members) (null include) (not complement)))
+(defun encoded-numscope (code integer-range)
+  (if (type-code-p 'integer code)
+      (make-numscope nil nil)
+    integer-range))
 
 (defun encoded-subtypep (code0 integer-range0 members0 include0 complement0
 			 code1 integer-range1 members1 include1 complement1)
@@ -601,17 +631,13 @@ If it isn't, also return wether we _know_ it isn't."
 	       (and (not all1) confident)))
 	;; type0 is t, and type1 isn't.
 	(result-is nil t))
-       ((and (encoded-integerp code0 integer-range0 members0 include0 complement0)
-	     (not complement1)
-	     (numscope-subsetp integer-range0 integer-range1))
-	;; type0 is an integer type which is included in type1.
-	(result-is t t))
        ((and (not complement0) (not complement1))
 	(dolist (st *tb-bitmap*)
 	  (when (type-code-p st code0)
 	    (unless (type-code-p st code1)
 	      (result-is nil t))))
-	(unless (numscope-subsetp integer-range0 integer-range1)
+	(unless (numscope-subsetp (encoded-numscope code0 integer-range0)
+				  (encoded-numscope code1 integer-range1))
 	  (result-is nil t))
 	(dolist (m members0)
 	  (ecase (encoded-typep nil :unknown m code1 integer-range1 members1 include1 nil)
@@ -643,8 +669,26 @@ If it isn't, also return wether we _know_ it isn't."
    ((and (null members) (null intscope))
     (warn "Not singleton, nulloton."))))
 
-(defun movitz-subtypep (type1 type2)
+(defun movitz-subtypep (type0 type1)
   "Compile-time subtypep."
   (multiple-value-call #'encoded-subtypep
-    (type-specifier-encode type1)
-    (type-specifier-encode type2)))
+    (type-specifier-encode type0)
+    (type-specifier-encode type1)))
+
+(defun encoded-integer-types-add (code0 integer-range0 members0 include0 complement0
+				  code1 integer-range1 members1 include1 complement1)
+  "Return the integer type that can result from adding a member of type0 to a member of type1."
+  (declare (ignore members0 members1))
+  (cond
+   ((or include0 include1)
+    ;; We can't know..
+    'integer)
+   ((or complement0 complement1)
+    (break "adding complement types..?"))
+   (t (let ((integer-range (numscope-plus (encoded-numscope code0 integer-range0)
+					  (encoded-numscope code1 integer-range1))))
+	(encoded-type-decode (if (not (numscope-allp integer-range))
+				 0
+			       (type-code 'integer))
+			     integer-range
+			     nil nil nil)))))
