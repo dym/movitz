@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 18 12:21:36 2002
 ;;;;                
-;;;; $Id: dp8390.lisp,v 1.3 2004/01/19 11:23:52 ffjeld Exp $
+;;;; $Id: dp8390.lisp,v 1.4 2004/02/02 13:41:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -102,15 +102,15 @@
 	 `((with-io-register-syntax (,var ,io-base-form)
 	     ,@body)))))
 
-(defun wait-for-dma-completion (io-base)
+(defun wait-for-dma-completion (io-base &optional command)
   (with-dp8390 (dp8390 io-base)
     (setf (dp8390 ($page0-write cr)) ($command page-0 abort-complete))
     (if (logbitp ($interrupt-status dma-complete)
 		 (dp8390 ($page0-read isr)))
 	(setf (dp8390 ($page0-write isr))
 	  (ash 1 ($interrupt-status dma-complete)))
-      (error "Incomplete dp8390 @ #x~X DMA: crda=#x~X."
-	     io-base
+      (error "Incomplete dp8390~@[ ~A~] @ #x~X DMA: crda=#x~X."
+	     command io-base
 	     (io-register8x2 dp8390 ($page0-read crda1) ($page0-read crda0)))))
   nil)
 
@@ -131,7 +131,7 @@
 		    `(setf (,dp8390-var ($page0-write cr)) ($command abort-complete))))
 	 (initialize-dma ,dp8390-var ($command ,rdma-command) ,size ,address)
 	 ,@body)
-     (wait-for-dma-completion ,dp8390-var)))
+     (wait-for-dma-completion ,dp8390-var ',rdma-command)))
 
 ;;; Utility functions
 
