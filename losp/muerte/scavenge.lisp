@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.21 2004/07/20 08:54:52 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.22 2004/07/20 12:37:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -124,7 +124,7 @@ start-location and end-location."
 	  (error "Scanned unknown basic-vector #x~Z at address #x~X." x scan))
 	 ((scavenge-typep x :old-vector)
 	  (error "Scanned old-vector #x~Z at address #x~X." x scan))
-	 ((eq x (fixnum-word 3))
+	 ((eq x (%lispval-object 3))
 	  (incf scan)
 	  (let ((delta (memref scan 0 0 :lisp)))
 	    (check-type delta positive-fixnum)
