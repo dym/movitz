@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.30 2004/07/07 17:37:15 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.31 2004/07/08 11:30:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -68,33 +68,15 @@
     (#.(bt:enum-value 'movitz::movitz-vector-element-type :code)
        'code)))
 
-;;;(defmacro vector-dimension (vector)
-;;;  `(movitz-accessor-u16 ,vector movitz-vector num-elements))
-
 (defun array-dimension (array axis-number)
   (etypecase array
-    (basic-vector
+    (simple-array
      (assert (zerop axis-number))
-     (movitz-accessor array movitz-basic-vector num-elements))
-    #+ignore
-    (vector
-     (assert (zerop axis-number))
-     (vector-dimension array))))
+     (movitz-accessor array movitz-basic-vector num-elements))))
 
 (defun shrink-vector (vector new-size)
   (set-movitz-accessor-u16 vector movitz-vector num-elements new-size)
   vector)
-
-
-;;;(define-compiler-macro vector-fill-pointer (vector)
-;;;  `(movitz-accessor-u16 ,vector movitz-vector fill-pointer)
-;;;  #+ignore `(with-inline-assembly (:returns :untagged-fixnum-ecx)
-;;;	      (:compile-form (:result-mode :eax) ,vector)
-;;;	      (:movzxw (:eax #.(bt:slot-offset 'movitz::movitz-vector 'movitz::fill-pointer))
-;;;		       :ecx)))
-;;;
-;;;(defun vector-fill-pointer (vector)
-;;;  (vector-fill-pointer vector))
 
 (define-compiler-macro %basic-vector-has-fill-pointer-p (vector)
   "Does the basic-vector have a fill-pointer?"
@@ -114,14 +96,13 @@
 
 (defun array-has-fill-pointer-p (array)
   (etypecase array
-    (basic-vector
+    (simple-array
      (%basic-vector-has-fill-pointer-p array))
-    (vector t)
     (array nil)))
   
 (defun fill-pointer (vector)
   (etypecase vector
-    (basic-vector
+    (simple-array
      (assert (%basic-vector-has-fill-pointer-p vector) (vector)
        "Vector has no fill-pointer.")
      (%basic-vector-fill-pointer vector))))
@@ -129,7 +110,7 @@
 
 (defun (setf fill-pointer) (new-fill-pointer vector)
   (etypecase vector
-    (basic-vector
+    (simple-array
      (macrolet
 	 ((do-it ()
 	    `(with-inline-assembly (:returns :eax)
@@ -147,13 +128,7 @@
 		       (:compile-form (:result-mode :ignore)
 			(error "Illegal fill-pointer: ~W." new-fill-pointer))))
 	       (:movw :ax (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::fill-pointer))))))
-       (do-it)))
-    #+ignore
-    (vector
-     (assert (<= new-fill-pointer (vector-dimension vector)))
-     (setf (memref vector #.(bt:slot-offset 'movitz::movitz-vector 'movitz::fill-pointer) 0
-		   :unsigned-byte16)
-       new-fill-pointer))))
+       (do-it)))))
 
 (defun vector-aref%unsafe (vector index)
   "No type-checking of <vector> or <index>."
@@ -225,7 +200,7 @@
   (numargs-case
    (2 (array index)
       (etypecase array
-	(basic-vector
+	(simple-array
 	 (macrolet
 	     ((do-it ()
 		`(with-inline-assembly (:returns :eax)
@@ -289,7 +264,7 @@
   (numargs-case
    (3 (value vector index)
       (etypecase vector
-	(basic-vector
+	(simple-array
 	 (macrolet
 	     ((do-it ()
 		`(with-inline-assembly (:returns :eax)
@@ -378,7 +353,7 @@
 
 (defun svref (simple-vector index)
   (etypecase simple-vector
-    (basic-vector
+    (simple-vector
      (macrolet
 	 ((do-it ()
 	    `(with-inline-assembly (:returns :eax)
@@ -403,7 +378,7 @@
 
 (defun (setf svref) (value simple-vector index)
   (etypecase simple-vector
-    (basic-vector
+    (simple-vector
      (macrolet
 	 ((do-it ()
 	    `(with-inline-assembly (:returns :eax)
@@ -662,26 +637,7 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
        (make-basic-vector%u32 dimensions fill-pointer initial-element initial-contents))
       ((eq element-type 'code)
        (make-basic-vector%code dimensions fill-pointer initial-element initial-contents))
-      (t (make-basic-vector%t dimensions fill-pointer initial-element initial-contents)
-	 #+ignore
-	 (let ((array (malloc-words dimensions)))
-	   (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)
-			 0 :lisp)
-	     dimensions)
-	   (setf (memref array #.(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::type)
-			 0 :unsigned-byte16)
-	     #.(movitz:basic-vector-type-tag :any-t))
-	   (setf (fill-pointer array)
-	     (case fill-pointer
-	       ((nil t) dimensions)
-	       (t fill-pointer)))
-	   (cond
-	    (initial-contents
-	     (replace array initial-contents))
-	    (initial-element
-	     (dotimes (i dimensions)
-	       (setf (svref%unsafe array i) initial-element))))
-	   array))))))
+      (t (make-basic-vector%t dimensions fill-pointer initial-element initial-contents))))))
 
 (defun vector (&rest objects)
   "=> vector"

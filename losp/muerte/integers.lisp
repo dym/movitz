@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.38 2004/06/11 23:26:38 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.39 2004/07/08 11:30:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1213,8 +1213,7 @@ Preserve EAX and EBX."
 					'retry-jumper)
 				      (:edi (:edi-offset atomically-status))))
 
-		     (:leal ((:ecx ,movitz:+movitz-fixnum-factor+) ,movitz:+movitz-fixnum-factor+)
-			    :eax)	; Number of words
+		     (:leal ((:ecx 4) 4) :eax) ; Number of words
 		     (:call-global-constant get-cons-pointer) ; New bignum into EAX
 		     
 
@@ -1548,6 +1547,50 @@ Preserve EAX and EBX."
   (numargs-case
    (1 (x) x)
    (2 (x y)
+      (number-double-dispatch (x y)
+	((fixnum fixnum)
+	 (with-inline-assembly (:returns :eax)
+	   (:compile-two-forms (:eax :ebx) x y)
+	   (:xorl :ebx :eax)))
+	((positive-fixnum positive-bignum)
+	 (macrolet
+	     ((do-it ()
+		`(let ((r (copy-bignum y)))
+		   (with-inline-assembly (:returns :eax)
+		     (:compile-two-forms (:eax :ecx) y x)
+		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		     (:xorl (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)) :ecx)))))
+	   (do-it)))
+	((positive-bignum positive-fixnum)
+	 (macrolet
+	     ((do-it ()
+		`(let ((r (copy-bignum x)))
+		   (with-inline-assembly (:returns :eax)
+		     (:compile-two-forms (:eax :ecx) r y)
+		     (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		     (:xorl :ecx (:eax ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))))))
+	   (do-it)))
+	((positive-bignum positive-bignum)
+	 (if (< (%bignum-bigits x) (%bignum-bigits y))
+	     (logior y x)
+	   (let ((r (copy-bignum x)))
+	     (macrolet
+		 ((do-it ()
+		    `(with-inline-assembly (:returns :eax)
+		       (:compile-two-forms (:eax :ebx) r y)
+		       (:movzxw (:ebx ,(bt:slot-offset 'movitz::movitz-bignum 'movitz::length))
+				:ecx)
+		       (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)
+			       ,(* -1 movitz:+movitz-fixnum-factor+))
+			      :edx)	; EDX is loop counter
+		      or-loop
+		       (:movl (:ebx :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0))
+			      :ecx)
+		       (:orl :ecx
+			     (:eax :edx ,(bt:slot-offset 'movitz:movitz-bignum 'movitz::bigit0)))
+		       (:subl 4 :edx)
+		       (:jnc 'or-loop))))
+	       (do-it))))))
       (number-double-dispatch (x y)
 	(((eql 0) t) y)
 	((t (eql 0)) x)

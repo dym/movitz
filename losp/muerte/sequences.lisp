@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.13 2004/07/07 17:37:38 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.14 2004/07/08 11:30:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -55,7 +55,7 @@
 
 (defun length (sequence)
   (etypecase sequence
-    (basic-vector
+    (simple-array
      (macrolet
 	 ((do-it ()
 	    `(with-inline-assembly (:returns :eax)

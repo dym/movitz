@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.24 2004/06/17 09:49:23 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.25 2004/07/08 11:30:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -658,8 +658,6 @@ Returns list in EAX and preserves numargs in ECX."
      (movitz-accessor object movitz-funobj-standard-gf standard-gf-class))
     (string
      (find-class 'string))
-    (basic-vector
-     (find-class 'vector))
     (vector
      (find-class 'vector))
     (function

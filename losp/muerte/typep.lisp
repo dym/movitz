@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.21 2004/07/07 17:37:34 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.22 2004/07/08 11:30:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -234,12 +234,13 @@
 		((function compiled-function)
 		 (make-other-typep :funobj))
 		((basic-vector)
+		 (break "Basic-vector typep?")
 		 (make-other-typep :basic-vector))
-		((vector array)
-		 `(typep ,object 'basic-vector))
+		((vector simple-array array)
+		 (make-other-typep :basic-vector))
 		(simple-vector
 		 (make-basic-vector-typep :any-t))
-		(string
+		((string simple-string)
 		 (make-basic-vector-typep :character))
 		(vector-u8
 		 (make-basic-vector-typep :u8))
@@ -262,6 +263,12 @@
 		(if deriver-function
 		    `(typep ,object ',(apply deriver-function (cdr type)))
 		  (case (car type)
+		    ((simple-array)
+		     (let ((et (cadr type)))
+		       (cond
+			((movitz:movitz-subtypep et '(unsigned-byte 8))
+			 (make-basic-vector-typep :u8))
+			(t (make-basic-vector-typep :any-t)))))
 		    ((integer)
 		     (destructuring-bind (&optional (lower-limit '*) (upper-limit '*))
 			 (cdr type)
@@ -383,7 +390,7 @@
 
 #+ignore
 (defun foo (x)
-  (typep x '(cons * symbol)))
+  (typep x '(simple-array (unsigned-byte 4))))
 
 (defmacro define-typep (tname lambda &body body)
   (let ((fname (format nil "~A-~A" 'typep tname)))
