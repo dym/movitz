@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.43 2005/01/25 13:44:11 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.44 2005/01/27 08:58:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1014,7 +1014,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	 (multiple-value-bind (lambda-forms lambda-declarations)
 	     (parse-docstring-declarations-and-body (cddr name))
 	   (let ((lambda-funobj
-		  (make-compiled-funobj-pass1 '(:anonymous-lambda)
+		  (make-compiled-funobj-pass1 '(muerte.cl:lambda)
 					      (cadr name)
 					      lambda-declarations
 					      `(muerte.cl:progn ,@lambda-forms)
