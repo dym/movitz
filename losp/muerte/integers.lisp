@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.57 2004/07/14 12:16:28 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.58 2004/07/14 12:28:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1434,11 +1434,17 @@ Preserve EAX and EBX."
 		     (setf q (+ q guess)
 			   r (- r (* divisor guess))))))))))
 	(((integer * -1) (integer 0 *))
-	 (- (truncate (- number) divisor)))
+	 (multiple-value-bind (q r)
+	     (truncate (- number) divisor)
+	   (values (- q) (- r))))
 	(((integer 0 *) (integer * -1))
-	 (- (truncate number (- divisor))))
+	 (multiple-value-bind (q r)
+	     (truncate (- number) divisor)
+	   (values (- q) r)))
 	(((integer * -1) (integer * -1))
-	 (truncate (- number) (- divisor)))
+	 (multiple-value-bind (q r)
+	     (truncate (- number) divisor)
+	   (values q (- r))))
 	))))
 
 (defun / (number &rest denominators)
