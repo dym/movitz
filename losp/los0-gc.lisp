@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2003-2004, 
+;;;;    Copyright (C) 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.45 2004/12/08 23:39:51 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.46 2005/01/25 13:56:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -109,6 +109,7 @@
       (macrolet
 	  ((do-it ()
 	     `(with-inline-assembly (:returns :nothing)
+	       retry
 		(:compile-form (:result-mode :eax) (+ free-space trigger))
 		(:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 		(:testl ,(logxor #xffffffff
@@ -121,6 +122,11 @@
 		       :ecx)
 		(:subl :eax :ecx)
 		(:movl (:edx 2) :ebx)
+		(:cmpl :ecx :ebx)
+		(:jc '(:sub-program ()
+		       ;; Current newspace was too full, so trigger a GC.
+		       (:int 113)
+		       (:jmp 'retry)))
 		(:movl :ecx (:edx 2))
 		(:addl 8 :ebx)
 	       fill-loop
@@ -138,7 +144,6 @@ Preserve ECX."
   (macrolet
       ((do-it ()
 	 `(with-inline-assembly (:returns :multiple-values)
-	   retry
 	    (:locally (:cmpl 0 (:edi (:edi-offset atomically-continuation)))) ; Atomically?
 	    (:je '(:sub-program ()
 		   (:int 63)))		; This must be called inside atomically.
@@ -151,8 +156,8 @@ Preserve ECX."
 	    (:ja '(:sub-program (probe-failed)
 		   (:int 113)
 		   (:int 63)))
-	    (:leal (:edx :ebx 8) :eax)
 	    (:movl :edi (:edx :ebx 8 ,movitz:+other-type-offset+))
+	    (:leal (:edx :ebx 8) :eax)
 	    (:ret))))
     (do-it)))
 
@@ -162,7 +167,6 @@ Preserve EAX and EBX."
   (macrolet
       ((do-it ()
 	 `(with-inline-assembly (:returns :multiple-values)
-	   retry
 	    (:locally (:cmpl 0 (:edi (:edi-offset atomically-continuation)))) ; Atomically?
 	    (:je '(:sub-program ()
 		   (:int 63)))		; This must be called inside atomically.
@@ -174,7 +178,7 @@ Preserve EAX and EBX."
 		   :ecx)
 	    (:ja '(:sub-program (commit-failed)
 		   (:int 113)
-		   (:jmp 'retry)))
+		   (:int 63)))
 	    (:movl :ecx (:edx 2))
 	    (:leal (:edx :ecx) :ecx)
 	    (:ret))))
@@ -190,7 +194,6 @@ Preserve EAX and EBX."
 	    (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
 	    (:ret)
 	   not-fixnum
-	   retry-cons
 	    (:locally (:movl ,(movitz::atomically-continuation-simple-pf 'box-u32-ecx)
 			     (:edi (:edi-offset atomically-continuation))))
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
@@ -211,7 +214,8 @@ Preserve EAX and EBX."
 	    (:ret))))
     (do-it)))
 
-(defvar *gc-stack*)
+(defvar *gc-stack* nil)
+(defvar *gc-stack2* nil)
 
 (defun install-los0-consing (&key (context (current-run-time-context))
 				  (kb-size 1024)
@@ -401,23 +405,37 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
 				 (break "Seeing old object in values-vector: ~Z" x))
 			       x)
 			     #x38 #xb8)
-	    (let* ((stack (%run-time-context-slot 'muerte::nursery-space))
+	    (let* ((stack (%run-time-context-slot 'muerte::stack-vector))
 		   (stack-start (- (length stack) (muerte::current-control-stack-depth))))
 	      (do ((i 0 (+ i 3)))
 		  ((>= i (length a)))
-		(when (find (aref a i) stack :start stack-start)
-		  (break "Seeing old object ~S in current stack!"
-			 (aref a i))))))))
-
+		(let* ((offender? (aref a i))
+		       (offender-index (position offender? stack :start stack-start)))
+		  (when offender-index
+		    (break "Seeing old object ~S in current stack at ~S, new is ~S"
+			   offender?
+			   (+ (object-location stack)
+			      offender-index 2)
+			   (aref a (+ i 2))))))
+	      (loop for x from 0 to #xa0000
+		  do (when (= #x19a04e (memref x 0 :type :unsigned-byte32))
+		       (warn "Seeing foo at ~S." x)))
+	      (loop for i from stack-start below (length stack)
+		  as o = (aref stack i)
+		  do (when (and (typep o 'pointer)
+				(location-in-object-p oldspace (object-location o)))
+		       (break "Seeing old (unmapped) object ~Z in stack at ~S."
+			      o (+ (object-location stack) i 2))))))))
       ;; GC completed, oldspace is evacuated.
       (unless *gc-quiet*
 	(let ((old-size (truncate (- (space-fresh-pointer oldspace) 2) 2))
 	      (new-size (truncate (- (space-fresh-pointer newspace) 2) 2)))
-	  (format t "Old space: ~/muerte:pprint-clumps/, new space: ~
+	  (format t "Old space [~Z]: ~/muerte:pprint-clumps/, new space [~Z]: ~
 ~/muerte:pprint-clumps/, freed: ~/muerte:pprint-clumps/.~%"
-		  old-size new-size (- old-size new-size))))
+		  oldspace old-size newspace new-size (- old-size new-size))))
       (initialize-space oldspace)
       (fill oldspace #x13 :start 2)
+      ;; (setf *gc-stack2* *gc-stack*)
       (setf *gc-stack* (muerte::copy-current-control-stack))
       (setf (fill-pointer *xx*) (fill-pointer *x*))
       (replace *xx* *x*)))

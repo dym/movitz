@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.39 2005/01/04 16:54:27 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.40 2005/01/25 13:56:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -36,7 +36,7 @@
     (loop for location from start-location below end-location
 	as object = (memref location 0)
 	do (when (typep object 'pointer)
-	     (let ((new-object (do-map object)))
+	     (let ((new-object (do-map object location)))
 	       (unless (eq object new-object)
 		 (setf (memref location 0) new-object)))))))
 
@@ -139,7 +139,7 @@ start-location and end-location."
 				     #.(bt:enum-value 'movitz:movitz-vector-element-type :any-t))
 		(setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
 	      (error "Scanned unknown basic-vector-header ~S at location #x~X." x scan)))
-	   ((eq x 3)
+	   ((and (eq x 3) (eq x2 0))
 	    (setf *scan-last* scan)
 	    (incf scan)
 	    (let ((delta (memref scan 0)))
@@ -147,15 +147,206 @@ start-location and end-location."
 	      ;; (warn "at ~S skipping ~S to ~S." scan delta (+ scan delta))
 	      (incf scan delta)))
 	   (t ;; (typep x 'pointer)
-	    (let* ((old (memref scan 0))
-		   (new (funcall function old scan)))
-	      (when verbose
-		(format *terminal-io* " [~Z => ~Z]" old new))
-	      (unless (eq old new)
-		(setf (memref scan 0) new)))))))))
+	    (let ((old (memref scan 0)))
+	      (unless (eq old (load-global-constant new-unbound-value))
+		(let ((new (funcall function old scan)))
+		  (when verbose
+		    (format *terminal-io* " [~Z => ~Z]" old new))
+		  (unless (eq old new)
+		    (setf (memref scan 0) new)))))))))))
   (values))
 
 (defun map-stack-vector (function stack start-frame &optional (map-region #'map-header-vals))
+  "Map function over the potential pointer words of a stack, starting
+at the start-stack-frame location."
+  (assert (typep (stack-frame-funobj stack start-frame) 'function) (start-frame)
+    "Cannot start map-stack-vector at a non-normal frame.")
+  (assert (eq nil stack))
+  (map-stack function
+	     (stack-frame-uplink stack start-frame)
+	     (+ start-frame 2)
+	     (+ start-frame 1)
+	     map-region))
+
+;;;(defun map-code-vector-slot (function stack slot casf-funobj)
+;;;  (let ((casf-code-vector (if (eq 0 casf-funobj)
+;;;			      (symbol-value 'default-interrupt-trampoline)
+;;;			    (funobj-code-vector casf-funobj)))
+;;;	(eip-location (stack-frame-ref stack slot 0 :location)))
+;;;    (cond
+;;;     ((location-in-object-p casf-code-vector eip-location)
+;;;      (let ((new (funcall function casf-code-vector nil)))
+;;;	(when (not (eq new casf-code-vector))
+;;;	  ;; Perform some pointer arithmetics..
+;;;	  (let ((offset (- (stack-frame-ref stack slot 0 :unsigned-byte32)
+;;;			   (%object-lispval casf-code-vector))))
+;;;	    (break "Code-vector for ~S moved, offset is ~D." casf-code-vector offset))))))))
+
+(defun scavenge-find-code-vector (location casf-funobj esi &optional searchp)
+  (flet ((match-funobj (funobj location)
+	   (cond
+	    ((let ((x (funobj-code-vector casf-funobj)))
+	       (and (location-in-object-p x location) x)))
+	    ((let ((x (funobj-code-vector%1op casf-funobj)))
+	       (and (typep x 'vector)
+		    (location-in-object-p x location)
+		    x)))
+	    ((let ((x (funobj-code-vector%2op casf-funobj)))
+	       (and (typep x 'vector)
+		    (location-in-object-p x location)
+		    x)))
+	    ((let ((x (funobj-code-vector%3op casf-funobj)))
+	       (and (typep x 'vector)
+		    (location-in-object-p x location)
+		    x))))))
+    (cond
+     ((eq 0 casf-funobj)
+      (let ((dit-code-vector (symbol-value 'default-interrupt-trampoline)))
+	(if (location-in-object-p dit-code-vector location)
+	    dit-code-vector
+	  (break "DIT returns outside DIT??"))))
+     ((and (typep esi 'function)
+	   (match-funobj esi location)))
+     ((match-funobj casf-funobj location))
+     ((not (typep casf-funobj 'function))
+      (break "Unknown funobj/frame-type: ~S" casf-funobj))
+     ((when searchp
+	(%find-code-vector location)))
+     (t (error "Unable to decode EIP #x~X funobj ~S." location casf-funobj)))))
+
+(defun map-stack-value (function value frame)
+  (if (not (typep value 'pointer))
+      value
+    (funcall function value frame)))
+
+(defun map-stack (function frame frame-bottom eip-index map-region)
+  (with-funcallable (map-region)
+    (loop
+      ;; for frame = frame then (stack-frame-uplink frame)
+      ;; as frame-end = frame-end then frame
+	while (not (eq 0 frame))
+	do (map-lisp-vals function (1- frame) frame)
+	   (let ((frame-funobj (map-stack-value function (stack-frame-funobj nil frame) frame)))
+	     (cond
+	      ((eq 0 frame-funobj)
+	       (return (map-stack-dit function frame frame-bottom eip-index map-region)))
+	      ((not (typep frame-funobj 'function))
+	       (error "Unknown stack-frame funobj ~S at ~S" frame-funobj frame))
+	      (t (let* ((old-code-vector
+			 (scavenge-find-code-vector (stack-frame-ref nil eip-index 0 :location)
+						    frame-funobj nil nil)))
+		   (map-stack-instruction-pointer function eip-index old-code-vector))
+		 (let ((raw-locals (funobj-frame-raw-locals frame-funobj)))
+		   (if (= 0 raw-locals)
+		       (map-region function frame-bottom frame)
+		     (progn
+		      (break "~D raw-locals for ~S?" raw-locals frame-funobj)
+		      (map-region function (1- frame) frame)
+		      (map-region function frame-bottom (- frame 1 raw-locals))))
+		   (setf eip-index (+ frame 1)
+			 frame-bottom (+ frame 2)
+			 frame (stack-frame-uplink nil frame)))))))))
+
+(defun test-stack ()
+  (let ((z (current-stack-frame)))
+    (map-stack (lambda (x y)
+		 (format t "~&[~S]: ~S" y x)
+		 x)
+	       (stack-frame-uplink nil z) (+ z 2) (+ z 1)
+	       #'map-header-vals)))
+
+(defun map-stack-dit (function dit-frame frame-bottom eip-index map-region)
+  (with-funcallable (map-region)
+    (let* ((atomically
+	    (dit-frame-ref nil dit-frame :atomically-continuation :unsigned-byte32))
+	   (secondary-register-mode-p
+	    (logbitp 10 (dit-frame-ref nil dit-frame :eflags :unsigned-byte32)))
+	   (casf-frame
+	    (dit-frame-casf nil dit-frame))
+	   (casf-funobj (map-stack-value function (stack-frame-funobj nil casf-frame) casf-frame))
+	   (casf-code-vector (map-stack-value function
+					      (case casf-funobj
+						(0 (symbol-value 'default-interrupt-trampoline))
+						(t (funobj-code-vector casf-funobj)))
+					      casf-frame)))
+      ;; 1. Scavenge the dit-frame
+      (cond
+       ((and (not (= 0 atomically))
+	     (= 0 (ldb (byte 2 0) atomically)))
+	;; Interrupt occurred inside an (non-pf) atomically, so none of the
+	;; GC-root registers are active.
+	(setf (dit-frame-ref nil dit-frame :eax) nil
+	      (dit-frame-ref nil dit-frame :ebx) nil
+	      (dit-frame-ref nil dit-frame :edx) nil
+	      (dit-frame-ref nil dit-frame :esi) nil)
+	(map-region function frame-bottom (+ dit-frame 1 (dit-frame-index :scratch1))))
+       (secondary-register-mode-p
+	;; EBX is also active
+	(map-region function frame-bottom (+ dit-frame 1 (dit-frame-index :ebx))))
+       (t ;; EDX and EAX too.
+	(map-region function frame-bottom (+ dit-frame 1 (dit-frame-index :eax)))))
+      ;; The DIT's return-address
+      (let* ((interrupted-esi (dit-frame-ref nil dit-frame :esi))
+	     (next-frame-bottom (+ dit-frame 1 (dit-frame-index :eflags)))
+	     (next-eip-index (+ dit-frame (dit-frame-index :eip)))
+	     (old-code-vector
+	      (scavenge-find-code-vector (stack-frame-ref nil eip-index 0 :location)
+					 0 interrupted-esi
+					 nil))
+	     (new-code-vector (map-stack-instruction-pointer function eip-index old-code-vector)))
+	;;
+	(multiple-value-bind (x0-location x0-tag)
+	    (stack-frame-ref nil next-frame-bottom 0 :signed-byte30+2)
+	  ;; (warn "X0: ~S ~S" x0-location x0-tag)
+	  (cond
+	   ((and (or (eq x0-tag 1)	; 1 or 5?
+		     (eq x0-tag 3)	; 3 or 7?
+		     (and (oddp x0-location) (eq x0-tag 2))) ; 6?
+		 (location-in-object-p casf-code-vector x0-location))
+	    (let* ((old-x0-code-vector
+		    (scavenge-find-code-vector (stack-frame-ref nil next-eip-index 0 :location)
+					       casf-funobj interrupted-esi t)))
+	      (map-stack-instruction-pointer function next-eip-index old-x0-code-vector))
+	    (setf next-eip-index next-frame-bottom
+		  next-frame-bottom (1+ next-frame-bottom)))
+	   (t (multiple-value-bind (x1-location x1-tag)
+		  (stack-frame-ref nil next-frame-bottom 1 :signed-byte30+2)
+		(when (and (or (eq x1-tag 1) ; 1 or 5?
+			       (eq x1-tag 3) ; 3 or 7?
+			       (and (oddp x1-location) (eq x1-tag 2))) ; 6?
+			   (location-in-object-p casf-code-vector x1-location))
+		  (warn "X1: ~S ~S" x1-location x1-tag)
+		  (let* ((old-x1-code-vector
+			  (scavenge-find-code-vector (stack-frame-ref nil next-eip-index 0 :location)
+						     casf-funobj interrupted-esi t)))
+		    (map-stack-instruction-pointer function next-eip-index old-x1-code-vector))
+		  (setf next-eip-index (+ 1 next-frame-bottom)
+			next-frame-bottom (+ 2 next-frame-bottom)))))))
+	;; proceed
+	(map-stack function casf-frame next-frame-bottom next-eip-index map-region)))))
+
+(defun map-stack-instruction-pointer (function index old-code-vector)
+  "Update the (raw) instruction-pointer in stack at index,
+assuming the pointer refers to old-code-vector."
+  (assert (location-in-object-p old-code-vector (stack-frame-ref nil index 0 :location)))
+  (let ((new-code-vector (funcall function old-code-vector nil)))
+    (when (not (eq old-code-vector new-code-vector))
+      (break "Code-vector for stack instruction-pointer moved. [index: ~S]" index))
+    new-code-vector))
+
+(defun map-stack-flaccid-pointer (function index)
+  "If the pointed-to object is moved, reset pointer to NIL."
+  (let ((old (stack-frame-ref nil index 0)))
+    (cond
+     ((not (typep old 'pointer))
+      old)
+     ((eq old (funcall function old index))
+      old)
+     (t (setf (stack-frame-ref nil index 0) nil)))))
+
+
+#+ignore
+(defun old-map-stack-vector (function stack start-frame &optional (map-region #'map-header-vals))
   "Map function over the potential pointer words of a stack, starting
 at the start-stack-frame location."
   (with-funcallable (map-region)
@@ -176,7 +367,7 @@ at the start-stack-frame location."
 		 (incf nether-frame 4))
 	       (typecase funobj
 		 ((or function null)
-		  (assert (= 0 (funobj-frame-num-unboxed funobj)))
+		  (assert (= 0 (funobj-frame-raw-locals funobj)))
 		  (map-region function (+ nether-frame 2) frame))
 		 ((eql 0)		; A dit interrupt-frame?
 		  (let* ((dit-frame frame)
@@ -210,10 +401,6 @@ at the start-stack-frame location."
 			  (interrupted-ebp (dit-frame-ref stack dit-frame :ebp))
 			  (casf-funobj (funcall function (stack-frame-funobj stack frame) frame)))
 		      (cond
-		       #+ignore
-		       ((eq nil casf-funobj)
-			(warn "Scanning interrupt in PF: ~S"
-			      (dit-frame-ref stack dit-frame :eip :unsigned-byte32)))
 		       ((or (eq 0 casf-funobj)
 			    (typep casf-funobj 'function))
 			(let ((casf-code-vector (scavenge-funobj-code-vector casf-funobj)))
