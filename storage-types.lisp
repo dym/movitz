@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.6 2004/02/12 11:28:28 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.7 2004/02/12 22:58:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1137,7 +1137,7 @@ integer (native lisp) value."
   (assert (= 3 (length (movitz-struct-slot-values movitz-hash))))
   (let* ((undef (movitz-read +undefined-hash-key+))
 	 (old-bucket (second (movitz-struct-slot-values movitz-hash)))
-	 (hash-size (* 2 (hash-table-size lisp-hash)))
+	 (hash-size (* 2 (truncate (hash-table-count lisp-hash) 2/3)))
 	 (bucket-data (or (and old-bucket
 			       (= (length (movitz-vector-symbolic-data old-bucket))
 				  hash-size)
