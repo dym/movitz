@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.32 2004/11/12 14:39:04 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.33 2004/11/12 15:13:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -83,7 +83,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				      :form init-form
 				      :modify-accumulate let-modifies
 				      :result-mode :push)
-				    `((:globally (:pushl (:edi (:edi-offset unbound-value)))))
+				    `((:pushl :edi)) ; scratch
 				    (prog1 nil (incf (stack-used init-env) 2))
 				    (compiler-call #'compile-self-evaluating ; binding name
 				      :env init-env
@@ -1103,11 +1103,10 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			  (:movl (:eax 3) :eax) ; (pop values)
 			  ,no-more-values
 			  (:pushl :edx)	; push (car values) [[ binding value ]]
-			  (:globally (:pushl (:edi (:edi-offset unbound-value)))) ;  [[ binding tag ]]
+			  (:pushl :edi)	; push binding scratch
 			  (:pushl (:ebx -1)) ; push (car symbols) [[ binding name ]]
 			  (:movl (:ebx 3) :ebx) ; (pop symbols)
 			  (:addl 4 :ecx)
-			  ;; (:jc '(:sub-program (too-many-symbols) (:int 71)))
 			  (:pushl :esp)	; push next tail
 			  (:jmp ',loop)
 			  ,no-more-symbols
