@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.29 2004/10/11 13:52:54 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.30 2004/11/11 10:08:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -61,6 +61,14 @@
 
 (defun dit-frame-ref (stack frame reg &optional (type :lisp))
   (stack-frame-ref stack frame (dit-frame-index reg) type))
+
+(define-compiler-macro (setf dit-frame-ref) (&whole form value stack frame reg
+					     &optional (type :lisp)
+					     &environment env)
+  (if (not (and (movitz:movitz-constantp stack env)
+		(eq nil (movitz:movitz-eval stack env))))
+      form
+    `(setf (memref ,frame (dit-frame-offset ,reg) :type ,type) ,value)))
 
 ;;;(defun (setf dit-frame-ref) (x reg type &optional (frame *last-dit-frame*))
 ;;;  (setf (memref frame (dit-frame-offset reg) 0 type) x))
@@ -117,7 +125,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 				     :key #'dit-frame-index)
 		  collect `(:pushl ,reg))
 	    (:locally (:pushl (:edi (:edi-offset scratch1))))
-	    
+ 	    
 	    (:locally (:movl (:edi (:edi-offset nursery-space)) :eax))
 	    (:pushl :eax)		; debug0: nursery-space
 	    (:pushl (:eax 2))		; debug1: nursery-space's fresh-pointer
@@ -126,9 +134,9 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    
 	    ;; Do RET atomicification
 	    (:movl (:ebp ,(dit-frame-offset :eip)) :ecx)
-	    (:cmpb ,(realpart (ia-x86:asm :ret)) (:ecx))
+	    ((:cs-override) :cmpb ,(realpart (ia-x86:asm :ret)) (:ecx))
 	    (:jne 'not-at-ret-instruction)
-	    (:locally (:movl (:edi (:edi-offset ret-trampoline)) :ecx))
+	    (:globally (:movl (:edi (:edi-offset ret-trampoline)) :ecx))
 	    (:movl :ecx (:ebp ,(dit-frame-offset :eip)))
 	   not-at-ret-instruction
 	    
@@ -259,6 +267,9 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    )))
     (do-it)))
 
+
+
+
 (defun interrupt-default-handler (vector dit-frame)
   (declare (without-check-stack-limit))
   (macrolet ((dereference (fixnum-address &optional (type :lisp))
@@ -277,7 +288,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	  (3 (break "Break instruction at ~@Z." $eip))
 	  (4 (error "Primitive overflow assertion failed."))
 	  (6 (error "Illegal instruction at ~@Z." $eip))
-	  (13 (error "General protection error. EIP=~@Z, error-code: #x~X, EAX: ~@Z, EBX: ~@Z, ECX: ~@Z"
+	  (13  (error "General protection error. EIP=~@Z, error-code: #x~X, EAX: ~@Z, EBX: ~@Z, ECX: ~@Z"
 		     $eip
 		     (dit-frame-ref nil dit-frame :error-code :unsigned-byte32)
 		     $eax $ebx $ecx))
@@ -309,6 +320,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 		  (stack (%run-time-context-slot 'movitz::stack-vector))
 		  (real-bottom (- (object-location stack) 2))
 		  (stack-left (- old-bottom real-bottom))
+		  (old-es (segment-register :es))
 		  (old-dynamic-env (%run-time-context-slot 'dynamic-env))
 		  (new-bottom (cond
 			       ((< stack-left 50)
@@ -325,8 +337,9 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	     (unwind-protect
 		 (progn
 		   (setf (%run-time-context-slot 'stack-bottom) new-bottom
-			 (%run-time-context-slot 'dynamic-env) 0)
-		   (format *debug-io* "~&Stack-warning: Bumped stack-bottom by ~D to #x~X. Reset ENV.~%"
+			 (%run-time-context-slot 'dynamic-env) 0
+			 (segment-register :es) (segment-register :ds))
+		   (format *debug-io* "~&Stack-warning: Bumped stack-bottom by ~D to #x~X. Reset ENV and ES.~%"
 			   (- old-bottom new-bottom)
 			   new-bottom)
 		   (break "Stack overload exception ~D at EIP=~@Z, ESP=~@Z, bottom=#x~X, ENV=#x~X."
@@ -337,7 +350,8 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	       (format *debug-io* "~&Stack-warning: Resetting stack-bottom to #x~X.~%"
 		       old-bottom)
 	       (setf (%run-time-context-slot 'stack-bottom) old-bottom
-		     (%run-time-context-slot 'dynamic-env) old-dynamic-env))))
+		     (%run-time-context-slot 'dynamic-env) old-dynamic-env
+		     (segment-register :es) old-es))))
 	  (69
 	   (error "Not a function: ~S" (dereference $edx)))
 	  (70
