@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.14 2004/11/12 14:51:56 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.15 2004/12/20 10:51:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -68,29 +68,6 @@
     (:xorl :ecx :ecx)
     (:call (:esi #.(movitz::slot-offset 'movitz::movitz-funobj 'movitz::code-vector)))))
 
-#+ignore
-(defun funcall%1ops (function-name arg0)
-  (funcall%1ops function-name arg0)	; compiler-macro
-  #+ignore (with-inline-assembly (:returns :multiple-values)
-	     (:compile-form (:result-mode :esi) (etypecase function-name
-						  (symbol (symbol-function function-name))
-						  (compiled-function function-name)))
-	     (:compile-form (:result-mode :edx) function-name)
-	     (:compile-form (:result-mode :eax) arg0)
-	     (:call (:esi #.(movitz::slot-offset 'movitz::movitz-funobj 'movitz::code-vector%1op)))))
-
-#+ignore
-(defun funcall%2ops (function arg0 arg1)
-  (funcall%2ops function arg0 arg1)	; compiler-macro.
-  #+ignore (with-inline-assembly (:returns :multiple-values)
-	     (:compile-form (:result-mode :esi) (etypecase function
-						  (symbol (symbol-function function))
-						  (compiled-function function)))
-	     (:compile-form (:result-mode :edx) function)
-	     (:compile-form (:result-mode :eax) arg0)
-	     (:compile-form (:result-mode :ebx) arg1)
-	     (:call (:esi #.(movitz::slot-offset 'movitz::movitz-funobj 'movitz::code-vector%2op)))))
-  
 (defun funcall (function-or-name &rest args)
   (numargs-case
    (1 (function-or-name)
