@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.5 2004/02/29 19:14:59 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.6 2004/03/31 12:17:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -775,35 +775,50 @@
       sequence-1)))
 
 (defun find (item sequence &key from-end (test 'eql) (start 0) end (key 'identity))
-  (with-funcallable (test)
-    (with-funcallable (key)
+  (numargs-case
+   (2 (item sequence)
       (sequence-dispatch sequence
 	(vector
-	 (setf end (or end (length sequence)))
-	 (with-subvector-accessor (sequence-ref sequence start end)
-	   (if (not from-end)
-	       (do ((i start (1+ i)))
-		   ((>= i end) nil)
-		 (when (test item (key (aref sequence i)))
-		   (return (sequence-ref i))))
-	     (do ((i (1- end) (1- i)))
-		 ((< i start) nil)
-	       (when (test item (key (sequence-ref i)))
-		 (return (sequence-ref i)))))))
+	 (with-subvector-accessor (sequence-ref sequence)
+	   (dotimes (i (length sequence))
+	     (when (eql item (sequence-ref i))
+	       (return item)))))
 	(list
-	 (if end
-	     (do ((p (nthcdr start sequence) (cdr p))
-		  (i start (1+ i)))
-		 ((or (>= i end) (endp p)) nil)
-	       (when (test item (key (car p)))
-		 (return (or (and from-end
-				  (find item (cdr p) :from-end t :test test :key key :end (- end i 1)))
-			     (car p)))))
-	   (do ((p (nthcdr start sequence) (cdr p)))
-	       ((endp p) nil)
-	     (when (test item (key (car p)))
-	       (return (or (and from-end (find item (cdr p) :from-end t :test test :key key))
-			   (car p)))))))))))
+	 (dolist (x sequence)
+	   (when (eql item x)
+	     (return x))))))
+   (t (item sequence &key from-end (test 'eql) (start 0) end (key 'identity))
+      (with-funcallable (test)
+	(with-funcallable (key)
+	  (sequence-dispatch sequence
+	    (vector
+	     (setf end (or end (length sequence)))
+	     (with-subvector-accessor (sequence-ref sequence start end)
+	       (if (not from-end)
+		   (do ((i start (1+ i)))
+		       ((>= i end) nil)
+		     (when (test item (key (aref sequence i)))
+		       (return (sequence-ref i))))
+		 (do ((i (1- end) (1- i)))
+		     ((< i start) nil)
+		   (when (test item (key (sequence-ref i)))
+		     (return (sequence-ref i)))))))
+	    (list
+	     (if end
+		 (do ((p (nthcdr start sequence) (cdr p))
+		      (i start (1+ i)))
+		     ((or (>= i end) (endp p)) nil)
+		   (when (test item (key (car p)))
+		     (return (or (and from-end
+				      (find item (cdr p)
+					    :from-end t :test test
+					    :key key :end (- end i 1)))
+				 (car p)))))
+	       (do ((p (nthcdr start sequence) (cdr p)))
+		   ((endp p) nil)
+		 (when (test item (key (car p)))
+		   (return (or (and from-end (find item (cdr p) :from-end t :test test :key key))
+			       (car p)))))))))))))
   
 
 (defun find-if (predicate sequence &key from-end (start 0) end (key 'identity))
@@ -897,24 +912,42 @@
 		 (incf n))))))))))
 
 (defun count-if (predicate sequence &key (start 0) end (key 'identity) #+ignore from-end)
-  (with-funcallable (predicate)
-    (with-funcallable (key)
-      (sequence-dispatch sequence
-	(list
-	 (if (not end)
-	     (do ((n 0)
-		  (p (nthcdr start sequence) (cdr p)))
-		 ((endp p) n)
-	       (when (predicate (key (car p)))
-		 (incf n)))
-	   (do ((n 0)
-		(i start (1+ i))
-		(p (nthcdr start sequence) (cdr p)))
-	       ((or (endp p) (>= i end)) n)
-	     (when (predicate (key (car p)))
-	       (incf n)))))
-	(vector
-	 (error "vector count-if not implemented."))))))
+  (numargs-case
+   (2 (predicate sequence)
+      (with-funcallable (predicate)
+	(sequence-dispatch sequence
+	  (list
+	   (let ((count 0))
+	     (dolist (x sequence)
+	       (when (predicate x)
+		 (incf count)))
+	     count))
+	  (vector
+	   (with-subvector-accessor (sequence-ref sequence)
+	     (let ((count 0))
+	       (dotimes (i (length sequence))
+		 (when (predicate (sequence-ref i))
+		   (incf count)))
+	       count))))))
+   (t (predicate sequence &key (start 0) end (key 'identity) #+ignore from-end)
+      (with-funcallable (predicate)
+	(with-funcallable (key)
+	  (sequence-dispatch sequence
+	    (list
+	     (if (not end)
+		 (do ((n 0)
+		      (p (nthcdr start sequence) (cdr p)))
+		     ((endp p) n)
+		   (when (predicate (key (car p)))
+		     (incf n)))
+	       (do ((n 0)
+		    (i start (1+ i))
+		    (p (nthcdr start sequence) (cdr p)))
+		   ((or (endp p) (>= i end)) n)
+		 (when (predicate (key (car p)))
+		   (incf n)))))
+	    (vector
+	     (error "vector count-if not implemented."))))))))
 
 
 (macrolet ((every-some-body ()
