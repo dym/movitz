@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.35 2004/06/04 13:35:25 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.36 2004/06/06 03:01:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -464,6 +464,18 @@
    (atomically-esp
     :binary-type lu32
     :initform 0)
+   (get-cons-pointer
+    :binary-type code-vector-word
+    :initform nil
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)
+   (cons-commit
+    :binary-type code-vector-word
+    :initform nil
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)
    (bochs-flags
     :binary-type lu32
     :initform 0)
