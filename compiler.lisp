@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.71 2004/07/09 16:11:20 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.72 2004/07/10 13:29:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -389,6 +389,9 @@ Side-effects each binding's binding-store-type."
 			      (member-type-encode (constant-object target-binding))))))
 			(t (pushnew target-binding (type-analysis-binding-types analysis))
 			   (setf more-binding-references-p t)))))
+		    ((and (bindingp type)
+			  (binding-eql type binding))
+		     nil)
 		    (t (setf (type-analysis-encoded-type analysis)
 			 (multiple-value-list
 			  (multiple-value-call
@@ -5425,7 +5428,6 @@ fifth:  all compiler-values for form1, as a list."
 	   (compiler-values ()
 	     :code (make-compiled-lexical-load binding returns)
 	     :final-form binding
-	     :type (binding-type-specifier binding)
 	     :returns returns
 	     :functional-p t))))))
 
@@ -6098,47 +6100,88 @@ and a list of any intervening unwind-protect environment-slots."
 
 (define-find-read-bindings :add (term0 term1 destination)
   (declare (ignore destination))
-  (remove-if-not #'bindingp (list term0 term1)))
+  (list term0 term1))
 
 (define-extended-code-expander :add (instruction funobj frame-map)
   (destructuring-bind (term0 term1 destination)
       (cdr instruction)
-    (cond
-     ((and (bindingp term0)
-	   (bindingp term1)
-	   (member destination
-		   '(:function :multple-values :eax :ebx :ecx :edx)))
-      #+ignore
-      (when (and (binding-store-subtypep term0 'fixnum)
-		 (binding-store-subtypep term1 'fixnum)
-		 (movitz-subtypep (multiple-value-call #'encoded-integer-types-add
-				    (values-list (binding-store-type term0))
-				    (values-list (binding-store-type term1)))
-				  'fixnum))
-	(warn "add: ~S~%~A => ~A~%~S, ~S"
-	      instruction
-	      (binding-type-specifier term0)
-	      (binding-type-specifier term1)
-	      (binding-store-subtypep term0 'fixnum)
-	      (binding-store-subtypep term1 'fixnum)))
+    (assert (and (bindingp term0)
+		 (bindingp term1)
+		 (member (result-mode-type destination)
+			 '(:lexical-binding :function :multple-values :eax :ebx :ecx :edx))))
+    (let* ((term0 (binding-target term0))
+	   (term1 (binding-target term1))
+	   (destination (if (or (not (bindingp destination))
+				(not (symbolp (new-binding-location destination frame-map :default 0))))
+			    destination
+			  (new-binding-location destination frame-map)))
+	   (type0 (apply #'encoded-type-decode (binding-store-type term0)))
+	   (type1 (apply #'encoded-type-decode (binding-store-type term1)))
+	   (result-type (multiple-value-call #'encoded-integer-types-add
+			  (values-list (binding-store-type term0))
+			  (values-list (binding-store-type term1)))))
+      ;; (warn "add for: ~S is ~A." destination result-type)
       (let ((loc0 (new-binding-location term0 frame-map :default nil))
 	    (loc1 (new-binding-location term1 frame-map :default nil)))
-	(append (cond
-		 ((and (eq :eax loc0) (eq :ebx loc1))
-		  nil)
-		 ((and (eq :ebx loc0) (eq :eax loc1))
-		  nil)			; terms order isn't important
-		 ((eq :eax loc1)
-		  (append
-		   (make-load-lexical term0 :ebx funobj nil frame-map)))
-		 (t (append
-		     (make-load-lexical term0 :eax funobj nil frame-map)
-		     (make-load-lexical term1 :ebx funobj nil frame-map))))
-		`((:movl (:edi ,(global-constant-offset '+)) :esi))
-		(make-compiled-funcall-by-esi 2)
-		(ecase destination
-		  ((:function :multple-values :eax))
-		  ((:ebx :ecx :edx)
-		   `((:movl :eax ,destination))))
-		)))
-     (t (error "Unknown add: ~S" instruction)))))
+	(cond
+	 ((type-specifier-singleton result-type)
+	  ;; (break "constant add: ~S" instruction)
+	  (make-load-constant (car (type-specifier-singleton result-type))
+			      destination funobj frame-map))
+	 ((and (movitz-subtypep type1 'fixnum)
+	       (movitz-subtypep type1 'fixnum)
+	       (movitz-subtypep result-type 'fixnum))
+	  (cond
+	   ((and (type-specifier-singleton type0)
+		 (eq loc1 destination))
+	    (cond
+	     ((member destination '(:eax :ebx :ecx :edx))
+	      `((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
+		       ,destination)))
+	     (t (assert (integerp loc1))
+		(break "check that this is correct..")
+		`((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
+			 (:ebp ,(stack-frame-offset loc1)))))))
+	   (t (warn "ADD: ~S = ~A + ~A, ~A ~A, ~A ~A"
+		    destination loc0 loc1 type0 type1
+		    (type-specifier-singleton type0)
+		    (eq loc1 destination))
+	      (warn "ADDI: ~S" instruction)
+	      (append (cond
+		       ((and (eq :eax loc0) (eq :ebx loc1))
+			nil)
+		       ((and (eq :ebx loc0) (eq :eax loc1))
+			nil)		; terms order isn't important
+		       ((eq :eax loc1)
+			(append
+			 (make-load-lexical term0 :ebx funobj nil frame-map)))
+		       (t (append
+			   (make-load-lexical term0 :eax funobj nil frame-map)
+			   (make-load-lexical term1 :ebx funobj nil frame-map))))
+		      `((:movl (:edi ,(global-constant-offset '+)) :esi))
+		      (make-compiled-funcall-by-esi 2)
+		      (etypecase destination
+			(symbol
+			 (unless (eq destination :eax)
+			   `((:movl :eax ,destination))))
+			(binding
+			 (make-store-lexical destination :eax nil frame-map)))))))
+	 (t (append (cond
+		     ((and (eq :eax loc0) (eq :ebx loc1))
+		      nil)
+		     ((and (eq :ebx loc0) (eq :eax loc1))
+		      nil)		; terms order isn't important
+		     ((eq :eax loc1)
+		      (append
+		       (make-load-lexical term0 :ebx funobj nil frame-map)))
+		     (t (append
+			 (make-load-lexical term0 :eax funobj nil frame-map)
+			 (make-load-lexical term1 :ebx funobj nil frame-map))))
+		    `((:movl (:edi ,(global-constant-offset '+)) :esi))
+		    (make-compiled-funcall-by-esi 2)
+		    (etypecase destination
+		      (symbol
+		       (unless (eq destination :eax)
+			 `((:movl :eax ,destination))))
+		      (binding
+		       (make-store-lexical destination :eax nil frame-map))))))))))

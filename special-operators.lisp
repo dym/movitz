@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.24 2004/07/09 16:12:44 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.25 2004/07/10 13:29:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1000,6 +1000,18 @@ on the current result."
       :forward all
       :env local-env
       :form sub-form)))
+
+(define-special-operator muerte::++%2op (&all all &form form &env env &result-mode result-mode)
+  (destructuring-bind (term1 term2)
+      (cdr form)
+    (let ((returns (ecase (result-mode-type result-mode)
+		     ((:function :multiple-values :eax :push) :eax)
+		     ((:ebx :ecx :edx) result-mode)
+		     ((:lexical-binding) result-mode))))
+      (compiler-values ()
+	:returns returns
+	:code `((:add ,(movitz-binding term1 env) ,(movitz-binding term2 env) ,returns))))))
+    
 
 (define-special-operator muerte::+%2op (&all all &form form &env env &result-mode result-mode)
   (assert (not (eq :boolean result-mode)) ()

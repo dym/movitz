@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.40 2004/07/08 21:51:08 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.41 2004/07/10 13:29:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -71,7 +71,10 @@
   (case (length operands)
     (0 0)
     (1 (first operands))
-    (2 `(+%2op ,(first operands) ,(second operands)))
+    #+ignore (2 `(+%2op ,(first operands) ,(second operands)))
+    (2 `(let ((x ,(first operands))
+	      (y ,(second operands)))
+	  (++%2op x y)))
     (t (let ((operands
 	      (loop for operand in operands
 		  if (movitz:movitz-constantp operand env)
@@ -1975,8 +1978,9 @@ Preserve EAX and EBX."
 	 (movitz:movitz-eval integer env))) ; constant folding
    ((and (movitz:movitz-constantp size env)
 	 (movitz:movitz-constantp position env))
-    (let ((size (movitz:movitz-eval size env))
-	  (position (movitz:movitz-eval position env)))
+    (let* ((size (movitz:movitz-eval size env))
+	   (position (movitz:movitz-eval position env))
+	   (result-type `(unsigned-byte ,size)))
       (cond
        ((or (minusp size) (minusp position))
 	(error "Negative byte-spec for ldb."))
@@ -1984,7 +1988,7 @@ Preserve EAX and EBX."
 	`(progn ,integer 0))
        ((<= (+ size position) (- 31 movitz:+movitz-fixnum-shift+))
 	`(with-inline-assembly (:returns :register
-					 :type (integer 0 ,(mask-field (byte size 0) -1)))
+					 :type ,result-type)
 	   (:compile-form (:result-mode :eax) ,integer)
 	   (:call-global-constant unbox-u32)
 	   (:andl ,(mask-field (byte size position) -1) :ecx)
@@ -1992,7 +1996,7 @@ Preserve EAX and EBX."
 	       `((:shrl ,position :ecx)))
 	   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) (:result-register))))
        ((<= (+ size position) 32)
-	`(with-inline-assembly-case ()
+	`(with-inline-assembly-case (:type ,result-type)
 	   (do-case (t :eax :labels (nix done))
 	     (:compile-form (:result-mode :eax) ,integer)
 	     ,@(cond
