@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.50 2004/04/16 23:38:41 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.52 2004/04/17 14:10:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -728,7 +728,9 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 		 (multiple-value-bind (prelude-code have-normalized-ecx-p)
 		     (make-compiled-function-prelude stack-frame-size function-env use-stack-frame-p
 						     (need-normalized-ecx-p function-env) frame-map
-						     :do-check-stack-p t)
+						     :do-check-stack-p (or (<= 32 stack-frame-size)
+									   (tree-search resolved-code
+											'(:call))))
 		   (let ((function-code
 			  (install-arg-cmp (append prelude-code
 						   resolved-code
@@ -737,11 +739,12 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 					   have-normalized-ecx-p)))
 		     (let ((optimized-function-code
 			    (optimize-code function-code
-					   :keep-labels (append (subseq (movitz-funobj-const-list funobj)
-									0 (movitz-funobj-num-jumpers funobj))
-								'(entry%1op
-								  entry%2op
-								  entry%3op)))))
+					   :keep-labels (append
+							 (subseq (movitz-funobj-const-list funobj)
+								 0 (movitz-funobj-num-jumpers funobj))
+							 '(entry%1op
+							   entry%2op
+							   entry%3op)))))
 		       (cons numargs optimized-function-code))))))))
     (let ((code1 (cdr (assoc 1 code-specs)))
 	  (code2 (cdr (assoc 2 code-specs)))
@@ -2702,7 +2705,8 @@ the sub-program options (&optional label) as secondary value."
 					   (truncate
 					    (or (position-if (lambda (i)
 							       (member b (find-read-bindings i)))
-							     (cdr init-pc))
+							     (cdr init-pc)
+							     #-sbcl :end #-sbcl 10)
 						15)
 					    count)))))))))
 		 ;; First, make several passes while trying to locate bindings

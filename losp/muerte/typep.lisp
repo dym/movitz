@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.9 2004/04/17 00:24:00 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.10 2004/04/17 14:08:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -311,7 +311,7 @@
 			(,(car type)
 			 ,@(loop for subtype in (cdr type)
 			       collect `(typep ,object ',subtype)))))
-		    (t (warn "typep ~A" type)))))))
+		    (t (warn "compiling typep ~A" type)))))))
 	    form)))))
 
 #+ignore
