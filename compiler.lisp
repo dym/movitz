@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.77 2004/07/18 23:45:45 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.78 2004/07/20 09:08:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2497,6 +2497,8 @@ the sub-program options (&optional label) as secondary value."
 			(:declare-label-set
 			 (destructuring-bind (name set)
 			     (cdr instruction)
+			   (assert (not (getf jumper-sets name)) ()
+			     "Duplicate jumper declaration for ~S." name)
 			   (setf (getf jumper-sets name) set))))
 		   do (let ((sub (instruction-sub-program instruction)))
 			(when sub (process sub))))))
