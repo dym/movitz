@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.63 2004/06/08 08:14:15 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.64 2004/06/09 17:26:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -471,6 +471,9 @@ Side-effects each binding's binding-store-type."
 		 binding-usage))))
   toplevel-funobj)
 
+(defmethod (setf borrowed-bindings) :before (x y)
+  (break "About to set borroweds for ~S to ~S." y x))
+
 (defun resolve-borrowed-bindings (toplevel-funobj)
   "For <funobj>'s code, for every non-local binding used we create
 a borrowing-binding in the funobj-env. This process must be done
@@ -479,23 +482,7 @@ of all function-bindings seen."
   (check-type toplevel-funobj movitz-funobj)
   (let ((function-binding-usage ()))
     (labels ((process-binding (funobj binding usages)
-	       (typecase binding
-		 (forwarding-binding
-		  (setf (forwarding-binding-target binding)
-		    (process-binding funobj (forwarding-binding-target binding) usages)))
-		 (function-binding
-		  (dolist (usage usages)
-		    (pushnew usage
-			     (getf (sub-function-binding-usage (function-binding-parent binding))
-				   binding))
-		    (pushnew usage (getf function-binding-usage binding)))))
-	       (cond
-		((typep binding 'constant-object-binding)
-		 binding)
-		((eq funobj (binding-funobj binding))
-		 binding)
-		(t #+ignore (warn "binding ~S is not local to ~S [~S])) .." binding funobj
-			 (mapcar #'borrowed-binding-target (borrowed-bindings funobj)))
+	       (if (not (eq funobj (binding-funobj binding)))
 		   (let ((borrowing-binding
 			  (or (find binding (borrowed-bindings funobj)
 				    :key #'borrowed-binding-target)
@@ -504,13 +491,39 @@ of all function-bindings seen."
 								   :name (binding-name binding)
 								   :target-binding binding))
 					 (borrowed-bindings funobj))))))
+		     ;; We don't want to borrow a forwarding-binding..
+		     (when (typep (borrowed-binding-target borrowing-binding)
+				  'forwarding-binding)
+		       (change-class (borrowed-binding-target borrowing-binding)
+				     'located-binding))
+		     #+ignore
+		     (warn "binding ~S of ~S is not local to ~S, replacing with ~S of ~S."
+			   binding (binding-env binding) funobj
+			   borrowing-binding (binding-env borrowing-binding))
 		     (pushnew borrowing-binding 
 			      (getf (binding-lended-p binding) :lended-to))
 		     (dolist (usage usages)
 		       (pushnew usage (borrowed-binding-usage borrowing-binding)))
-		     borrowing-binding))))
+		     borrowing-binding)
+		 ;; Binding is local to this funobj
+		 (typecase binding
+		   (forwarding-binding
+		    (setf (forwarding-binding-target binding)
+		      (process-binding funobj (forwarding-binding-target binding) usages)))
+		   (function-binding
+		    (dolist (usage usages)
+		      (pushnew usage
+			       (getf (sub-function-binding-usage (function-binding-parent binding))
+				     binding))
+		      (pushnew usage (getf function-binding-usage binding))))
+		   (t binding))))
 	     (resolve-sub-funobj (funobj sub-funobj)
 	       (dolist (binding-we-lend (borrowed-bindings (resolve-funobj-borrowing sub-funobj)))
+		 #+ignore
+		 (warn "Lending from ~S to ~S: ~S <= ~S"
+		       funobj sub-funobj
+		       (borrowed-binding-target binding-we-lend)
+		       binding-we-lend)
 		 (process-binding funobj
 				  (borrowed-binding-target binding-we-lend)
 				  (borrowed-binding-usage binding-we-lend))))
@@ -562,7 +575,8 @@ of all function-bindings seen."
 ;;;  (multiple-value-bind (toplevel-funobj function-binding-usage)
 ;;;      (resolve-borrowed-bindings toplevel-funobj)
   (assert (null (borrowed-bindings toplevel-funobj)) ()
-    "Can't deal with toplevel closures yet.")
+    "Can't deal with toplevel closures yet. Borrowed: ~S"
+    (borrowed-bindings toplevel-funobj))
   (setf (movitz-funobj-extent toplevel-funobj) :indefinite-extent)
   (let ((sub-funobj-index 0))
     (loop for (function-binding usage) on function-binding-usage by #'cddr
@@ -2371,7 +2385,7 @@ of argument <argnum>."
 	      (list new-value)
 	      `(let ((,(car stores) (progn
 				      (assert (not (new-binding-located-p ,binding-var ,getter)))
-				      (check-type ,new-value (or keyword (integer 0 *)))
+				      (check-type ,new-value (or keyword binding (integer 0 *)))
 				      (acons ,binding-var ,new-value ,getter))))
 		 ,setter
 		 ,new-value)
@@ -2573,27 +2587,31 @@ the sub-program options (&optional label) as secondary value."
 			    free-so-far)))
 	      ((:load-constant :load-lexical :store-lexical :cons-get :endp :incf-lexvar :init-lexvar)
 	       (assert (gethash (instruction-is i) *extended-code-expanders*))
-	       (unless (can-expand-extended-p i frame-map)
-		 (return (values nil t)))
-	       (let ((exp (expand-extended-code i funobj frame-map)))
-		 (when (tree-search exp '(:call :local-function-init))
-		   (setf free-so-far
-		     (remove-if (lambda (r)
-				  (not (eq r :push)))
-				free-so-far)))
-		 (setf free-so-far
-		   (remove-if (lambda (r)
-				(and (not (eq r :push))
-				     (or (tree-search exp r)
-					 (tree-search exp (register32-to-low8 r)))))
-			      free-so-far))))
+	       (cond
+		((and (instruction-is i :init-lexvar) ; special case..
+		      (typep (second i) 'forwarding-binding)))
+		(t (unless (can-expand-extended-p i frame-map)
+		     ;; (warn "can't expand ~A from ~A" i frame-map)
+		     (return (values nil t)))
+		   (let ((exp (expand-extended-code i funobj frame-map)))
+		     (when (tree-search exp '(:call :local-function-init))
+		       (setf free-so-far
+			 (remove-if (lambda (r)
+				      (not (eq r :push)))
+				    free-so-far)))
+		     (setf free-so-far
+		       (remove-if (lambda (r)
+				    (and (not (eq r :push))
+					 (or (tree-search exp r)
+					     (tree-search exp (register32-to-low8 r)))))
+				  free-so-far))))))
 	      ((:local-function-init)
 	       (destructuring-bind (binding)
 		   (cdr i)
 		 (unless (typep binding 'funobj-binding)
 		   (return nil))))
-	      (t (warn "Dist ~D stopped by ~A"
-		       distance i)
+	      (t #+ignore (warn "Dist ~D stopped by ~A"
+				distance i)
 		 (return nil)))))
       ;; do (warn "after ~A: ~A" i free-so-far)
       finally (return free-so-far)))
@@ -2605,13 +2623,13 @@ the sub-program options (&optional label) as secondary value."
   (let* ((count-init-pc (gethash binding var-counts))
 	 (count (car count-init-pc))
 	 (init-pc (cdr count-init-pc)))
-    ;; (warn "b ~S: count: ~D, init-pc: ~{~&~A~}" binding count init-pc)
     (cond
      ((binding-lended-p binding)
       ;; We can't lend a register.
       (values nil :never))
      ((and (= 1 count)
 	   init-pc)
+      ;; (warn "b ~S: count: ~D, init-pc: ~{~&~A~}" binding count init-pc)
       (assert (instruction-is (first init-pc) :init-lexvar))
       (destructuring-bind (init-binding &key init-with-register init-with-type
 					     protect-registers protect-carry)
@@ -2620,8 +2638,9 @@ the sub-program options (&optional label) as secondary value."
 	(assert (eq binding init-binding))
 	(let* ((load-instruction
 		(find-if (lambda (i)
-			   (member binding (find-read-bindings i)
-				   :test #'binding-eql))
+			   (and (not (instruction-is i :init-lexvar))
+				(member binding (find-read-bindings i)
+					:test #'eq)))
 			 (cdr init-pc)
 			 :end 15))
 	       (binding-destination (third load-instruction))
@@ -2674,7 +2693,7 @@ the sub-program options (&optional label) as secondary value."
   "Iterate over CODE, and take note in the hash-table VAR-COUNTER which ~
    variables CODE references that are lexically bound in ENV."
   (check-type function-env function-env)
-  ;; (format t "~{~&~S~}" code)
+  ;; (print-code 'discover code)
   (let ((var-counter (make-hash-table :test #'eq :size 40)))
     (labels ((take-note-of-binding (binding &optional storep init-pc)
 	       (let ((count-init-pc (or (gethash binding var-counter)
@@ -2685,17 +2704,17 @@ the sub-program options (&optional label) as secondary value."
 		   (setf (cdr count-init-pc) init-pc))
 		 (unless storep
 		   (incf (car count-init-pc))))
+	       #+ignore
 	       (when (typep binding 'forwarding-binding)
-		 (take-note-of-binding (forwarding-binding-target binding))))
+		 (take-note-of-binding (forwarding-binding-target binding) storep)))
 	     (do-discover-variables (code env)
 	       (loop for pc on code as instruction in code
 		   when (listp instruction)
 		   do (flet ((lend-lexical (borrowing-binding dynamic-extent-p)
 			       (let ((lended-binding
 				      (borrowed-binding-target borrowing-binding)))
-				 (when (typep lended-binding 'forwarding-binding)
-				   (setf lended-binding
-				     (change-class lended-binding 'located-binding)))
+				 (assert (not (typep lended-binding 'forwarding-binding)) ()
+				   "Can't lend a forwarding-binding.")
 				 (pushnew lended-binding
 					  (potentially-lended-bindings function-env))
 				 (take-note-of-binding lended-binding)
@@ -2724,7 +2743,10 @@ the sub-program options (&optional label) as secondary value."
 			       (cdr instruction)
 			     (declare (ignore protect-registers protect-carry init-with-type))
 			     (when init-with-register
-			       (take-note-of-binding binding t pc))))
+			       (take-note-of-binding binding t pc)
+			       (when (and (typep init-with-register 'binding)
+					  #+ignore (not (typep binding 'forwarding-binding)))
+				 (take-note-of-binding init-with-register)))))
 			  (t (mapcar #'take-note-of-binding 
 				     (find-read-bindings instruction))
 			     (let ((store-binding (find-written-binding-and-type instruction)))
@@ -2765,7 +2787,12 @@ the sub-program options (&optional label) as secondary value."
 				   ((not (typep binding 'lexical-binding)))
 				   ((typep binding 'lambda-binding))
 				   ((typep binding 'constant-object-binding))
-				   ((typep binding 'forwarding-binding))
+				   ((typep binding 'forwarding-binding)
+				    ;; Immediately "assign" to target.
+				    (when (plusp (or (car (gethash binding var-counts)) 0))
+				      (setf (new-binding-location binding frame-map)
+					(forwarding-binding-target binding)))
+				    t)
 				   ((typep binding 'borrowed-binding))
 				   ((typep binding 'funobj-binding))
 				   ((and (typep binding 'fixed-required-function-argument)
@@ -2778,7 +2805,7 @@ the sub-program options (&optional label) as secondary value."
 				      (unless (or (movitz-env-get variable 'ignore nil env nil)
 						  (movitz-env-get variable 'ignorable nil env nil)
 						  (typep binding 'hidden-rest-function-argument))
-					(warn "Unused variable: ~S" variable)))))
+					(warn "Unused variable: ~S" binding)))))
 			   collect binding))
 		      (bindings-fun-arg-sorted
 		       (when (eq env function-env)
@@ -2919,7 +2946,7 @@ the sub-program options (&optional label) as secondary value."
 		   ;; do (warn "bind: ~S: ~S" binding (eq function-env (find-function-env env funobj)))
 	  when (sub-env-p env function-env)
 	  do (assign-env-bindings (binding-env binding)))
-      ;; (warn "Frame-map:~{ ~A~}" frame-map)
+      ;; (warn "Frame-map:~{ ~A~}"  frame-map)
       frame-map)))
 
 
@@ -3418,6 +3445,7 @@ loading borrowed bindings."
 
 (defun finalize-code (code funobj frame-map)
   ;; (print-code 'to-be-finalized code)
+  ;; (warn "frame-map: ~A" frame-map)
   (labels ((actual-binding (b)
 	     (if (typep b 'borrowed-binding)
 		 (borrowed-binding-target b)
@@ -3481,92 +3509,92 @@ loading borrowed bindings."
 						      funobj frame-map)))))
 	   
 	     (t ;; (warn "finalizing ~S" instruction)
-		(case (first instruction)
-		  ((:locally :globally)
-		   (destructuring-bind (sub-instr)
-		       (cdr instruction)
-		     (let ((pf (ecase (first instruction)
-				 (:locally *compiler-local-segment-prefix*)
-				 (:globally *compiler-global-segment-prefix*))))
-		       (list (fix-edi-offset
-			      (cond
-			       ((atom sub-instr)
-				sub-instr)
-			       ((consp (car sub-instr))
-				(list* (append pf (car sub-instr))
-				       (cdr sub-instr)))
-			       (t (list* pf sub-instr))))))))
-		  (:declare-label-set nil)
-		  (:local-function-init
-		   (destructuring-bind (function-binding)
-		       (operands instruction)
-		     #+ignore (warn "local-function-init: init ~S at ~S"
-				    function-binding
-				    (new-binding-location function-binding frame-map))
-		     (finalize-code 
-		      (let* ((sub-funobj (function-binding-funobj function-binding))
-			     (lend-code (loop for bb in (borrowed-bindings sub-funobj)
-					    append (make-lend-lexical bb :edx nil))))
-			(cond
-			 ((typep function-binding 'funobj-binding)
-			  nil)
-			 ((null lend-code)
-			  (warn "null lending")
-			  (append (make-load-constant sub-funobj :eax funobj frame-map)
-				  (make-store-lexical function-binding :eax nil frame-map)))
-			 (t (append (make-load-constant sub-funobj :eax funobj frame-map)
-				    `((:movl (:edi ,(global-constant-offset 'copy-funobj)) :esi)
-				      (:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%1op)))
-				      (:movl :eax :edx))
-				    (make-store-lexical function-binding :eax nil frame-map)
-				    lend-code))))
-		      funobj frame-map)))
-		  (:load-lambda
-		   (destructuring-bind (function-binding register)
-		       (operands instruction)
-		     ;; (warn "load-lambda not completed for ~S" function-binding)
-		     (finalize-code
-		      (let* ((sub-funobj (function-binding-funobj function-binding))
-			     (lend-code (loop for bb in (borrowed-bindings sub-funobj)
-					    appending
-					      (make-lend-lexical bb :edx nil))))
-			(cond
-			 ((null lend-code)
-			  ;; (warn "null lambda lending")
-			  (append (make-load-constant sub-funobj register funobj frame-map)))
-			 (t (append (make-load-constant sub-funobj :eax funobj frame-map)
-				    `((:movl (:edi ,(global-constant-offset 'copy-funobj)) :esi)
-				      (:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%1op)))
-				      (:movl :eax :edx))
-				    lend-code
-				    `((:movl :edx ,register))))))
-		      funobj frame-map)))
-		  (:load-constant
-		   (destructuring-bind (object result-mode &key (op :movl))
-		       (cdr instruction)
-		     (make-load-constant object result-mode funobj frame-map :op op)))
-		  (:lexical-control-transfer
-		   (destructuring-bind (return-code return-mode from-env to-env &optional to-label)
-		       (cdr instruction)
-		     (declare (ignore return-code))
-		     (let ((x (apply #'make-compiled-lexical-control-transfer
-				     nil
-				     return-mode from-env to-env
-				     (when to-label (list to-label)))))
-		       (finalize-code x funobj frame-map))))
-		  (:call-lexical
-		   (destructuring-bind (binding num-args)
-		       (operands instruction)
-		     (append (etypecase binding
-			       (closure-binding
-				(make-load-lexical (ensure-local-binding binding)
-						   :esi funobj nil frame-map
-						   :tmp-register :edx))
-			       (funobj-binding
-				(make-load-constant (function-binding-funobj binding)
-						    :esi funobj frame-map)))
-			     (make-compiled-funcall-by-esi num-args))))
-		  (t (expand-extended-code instruction funobj frame-map)))))))))
+	      (case (first instruction)
+		((:locally :globally)
+		 (destructuring-bind (sub-instr)
+		     (cdr instruction)
+		   (let ((pf (ecase (first instruction)
+			       (:locally *compiler-local-segment-prefix*)
+			       (:globally *compiler-global-segment-prefix*))))
+		     (list (fix-edi-offset
+			    (cond
+			     ((atom sub-instr)
+			      sub-instr)
+			     ((consp (car sub-instr))
+			      (list* (append pf (car sub-instr))
+				     (cdr sub-instr)))
+			     (t (list* pf sub-instr))))))))
+		(:declare-label-set nil)
+		(:local-function-init
+		 (destructuring-bind (function-binding)
+		     (operands instruction)
+		   #+ignore (warn "local-function-init: init ~S at ~S"
+				  function-binding
+				  (new-binding-location function-binding frame-map))
+		   (finalize-code 
+		    (let* ((sub-funobj (function-binding-funobj function-binding))
+			   (lend-code (loop for bb in (borrowed-bindings sub-funobj)
+					  append (make-lend-lexical bb :edx nil))))
+		      (cond
+		       ((typep function-binding 'funobj-binding)
+			nil)
+		       ((null lend-code)
+			(warn "null lending")
+			(append (make-load-constant sub-funobj :eax funobj frame-map)
+				(make-store-lexical function-binding :eax nil frame-map)))
+		       (t (append (make-load-constant sub-funobj :eax funobj frame-map)
+				  `((:movl (:edi ,(global-constant-offset 'copy-funobj)) :esi)
+				    (:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%1op)))
+				    (:movl :eax :edx))
+				  (make-store-lexical function-binding :eax nil frame-map)
+				  lend-code))))
+		    funobj frame-map)))
+		(:load-lambda
+		 (destructuring-bind (function-binding register)
+		     (operands instruction)
+		   ;; (warn "load-lambda not completed for ~S" function-binding)
+		   (finalize-code
+		    (let* ((sub-funobj (function-binding-funobj function-binding))
+			   (lend-code (loop for bb in (borrowed-bindings sub-funobj)
+					  appending
+					    (make-lend-lexical bb :edx nil))))
+		      (cond
+		       ((null lend-code)
+			;; (warn "null lambda lending")
+			(append (make-load-constant sub-funobj register funobj frame-map)))
+		       (t (append (make-load-constant sub-funobj :eax funobj frame-map)
+				  `((:movl (:edi ,(global-constant-offset 'copy-funobj)) :esi)
+				    (:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%1op)))
+				    (:movl :eax :edx))
+				  lend-code
+				  `((:movl :edx ,register))))))
+		    funobj frame-map)))
+		(:load-constant
+		 (destructuring-bind (object result-mode &key (op :movl))
+		     (cdr instruction)
+		   (make-load-constant object result-mode funobj frame-map :op op)))
+		(:lexical-control-transfer
+		 (destructuring-bind (return-code return-mode from-env to-env &optional to-label)
+		     (cdr instruction)
+		   (declare (ignore return-code))
+		   (let ((x (apply #'make-compiled-lexical-control-transfer
+				   nil
+				   return-mode from-env to-env
+				   (when to-label (list to-label)))))
+		     (finalize-code x funobj frame-map))))
+		(:call-lexical
+		 (destructuring-bind (binding num-args)
+		     (operands instruction)
+		   (append (etypecase binding
+			     (closure-binding
+			      (make-load-lexical (ensure-local-binding binding)
+						 :esi funobj nil frame-map
+						 :tmp-register :edx))
+			     (funobj-binding
+			      (make-load-constant (function-binding-funobj binding)
+						  :esi funobj frame-map)))
+			   (make-compiled-funcall-by-esi num-args))))
+		(t (expand-extended-code instruction funobj frame-map)))))))))
 
 
 (defun image-t-symbol-p (x)
@@ -5801,17 +5829,32 @@ and a list of any intervening unwind-protect environment-slots."
       (assert init-with-type)
       (values binding init-with-type))))
 
+(define-find-read-bindings :init-lexvar (binding &key init-with-register &allow-other-keys)
+  (declare (ignore binding))
+  (when (typep init-with-register 'binding)
+    (list init-with-register)))
+
 (define-extended-code-expander :init-lexvar (instruction funobj frame-map)
   (destructuring-bind (binding &key protect-registers protect-carry
 				    init-with-register init-with-type)
       (cdr instruction)
     (declare (ignore protect-carry))	; nothing modifies carry anyway.
-    (assert (eq binding (ensure-local-binding binding funobj)))
+    ;; (assert (eq binding (ensure-local-binding binding funobj)))
+    (assert (eq funobj (binding-funobj binding)))
     (cond
      ((not (new-binding-located-p binding frame-map))
       (unless (or (movitz-env-get (binding-name binding) 'ignore nil (binding-env binding))
-		  (movitz-env-get (binding-name binding) 'ignorable nil (binding-env binding)))
-	(warn "Unused variable: ~S." (binding-name binding))))
+		  (movitz-env-get (binding-name binding) 'ignorable nil (binding-env binding))
+		  #+ignore
+		  (labels ((recursive-located-p (b)
+			     (or (new-binding-located-p b frame-map)
+				 (and (typep binding 'forwarding-binding)
+				      (recursive-located-p (forwarding-binding-target b))))))
+		    (recursive-located-p binding)))
+	(warn "Unused variable: ~S." binding)))
+     ((typep binding 'forwarding-binding)
+      ;; No need to do any initialization because the target will be initialized.
+      nil)
      (t (when (movitz-env-get (binding-name binding) 'ignore nil (binding-env binding))
 	  (warn "Variable ~S used while declared ignored." (binding-name binding)))
 	(append
@@ -5835,24 +5878,34 @@ and a list of any intervening unwind-protect environment-slots."
 		     (make-compiled-funcall-by-symbol 'muerte.cl:copy-list 1 funobj)))))
 	 (cond
 	  ((binding-lended-p binding)
-	   (let ((cons-position (getf (binding-lended-p binding)
-				      :stack-cons-location))
-		 (tmp-register (find-if (lambda (r)
-					  (and (not (member r protect-registers))
-					       (not (eq r init-with-register))))
-					'(:edx :ecx  :ebx :eax)))
-		 (init-register (or init-with-register :edi)))
+	   (let* ((cons-position (getf (binding-lended-p binding)
+				       :stack-cons-location))
+		  (init-register (etypecase init-with-register
+				   (lexical-binding
+				    (or (find-if (lambda (r)
+						   (not (member r protect-registers)))
+						 '(:edx :ebx :eax))
+					(error "Unable to get a register.")))
+				   (keyword init-with-register)
+				   (null :edi)))
+		  (tmp-register (find-if (lambda (r)
+					   (and (not (member r protect-registers))
+						(not (eq r init-register))))
+					 '(:edx :ebx :eax))))
 	     (when init-with-register
 	       (assert (not (null init-with-type))))
 	     (assert tmp-register ()	; solve this with push eax .. pop eax if ever needed.
 	       "Unable to find a tmp-register for ~S." instruction)
-	     `((:leal (:ebp ,(1+ (stack-frame-offset (1+ cons-position))))
-		      ,tmp-register)
-	       (:movl :edi (,tmp-register 3)) ; cdr
-	       (:movl ,init-register (,tmp-register -1)) ; car
-	       (:movl ,tmp-register
-		      (:ebp ,(stack-frame-offset
-			      (new-binding-location binding frame-map)))))))
+	     (append (when (typep init-with-register 'binding)
+		       (make-load-lexical init-with-register init-register funobj nil frame-map
+					  :protect-registers protect-registers))
+		     `((:leal (:ebp ,(1+ (stack-frame-offset (1+ cons-position))))
+			      ,tmp-register)
+		       (:movl :edi (,tmp-register 3)) ; cdr
+		       (:movl ,init-register (,tmp-register -1)) ; car
+		       (:movl ,tmp-register
+			      (:ebp ,(stack-frame-offset
+				      (new-binding-location binding frame-map))))))))
 	  (init-with-register
 	   (make-store-lexical binding init-with-register nil frame-map))))))))
 

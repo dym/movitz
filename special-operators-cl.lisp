@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.17 2004/04/13 16:55:08 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.18 2004/06/09 17:26:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -212,14 +212,20 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 											     :load t
 											     :store t))
 								      rest-codes))))))
-					 ;; replace read-only lexical binding with the outer lexical binding
-					 ;; (warn "replace ~S with outer ~S" var (second (first init-code)))
-					 (change-class binding 'forwarding-binding 
-						       :target-binding (second (first init-code)))
-					 nil)
+					 ;; replace read-only binding with the outer binding
+					 #+ignore (warn "replace ~S in ~S with outer ~S"
+							binding (binding-funobj binding)
+							(second (first init-code)))
+					 (let ((target (second (first init-code))))
+					   (change-class binding 'forwarding-binding 
+							 :target-binding target)
+					   `((:init-lexvar ,binding
+							   :init-with-register ,target
+							   :init-with-type ,target))))
 					((and (typep binding 'located-binding)
 					      (type-specifier-singleton type)
-					      (not (code-uses-binding-p body-code binding :load nil :store t)))
+					      (not (code-uses-binding-p body-code binding
+									:load nil :store t)))
 					 ;; replace read-only lexical binding with
 					 ;; side-effect-free form
 					 #+ignore (warn "Constant binding: ~S => ~S => ~S"
