@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.5 2004/02/26 11:26:24 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.6 2004/04/01 17:29:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -91,8 +91,12 @@
 	     (loop for x from y below (min (length packet) (+ y 16))
 		 as c = (code-char (aref packet x))
 		 do (write-char (if (alphanumericp c) c #\.)))))
-     ((mismatch packet (address stack) :start1 (+ start +ip-header-destination+) :end1 (+ start +ip-header-destination+ 4))
-      #+ignore (warn "IPv4 Packet from ~@/ip4:pprint-ip4/ not for me, but for ~:/ip4:pprint-ip4/." packet packet))
+     ((mismatch packet (address stack)
+		:start1 (+ start +ip-header-destination+)
+		:end1 (+ start +ip-header-destination+ 4))
+      #+ignore
+      (warn "IPv4 Packet from ~@/ip4:pprint-ip4/ not for me, but for ~:/ip4:pprint-ip4/."
+	    packet packet))
      (t (named-integer-case ip-protocol (ip-protocol packet start)
 	  (icmp
 	   (icmp-input stack packet start (+ start header-size)))
@@ -244,7 +248,7 @@
 	  (+ (ldb (byte 16 0) new-checksum)
 	     (ash new-checksum -16))))
       (transmit (interface stack) packet)
-      (write-char #\.)))))
+      #+ignore (write-char #\.)))))
 
 ;;;; UDP
 
