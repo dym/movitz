@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct 17 21:50:42 2001
 ;;;;                
-;;;; $Id: read.lisp,v 1.7 2004/07/21 22:35:15 ffjeld Exp $
+;;;; $Id: read.lisp,v 1.8 2004/07/27 14:43:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -86,25 +86,41 @@ of string delimited by start and end."
 (defun simple-read-token (string &key (start 0) (end (length string)))
   (let ((colon-position (and (char= #\: (schar string start)) start))
 	(almost-integer nil))
-    (multiple-value-bind (token-end token-integer)
+    (multiple-value-bind (token-end token-integer token-denominator)
 	(do ((integer (or (digit-char-p (schar string start) *read-base*)
 			  (and (member (schar string start) '(#\- #\+))
 			       (> end (1+ start))
 			       (digit-char-p (schar string (1+ start)) *read-base*)
 			       0)))
+	     (denominator nil)
 	     (i (1+ start) (1+ i)))
 	    ((or (>= i end)
 		 (member (schar string i) +simple-token-terminators+))
-	     (values i (if (and integer (char= #\- (schar string start)))
+	     (values i
+		     (unless (eql 0 denominator)
+		       (if (and integer (char= #\- (schar string start)))
 			   (- integer)
-			 integer)))
+			 integer))
+		     (when (and integer denominator (plusp denominator))
+		       denominator)))
 	  (when (char= #\: (schar string i))
 	    (setf colon-position i))
 	  (setf almost-integer integer)
 	  (when integer
-	    (let ((digit (digit-char-p (schar string i) *read-base*)))
-	      (setf integer (and digit (+ (* integer *read-base*) digit))))))
+	    (if (and (not denominator)
+		     (char= #\/ (schar string i)))
+		(setf denominator 0)
+	      (let ((digit (digit-char-p (schar string i) *read-base*)))
+		(cond
+		 ((and denominator (not digit))
+		  (setf integer nil))
+		 (denominator
+		  (setf denominator (+ (* denominator *read-base*) digit)))
+		 (t (setf integer (and digit (+ (* integer *read-base*) digit)))))))))
       (cond
+       (token-denominator
+	(values (make-rational token-integer token-denominator)
+		token-end))
        (token-integer
 	(values token-integer token-end))
        ((and almost-integer		; check for base 10 <n>. notation.
@@ -134,6 +150,12 @@ of string delimited by start and end."
 
 
 (defun simple-read-integer (string start end radix)
+  (multiple-value-bind (x token-end)
+      (let ((*read-base* radix))
+	(simple-read-token string :start start :end end))
+    (check-type x number)
+    (values x token-end))
+  #+ignore
   (let ((token-end (do ((i start (1+ i)))
 		       ((>= i end) i)
 		     (when (member (schar string i) +simple-token-terminators+)

@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.83 2004/07/27 13:47:09 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.84 2004/07/27 14:43:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1200,7 +1200,12 @@ Preserve EAX and EBX."
 (defun truncate (number &optional (divisor 1))
   (numargs-case
    (1 (number)
-      (values number 0))
+      (if (not (ratio-p number))
+	  (values number 0)
+	(multiple-value-bind (q r)
+	    (truncate (ratio-numerator number)
+		      (ratio-denominator number))
+	  (values q (make-rational r (ratio-denominator number))))))
    (t (number divisor)
       (number-double-dispatch (number divisor)
 	((t (eql 1))
@@ -1384,7 +1389,10 @@ Preserve EAX and EBX."
 (defun / (number &rest denominators)
   (numargs-case
    (1 (x)
-      (make-rational 1 x))
+      (if (not (ratio-p x))
+	  (make-rational 1 x)
+	(make-rational (ratio-denominator x)
+		       (ratio-numerator x))))
    (2 (x y)
       (multiple-value-bind (q r)
 	  (truncate x y)
