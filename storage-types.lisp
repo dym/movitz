@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.28 2004/07/13 02:26:19 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.29 2004/07/21 14:15:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -396,8 +396,8 @@ integer (native lisp) value."
 (defmethod update-movitz-object ((movitz-vector movitz-basic-vector) (vector vector))
   (when (eq :any-t (movitz-vector-element-type movitz-vector))
     (loop for i from 0 below (length vector)
-	do (setf (svref (movitz-vector-symbolic-data movitz-vector) i)
-	     (movitz-read (svref vector i)))))
+	do (setf (aref (movitz-vector-symbolic-data movitz-vector) i)
+	     (movitz-read (aref vector i)))))
   (values))
 
 (defmethod write-binary-record ((obj movitz-basic-vector) stream)
