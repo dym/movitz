@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 21 22:14:08 2001
 ;;;;                
-;;;; $Id: io-port.lisp,v 1.2 2004/01/19 11:23:46 ffjeld Exp $
+;;;; $Id: io-port.lisp,v 1.3 2004/01/20 15:40:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -183,6 +183,86 @@ that reads from <io-base-form> plus some offset."
 (defun io-delay (&optional (x 1000))
   (dotimes (i x)
     (with-inline-assembly (:returns :nothing) (:nop))))
+
+(define-compiler-macro %io-port-read-succession (&whole form port object offset start end byte-size
+						 &environment env)
+  (if (not (movitz:movitz-constantp byte-size env))
+      form
+    (let ((byte-size (movitz:movitz-eval byte-size env)))
+      (cond
+       ((and (movitz:movitz-constantp offset env)
+	     (movitz:movitz-constantp start env)
+	     (movitz:movitz-constantp end env))
+	(let* ((offset (movitz:movitz-eval offset env))
+	       (start (movitz:movitz-eval start env))
+	       (end (movitz:movitz-eval end env))
+	       (count (- end start)))
+	  (check-type count (integer 0 #x10000))
+	  (case byte-size
+	    (:32-bit
+	     (assert (= 4 movitz:+movitz-fixnum-factor+))
+	     (if (<= 1 count 20)
+		 `(with-inline-assembly-case ()
+		    (do-case (t :eax :labels (io-read-loop end-io-read-loop not-fixnum))
+		      (:compile-two-forms (:edx :ebx) ,port ,object)
+		      (:andl ,(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		      (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+		      ,@(loop for i from start below end
+			    appending
+			      `((:inl :dx :eax)
+				(:movl :eax (:ebx ,(+ offset (* 4 i))))))
+		      (:movl :ebx :eax)))
+	       `(with-inline-assembly-case ()
+		  (do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
+		    (:compile-two-forms (:edx :ebx) ,port ,object)
+		    (:andl ,(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		    (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+		    (:pushl ,(cl:* movitz::+movitz-fixnum-factor+ end)) ; keep end in (:esp)
+		    (:movl ,(cl:* movitz::+movitz-fixnum-factor+ start) :ecx)
+		   io-read-loop
+		    (:cmpl :ecx (:esp))
+		    (:jbe 'end-io-read-loop)
+		    (:inl :dx :eax)
+		    (:addl 4 :ecx)
+		    (:movl :eax (:ebx ,(+ offset -4) :ecx))
+		    (:jmp 'io-read-loop)
+		    (:popl :eax)	; increment :esp, and put a lispval in :eax.
+		   end-io-read-loop))))
+	    (t (error "~S byte-size ~S not implemented." (car form) byte-size)))))
+       ((and (movitz:movitz-constantp offset env))
+	(let ((offset (movitz:movitz-eval offset env)))
+	  (case byte-size
+	    (:32-bit
+	     (assert (= 4 movitz:+movitz-fixnum-factor+))
+	     `(with-inline-assembly-case ()
+		(do-case (t :ebx :labels (io-read-loop end-io-read-loop not-fixnum))
+		  (:compile-form (:result-mode :push) ,port)
+		  (:compile-form (:result-mode :push) ,object)
+		  (:compile-two-forms (:ecx :eax) ,start ,end)
+		  (:popl :ebx)		; object
+		  (:popl :edx)		; port
+		  (:andl #.(cl:* #xffff movitz::+movitz-fixnum-factor+) :edx)
+		  (:shrl #.movitz::+movitz-fixnum-shift+ :edx)
+		  (:pushl :eax)		; keep end in (:esp)
+		 io-read-loop
+		  (:cmpl :ecx (:esp))
+		  (:jbe 'end-io-read-loop)
+		  (:inl :dx :eax)
+		  (:addl 4 :ecx)
+		  (:movl :eax (:ebx ,(+ offset -4) :ecx))
+		  (:jmp 'io-read-loop)
+		  (:popl :eax)		; increment :esp, and put a lispval in :eax.
+		 end-io-read-loop)))
+	    (t (error "~S byte-size ~S not implemented." (car form) byte-size)))))
+       (t (error "Not implemented."))))))
+
+(defun %io-port-read-succession (port object offset start end byte-size)
+  (unless (= 2 offset)
+    (error "Only offset 2 implemented."))
+  (ecase byte-size
+    (:32-bit
+     (%io-port-read-succession port object 2 start end :32-bit))))
+
 
 (defun io-port-read-sequence (sequence port type transfer-unit &key (start 0) end)
   (etypecase sequence
