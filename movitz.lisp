@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:52:58 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: movitz.lisp,v 1.4 2004/02/02 13:06:06 ffjeld Exp $
+;;;; $Id: movitz.lisp,v 1.5 2004/02/13 22:07:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -29,6 +29,15 @@
 (defvar *bq-level* 0)
 (defvar *default-image-init-file* #p"losp/los0.lisp")
 (defvar *default-image-file* #p"los0-image")
+
+(defvar *movitz-host-features* *features*
+  "The *features* of the host implementation.")
+
+(defmacro with-host-environment (options &body body)
+  "Execute body in a `normal' host environment."
+  (declare (ignore options))
+  `(let ((*features* *movitz-host-features*))
+     ,@body))
 
 (defmacro print-unreadable-movitz-object ((object stream &rest key-args) &body body)
   "Just like print-unreadable-object, just adorn output so as to
