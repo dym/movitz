@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.113 2004/11/20 01:29:52 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.114 2004/11/20 17:43:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3377,8 +3377,8 @@ loading borrowed bindings."
 			((:ebx :ecx :edx :esi) `((:movl :eax ,result-mode)))
 			((:eax :single-value) nil)
 			(:untagged-fixnum-ecx
-			 `((:movl :eax :ecx)
-			   (:sarl ,movitz:+movitz-fixnum-shift+ :ecx)))))
+			 `((,*compiler-global-segment-prefix*
+			    :call (:edi ,(global-constant-offset 'unbox-u32)))))))
 		     ((:ebx :ecx :edx)
 		      (assert (not indirect-p))
 		      (unless (eq result-mode lexb-location)
@@ -4836,27 +4836,14 @@ Return arg-init-code, need-normalized-ecx-p."
 	    (values (append code
 			    `((:load-lexical ,returns-provided ,desired-result)))
 		    desired-result))))
-	#+ignore
-	(:untagged-fixnum-eax
-	 (case returns-provided
-	   (:untagged-fixnum-eax
-	    (values code :untagged-fixnum-eax))
-	   ((:eax :single-value :multiple-values :function)
-	    (values (append code
-			    `((:testb ,+movitz-fixnum-zmask+ :al)
-			      (:jnz '(:sub-program (not-an-integer) (:int 107))) ;
-			      (:sarl ,+movitz-fixnum-shift+ :eax)))
-		    :untagged-fixnum-eax))))
 	(:untagged-fixnum-ecx
 	 (case returns-provided
 	   (:untagged-fixnum-ecx
 	    (values code :untagged-fixnum-ecx))
 	   ((:eax :single-value :multiple-values :function)
 	    (values (append code
-			    `((:testb ,+movitz-fixnum-zmask+ :al)
-			      (:jnz '(:sub-program (not-an-integer) (:int 107))) ;
-			      (:movl :eax :ecx)
-			      (:sarl ,+movitz-fixnum-shift+ :ecx)))
+			    `((,*compiler-global-segment-prefix*
+			       :call (:edi ,(global-constant-offset 'unbox-u32)))))
 		    :untagged-fixnum-ecx))
 	   (:ecx
 	    (values (append code
