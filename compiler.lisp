@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.62 2004/06/07 22:18:37 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.63 2004/06/08 08:14:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2532,13 +2532,21 @@ the sub-program options (&optional label) as secondary value."
 	 (t (case (instruction-is i)
 	      ((nil)
 	       (return nil))		; a label, most likely
+	      ((:lexical-control-transfer :load-lambda)
+	       (return nil))		; not sure about these.
 	      ((:call)
 	       (setf free-so-far
 		 (remove-if (lambda (r)
 			      (not (eq r :push)))
 			    free-so-far)))
-	      ((:into :clc :stc :cld :std))
-	      ((:jnz :je :jne :jz :jge)
+	      ((:arg-cmp)
+	       (setf free-so-far
+		 (remove :ecx free-so-far)))
+	      ((:cld :std)
+	       (setf free-so-far
+		 (set-difference free-so-far '(:eax :edx))))
+	      ((:into :clc :stc :int))
+	      ((:jmp :jnz :je :jne :jz :jge :jae :jnc :jbe)
 	       (setf free-so-far
 		 (remove :push free-so-far)))
 	      ((:pushl :popl)
@@ -2547,7 +2555,7 @@ the sub-program options (&optional label) as secondary value."
 			      (or (eq r :push)
 				  (tree-search i r)))
 			    free-so-far)))
-	      ((:outb)
+	      ((:outb :inb)
 	       (setf free-so-far
 		 (set-difference free-so-far '(:eax :edx))))
 	      ((:movb :testb :andb :cmpb)
@@ -2557,7 +2565,8 @@ the sub-program options (&optional label) as secondary value."
 				   (or (tree-search i r)
 				       (tree-search i (register32-to-low8 r)))))
 			    free-so-far)))
-	      ((:sarl :shrl :cmpl :leal :movl :testl :andl :addl :subl :imull)
+	      ((:sarl :shrl :shll :xorl :cmpl :leal :btl :sbbl :cdq
+		:movl :movzxw :movzxb :testl :andl :addl :subl :imull :idivl)
 	       (setf free-so-far
 		 (remove-if (lambda (r)
 			      (tree-search i r))
