@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.51 2004/11/11 19:26:12 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.52 2004/11/12 14:52:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -81,8 +81,8 @@
 ;;; Dynamic binding:
 ;;;   12: parent (no parent == #x0)
 ;;;    8: value
-;;;    4: tag = #:unbound (unique value that cannot be a catch tag)
-;;;    0: binding name/symbol
+;;;    4: scratch, free to use by binding implementation.
+;;;    0: binding name (a symbol)
 
 ;;; Catch exit-point:
 ;;;   12: parent (no parent == #x0)
@@ -161,44 +161,6 @@ and also EDX must be preserved."
   (with-inline-assembly (:returns :nothing)
     ;; Default binding strategy is naive deep binding, so this is a NOP.
     (:ret)))
-
-(define-primitive-function dynamic-locate-catch-tag (tag)
-  "Search the dynamic environment for a catch slot matching <tag> in EAX.
-If EBX is not zero, only match that exact dynamic context (which presumably
-was located earlier by other means).
-Iff a tag is found, any intervening unwind-protect cleanup-forms are executed, and
-this functions returns with EAX pointing to the dynamic-slot for tag, and with carry set.
-When the tag is not found, no cleanup-forms are executed, and carry is cleared upon return,
-with EAX still holding the tag."
-  (with-inline-assembly (:returns :multiple-values)
-    (:globally (:movl (:edi (:edi-offset unwind-protect-tag)) :edx))
-    (:locally (:movl (:edi (:edi-offset dynamic-env)) :ecx))
-
-   search-loop
-    (:jecxz 'search-failed)
-    
-    (:cmpl :eax (:ecx 4))		; is env-slot in ECX == tag?
-    (:jne 'mismatch)
-    
-    (:cmpl :ecx :ebx)
-    (:je 'success)
-    (:testl :ebx :ebx)
-    (:jz 'success)
-
-   mismatch
-
-   not-unwind-protect
-    (:movl (:ecx 12) :ecx)		; get parent
-    (:jmp 'search-loop)
-    
-   success
-    (:movl :ecx :eax)
-    (:stc)				; signal success
-    (:ret)				; return
-    
-   search-failed
-    (:clc)				; signal failure
-    (:ret)))				; return.
     
 (define-primitive-function dynamic-unwind ()
   "Unwind ECX dynamic environment slots. Scratch EAX."

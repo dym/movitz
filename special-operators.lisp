@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.42 2004/10/21 20:41:56 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.43 2004/11/12 14:51:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1175,7 +1175,10 @@ on the current result."
 	  finally (error "No compiler-typecase clause matched compile-time type ~S." keyform-type)))))
 
 (define-special-operator muerte::exact-throw (&all all-throw &form form &env env &funobj funobj)
-  (destructuring-bind (tag context value-form)
+  "Perform a dynamic control transfer to catch-env-slot context (evaluated),
+with values from value-form. Error-form, if provided, is evaluated in case the context
+is zero (i.e. not found)."
+  (destructuring-bind (context value-form &optional error-form)
       (cdr form)
     (let* ((local-env (make-local-movitz-environment env funobj :type 'let-env))
 	   (dynamic-slot-binding
@@ -1186,43 +1189,46 @@ on the current result."
 	    (movitz-env-add-binding local-env
 				    (make-instance 'located-binding
 				      :name (gensym "continuation-step-")))))
-      (with-labels (throw (save-tag-var save-context-var))
-	(compiler-values ()
-	  :returns :non-local-exit
-	  :code (append (compiler-call #'compile-form
-			  :forward all-throw
-			  :result-mode :multiple-values
-			  :form `(muerte.cl:let ((,save-tag-var ,tag)
-						 (,save-context-var ,context))
-				   (muerte.cl:multiple-value-prog1
-				       ,value-form
-				     (muerte::with-inline-assembly (:returns :nothing)
-				       (:compile-two-forms (:eax :ebx) ,save-tag-var ,save-context-var)
-				       (:globally (:call (:edi (:edi-offset dynamic-locate-catch-tag))))
-				       (:jnc '(:sub-program () (:int 108)))
-				       (:store-lexical ,dynamic-slot-binding :eax :type t)
-				       (:globally (:call (:edi (:edi-offset dynamic-unwind-next))))
-				       (:store-lexical ,next-continuation-step-binding :eax :type t)
-				       ))))
-			;; now outside of m-v-prog1's cloak, with final dynamic-slot in ..
-			;; ..unwind it and transfer control.
-			;;
-			;; * 12 dynamic-env uplink
-			;; *  8 target jumper number
-			;; *  4 target catch tag
-			;; *  0 target EBP
-			`((:load-lexical ,dynamic-slot-binding :edx)
-			  (:locally (:movl :edx (:edi (:edi-offset raw-scratch0)))) ; final continuation
-			  (:load-lexical ,next-continuation-step-binding :edx) ; next continuation-step
-			  (:locally (:movl :esi (:edi (:edi-offset scratch1))))
-			  (:locally (:movl :edx (:edi (:edi-offset dynamic-env)))) ; exit dynamic-env
-			  (:movl :edx :esp) ; enter non-local jump stack mode.
+      (compiler-values ()
+	:returns :non-local-exit
+	:code (append (compiler-call #'compile-form
+			:forward all-throw
+			:result-mode dynamic-slot-binding
+			:form context)
+		      (compiler-call #'compile-form
+			:forward all-throw
+			:result-mode :multiple-values
+			:form `(muerte.cl:multiple-value-prog1
+				   ,value-form
+				 (muerte::with-inline-assembly (:returns :nothing)
+				   (:load-lexical ,dynamic-slot-binding :eax)
+				   ,@(when error-form
+				       `((:testl :eax :eax)
+					 (:jz '(:sub-program ()
+						(:compile-form (:result-mode :ignore)
+						 ,error-form)))))
+				   (:locally (:call (:edi (:edi-offset dynamic-unwind-next))))
+				   (:store-lexical ,next-continuation-step-binding :eax :type t)
+				   )))
+		      ;; now outside of m-v-prog1's cloak, with final dynamic-slot in ..
+		      ;; ..unwind it and transfer control.
+		      ;;
+		      ;; * 12 dynamic-env uplink
+		      ;; *  8 target jumper number
+		      ;; *  4 target catch tag
+		      ;; *  0 target EBP
+		      `((:load-lexical ,dynamic-slot-binding :edx)
+			(:locally (:movl :edx (:edi (:edi-offset raw-scratch0)))) ; final continuation
+			(:load-lexical ,next-continuation-step-binding :edx) ; next continuation-step
+			(:locally (:movl :esi (:edi (:edi-offset scratch1))))
+			(:locally (:movl :edx (:edi (:edi-offset dynamic-env)))) ; exit dynamic-env
+			(:movl :edx :esp) ; enter non-local jump stack mode.
 			  
-			  (:movl (:esp) :edx) ; target stack-frame EBP
-			  (:movl (:edx -4) :esi) ; get target funobj into ESI
+			(:movl (:esp) :edx) ; target stack-frame EBP
+			(:movl (:edx -4) :esi) ; get target funobj into ESI
 			  
-			  (:movl (:esp 8) :edx) ; target jumper number
-			  (:jmp (:esi :edx ,(slot-offset 'movitz-funobj 'constant0))))))))))
+			(:movl (:esp 8) :edx) ; target jumper number
+			(:jmp (:esi :edx ,(slot-offset 'movitz-funobj 'constant0)))))))))
 
 
 (define-special-operator muerte::with-basic-restart (&all defaults &form form &env env)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.39 2004/11/11 19:29:08 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.40 2004/11/12 14:51:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1088,8 +1088,7 @@
   (:use muerte.mop muerte.common-lisp)
   (:import-from common-lisp cl:nil)
   (:shadow get-setf-expansion)
-  (:export exact-throw
-	   translate-program
+  (:export translate-program
 	   decode-macro-lambda-list
 	   with-inline-assembly
 	   with-progn-results

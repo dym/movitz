@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct 28 09:27:13 2003
 ;;;;                
-;;;; $Id: restarts.lisp,v 1.4 2004/09/02 09:41:04 ffjeld Exp $
+;;;; $Id: restarts.lisp,v 1.5 2004/11/12 14:52:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -119,8 +119,7 @@
 	   (function
 	    (apply function arguments))
 	   (symbol
-	    (exact-throw (load-global-constant restart-tag)
-			 (basic-restart->dynamic-context restart)
+	    (exact-throw (basic-restart->dynamic-context restart)
 			 (ecase function
 			   ((with-simple-restart)
 			    (values nil t))))))))
