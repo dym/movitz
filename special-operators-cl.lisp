@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.33 2004/11/12 15:13:47 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.34 2004/11/13 14:49:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -629,8 +629,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	:returns last-returns
 	:functional-p nil))))
 		  
-(define-special-operator tagbody
-    (&all forward &funobj funobj &form form &env env)
+(define-special-operator tagbody (&all forward &funobj funobj &form form &env env)
   (let* ((save-esp-variable (gensym "tagbody-save-esp"))
 	 (lexical-catch-tag-variable (gensym "tagbody-lexical-catch-tag-"))
 	 (label-set-name (gensym "label-set-"))
@@ -744,7 +743,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			;; The target jumper points to the tagbody's label-set.
 			;; Now, install correct jumper within tagbody as target.
 			`((:addl ,(* 4 label-id) (:edx 8))))
-		    (:globally (:call (:edi (:edi-offset dynamic-unwind-next))))
+		    (:locally (:call (:edi (:edi-offset dynamic-unwind-next))))
 		    ;; have next-continuation in EAX, final-continuation in EDX
 		    (:locally (:movl :edx (:edi (:edi-offset raw-scratch0)))) ; final continuation
 		    (:locally (:movl :esi (:edi (:edi-offset scratch1))))
@@ -767,9 +766,10 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				((:eax :eax :multiple-values :function :ebx :ecx :ignore)
 				 result-mode)
 				(t :eax)))
-	   (block-returns-mode (case block-result-mode
+	   (block-returns-mode (case (result-mode-type block-result-mode)
 				 (:function :multiple-values)
 				 (:ignore :nothing)
+				 ((:boolean-branch-on-true :boolean-branch-on-false) :eax)
 				 (t block-result-mode)))
 	   (block-env (make-instance 'lexical-exit-point-env
 			:uplink env
@@ -779,13 +779,10 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			:exit-label exit-block-label
 			:exit-result-mode block-result-mode))
 	   (save-esp-binding (make-instance 'located-binding
-			       :name save-esp-variable))
-	   (lexical-catch-tag-binding (make-instance 'located-binding
-					:name lexical-catch-tag-variable)))
+			       :name save-esp-variable)))
       (movitz-env-add-binding block-env save-esp-binding)
-      (movitz-env-add-binding block-env lexical-catch-tag-binding)
-      (movitz-env-load-declarations `((muerte.cl::ignorable ,save-esp-variable ,lexical-catch-tag-variable))
-				 block-env nil)
+      (movitz-env-load-declarations `((muerte.cl::ignorable ,save-esp-variable))
+				    block-env nil)
       (setf (movitz-env-get block-name :block-name nil block-env)
 	block-env)
       (compiler-values-bind (&code block-code &functional-p block-no-side-effects-p)
@@ -794,14 +791,15 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	    :result-mode block-result-mode
 	    :form `(muerte.cl:progn ,@body)
 	    :env block-env)
-	(let ((maybe-store-esp-code
-	       (when (and (not (eq block-result-mode :function))
+	(let ((label-set-name (gensym "block-label-set-"))
+	      (maybe-store-esp-code
+	       (when (and #+ignore (not (eq block-result-mode :function))
 			  (operators-present-in-code-p block-code '(:lexical-control-transfer) nil
 						       :test (lambda (x) (eq block-env (fifth x)))))
 		 `((:init-lexvar ,save-esp-binding
 				 :init-with-register :esp
 				 :init-with-type t)))))
-	  (if (not (code-uses-binding-p block-code lexical-catch-tag-binding))
+	  (if (not (code-uses-binding-p block-code save-esp-binding))
 	      (compiler-values ()
 		:code (append maybe-store-esp-code
 			      block-code
@@ -810,25 +808,29 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		:functional-p block-no-side-effects-p)
 	    (multiple-value-bind (new-code new-returns)
 		(make-result-and-returns-glue :multiple-values block-returns-mode block-code)
-	      (multiple-value-bind (stack-used wrapped-code)
-		  (make-compiled-catch-wrapper lexical-catch-tag-variable
-					       funobj block-env new-returns
-					       new-code)
-		(incf (stack-used block-env) stack-used)
-		(setf (num-specials block-env) 1) ; block-env now has one dynamic slot
-		(compiler-values ()
-		  :code (append maybe-store-esp-code
-				`((:movl :esp :eax)
-				  (:addl :eax :eax)
-				  (:xorl ,(ash (movitz-symbol-hash-key (movitz-read block-name)) 16) :eax)
-				  (:init-lexvar ,lexical-catch-tag-binding
-						:init-with-register :eax
-						:init-with-type t))
-				wrapped-code
-				(list exit-block-label))
-		  :returns block-returns-mode
-		  :functional-p block-no-side-effects-p)))))))))
-
+	      (assert (eq :multiple-values new-returns))
+	      (incf (stack-used block-env) 4)
+	      (setf (num-specials block-env) 1) ; block-env now has one dynamic slot
+	      (compiler-values ()
+		:code (append `((:declare-label-set ,label-set-name (,exit-block-label))
+				;; catcher
+				(:locally (:pushl (:edi (:edi-offset dynamic-env))))
+				(:pushl ',label-set-name)
+				(:locally (:pushl (:edi (:edi-offset unbound-value))))
+				(:pushl :ebp)
+				(:locally (:movl :esp (:edi (:edi-offset dynamic-env)))))
+			      `((:init-lexvar ,save-esp-binding
+					      :init-with-register :esp
+					      :init-with-type t))
+			      new-code
+			      ;; wrapped-code
+			      `(,exit-block-label
+				(:movl (:esp 12) :edx)
+				(:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
+				(:popl :ebp)
+				(:leal (:esp 12) :esp)))
+		:returns :multiple-values
+		:functional-p block-no-side-effects-p))))))))
 
 (define-special-operator return-from (&all all &form form &env env &funobj funobj)
   (destructuring-bind (block-name &optional result-form)
@@ -837,7 +839,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
       (assert block-env (block-name)
 	"Block-name not found for return-from: ~S." block-name)
       (cond
-       ((eq funobj (movitz-environment-funobj block-env))
+       ((and (eq funobj (movitz-environment-funobj block-env))
+	     (null (nth-value 2 (stack-delta env block-env))))
 	(compiler-values-bind (&code return-code &returns return-mode)
 	    (compiler-call #'compile-form
 	      :forward all
@@ -847,12 +850,12 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	    :returns :non-local-exit
 	    :code (append return-code
 			  `((:lexical-control-transfer nil ,return-mode ,env ,block-env))))))
-       ((not (eq funobj (movitz-environment-funobj block-env)))
+       ((not (and (eq funobj (movitz-environment-funobj block-env))
+		  (null (nth-value 2 (stack-delta env block-env)))))
 	(compiler-call #'compile-form-unprotected
 	  :forward all
-	  :form `(muerte.cl:throw
-		     ,(movitz-env-lexical-catch-tag-variable block-env)
-		   ,result-form)))))))
+	  :form `(muerte::exact-throw ,(save-esp-variable block-env)
+				      ,result-form)))))))
 
 (define-special-operator require (&form form)
   (let ((*require-dependency-chain*
