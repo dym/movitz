@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.4 2004/02/13 22:11:29 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.5 2004/02/26 11:26:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,6 +22,8 @@
 (defpackage muerte.ip4
   (:use #:muerte.cl #:muerte #:muerte.ethernet #:muerte.lib)
   (:export #:pprint-ip4
+	   #:read-ip4-address
+	   #:ip4-address
 	   #:ip4-test
 	   #:ip4-free))
 
@@ -36,6 +38,10 @@
    (address
     :initarg :address
     :accessor address)))
+
+(defmethod unknown-packet ((stack ip4-stack) packet)
+  (declare (ignore packet)))
+  
 
 (define-named-integer ip-protocol (:export-constants t)
   (1 icmp)
@@ -98,69 +104,6 @@
 		   (integer-name 'ip-protocol (ip-protocol packet start) nil)
 		   packet)))))))
 
-(defvar *ne2000* nil)
-
-(defun ip4-test (&optional (ip #(129 242 16 173))
-			   (ethernet *ne2000*))
-  (unless ethernet
-    (setf ethernet
-      (some #'muerte.x86-pc.ne2k:ne2k-probe
-	    muerte.x86-pc.ne2k:+ne2k-probe-addresses+))
-    (assert ethernet ethernet "No ethernet device.")
-    (when ethernet
-      (setf (promiscuous-p ethernet) nil
-	    (accept-broadcasts-p ethernet) t)
-      (setf *ne2000* ethernet)))
-  (loop with stack = (make-instance 'ip4-stack
-		       :interface ethernet
-		       :address ip)
-      as key = (muerte.x86-pc.keyboard:poll-char)
-      do (cond
-	  ((eql #\esc key) (break "You broke ip4!"))
-	  (key (return (values))))
-	 (let ((packet (muerte.ethernet:receive ethernet)))
-	   (when packet
-	     #+ignore (format t "~&From ~@/ethernet:pprint-mac/ to ~:/ethernet:pprint-mac/ of type ~S.~%"
-			      packet packet (integer-name 'ether-type (ether-type packet) nil))
-	     (case (ether-type packet)
-	       (#.+ether-type-arp+ (arp-input stack packet 14))
-	       (#.+ether-type-ip4+ (ip-input stack packet 14))
-	       (#.+ether-type-mswin-heartbeat+
-		(format t "~&MS heartbeat from ~@/ethernet:pprint-mac/: [" packet)
-		(loop for i from 40 below (length packet) by 2
-		    do (write-char (code-char (aref packet i))))
-		(format t "]~%")
-		#+ignore
-		(let ((pos (or (search packet #(129 242 16) :start1 14)
-			       (search packet #(129 242) :start1 14))))
-		  (if pos
-		      (format t "~&MS heartbeat from ~@/ethernet:pprint-mac/ found possible IP at ~D: ~/ip4:pprint-ip4.~%"
-			      packet pos (subseq packet pos (+ pos 6)))
-		    (progn
-		      (format t "~&MS heartbeat found no IP from ~:@/ethernet:pprint-mac/.~%"
-			      packet)
-		      (loop for y from 0 below (length packet) by 16
-			  do (format t "~&  ")
-			     (loop for x from y below (min (length packet) (+ y 16))
-				 when (zerop (rem x 4))
-				 do (format t "  ")
-				 do (format t " ~2,'0X" (aref packet x))))
-		      (fresh-line)))))
-	       (t (cond
-		   ((ether-802.3-snap-p packet)
-		    (format t "~&~:@/ethernet:pprint-mac/ IEEE 802.3 SNAP type ~A len ~D.~%"
-			    packet (integer-name 'ether-type (ether-802.3-snap-type packet) nil)
-			    (length packet)))
-		   ((ether-802.3-p packet)
-		    (format t "~&~:@/ethernet:pprint-mac/ IEEE 802.3 LLC ssap ~S, dsap ~S, type ~D len ~D.~%"
-			    packet
-			    (ether-802.3-llc-ssap packet)
-			    (ether-802.3-llc-dsap packet)
-			    (ether-802.3-llc-type packet)
-			    (length packet)))
-		   (t (format t "~&From ~:@/ethernet:pprint-mac/ unknown ether type ~S."
-			      packet (integer-name 'ether-type (ether-type packet) nil)))))))))
-  (values))
 
 
 (defun pprint-ip4 (stream address &optional colon at (start 0 start-p))
@@ -178,18 +121,18 @@
   nil)
 
 (defun arp-input (stack packet start)
-  #+ignore
-  (warn "arp operation: ~S ~S ~S"
-	(integer-name 'arp-op (arp-operation packet start) nil)
-	(integer-name 'arp-hard-type (arp-hard-type packet start) nil)
-	(integer-name 'ether-type (arp-prot-type packet start) nil))
+;;;  (warn "arp operation: ~S ~S ~S"
+;;;	(integer-name 'arp-op (arp-operation packet start) nil)
+;;;	(integer-name 'arp-hard-type (arp-hard-type packet start) nil)
+;;;	(integer-name 'ether-type (arp-prot-type packet start) nil))
   (case (arp-operation packet start)
     (#.+arp-op-request+
-     (when (and (= +arp-hard-type-ethernet+
-		   (arp-hard-type packet start))
-		(= +ether-type-ip4+
-		   (arp-prot-type packet start))
-		(not (mismatch (address stack) packet :start2 (+ start 24) :end2 (+ start 28))))
+     (cond
+      ((and (= +arp-hard-type-ethernet+
+	       (arp-hard-type packet start))
+	    (= +ether-type-ip4+
+	       (arp-prot-type packet start))
+	    (not (mismatch (address stack) packet :start2 (+ start 24) :end2 (+ start 28))))
        (warn "arp request from ~v/ip4:pprint-ip4/." (+ start 14) packet)
        (transmit (interface stack)
 		 (format-ethernet-packet (format-arp-request nil +arp-op-reply+
@@ -201,9 +144,19 @@
 					 (mac-address (interface stack))
 					 packet
 					 muerte.ethernet:+ether-type-arp+
-					 :destination-start (+ start 8)))
-       ))))
-
+					 :destination-start (+ start 8))))
+      (t (unknown-packet stack packet)
+	 #+ignore (warn "ARP request for not me ~/ip4:pprint-ip4/: ~v/ip4:pprint-ip4/."
+			(address stack) (+ start 24) packet))))
+    (#.+arp-op-reply+
+     (warn "Received an ARP reply: ~v/ip4:pprint-ip4/ is ~v/ethernet:pprint-mac/."
+	   (+ start 14) packet
+	   (+ start 8) packet))
+    (t (unknown-packet stack packet)
+       (warn "Received unknown ARP packet of type ~D~@[ ~A~]"
+	     (arp-operation packet start)
+	     (integer-name 'arp-op (arp-operation packet start) nil)))))
+	   
 
 
 ;;; ICMP
@@ -253,7 +206,7 @@
 	  checksum-ok)
     (cond
      ((not checksum-ok)
-      (write-char #\X)
+      (warn "ICMP checksum failed from ~v@/ip4:pprint-ip4/." ip-start packet)
       (loop for i upfrom (+ icmp-start 8 8) below (length packet)
 	  when (/= (aref packet i)
 		   (ldb (byte 8 0)
@@ -291,8 +244,7 @@
 	  (+ (ldb (byte 16 0) new-checksum)
 	     (ash new-checksum -16))))
       (transmit (interface stack) packet)
-      (write-char #\.)
-      ))))
+      (write-char #\.)))))
 
 ;;;; UDP
 
@@ -362,8 +314,126 @@
 
 ;;;;;
 
+(defun read-ip4-address (string &optional (start 0))
+  (prog (a b c d (i start))
+    (multiple-value-setq (a i)
+      (parse-integer string :start i :junk-allowed t))
+    (unless (and (<= 0 a #xff) (char= #\. (char string i)))
+      (go parse-failure))
+    (multiple-value-setq (b i)
+      (parse-integer string :start (1+ i) :junk-allowed t))
+    (unless (and (<= 0 b #xff) (char= #\. (char string i)))
+      (go parse-failure))
+    (multiple-value-setq (c i)
+      (parse-integer string :start (1+ i) :junk-allowed t))
+    (unless (and (<= 0 b #xff) (char= #\. (char string i)))
+      (go parse-failure))
+    (multiple-value-setq (d i)
+      (parse-integer string :start (1+ i) :junk-allowed t))
+    (unless (<= 0 b #xff)
+      (go parse-failure))
+    (let ((x (make-array 4 :element-type '(unsigned-byte 8))))
+      (setf (aref x 0) a (aref x 1) b (aref x 2) c (aref x 3) d)
+      (return x))
+   parse-failure
+    (error "Not an IPv4 address at position ~D in ~S."
+	   i string)))
+    
+
+(defun ip4-address (specifier &optional (start 0))
+  (or (ignore-errors
+       (typecase specifier
+	 ((or string symbol)
+	  (read-ip4-address (string specifier) start))
+	 (vector
+	  (loop with address = (make-array 4 :element-type '(unsigned-byte 8))
+	      for i from 0 to 3
+	      as n = (aref specifier (+ start i))
+	      do (check-type n (unsigned-byte 8))
+		 (setf (aref address i) n)
+	      finally (return address)))))
+      (error "Not an IPv4 address: ~S." specifier)))
+       
+	       
+
 (defun ip4-free ()
   (when *ne2000*
     (muerte.x86-pc::free-io-space *ne2000*)
     (setf *ne2000* nil))
+  (values))
+
+(defvar *ne2000* nil)
+
+(defun ip4-test (&key (ip #(129 242 16 173))
+		      (ethernet *ne2000*)
+		      (router #(129 242 16 1)))
+  (unless ethernet
+    (setf ethernet
+      (some #'muerte.x86-pc.ne2k:ne2k-probe
+	    muerte.x86-pc.ne2k:+ne2k-probe-addresses+))
+    (assert ethernet ethernet "No ethernet device.")
+    (when ethernet
+      (setf (promiscuous-p ethernet) nil
+	    (accept-broadcasts-p ethernet) t)
+      (setf *ne2000* ethernet)))
+  (let ((stack (make-instance 'ip4-stack
+		 :interface ethernet
+		 :address (ip4-address ip))))
+    (when router
+      (transmit (interface stack)
+		(format-ethernet-packet (format-arp-request nil +arp-op-request+
+							    (address stack)
+							    (mac-address (interface stack))
+							    (ip4-address router))
+					(mac-address (interface stack))
+					+broadcast-address+
+					+ether-type-arp+)))
+    (loop
+      (case (muerte.x86-pc.keyboard:poll-char)
+	((nil))
+	((#\esc) (break "You broke ip4!"))
+	(t (return (values))))
+      (let ((packet (and (packet-available-p ethernet)
+			 (receive ethernet))))
+	(when packet
+	  #+ignore
+	  (format t "~&From ~@/ethernet:pprint-mac/ to ~:/ethernet:pprint-mac/ of type ~S.~%"
+		  packet packet (integer-name 'ether-type (ether-type packet) nil))
+	  (case (ether-type packet)
+	    (#.+ether-type-arp+ (arp-input stack packet 14))
+	    (#.+ether-type-ip4+ (ip-input stack packet 14))
+	    (#.+ether-type-mswin-heartbeat+
+	     (format t "~&MS heartbeat from ~@/ethernet:pprint-mac/: [" packet)
+	     (loop for i from 40 below (length packet) by 2
+		 do (write-char (code-char (aref packet i))))
+	     (format t "]~%")
+	     (let ((pos (or (search packet #(129 242 16) :start1 14)
+			    (search packet #(129 242) :start1 14))))
+	       (if pos
+		   (format t "~&MS heartbeat from ~@/ethernet:pprint-mac/ found possible IP at ~D: ~/ip4:pprint-ip4.~%"
+			   packet pos (subseq packet pos (+ pos 6)))
+		 (progn
+		   (format t "~&MS heartbeat found no IP from ~:@/ethernet:pprint-mac/.~%"
+			   packet)
+		   (loop for y from 0 below (length packet) by 16
+		       do (format t "~&  ")
+			  (loop for x from y below (min (length packet) (+ y 16))
+			      when (zerop (rem x 4))
+			      do (format t "  ")
+			      do (format t " ~2,'0X" (aref packet x))))
+		   (fresh-line)))))
+	    (t (cond
+		((ether-802.3-snap-p packet)
+		 (format t "~&~:@/ethernet:pprint-mac/ IEEE 802.3 SNAP type ~A len ~D.~%"
+			 packet (integer-name 'ether-type (ether-802.3-snap-type packet) nil)
+			 (length packet)))
+		((ether-802.3-p packet)
+		 (format t "~&~:@/ethernet:pprint-mac/ IEEE 802.3 LLC ssap ~S, dsap ~S, type ~D len ~D.~%"
+			 packet
+			 (ether-802.3-llc-ssap packet)
+			 (ether-802.3-llc-dsap packet)
+			 (ether-802.3-llc-type packet)
+			 (length packet)))
+		(t (format t "~&From ~:@/ethernet:pprint-mac/ unknown ether type ~S."
+			   packet (integer-name 'ether-type (ether-type packet) nil))))))))))
   (values))
