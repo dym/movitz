@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.53 2004/04/17 15:33:45 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.54 2004/04/18 23:12:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3064,7 +3064,7 @@ loading borrowed bindings."
 	     (or tmp-register
 		 (unless (member preferred protect-registers)
 		   preferred)
-		 (first (set-difference '(:eax :ebx :ecx :edx)
+		 (first (set-difference '(:eax :ebx :edx)
 					protect-registers))
 		 (error "Unable to chose a temporary register.")))
 	   (install-for-single-value (lexb lexb-location result-mode indirect-p)
@@ -3238,8 +3238,8 @@ loading borrowed bindings."
 				       dest-location
 				       binding
 				       destination)
-			(append (install-for-single-value binding binding-location :ecx nil)
-				(make-store-lexical result-mode :ecx nil frame-map))))))
+			(append (install-for-single-value binding binding-location :eax nil)
+				(make-store-lexical result-mode :eax nil frame-map))))))
 		 (t (make-result-and-returns-glue
 		     result-mode :eax
 		     (install-for-single-value binding binding-location :eax nil)))
@@ -4413,9 +4413,10 @@ Return arg-init-code, need-normalized-ecx-p."
 	((:lexical-binding)
 	 (case (result-mode-type returns-provided)
 	   (:lexical-binding
-	    (assert (eq desired-result returns-provided) ()
-	      "Desired-result ~S produced a value in ~S for code ~W." desired-result returns-provided code)
-	    (values code returns-provided))
+	    (if (eq desired-result returns-provided)
+		(values code returns-provided)
+	      (values (append code `((:load-lexical ,returns-provided ,desired-result)))
+		      returns-provided)))
 	   ((:eax :multiple-values)
 	    (values (append code
 			    `((:store-lexical ,desired-result :eax
