@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.44 2004/09/22 14:48:27 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.45 2004/09/25 15:51:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -714,4 +714,7 @@ The number of values (untagged) is returned in ECX, even if CF=0."
 
 ;;;;;;
 
-
+(define-primitive-function ret-trampoline ()
+  "This is the global RET trampoline, used to achieve stack discipline."
+  (with-inline-assembly (:returns :multiple-values)
+    (:ret)))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.26 2004/09/22 17:57:33 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.27 2004/09/25 15:51:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -123,6 +123,14 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:pushl (:eax 2))		; debug1: nursery-space's fresh-pointer
 
 	    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
+	    
+	    ;; Do RET atomicification
+	    (:movl (:ebp ,(dit-frame-offset :eip)) :ecx)
+	    (:cmpb ,(realpart (ia-x86:asm :ret)) (:ecx))
+	    (:jne 'not-at-ret-instruction)
+	    (:locally (:movl (:edi (:edi-offset ret-trampoline)) :ecx))
+	    (:movl :ecx (:ebp ,(dit-frame-offset :eip)))
+	   not-at-ret-instruction
 	    
 	    (:xorl :eax :eax)		; Ensure safe value
 	    (:xorl :edx :edx)		; Ensure safe value
