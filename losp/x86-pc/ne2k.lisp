@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:16:00 2002
 ;;;;                
-;;;; $Id: ne2k.lisp,v 1.4 2004/01/19 11:23:52 ffjeld Exp $
+;;;; $Id: ne2k.lisp,v 1.5 2004/02/01 22:10:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -66,7 +66,7 @@
 (defun ne-x000-probe (&optional (io-base #x300))
   "Probe for the presence of a NE2000 compatible card at IO-address io-base." 
   (with-dp8390 (dp8390 io-base)
-    (let ((test-vector (copy-seq #(#xab #xba #x00 #xff #x55 #x99 #x01 #x23 #x45 #xde #xad #xbe #xef #x23))))
+    (let ((test-vector #(#xabba #x00ff #x5599 #x0123 #x45de #xadbe #xef23)))
       (declare (dynamic-extent test-vector))
       ;; NE1000 has RAM buffer located at 8192
       ;; NE2000 has RAM buffer located at 16384
@@ -75,17 +75,15 @@
 	    (dp8390 ($page0-write dcr)) ($data-config fifo-threshold-8-bytes
 						      loopback-off
 						      dma-16-bit))
-      (with-dp8390-dma (dp8390 remote-write (length test-vector) 16384)
-	(io-port-write-sequence test-vector (+ io-base #x10) :unsigned-byte8 :16-bits))
+      (with-dp8390-dma (dp8390 remote-write (* 2 (length test-vector)) 16384)
+	(loop with asic = (+ io-base #x10)
+	    for x across test-vector
+	    do (setf (io-port asic :unsigned-byte16) x)))
       (let ((mismatch nil))
-	(with-dp8390-dma (dp8390 remote-read (length test-vector) 16384)
-	  (dotimes (i (truncate (length test-vector) 2))
-	    (let ((nic-byte (io-port (+ io-base #x10) :unsigned-byte16)))
-	      (unless (and (= (aref test-vector (* 2 i))
-			      (ldb (byte 8 0) nic-byte))
-			   (= (aref test-vector (1+ (* 2 i)))
-			      (ldb (byte 8 8) nic-byte)))
-		(setf mismatch t)))))
+	(with-dp8390-dma (dp8390 remote-read (* 2 (length test-vector)) 16384)
+	  (loop for x across test-vector
+	      do (unless (= x (io-port (+ io-base #x10) :unsigned-byte16))
+		   (setf mismatch t))))
 	(unless mismatch
 	  'ne2000)))))
 
@@ -102,8 +100,10 @@
     (let ((mac (make-array 6 :element-type 'muerte::u8)))
       (with-dp8390 (dp8390 io-base)
 	(with-dp8390-dma (dp8390 remote-read 12 0)
-	  (io-port-read-sequence mac (asic-io-base ne2000)
-				 :unsigned-byte16 :16-bits)))
+	  (dotimes (i 6)
+	    (setf (aref mac i)
+	      (ldb (byte 8 0)
+		   (io-port (asic-io-base ne2000) :unsigned-byte16))))))
       (setf (mac-address ne2000) mac))
     ne2000))
 
@@ -117,6 +117,7 @@
     (let ((asic-io (asic-io-base device))
 	  (bnry (cached-bnry device))
 	  (packet (or packet (make-array +max-ethernet-frame-size+ :element-type 'muerte::u8))))
+      (check-type packet 'vector-u8)
       (with-dp8390 (dp8390 (io-base device))
 	(multiple-value-bind (packet-status next-bnry packet-length)
 	    (with-dp8390-dma (dp8390 remote-read 4 (* 256 bnry))
@@ -140,7 +141,7 @@
 	     ((< (+ bnry (ash (1- packet-length) -8))
 		 (ring-stop device))
 	      (with-dp8390-dma (dp8390 remote-read packet-length (+ (* 256 bnry) 4))
-		(io-port-read-sequence packet asic-io :unsigned-byte8 :16-bits :start start)
+		(%io-port-read-succession asic-io packet 2 start rx-end :16-bit)
 		(when (oddp rx-end)
 		  (setf (aref packet (1- rx-end))
 		    (ldb (byte 8 0) (io-port asic-io :unsigned-byte16)))))
@@ -148,13 +149,11 @@
 		    (cached-bnry device) next-bnry))
 	     (t (let ((split-point (+ -4 (ash (- (ring-stop device) bnry) 8))))
 		  (with-dp8390-dma (dp8390 remote-read split-point)
-		    (io-port-read-sequence packet asic-io :unsigned-byte8 :16-bits
-					   :start start :end (+ start split-point)))
+		    (%io-port-read-succession asic-io packet 2 start (+ start split-point) :16-bit))
 		  (with-dp8390-dma (dp8390 remote-read
 					   (- rx-end start split-point)
 					   (* 256 (ring-start device)))
-		    (io-port-read-sequence packet asic-io :unsigned-byte8 :16-bits
-					   :start (+ start split-point))
+		    (%io-port-read-succession asic-io packet 2 (+ start split-point) rx-end :16-bit)
 		    (when (oddp rx-end)
 		      (setf (aref packet (1- rx-end))
 			(ldb (byte 8 0)
