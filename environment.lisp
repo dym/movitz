@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.6 2004/06/07 22:09:56 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.7 2004/08/12 17:16:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -360,10 +360,10 @@ the function sets up itself. Its parent env. must be a funobj-env."))
 	   ((muerte::loop-tag)
 	    (dolist (var data)
 	      (setf (movitz-env-get var declaration-identifier nil environment) t)))
-	   (t #+ignore (let ((typespec declaration-identifier)
-			     (vars data))
-			 (dolist (var vars)
-			   (setf (movitz-env-get var :variable-type nil environment) typespec))))))
+	   (t (let ((typespec declaration-identifier)
+		    (vars data))
+		(dolist (var vars)
+		  (setf (movitz-env-get var :variable-type nil environment) typespec))))))
   environment)
 		      
 (defun make-local-movitz-environment (uplink funobj
