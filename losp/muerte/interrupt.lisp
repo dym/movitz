@@ -10,59 +10,77 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.19 2004/07/27 13:50:08 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.20 2004/08/12 16:57:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
-(in-package #:muerte)
+(in-package muerte)
 
 (provide :muerte/interrupt)
 
-(defvar *last-interrupt-frame* nil)
+(defvar *last-dit-frame* nil)
 
-(defmacro stack-word (offset)
-  `(with-inline-assembly (:returns :eax)
-     (:movl (:esp ,(* 4 offset)) :eax)))
+(defun dit-frame-esp (dit-frame)
+  (+ dit-frame 6))
 
-(define-compiler-macro interrupt-frame-index (&whole form name &environment env)
+(defconstant +dit-frame-map+
+    '(nil :eflags :eip :error-code :exception-vector :ebp :funobj
+      :edi
+      :atomically-status
+      :atomically-esp
+      :scratch0      
+      :ecx :eax :edx :ebx :esi))
+
+(define-compiler-macro dit-frame-index (&whole form name &environment env)
   (let ((name (and (movitz:movitz-constantp name env)
 		   (movitz:movitz-eval name env))))
     (if (not name)
 	form
-      (- 5 (position name
-		     '(nil :eflags :eip :error-code :exception :ebp nil
-		       :ecx :eax :edx :ebx :esi :edi :atomically-status))))))
+      (- 5 (position name +dit-frame-map+)))))
 
-(defun interrupt-frame-index (name)
-  (- 5 (position name
-		 '(nil :eflags :eip :error-code :exception :ebp nil
-		   :ecx :eax :edx :ebx :esi :edi :atomically-status))))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defun dit-frame-index (name)
+    (- 5 (position name +dit-frame-map+)))
+  (defun dit-frame-offset (name)
+    (* 4 (dit-frame-index name))))
 
-(define-compiler-macro interrupt-frame-ref (&whole form reg type
+(define-compiler-macro dit-frame-ref (&whole form reg type
 					    &optional (offset 0)
-						      (frame '*last-interrupt-frame*)
+						      (frame '*last-dit-frame*)
 					    &environment env)
-  `(memref ,frame (+ (* 4 (interrupt-frame-index ,reg)) ,offset) 0 ,type))
+  `(memref ,frame (+ (dit-frame-offset ,reg) ,offset) 0 ,type))
 
-(defun interrupt-frame-ref (reg type &optional (offset 0) (frame *last-interrupt-frame*))
-  (interrupt-frame-ref reg type offset frame))
+(defun dit-frame-ref (reg type &optional (offset 0) (frame *last-dit-frame*))
+  (dit-frame-ref reg type offset frame))
 
-(defun (setf interrupt-frame-ref) (x reg type &optional (frame *last-interrupt-frame*))
-  (setf (memref frame (* 4 (interrupt-frame-index reg)) 0 type) x))
+(defun (setf dit-frame-ref) (x reg type &optional (frame *last-dit-frame*))
+  (setf (memref frame (dit-frame-offset reg) 0 type) x))
 
-(define-primitive-function default-interrupt-trampoline ()
-  "Default first-stage interrupt handler."
+(defun dit-frame-casf (dit-frame)
+  "Compute the `currently active stack-frame' when the interrupt occurred."
+  (let ((ebp (dit-frame-ref :ebp :lisp 0 dit-frame))
+	(esp (dit-frame-esp dit-frame)))
+    (if (< esp ebp)
+	ebp
+      (let ((next-ebp (memref ebp 0 0 :lisp)))
+	(check-type next-ebp fixnum)
+	(assert (< esp next-ebp))
+	next-ebp))))
+
+(define-primitive-function (default-interrupt-trampoline :symtab-property t) ()
+  "Default first-stage/trampoline interrupt handler. Assumes the IF flag in EFLAGS
+is off, e.g. because this interrupt/exception is routed through an interrupt gate."
   (macrolet
       ((do-it ()
 	 `(with-inline-assembly (:returns :multiple-values)
-	    ,@(loop for i from 0 to movitz::+idt-size+
+	    ,@(loop for i from 0 to 255
+		  append (list i)
 		  append (if (member i '(8 10 11 12 13 14 17))
-			     `(((5) :pushl ,i)
-			       ((5) :jmp 'ok))
-			   `(((2) :pushl 0) ; replace Error Code
-			     ((2) :pushl ,i)
-			     ((1) :nop)
-			     ((5) :jmp 'ok))))
+			     `((:pushl ,i)
+			       (:jmp 'ok))
+			   `((:pushl 0) ; replace Error Code
+			     (:pushl ,i)
+			     (:jmp 'ok))))
 	   ok
 	    ;; Stack:
 	    ;; 20: Interruptee EFLAGS (later EIP)
@@ -73,16 +91,16 @@
 	    ;;  0: EBP
 	    (:pushl :ebp)
 	    (:movl :esp :ebp)
-	    (:pushl 0)			; 0 means default-interrupt-trampoline frame
-	    (:pushl :ecx)		; -8
-	    (:pushl :eax)		; -12
-	    (:pushl :edx)		; -16
-	    (:pushl :ebx)		; -20
-	    (:pushl :esi)		; -24
+	    (:pushl 0)			; 0 'funobj' means default-interrupt-trampoline frame
 	    (:pushl :edi)		; -28
 	    (:movl ':nil-value :edi)	; We want NIL!
-	    (:locally (:pushl (:edi (:edi-offset atomically-status)))) ; -32
-	    (:locally (:pushl (:edi (:edi-offset atomically-esp)))) ; -36
+	    (:locally (:pushl (:edi (:edi-offset atomically-status))))
+	    (:locally (:pushl (:edi (:edi-offset atomically-esp))))
+	    (:locally (:pushl (:edi (:edi-offset scratch0))))
+	    ,@(loop for reg in (sort (copy-list '(:eax :ebx :ecx :edx :esi))
+				     #'>
+				     :key #'dit-frame-index)
+		  collect `(:pushl ,reg))
 
 	    (:locally (:movl 0 (:edi (:edi-offset atomically-status))))
 
@@ -110,7 +128,7 @@
 	    ;; Save/push thread-local values
 	    (:locally (:movl (:edi (:edi-offset num-values)) :ecx))
 	    (:jecxz 'push-values-done)
-	    (:leal (:edi #.(movitz::global-constant-offset 'values)) :eax)
+	    (:leal (:edi (:offset movitz-run-time-context values)) :eax)
 	   push-values-loop
 	    (:locally (:pushl (:eax)))
 	    (:addl 4 :eax)
@@ -120,12 +138,11 @@
 	    (:locally (:pushl (:edi (:edi-offset num-values))))
     
 	    ;; call handler
-	    (:movl (:ebp 4) :ecx)	; interrupt number into ECX
-	    (:locally (:movl (:edi (:edi-offset interrupt-handlers)) :eax))
-	    (:movl (:eax 2 (:ecx 4)) :esi) ; funobj at (aref EBX interrupt-handlers) into :esi
-	    (:movl :ebp :ebx)		; pass interrupt-frame as arg1
-	    (:movl (:ebp 4) :ecx)	; pass interrupt number as arg 0.
-	    (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax)
+	    (:movl (:ebp ,(dit-frame-offset :exception-vector)) :ecx)
+	    (:locally (:movl (:edi (:edi-offset exception-handlers)) :eax))
+	    (:movl (:eax 2 (:ecx 4)) :esi) ; funobj at (aref ECX exception-handlers) into :esi
+	    (:movl :ebp :ebx)		; pass dit-frame as arg1
+	    (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :eax) ; pass interrupt number as arg 0.
 	    (:call (:esi ,(bt:slot-offset 'movitz::movitz-funobj 'movitz::code-vector%2op)))
 
 	   skip-interrupt-handler
@@ -140,40 +157,43 @@
 	    (:jnz 'pop-values-loop)
 	   pop-values-done
 
-	    (:movl (:ebp -32) :ecx)	; Check interruptee's atomically status
+	    (:movl (:ebp ,(dit-frame-offset :atomically-status)) :ecx)
 	    (:testb :cl :cl)
 	    (:jnz 'restart-atomical-block)
 
 	    ;; Interrupted code was non-atomical, the normal case.
 	   normal-return		; With atomically-status-to-restore in ECX
 	    (:locally (:movl :ecx (:edi (:edi-offset atomically-status))))
-	    (:movl (:ebp -36) :ecx)	; Load interruptee's atomically-esp..
-	    (:locally (:movl :ecx (:edi (:edi-offset atomically-esp)))) ; ..and restore it.
-	    (:movl (:ebp -28) :edi)
-	    (:movl (:ebp -24) :esi)
-	    (:movl (:ebp -20) :ebx)
-	    (:movl (:ebp -16) :edx)
-	    (:movl (:ebp -12) :eax)
-	    (:movl (:ebp -8)  :ecx)
-	    ;; Make stack safe before we exit interrupt-frame..
+	    (:movl (:ebp ,(dit-frame-offset :atomically-esp)) :ecx)
+	    (:locally (:movl :ecx (:edi (:edi-offset atomically-esp))))
+	    (:movl (:ebp ,(dit-frame-offset :scratch0)) :ecx)
+	    (:locally (:movl :ecx (:edi (:edi-offset scratch0))))
+	    (:movl (:ebp ,(dit-frame-offset :edi)) :edi)
+	    (:movl (:ebp ,(dit-frame-offset :esi)) :esi)
+	    (:movl (:ebp ,(dit-frame-offset :ebx)) :ebx)
+	    (:movl (:ebp ,(dit-frame-offset :edx)) :edx)
+	    (:movl (:ebp ,(dit-frame-offset :eax)) :eax)
+	    (:movl (:ebp ,(dit-frame-offset :ecx)) :ecx)
+	    ;; Make stack safe before we exit dit-frame..
 	    (:movl :edi (:ebp 4))
 	    (:movl :edi (:ebp 8))
 	    (:movl :edi (:ebp 12))
+	    (:cli)			; Clear IF in EFLAGS before leaving dit-frame.
 	    (:leave)
 	    (:addl 12 :esp)
-	    (:popfl)			; pop EFLAGS
+	    (:popfl)			; pop EFLAGS (also resets IF)
 	    (:ret)			; pop EIP
     
 	   restart-atomical-block
 	    (:cmpb ,(bt:enum-value 'movitz::atomically-status :restart-primitive-function) :cl)
 	    (:jne 'not-simple-atomical-pf-restart)
-	    (:testl #xff00 :ecx)	; map of registers to restore
+	    (:testl #xfe00 :ecx)	; map of registers to restore
 	    (:jnz 'not-simple-atomical-pf-restart)
 	    (:sarl 16 :ecx)		; move atomically-status data into ECX
 	    (:movl (:edi (:ecx 4) ,(- (movitz:tag :null)))
 		   :ecx)		; This is the EIP to restart
 	    (:movl :ecx (:ebp 20))
-	    (:movl (:ebp -32) :ecx)
+	    (:movl (:ebp ,(dit-frame-offset :atomically-status)) :ecx)
 	    (:testl ,(bt:enum-value 'movitz::atomically-status :reset-status-p)
 		    :ecx)		; Should we reset status to zero?
 	    (:jnz 'normal-return)
@@ -187,9 +207,9 @@
 	    (:jnz 'atomically-esp-ok)
 	    ;; Generate the correct ESP for interruptee's atomically-esp
 	    (:leal (:ebp 24) :ecx)
-	    (:movl :ecx (:ebp -36))
+	    (:movl :ecx (:ebp ,(dit-frame-offset :atomically-esp)))
 	   atomically-esp-ok
-	    (:movl (:ebp -32) :ecx)
+	    (:movl (:ebp ,(dit-frame-offset :atomically-status)) :ecx)
 	    (:testl ,(bt:enum-value 'movitz::atomically-status :reset-status-p)
 		    :ecx)		; Should we reset status to zero?
 	    (:jnz 'atomically-jumper-return)
@@ -197,22 +217,22 @@
 	    
 	   atomically-jumper-return
 	    (:locally (:movl :ecx (:edi (:edi-offset atomically-status))))
-	    (:movl (:ebp -36) :ecx)	; Load interruptee's atomically-esp..
+	    (:movl (:ebp ,(dit-frame-offset :atomically-esp)) :ecx) ; Load interruptee's atomically-esp..
 	    (:locally (:movl :ecx (:edi (:edi-offset atomically-esp)))) ; ..and restore it.
 
 	    (:testl #x40 (:ebp 16))	; Test EFLAGS bit DF
 	    (:jnz 'atomically-jumper-return-dirty-registers)
 
-	    (:movl (:ebp -28) :edi)
-	    (:movl (:ebp -24) :esi)
-	    (:movl (:ebp -16) :edx)
-	    (:movl (:ebp -12) :eax)
-	    (:movl (:ebp -8)  :ecx)
+	    (:movl (:ebp ,(dit-frame-offset :edi)) :edi)
+	    (:movl (:ebp ,(dit-frame-offset :esi)) :esi)
+	    (:movl (:ebp ,(dit-frame-offset :edx)) :edx)
+	    (:movl (:ebp ,(dit-frame-offset :eax)) :eax)
+	    (:movl (:ebp ,(dit-frame-offset :ecx)) :ecx)
 
-	    (:movl (:ebp -32) :ebx)	; atomically-status..
+	    (:movl (:ebp ,(dit-frame-offset :atomically-status)) :ebx) ; atomically-status..
 	    (:shrl ,(- 16 movitz:+movitz-fixnum-shift+) :ebx)
 
-	    ;; Make stack safe before we exit interrupt-frame..
+	    ;; Make stack safe before we exit dit-frame..
 	    (:movl :edi (:ebp 4))
 	    (:movl :edi (:ebp 8))
 	    (:movl :edi (:ebp 12))
@@ -220,6 +240,7 @@
 	    (:movl :edi (:ebp 20))
 	    (:movl (:ebp 0) :ebp)	; pop stack-frame
 	    (:locally (:movl (:edi (:edi-offset atomically-esp)) :esp)) ; restore ESP
+	    ;; XXXX this state isn't covered in the stack discipline!?!
 	    (:jmp (:esi :ebx ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
 
 	   atomically-jumper-return-dirty-registers
@@ -228,20 +249,21 @@
 	    ;; DF will be cleared.
 	    (:movl :edi :edx)
 	    (:movl :edi :eax)
-	    (:movl :edi  :ecx)
+	    (:movl :edi :ecx)
 
-	    (:movl (:ebp -32) :ebx)	; atomically-status..
+	    (:movl (:ebp ,(dit-frame-offset :atomically-status)) :ebx)
 	    (:shrl ,(- 16 movitz:+movitz-fixnum-shift+) :ebx)
 
-	    ;; Make stack safe before we exit interrupt-frame..
+	    ;; Make stack safe before we exit dit-frame..
 	    (:movl :edi (:ebp 4))
 	    (:movl :edi (:ebp 8))
 	    (:movl :edi (:ebp 12))
 	    (:movl :edi (:ebp 16))
 	    (:movl :edi (:ebp 20))
-	    (:movl (:ebp 0) :ebp)	; pop interrupt-frame
+	    (:movl (:ebp 0) :ebp)	; pop dit-frame
 	    (:movl (:ebp -4) :esi)
 	    (:locally (:movl (:edi (:edi-offset atomically-esp)) :esp)) ; restore ESP
+	    ;; XXXX this state isn't covered in the stack discipline!?!
 	    (:jmp (:esi :ebx ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
 
 	   not-simple-restart-jumper
@@ -252,27 +274,28 @@
 	    )))
     (do-it)))
 
-(defun interrupt-default-handler (number interrupt-frame)
+(defun interrupt-default-handler (vector dit-frame)
   (declare (without-check-stack-limit))
+  (cli)
   (macrolet ((dereference (fixnum-address &optional (type :lisp))
 	       "Dereference the fixnum-address."
 	       `(memref ,fixnum-address 0 0 ,type)))
-    (let (($eip (+ interrupt-frame (interrupt-frame-index :eip)))
-	  ($eax (+ interrupt-frame (interrupt-frame-index :eax)))
-	  ($ebx (+ interrupt-frame (interrupt-frame-index :ebx)))
-	  ($ecx (+ interrupt-frame (interrupt-frame-index :ecx)))
-	  ($edx (+ interrupt-frame (interrupt-frame-index :edx)))
-	  ($esi (+ interrupt-frame (interrupt-frame-index :esi)))
-	  (*last-interrupt-frame* interrupt-frame))
+    (let (($eip (+ dit-frame (dit-frame-index :eip)))
+	  ($eax (+ dit-frame (dit-frame-index :eax)))
+	  ($ebx (+ dit-frame (dit-frame-index :ebx)))
+	  ($ecx (+ dit-frame (dit-frame-index :ecx)))
+	  ($edx (+ dit-frame (dit-frame-index :edx)))
+	  ($esi (+ dit-frame (dit-frame-index :esi)))
+	  (*last-dit-frame* dit-frame))
       (block nil
-	(case number
+	(case vector
 	  (0 (error 'division-by-zero))
 	  (3 (break "Break instruction at ~@Z." $eip))
 	  (4 (error "Primitive overflow assertion failed."))
 	  (6 (error "Illegal instruction at ~@Z." $eip))
 	  (13 (error "General protection error. EIP=~@Z, error-code: #x~X, EAX: ~@Z, EBX: ~@Z, ECX: ~@Z"
 		     $eip
-		     (interrupt-frame-ref :error-code :unsigned-byte32 0 interrupt-frame)
+		     (dit-frame-ref :error-code :unsigned-byte32 0 dit-frame)
 		     $eax $ebx $ecx))
 	  ((60)
 	   ;; EAX failed type in EDX. May be restarted by returning with a new value in EAX.
@@ -286,7 +309,7 @@
 	  (64 (error 'type-error :datum (dereference $eax) :expected-type 'integer))
 	  (65 (error 'index-out-of-range :index (dereference $ebx) (dereference $ecx)))
 	  (66 (error "Unspecified type error at ~@Z in ~S with EAX=~@Z, ECX=~@Z."
-		     $eip (dereference (+ interrupt-frame (interrupt-frame-index :esi)))
+		     $eip (dereference (+ dit-frame (dit-frame-index :esi)))
 		     $eax $ecx))
 	  (67 (backtrace :fresh-lines nil :length 6)
 	      (dotimes (i 100000)
@@ -295,6 +318,7 @@
 		    $eip $eax $ebx $ecx $edx)
 	      (dotimes (i 100000)
 		(with-inline-assembly (:returns :nothing) (:nop))))
+	  (70 (error "Unaligned memref access."))
 	  ((5 55)
 	   (let* ((old-bottom (prog1 (stack-bottom)
 				(setf (stack-bottom) 0)))
@@ -317,8 +341,8 @@
 			   (- old-bottom new-bottom)
 			   new-bottom)
 		   (break "Stack overload exception ~D at EIP=~@Z, ESI=~@Z, ESP=~@Z, bottom=#x~X."
-			  number $eip $esi
-			  (+ interrupt-frame (interrupt-frame-index :ebp))
+			  vector $eip $esi
+			  (+ dit-frame (dit-frame-index :ebp))
 			  old-bottom))
 	       (format *debug-io* "~&Stack-warning: Resetting stack-bottom to #x~X.~%"
 		       old-bottom)
@@ -336,13 +360,13 @@
 	     (when (symbolp name)
 	       (error 'unbound-variable :name name))))
 	  ((100);; 101 102 103 104 105)
-	   (let ((funobj (dereference (+ interrupt-frame (interrupt-frame-index :esi))))
-		 (code (interrupt-frame-ref :ecx :unsigned-byte8 0 interrupt-frame)))
+	   (let ((funobj (dereference (+ dit-frame (dit-frame-index :esi))))
+		 (code (dit-frame-ref :ecx :unsigned-byte8 0 dit-frame)))
 	     (error 'wrong-argument-count
 		    :function funobj
 		    :argument-count (if (logbitp 7 code)
-					(ash (interrupt-frame-ref :ecx :unsigned-byte32
-								  0 interrupt-frame)
+					(ash (dit-frame-ref :ecx :unsigned-byte32
+								  0 dit-frame)
 					     -24)
 				      code))))
 	  (108
@@ -353,20 +377,20 @@
 	  (112
 	   (let ((*error-no-condition-for-debugger* t)) ; no space..
 	     (error "Out of memory. Please take out the garbage.")))
-	  (t (funcall (if (< 16 number 50) #'warn #'error)
+	  (t (funcall (if (< 16 vector 50) #'warn #'error)
 		      "Exception occurred: ~D, EIP: ~@Z, EAX: ~@Z, ECX: ~@Z, ESI: ~@Z"
-		      number $eip $eax $ecx $esi)))
+		      vector $eip $eax $ecx $esi)))
 	nil))))
 
 
-(defun exception-handler (n)
-  (let ((vector (load-global-constant interrupt-handlers)))
-    (svref vector n)))
+(defun exception-handler (vector)
+  (let ((handlers (load-global-constant exception-handlers)))
+    (svref handlers vector)))
 
-(defun (setf exception-handler) (handler n)
+(defun (setf exception-handler) (handler vector)
   (check-type handler function)
-  (let ((vector (load-global-constant interrupt-handlers)))
-    (setf (svref vector n) handler)))
+  (let ((handlers (load-global-constant exception-handlers)))
+    (setf (svref handlers vector) handler)))
 
 (defun cli ()
   (with-inline-assembly (:returns :nothing)
@@ -376,17 +400,17 @@
   (with-inline-assembly (:returns :nothing)
     (:sti)))
 
-(defun raise-exception (exception &optional (eax 0) (ebx 0))
+(defun raise-exception (vector &optional (eax 0) (ebx 0))
   "Generate a CPU exception, with those values in EAX and EBX."
   ;; The problem now is that the x86 INT instruction only takes an
   ;; immediate argument.
-  (check-type exception (unsigned-byte 8))
+  (check-type vector (unsigned-byte 8))
   (macrolet
       ((do-it ()
 	 `(with-inline-assembly (:returns :eax)
 	    (:load-lexical (:lexical-binding eax) :eax)
 	    (:load-lexical (:lexical-binding ebx) :ebx)
-	    (:load-lexical (:lexical-binding exception) :ecx)
+	    (:load-lexical (:lexical-binding vector) :ecx)
 	    (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 	    (:jnz 'not-0)
 	    (:int 0)
