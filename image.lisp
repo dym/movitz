@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.67 2004/09/15 10:22:52 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.68 2004/09/16 08:50:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -409,10 +409,10 @@
 			(declare (ignore x type))
 			(- (bt:slot-offset 'movitz-run-time-context 'non-pointers-end)
 			   (bt:slot-offset 'movitz-run-time-context 'non-pointers-start))))
+   (non-pointers-start :binary-type :label) ; ========= NON-POINTER-START =======
    (bochs-flags
     :binary-type lu32
     :initform 0)
-   (non-pointers-start :binary-type :label) ; ========= NON-POINTER-START =======
    ;; (align-segment-descriptors :binary-type 4)
    (segment-descriptor-table :binary-type :label)
    (segment-descriptor-0
