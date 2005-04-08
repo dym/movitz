@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001, 2003-2004, 
+;;;;    Copyright (C) 2001, 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu May  8 14:25:06 2003
 ;;;;                
-;;;; $Id: segments.lisp,v 1.4 2004/10/21 20:51:13 ffjeld Exp $
+;;;; $Id: segments.lisp,v 1.5 2005/04/08 06:17:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,13 +18,13 @@
 
 (in-package muerte)
 
-(defun segment-register (segment-register)
+(defun segment-register-name (segment-register-name)
   "Return the value of an x86 segment register, such as :cs or :ds."
   (macrolet ((sreg (reg)
 	       `(with-inline-assembly (:returns :untagged-fixnum-ecx)
 		  (:xorl :ecx :ecx)
 		  (:movw ,reg :cx))))
-    (ecase segment-register
+    (ecase segment-register-name
       (:ss (sreg :ss))
       (:cs (sreg :cs))
       (:ds (sreg :ds))
@@ -32,7 +32,7 @@
       (:fs (sreg :fs))
       (:gs (sreg :gs)))))
 
-(defun (setf segment-register) (value segment-register)
+(defun (setf segment-register-name) (value segment-register-name)
   "This function indiscriminately sets a segment register,
 which is a great way to crash the machine. So know what you're doing."
   (check-type value (unsigned-byte 16))
@@ -41,7 +41,7 @@ which is a great way to crash the machine. So know what you're doing."
 		  (:compile-form (:result-mode :ecx) value)
 		  (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
 		  (:movw :cx ,reg))))
-    (ecase segment-register
+    (ecase segment-register-name
       (:ss (set-sreg :ss))
       (:cs (set-sreg :cs))
       (:ds (set-sreg :ds))
