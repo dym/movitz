@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu May  8 14:25:06 2003
 ;;;;                
-;;;; $Id: segments.lisp,v 1.6 2005/04/13 06:43:12 ffjeld Exp $
+;;;; $Id: segments.lisp,v 1.7 2005/04/13 06:57:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -55,39 +55,38 @@ which is a great way to crash the machine. So know what you're doing."
 Error if the GDT location is not zero modulo 4."
   (eval-when (:compile-toplevel)
     (assert (= 4 movitz:+movitz-fixnum-factor+)))
-  (with-inline-assembly (:returns :multiple-values)
-    (:pushl #.movitz:+scan-skip-word+)
-    (:pushl 2)
-    (:pushl 0)
-    (:pushl 0)
-    (:leal (:esp 2) :ecx)
-    (:sgdt (:ecx))
-    (:popl :ecx)
-    (:shrl 16 :ecx)
-    (:leal ((:ecx #.movitz::+movitz-fixnum-factor+)) :ebx)
-    (:popl :ecx)
-    (:testb 3 :cl)
-    (:jnz '(:sub-program ()
-	    (:compile-form (:result-mode :ignore)
-	     (error "The GDT base is not 4-aligned."))))
-    (:movl :ecx :eax)
-    (:movl 2 :ecx)
-    (:stc)))
+  (without-interrupts
+    (with-inline-assembly (:returns :multiple-values)
+      (:std)
+      (:pushl 0)
+      (:pushl 0)
+      (:leal (:esp 2) :ecx)
+      (:sgdt (:ecx))
+      (:popl :ebx)
+      (:shrl #.(cl:- 16 movitz::+movitz-fixnum-shift+) :ebx)
+      (:andl #.movitz:+movitz-fixnum-zmask+ :ebx)
+      (:popl :eax)
+      (:andl #.movitz:+movitz-fixnum-zmask+ :eax)
+      (:cld)
+      (:movl 2 :ecx)
+      (:stc))))
 
 (defun %lgdt (base-location limit)
   "Set the GDT according to base-location and limit.
 This is the setter corresponding to the sgdt getter."
   (eval-when (:compile-toplevel)
     (assert (= 4 movitz:+movitz-fixnum-factor+)))
-  (with-inline-assembly (:returns :nothing)
-    (:compile-two-forms (:eax :ebx) base-location limit)
-    (:pushl #.movitz:+scan-skip-word+)
-    (:pushl 2)
-    (:shll #.(cl:- 16 movitz:+movitz-fixnum-shift+) :ebx)
-    (:pushl :eax)
-    (:pushl :ebx)
-    (:leal (:esp 2) :ecx)
-    (:lgdt (:ecx))))
+  (check-type base-location fixnum)
+  (check-type limit positive-fixnum)
+  (without-interrupts
+    (with-inline-assembly (:returns :eax)
+      (:compile-form (:result-mode :push) base-location)
+      (:compile-form (:result-mode :push) limit)
+      (:shll #.(cl:- 16 movitz:+movitz-fixnum-shift+) (:esp))
+      (:leal (:esp 2) :ecx)
+      (:lgdt (:ecx))
+      (:popl :eax)
+      (:popl :eax))))
 
 ;;;
 
