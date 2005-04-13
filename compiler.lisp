@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.135 2005/02/27 02:30:22 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.136 2005/04/13 07:25:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5084,7 +5084,7 @@ Return arg-init-code, need-normalized-ecx-p."
 	       (:boolean-cf=1
 		(values (append code
 				`((:sbbl :ecx :ecx)
-				  (:movl (:edi (:ecx 4) ,(global-constant-offset 'null-cons))
+				  (:movl (:edi (:ecx 4) ,(global-constant-offset 'not-not-nil))
 					 ,desired-result)))
 			desired-result))
 	       (#.+boolean-modes+
