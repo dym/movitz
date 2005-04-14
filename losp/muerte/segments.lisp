@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu May  8 14:25:06 2003
 ;;;;                
-;;;; $Id: segments.lisp,v 1.7 2005/04/13 06:57:01 ffjeld Exp $
+;;;; $Id: segments.lisp,v 1.8 2005/04/14 06:14:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,7 +18,7 @@
 
 (in-package muerte)
 
-(defun segment-register-name (segment-register-name)
+(defun segment-register (segment-register-name)
   "Return the value of an x86 segment register, such as :cs or :ds."
   (macrolet ((sreg (reg)
 	       `(with-inline-assembly (:returns :untagged-fixnum-ecx)
@@ -32,7 +32,7 @@
       (:fs (sreg :fs))
       (:gs (sreg :gs)))))
 
-(defun (setf segment-register-name) (value segment-register-name)
+(defun (setf segment-register) (value segment-register-name)
   "This function indiscriminately sets a segment register,
 which is a great way to crash the machine. So know what you're doing."
   (check-type value (unsigned-byte 16))
