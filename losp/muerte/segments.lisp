@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu May  8 14:25:06 2003
 ;;;;                
-;;;; $Id: segments.lisp,v 1.8 2005/04/14 06:14:49 ffjeld Exp $
+;;;; $Id: segments.lisp,v 1.9 2005/04/14 06:42:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -166,7 +166,7 @@ This is the setter corresponding to the sgdt getter."
   (let ((offset (+ (* index 8) (movitz-type-slot-offset 'movitz-basic-vector 'data))))
     (logior (ash (memref table (+ 7 offset) :type :unsigned-byte8)
 		 24)
-	    (ash (memref table (+ 4 offset) :type :unsigned-byte16)
+	    (ash (memref table (+ 4 offset) :type :unsigned-byte8)
 		 16)
 	    (ash (memref table (+ 2 offset) :type :unsigned-byte16)
 		 0))))
