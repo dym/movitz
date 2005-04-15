@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.42 2005/02/28 23:39:04 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.43 2005/04/15 07:00:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -525,6 +525,9 @@
   (and (typep x 'cons)
        (or (eq '* car) (typep (car x) car))
        (or (eq '* cdr) (typep (cdr x) cdr))))
+
+(deftype vector (&optional (element-type '*) (size '*))
+  `(simple-array ,element-type (,size)))
 
 (define-simple-typep (atom atom) (x)
   (typep x 'atom))
