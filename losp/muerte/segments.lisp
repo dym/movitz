@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu May  8 14:25:06 2003
 ;;;;                
-;;;; $Id: segments.lisp,v 1.9 2005/04/14 06:42:29 ffjeld Exp $
+;;;; $Id: segments.lisp,v 1.10 2005/04/15 07:04:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -64,9 +64,9 @@ Error if the GDT location is not zero modulo 4."
       (:sgdt (:ecx))
       (:popl :ebx)
       (:shrl #.(cl:- 16 movitz::+movitz-fixnum-shift+) :ebx)
-      (:andl #.movitz:+movitz-fixnum-zmask+ :ebx)
+      (:andl -4 :ebx)
       (:popl :eax)
-      (:andl #.movitz:+movitz-fixnum-zmask+ :eax)
+      (:andl -4 :eax)
       (:cld)
       (:movl 2 :ecx)
       (:stc))))
