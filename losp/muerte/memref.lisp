@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.44 2005/03/09 07:19:53 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.45 2005/04/15 07:03:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,12 +18,14 @@
 
 (in-package muerte)
 
-(define-compiler-macro memref (&whole form object offset &key (index 0) (type :lisp)
-							      (localp nil) (endian :host)
+(define-compiler-macro memref (&whole form object offset
+			       &key (index 0) (type :lisp) (localp nil) (endian :host)
+				    (physicalp nil)
 			       &environment env)
   (if (or (not (movitz:movitz-constantp type env))
 	  (not (movitz:movitz-constantp localp env))
-	  (not (movitz:movitz-constantp endian env)))
+	  (not (movitz:movitz-constantp endian env))
+	  (not (movitz:movitz-constantp physicalp env)))
       form
     (labels ((sub-extract-constant-delta (form)
 	       "Try to extract at compile-time an integer offset from form."
@@ -69,7 +71,10 @@
 	    (warn "o: ~S, co: ~S, i: ~S, ci: ~S"
 		  offset constant-offset
 		  index constant-index)
-	    (let ((type (movitz:movitz-eval type env)))
+	    (let ((type (movitz:movitz-eval type env))
+		  (physicalp (movitz:movitz-eval physicalp env)))
+	      (when (and physicalp (not (eq type :unsigned-byte32)))
+		(warn "(memref physicalp) unsupported for type ~S." type))
 	      (case type
 		(:unsigned-byte8
 		 (cond
@@ -310,29 +315,32 @@
 			    (:movl (:eax :ecx ,(offset-by 4)) :ecx)
 			    (:andl 7 :ecx)))))))
 		(:unsigned-byte32
-		 (let ((endian (movitz:movitz-eval endian env)))
-		   (assert (member endian '(:host :little))))
-		 (assert (= 4 movitz::+movitz-fixnum-factor+))
-		 (cond
-		  ((and (eq 0 offset) (eq 0 index))
-		   `(with-inline-assembly (:returns :untagged-fixnum-ecx
-						    :type (unsigned-byte 32))
-		      (:compile-form (:result-mode :eax) ,object)
-		      (:movl (:eax ,(offset-by 4)) :ecx)))
-		  ((eq 0 offset)
-		   `(with-inline-assembly (:returns :untagged-fixnum-ecx
-						    :type (unsigned-byte 32))
-		      (:compile-two-forms (:eax :ecx) ,object ,index)
-		      (:movl (:eax :ecx ,(offset-by 4)) :ecx)))
-		  (t (let ((object-var (gensym "memref-object-")))
-		       `(let ((,object-var ,object))
-			  (with-inline-assembly (:returns :untagged-fixnum-ecx
-							  :type (unsigned-byte 32))
-			    (:compile-two-forms (:ecx :ebx) ,offset ,index)
-			    (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
-			    (:load-lexical (:lexical-binding ,object-var) :eax)
-			    (:addl :ebx :ecx)
-			    (:movl (:eax :ecx ,(offset-by 4)) :ecx)))))))
+		 (let ((endian (movitz:movitz-eval endian env))
+		       (prefixes (if (not physicalp)
+				     ()
+				   movitz:*compiler-physical-segment-prefix*)))
+		   (assert (member endian '(:host :little)))
+		   (assert (= 4 movitz::+movitz-fixnum-factor+))
+		   (cond
+		    ((and (eq 0 offset) (eq 0 index))
+		     `(with-inline-assembly (:returns :untagged-fixnum-ecx
+						      :type (unsigned-byte 32))
+			(:compile-form (:result-mode :eax) ,object)
+			(,prefixes :movl (:eax ,(offset-by 4)) :ecx)))
+		    ((eq 0 offset)
+		     `(with-inline-assembly (:returns :untagged-fixnum-ecx
+						      :type (unsigned-byte 32))
+			(:compile-two-forms (:eax :ecx) ,object ,index)
+			(,prefixes :movl (:eax :ecx ,(offset-by 4)) :ecx)))
+		    (t (let ((object-var (gensym "memref-object-")))
+			 `(let ((,object-var ,object))
+			    (with-inline-assembly (:returns :untagged-fixnum-ecx
+							    :type (unsigned-byte 32))
+			      (:compile-two-forms (:ecx :ebx) ,offset ,index)
+			      (:sarl ,movitz::+movitz-fixnum-shift+ :ecx)
+			      (:load-lexical (:lexical-binding ,object-var) :eax)
+			      (:addl :ebx :ecx)
+			      (,prefixes :movl (:eax :ecx ,(offset-by 4)) :ecx))))))))
 		(:lisp
 		 (let* ((localp (movitz:movitz-eval localp env))
 			(prefixes (if localp
