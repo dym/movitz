@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.37 2005/03/09 07:24:54 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.38 2005/04/15 07:04:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -27,6 +27,8 @@
 ;; (require :lib/net/ip6)
 (require :lib/net/ip4)
 (require :lib/repl)
+
+(require :ll-testing)
 
 (defpackage muerte.init
   (:nicknames #:los0)
