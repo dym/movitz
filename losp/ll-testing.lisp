@@ -10,10 +10,11 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 14 08:18:43 2005
 ;;;;                
-;;;; $Id: ll-testing.lisp,v 1.1 2005/04/15 07:03:09 ffjeld Exp $
+;;;; $Id: ll-testing.lisp,v 1.2 2005/04/16 16:20:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
+(provide :ll-testing)
 (in-package muerte)
 
 (defun dump-global-segment-table (&key table entries nofill)
