@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.136 2005/04/13 07:25:41 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.137 2005/04/17 22:24:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -4760,13 +4760,22 @@ Return arg-init-code, need-normalized-ecx-p."
 	    need-normalized-ecx-p)))
 
 (defun make-special-funarg-shadowing (env function-body)
-  ""
-  (cond
-   ((without-function-prelude-p env)
-    function-body)
-   ((special-variable-shadows env)
-    `(muerte.cl::let ,(special-variable-shadows env) ,function-body))
-   (t function-body)))
+  "Wrap function-body in a let, if we need to.
+We need to when the function's lambda-list binds a special variable,
+or when there's a non-dynamic-extent &rest binding."
+  (if (without-function-prelude-p env)
+      function-body
+    (let ((shadowing
+	   (append (special-variable-shadows env)
+		   (when (and (rest-var env)
+			      (not (movitz-env-get (rest-var env) 'dynamic-extent nil env nil))
+			      (not (movitz-env-get (rest-var env) 'ignore nil env nil)))
+		     (movitz-env-load-declarations `((muerte.cl:dynamic-extent ,(rest-var env)))
+						   env :funobj)
+		     `((,(rest-var env) (muerte.cl:copy-list ,(rest-var env))))))))
+      (if (null shadowing)
+	  function-body
+	`(muerte.cl::let ,shadowing ,function-body)))))
 
 (defun make-compiled-function-postlude (funobj env use-stack-frame-p)
   (declare (ignore funobj env))
