@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.10 2005/03/09 07:19:19 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.11 2005/04/19 06:42:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -48,8 +48,8 @@
     (symbol
      function-name)
     ((cons (eql setf) (cons symbol null))
-     (gethash (cadr function-name)
-	      (get-global-property :setf-namespace)))))
+     (gethash (cadr function-name) *setf-namespace*
+	      #+ignore (get-global-property :setf-namespace)))))
 
 (defun match-caller (name)
   (do ((frame (stack-frame-uplink nil (current-stack-frame))

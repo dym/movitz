@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.27 2005/01/31 15:47:57 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.28 2005/04/19 06:42:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,6 +19,9 @@
 (provide :muerte/functions)
 
 (in-package muerte)
+
+(defvar *setf-namespace* nil
+  "This hash-table is initialized by dump-image.")
 
 (defun identity (x) x)
 
@@ -484,15 +487,15 @@ so that we can be reasonably sure of dst's size."
     (symbol
      (symbol-function function-name))
     ((cons (eql setf))
-     (symbol-function (gethash (cadr function-name)
-			       (get-global-property :setf-namespace))))))
+     (symbol-function (gethash (cadr function-name) *setf-namespace*
+			       #+ignore (get-global-property :setf-namespace))))))
 
 (defun (setf fdefinition) (value function-name)
   (etypecase function-name
     (symbol
      (setf (symbol-function function-name) value))
     ((cons (eql setf))
-     (let* ((setf-namespace (get-global-property :setf-namespace))
+     (let* ((setf-namespace *setf-namespace* #+ignore (get-global-property :setf-namespace))
 	    (setf-name (cadr function-name))
 	    (setf-symbol (or (gethash setf-name setf-namespace)
 			     (setf (gethash setf-name setf-namespace)
