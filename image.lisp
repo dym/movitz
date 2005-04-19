@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.88 2005/01/10 08:18:56 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.89 2005/04/19 06:44:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -882,6 +882,8 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
   (let ((handler (movitz-env-symbol-function 'muerte::interrupt-default-handler)))
     (setf (movitz-run-time-context-exception-handlers (image-run-time-context *image*))
       (movitz-read (make-array 256 :initial-element handler))))
+  (setf (movitz-symbol-value (movitz-read 'muerte::*setf-namespace*))
+    (movitz-read (movitz-environment-setf-function-names *movitz-global-environment*) t))
   (let ((load-address (image-start-address *image*)))
     (setf (image-cons-pointer *image*) (- load-address
 					  (image-ds-segment-base *image*))
@@ -969,8 +971,6 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		   (setf (movitz-symbol-value mname) mvalue)))
 	  (setf (movitz-run-time-context-global-properties run-time-context)
 	    (movitz-read (list :packages (make-packages-hash)
-			       :setf-namespace (movitz-environment-setf-function-names
-						*movitz-global-environment*)
 			       :trampoline-funcall%1op (find-primitive-function
 							'muerte::trampoline-funcall%1op)
 			       :trampoline-funcall%2op (find-primitive-function
@@ -1483,7 +1483,10 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 					:element-type (array-element-type expr)
 					:initial-contents expr))
 	    (cons
-	     (or (gethash expr (image-cons-constants *image*))
+	     (or (let ((old-cons (gethash expr (image-cons-constants *image*))))
+		   (when old-cons
+		     (update-movitz-object old-cons expr)
+		     old-cons))
 		 (setf (gethash expr (image-cons-constants *image*))
 		   (if (eq '#0=#:error (ignore-errors (when (not (list-length expr)) '#0#)))
 		       (multiple-value-bind (unfolded-expr cdr-index)
