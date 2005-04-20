@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Aug 27 14:46:50 2001
 ;;;;                
-;;;; $Id: stream-image.lisp,v 1.11 2004/08/06 14:43:55 ffjeld Exp $
+;;;; $Id: stream-image.lisp,v 1.12 2005/04/20 06:51:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -91,6 +91,8 @@
 			(read-binary 'movitz-std-instance (image-stream image)))
 		       (:bignum
 			(read-binary 'movitz-bignum (image-stream image)))
+		       (:run-time-context
+			(read-binary 'movitz-run-time-context (image-stream image)))
 		       (t (warn "unknown other object: #x~X: ~S code #x~X."
 				word type-tag type-code)
 			  (make-instance 'movitz-fixnum :value (truncate word 4))))))

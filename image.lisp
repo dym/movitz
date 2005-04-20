@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.89 2005/04/19 06:44:01 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.90 2005/04/20 06:54:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -24,7 +24,7 @@
     :binary-type 3)
    (name
     :binary-type word
-    :initform :global
+    :initform :bootup
     :map-binary-write 'movitz-read-and-intern
     :map-binary-read-delayed 'movitz-word)
    (fast-car

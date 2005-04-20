@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.45 2005/03/09 07:24:37 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.46 2005/04/20 06:54:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1288,6 +1288,9 @@
 	   #:decode-eflags
 	   #:load-idt
 	   #:segment-register
+	   #:segment-descriptor
+	   #:segment-descriptor-base-location
+	   #:segment-descriptor-limit
 	   #:control-register-lo12
 	   #:control-register-hi20
 	   ))
