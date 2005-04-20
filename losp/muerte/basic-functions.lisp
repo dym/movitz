@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.16 2005/01/27 07:47:37 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.17 2005/04/20 06:52:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -349,6 +349,18 @@
 
 (defun object-tag (object)
   (object-tag object))
+
+
+(define-compiler-macro location-physical-offset ()
+  '(memref nil (movitz-type-slot-offset 'movitz-run-time-context
+		'physical-address-offset)
+    :type :lisp))
+
+(defun location-physical-offset ()
+  "The offset between physical and logical locations.
+A location is an 4-aligned address (32 bits whose two lsb are zero)
+interpreted as a lispval, and consequently a fixnum."
+  (location-physical-offset))
 
 (defun halt-cpu ()
   (halt-cpu))
