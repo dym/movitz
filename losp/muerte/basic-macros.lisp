@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.56 2005/02/28 23:38:03 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.57 2005/04/20 06:50:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -401,6 +401,12 @@
 				       (find-symbol (string slot-name) :movitz))))
      (:leal ((:ecx #.movitz::+movitz-fixnum-factor+) :edi ,(- (movitz::image-nil-word movitz::*image*)))
 	    :eax)))
+
+(define-compiler-macro movitz-type-word-size (type &environment env)
+  (if (not (movitz:movitz-constantp type env))
+      (error "Non-constant movitz-type-word-size call.")
+    (movitz::movitz-type-word-size (intern (symbol-name (movitz:movitz-eval type env))
+					   :movitz))))
 
 (define-compiler-macro movitz-type-slot-offset (type slot &environment env)
   (if (not (and (movitz:movitz-constantp type env)
