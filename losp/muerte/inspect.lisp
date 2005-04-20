@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.49 2005/02/28 17:00:05 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.50 2005/04/20 06:51:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -264,7 +264,9 @@ Otherwise, stack-frame is an absolute location."
     (function
      (copy-funobj old))
     (structure-object
-     (copy-structure old))))
+     (copy-structure old))
+    (run-time-context
+     (%shallow-copy-object old (movitz-type-word-size 'movitz-run-time-context)))))
 
 (defun objects-equalp (x y)
   "Basically, this verifies whether x is a shallow-copy of y, or vice versa."
@@ -364,51 +366,51 @@ Obviously, this correspondence is not guaranteed to hold e.g. across GC."
       (symbol
        (<= object-location
 	   location
-	   (+ -1 object-location #.(movitz::movitz-type-word-size :movitz-symbol))))
+	   (+ -1 object-location (movitz-type-word-size :movitz-symbol))))
       (run-time-context
        (<= object-location
 	   location
-	   (+ -1 object-location #.(movitz::movitz-type-word-size :movitz-run-time-context))))
+	   (+ -1 object-location (movitz-type-word-size :movitz-run-time-context))))
       (std-instance
        (<= object-location
 	   location
-	   (+ -1 object-location #.(movitz::movitz-type-word-size :movitz-std-instance))))
+	   (+ -1 object-location (movitz-type-word-size :movitz-std-instance))))
       (function
        (<= object-location
 	   location
 	   (+ -1 object-location
-	      #.(movitz::movitz-type-word-size :movitz-funobj)
+	      (movitz-type-word-size :movitz-funobj)
 	      (funobj-num-constants object))))
       ((or string code-vector (simple-array (unsigned-byte 8) 1))
        (<= object-location
 	   location
 	   (+ -1 object-location
-	      #.(movitz::movitz-type-word-size 'movitz-basic-vector)
+	      (movitz-type-word-size 'movitz-basic-vector)
 	      (* 2 (truncate (+ (array-dimension object 0) 7) 8)))))
       (vector-u16
        (<= object-location
 	   location
 	   (+ -1 object-location
-	      #.(movitz::movitz-type-word-size 'movitz-basic-vector)
+	      (movitz-type-word-size 'movitz-basic-vector)
 	      (* 2 (truncate (+ (array-dimension object 0) 3) 4)))))
       ((or vector-u32 simple-vector)
        (<= object-location
 	   location
 	   (+ -1 object-location
-	      #.(movitz::movitz-type-word-size 'movitz-basic-vector)
+	      (movitz-type-word-size 'movitz-basic-vector)
 	      (* 2 (truncate (+ (array-dimension object 0) 1) 2)))))
       (structure-object
        (<= object-location
 	   location
 	   (+ -1 object-location
-	      #.(movitz::movitz-type-word-size :movitz-struct)
+	      (movitz-type-word-size :movitz-struct)
 	      (* 2 (truncate (+ (structure-object-length object) 1) 2))))))))
 
 (defun location-in-code-vector-p%unsafe (code-vector location)
   (and (<= (object-location code-vector) location)
        (<= location
 	   (+ -1 (object-location code-vector)
-	      #.(movitz::movitz-type-word-size 'movitz-basic-vector)
+	      (movitz-type-word-size 'movitz-basic-vector)
 	      (* 2 (truncate (+ (memref code-vector
 					(movitz-type-slot-offset 'movitz-basic-vector 'num-elements))
 				7)
