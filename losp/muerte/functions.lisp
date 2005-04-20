@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.28 2005/04/19 06:42:22 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.29 2005/04/20 06:53:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -476,7 +476,7 @@ so that we can be reasonably sure of dst's size."
   (check-type old-funobj function)
   (%shallow-copy-object old-funobj
 			(+ (funobj-num-constants old-funobj)
-			   #.(movitz::movitz-type-word-size 'movitz-funobj))))
+			   (movitz-type-word-size 'movitz-funobj))))
 
 (defun install-funobj-name (name funobj)
   (setf (funobj-name funobj) name)
@@ -487,18 +487,16 @@ so that we can be reasonably sure of dst's size."
     (symbol
      (symbol-function function-name))
     ((cons (eql setf))
-     (symbol-function (gethash (cadr function-name) *setf-namespace*
-			       #+ignore (get-global-property :setf-namespace))))))
+     (symbol-function (gethash (cadr function-name) *setf-namespace*)))))
 
 (defun (setf fdefinition) (value function-name)
   (etypecase function-name
     (symbol
      (setf (symbol-function function-name) value))
     ((cons (eql setf))
-     (let* ((setf-namespace *setf-namespace* #+ignore (get-global-property :setf-namespace))
-	    (setf-name (cadr function-name))
-	    (setf-symbol (or (gethash setf-name setf-namespace)
-			     (setf (gethash setf-name setf-namespace)
+     (let* ((setf-name (cadr function-name))
+	    (setf-symbol (or (gethash setf-name *setf-namespace*)
+			     (setf (gethash setf-name *setf-namespace*)
 			       (make-symbol (format nil "~A-~A" 'setf 'setf-name))))))
        (setf (symbol-function setf-symbol)
 	 value)))))

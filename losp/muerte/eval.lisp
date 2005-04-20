@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.16 2005/04/19 06:42:15 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.17 2005/04/20 06:53:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -345,7 +345,7 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
     setf-name))
 
 (defun setf-intern (name)
-  (values (gethash name *setf-namespace* #+ignore (get-global-property :setf-namespace))))
+  (values (gethash name *setf-namespace*)))
 
 (defun special-operator-p (operator-name)			   
   (member operator-name '(quote function if progn tagbody go)))

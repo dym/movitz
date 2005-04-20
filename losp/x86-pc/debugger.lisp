@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.37 2005/03/09 07:22:32 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.38 2005/04/20 06:54:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -630,7 +630,7 @@ be provided for those cases."
 			  (location-in-object-p (%run-time-context-slot slot-name)
 						instruction-location))
 		 (return (values slot-name :run-time-context))))
-	(with-hash-table-iterator (hashis (get-global-property :setf-namespace))
+	(with-hash-table-iterator (hashis *setf-namespace*)
 	  (do () (nil)
 	    (multiple-value-bind (morep setf-name symbol)
 		(hashis)
