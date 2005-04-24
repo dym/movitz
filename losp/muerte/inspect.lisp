@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.50 2005/04/20 06:51:12 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.51 2005/04/24 22:10:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -47,9 +47,11 @@ This variable should be initialized during bootup initialization.")
     (+ (object-location stack) 2 index)))
 
 (defun stack-frame-uplink (stack frame)
-  (if (eq 0 (stack-frame-funobj stack frame))
-      (dit-frame-casf stack frame)
-    (stack-frame-ref stack frame 0)))
+  (cond
+   ((eq 0 frame) 0)
+   ((eq 0 (stack-frame-funobj stack frame))
+    (dit-frame-casf stack frame))
+   (t (stack-frame-ref stack frame 0))))
 
 (defun stack-vector-designator (stack)
   (etypecase stack
