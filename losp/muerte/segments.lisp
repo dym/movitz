@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu May  8 14:25:06 2003
 ;;;;                
-;;;; $Id: segments.lisp,v 1.11 2005/04/18 07:07:45 ffjeld Exp $
+;;;; $Id: segments.lisp,v 1.12 2005/04/24 22:11:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -161,26 +161,31 @@ This is the setter corresponding to the sgdt getter."
       (:cr4 (set-creg :cr4)))
     value))
     
-(defun segment-descriptor-base (table index)
+(defun segment-descriptor-base-location (table index)
   (check-type table (and vector (not simple-vector)))
+  (eval-when (:compile-toplevel)
+    (assert (= 4 movitz::+movitz-fixnum-factor+)))
+  ;; XXX This fails for locations above 2GB.
   (let ((offset (+ (* index 8) (movitz-type-slot-offset 'movitz-basic-vector 'data))))
     (logior (ash (memref table (+ 7 offset) :type :unsigned-byte8)
-		 24)
+		 22)
 	    (ash (memref table (+ 4 offset) :type :unsigned-byte8)
-		 16)
+		 14)
 	    (ash (memref table (+ 2 offset) :type :unsigned-byte16)
-		 0))))
+		 -2))))
 
-(defun (setf segment-descriptor-base) (base table index)
+(defun (setf segment-descriptor-base-location) (base-location table index)
   (check-type table (and vector (not simple-vector)))
+  (eval-when (:compile-toplevel)
+    (assert (= 4 movitz::+movitz-fixnum-factor+)))
   (let ((offset (+ (* index 8) (movitz-type-slot-offset 'movitz-basic-vector 'data))))
     (setf (memref table (+ 7 offset) :type :unsigned-byte8)
-      (ldb (byte 8 24) base))
+      (ldb (byte 8 22) base-location))
     (setf (memref table (+ 4 offset) :type :unsigned-byte8)
-      (ldb (byte 8 16) base))
+      (ldb (byte 8 14) base-location))
     (setf (memref table (+ 2 offset) :type :unsigned-byte16)
-      (ldb (byte 16 0) base))
-    base))
+      (ash (ldb (byte 14 0) base-location) 2))
+    base-location))
 
 (defun segment-descriptor-limit (table index)
   (check-type table (and vector (not simple-vector)))

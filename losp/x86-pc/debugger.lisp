@@ -6,11 +6,11 @@
 ;;;;    For distribution policy, see the accompanying file COPYING.
 ;;;; 
 ;;;; Filename:      debugger.lisp
-;;;; Description:   
+;;;; Description:   Debugging functionality.
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.38 2005/04/20 06:54:07 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.39 2005/04/24 22:13:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -38,7 +38,8 @@
       muerte::do-slow-method-lookup
       muerte::initial-discriminating-function
       muerte::discriminating-function-max
-      muerte::discriminating-function-max-step2))
+      muerte::discriminating-function-max-step2
+      invoke-debugger-on-designator))
 
 (defconstant +backtrace-gf-discriminatior-functions+
     '(muerte::discriminating-function-max
@@ -132,12 +133,12 @@
 	(stack-frame-call-site stack frame)
       (when (and call-site code)
 	(dolist (map +call-site-numargs-maps+
-		  (warn "no match at ~D for ~S frame ~S [~S]."
-			call-site
-			(stack-frame-funobj stack (stack-frame-uplink stack frame))
-			frame funobj))
+		  #+ignore (warn "no match at ~D for ~S frame ~S [~S]."
+				 call-site
+				 (stack-frame-funobj stack (stack-frame-uplink stack frame))
+				 frame funobj))
 	  (when (not (mismatch code (cdr map)
-			       :start1 (- call-site (length (cdr map)))
+			       :start1 (max 0 (- call-site (length (cdr map))))
 			       :end1 call-site))
 	    (return
 	      (cond
@@ -600,10 +601,11 @@ be provided for those cases."
 		      (format t "?: ~Z" funobj)))
 	       (serious-condition (c)
 		 (let ((*print-safely* t))
-		   (format t " - Error at ~S funobj ~S: ~A"
+		   (format t " - Backtracing error at ~S funobj ~S: ~A"
 			   frame
 			   (stack-frame-funobj nil frame)
-			   c)))))))
+			   c)))))
+	until (zerop (stack-frame-uplink stack frame))))
   (values))
 
 (defun locate-function (instruction-location)
