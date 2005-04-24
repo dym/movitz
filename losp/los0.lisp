@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.39 2005/04/18 07:08:42 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.40 2005/04/24 16:46:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1315,9 +1315,9 @@ Can be used to measure the overhead of primitive function."
 						 :index (+ x (* y muerte.x86-pc::*screen-stride*))
 						 :type :unsigned-byte16)))
 			       data)))
-    (muerte.ip4:tftp/ethernet-write :129.242.16.151 "movitz-screendump.txt" data
+    (muerte.ip4:tftp/ethernet-write :129.242.19.132 "movitz-screendump.txt" data
 				    :quiet t
-				    :mac (muerte.ip4::polling-arp :129.242.16.1
+				    :mac (muerte.ip4::polling-arp ip4::*ip4-router*
 								  (lambda ()
 								    (eql #\escape (muerte.x86-pc.keyboard:poll-char)))))))
 
@@ -1331,6 +1331,21 @@ Can be used to measure the overhead of primitive function."
    no-overflow))
 
 (defvar *segment-descriptor-table*)
+
+(defun threading ()
+  (let* ((thread (muerte::clone-run-time-context :name 'subthread))
+	 (stack (make-array 1022 :element-type '(unsigned-byte 32))))
+    (setf (segment-descriptor *segment-descriptor-table* 8)
+      (segment-descriptor *segment-descriptor-table* (truncate (segment-register :fs) 8)))
+    (warn "Thread ~S FS base: ~S"
+	  thread
+	  (setf (segment-descriptor-base-location *segment-descriptor-table* 8)
+	    (+ (object-location thread)
+	       (muerte::location-physical-offset))))
+    (format *terminal-io* "~&Switching...")
+    (setf (segment-register :fs) (* 8 8))
+    (format *terminal-io* "ok.~%")
+    (values thread stack)))
 
 (defun genesis ()
   ;; (install-shallow-binding)
@@ -1354,12 +1369,13 @@ Can be used to measure the overhead of primitive function."
 
   (setf *debugger-function* #'los0-debugger)
   (clos-bootstrap)
-  (install-shallow-binding)
+  (setf *package* (find-package "INIT"))
+  ;; (install-shallow-binding)
   (let ((*repl-readline-context* (make-readline-context :history-size 16))
 	#+ignore (*backtrace-stack-frame-barrier* (stack-frame-uplink (current-stack-frame)))
 	#+ignore (*error-no-condition-for-debugger* t)
 	#+ignore (*debugger-function* #'los0-debugger)
-	(*package* nil))
+	(*package* *package*))
     (with-simple-restart (abort "Skip Los0 boot-up initialization.")
       (setf *cpu-features*
 	(find-cpu-features))
