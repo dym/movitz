@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.57 2005/04/20 06:50:10 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.58 2005/04/26 23:45:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -367,6 +367,12 @@
 				      ,keyform
 				      ',(mapcar #'first clauses)))))
 
+(define-compiler-macro asm-register (register-name)
+  (if (member register-name '(:eax :ebx :ecx :untagged-fixnum-ecx :edx))
+      `(with-inline-assembly (:returns ,register-name) ())
+    `(with-inline-assembly (:returns :eax)
+       (:movl ,register-name :eax))))
+
 (defmacro movitz-accessor (object-form type slot-name)
   (warn "movitz-accesor deprecated.")
   `(with-inline-assembly (:returns :register :side-effects nil)
@@ -604,7 +610,6 @@
 (define-compiler-macro cdar (x)
   `(cdr (car ,x)))
 			     
-
 (define-compiler-macro rest (x) `(cdr ,x))
 (define-compiler-macro first (x) `(car ,x))
 (define-compiler-macro second (x) `(cadr ,x))
