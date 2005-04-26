@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2003-2004, 
+;;;;    Copyright (C) 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromsoe, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.15 2004/10/11 13:53:19 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.16 2005/04/26 23:43:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -113,39 +113,39 @@
 (defun clone-run-time-context (&key (parent (current-run-time-context))
 				    (name :anonymous))
   (check-type parent run-time-context)
-  (let ((context (%shallow-copy-object parent #.(movitz::movitz-type-word-size 'movitz-run-time-context))))
+  (let ((context (%shallow-copy-object parent (movitz-type-word-size 'movitz-run-time-context))))
     (setf (%run-time-context-slot 'name context) name
-	  (%run-time-context-slot 'self context) context)
-    (setf (%run-time-context-segment-base 'segment-descriptor-thread-context context) 
-      (+ (* #.movitz::+movitz-fixnum-factor+ (object-location context))
-	 (%run-time-context-slot 'physical-address-offset)))
+	  (%run-time-context-slot 'self context) context
+	  (%run-time-context-slot 'atomically-continuation context) 0)
     context))
 
-(defun switch-to-context (context)
-  (check-type context run-time-context)
-  (with-inline-assembly (:returns :nothing)
-    (:compile-form (:result-mode :eax) context)
-    (:movw #.(cl:1- (cl:* 8 8)) (:esp -6))
-    (:addl #.(cl:+ -6 (movitz::global-constant-offset 'movitz::segment-descriptor-table))
-	   :eax)
-    (:addl :edi :eax)
-    (:locally (:addl (:edi (:edi-offset physical-address-offset)) :eax))
-    (:movl :eax (:esp -4))
-    (:lgdt (:esp -6))
-    (:movw #x28 :ax)
-    (:movw :ax :fs)
-    (:locally (:movl (:edi (:edi-offset self)) :eax))))
+;;;(defun switch-to-context (context)
+;;;  (check-type context run-time-context)
+;;;  (with-inline-assembly (:returns :nothing)
+;;;    (:compile-form (:result-mode :eax) context)
+;;;    (:movw #.(cl:1- (cl:* 8 8)) (:esp -6))
+;;;    (:addl #.(cl:+ -6 (movitz::global-constant-offset 'movitz::segment-descriptor-table))
+;;;	   :eax)
+;;;    (:addl :edi :eax)
+;;;    (:locally (:addl (:edi (:edi-offset physical-address-offset)) :eax))
+;;;    (:movl :eax (:esp -4))
+;;;    (:lgdt (:esp -6))
+;;;    (:movw #x28 :ax)
+;;;    (:movw :ax :fs)
+;;;    (:locally (:movl (:edi (:edi-offset self)) :eax))))
 
-(defun %run-time-context-install-stack (context &optional (stack-vector
-							   (make-array 8192 :element-type 'u32))
-							  (cushion 1024))
-  (check-type stack-vector vector)
-  (assert (< cushion (array-dimension stack-vector 0)))
-  (setf (%run-time-context-slot 'stack-vector context) stack-vector)
+(defun %run-time-context-install-stack (context
+					&optional (control-stack
+						   (make-array 8192 :element-type '(unsigned-byte 32)))
+						  (cushion 1024))
+  (check-type control-stack vector)
+  (assert (< cushion (array-dimension control-stack 0)))
+  (setf (%run-time-context-slot 'control-stack context) control-stack)
   (setf (%run-time-context-slot 'stack-top context)
-    (+ (object-location stack-vector) 8
-       (* 4 (array-dimension stack-vector 0))))
+    (+ (object-location control-stack) 8
+       (* 4 (array-dimension control-stack 0))))
   (setf (%run-time-context-slot 'stack-bottom context)
-    (+ (object-location stack-vector) 8
+    (+ (object-location control-stack) 8
        (* 4 cushion)))
-  stack-vector)
+  control-stack)
+
