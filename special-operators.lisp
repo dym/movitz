@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.50 2005/04/24 22:08:39 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.51 2005/04/26 23:45:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1132,12 +1132,9 @@ on the current result."
 				     `(:locally (:popl (:edi (:edi-offset values ,(* i 4))))))
 			       (make-immediate-move (* +movitz-fixnum-factor+ (- (length sub-forms) 2))
 						    :ecx)
-			       `((:locally (:movl :ecx (:edi (:edi-offset num-values))))
-				 (:stc))
-			       #+ignore
-			       (make-compiled-funcall-by-symbol 'muerte.cl::values
-								(length sub-forms)
-								(all :funobj))
+			       `((:locally (:movl :ecx (:edi (:edi-offset num-values)))))
+			       (make-immediate-move (length sub-forms) :ecx)
+			       `((:stc))
 			       stack-restore-code)))))))))
 
 (define-special-operator muerte::compiler-typecase (&all all &form form)
