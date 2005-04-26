@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.41 2005/03/09 07:20:54 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.42 2005/04/26 23:44:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -129,7 +129,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:locally (:pushl (:edi (:edi-offset dynamic-env))))
 	    (:locally (:pushl (:edi (:edi-offset atomically-continuation))))
 	    (:locally (:pushl (:edi (:edi-offset raw-scratch0))))
-	    (:locally (:pushl :ecx))
+	    (:pushl :ecx)
 	    (:movcr :cr2 :ecx)
 	    (:locally (:pushl :ecx))
 	    ,@(loop for reg in (sort (copy-list '(:eax :ebx :edx :esi))
