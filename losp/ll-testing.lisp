@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 14 08:18:43 2005
 ;;;;                
-;;;; $Id: ll-testing.lisp,v 1.4 2005/04/26 22:23:14 ffjeld Exp $
+;;;; $Id: ll-testing.lisp,v 1.5 2005/04/26 23:46:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -104,7 +104,7 @@ NB! ensure that the table object isn't garbage-collected."
     (values (+ (control-stack-ebp stack) stack-base)
 	    (+ (control-stack-esp stack) stack-base))))	       
 
-(defun make-thread (segment-descriptor-table)
+(defun alloc-context (segment-descriptor-table)
   (let* ((fs-index 8)
 	 (thread (muerte::clone-run-time-context :name 'subthread)))
     (setf (segment-descriptor segment-descriptor-table fs-index)
@@ -115,7 +115,6 @@ NB! ensure that the table object isn't garbage-collected."
 	    (+ (object-location thread)
 	       (muerte::location-physical-offset))))
     (values thread (* 8 fs-index))))
-
 
 (defun control-stack-bootstrap (stack function &rest args)
   (declare (dynamic-extent args))
@@ -143,11 +142,16 @@ NB! ensure that the table object isn't garbage-collected."
       (muerte.init::threading)
     (control-stack-bootstrap stack #'format t "Hello world!")))
 
-(defun test-tr (function &rest args)
-  (declare (dynamic-extent args))
-  (assert (= 2 (length args)))
-  (multiple-value-bind (thread fs)
-      (make-thread muerte.init::*segment-descriptor-table*)
+(defun make-thread (&optional (name (gensym "thread-")) (function #'invoke-debugger) &rest args)
+  "Make a thread and initialize its stack to apply function to args."
+  (let* ((fs-index 8) ; a vacant spot in the global segment descriptor table..
+	 (fs (* 8 fs-index))
+	 (thread (muerte::clone-run-time-context :name name))
+	 (segment-descriptor-table muerte.init::*segment-descriptor-table*))
+    (setf (segment-descriptor segment-descriptor-table fs-index)
+      (segment-descriptor segment-descriptor-table (truncate (segment-register :fs) 8)))
+    (setf (segment-descriptor-base-location segment-descriptor-table fs-index)
+      (+ (object-location thread) (muerte::location-physical-offset)))
     (let ((cushion nil)
 	  (stack (control-stack-init-for-yield (make-array 4094 :element-type '(unsigned-byte 32))
 					       function args)))
@@ -164,33 +168,25 @@ NB! ensure that the table object isn't garbage-collected."
 								 (if (>= (length stack) 200)
 								     100
 								   0))))
-      (values thread fs stack))))
+      (values thread fs))))
 
-(defun stack-bootstrapper (&rest args)
-  (declare (ignore args))
-  (with-inline-assembly (:returns :nothing) (:break))
+(defun stack-bootstrapper (&rest ignore)
+  (declare (ignore ignore))
   (let ((frame (current-stack-frame)))
     (assert (eql 0 (stack-frame-uplink nil frame)))
     (let ((function (stack-frame-ref nil frame 1))
-	  (numargs (stack-frame-ref nil frame 2)))
-      (warn "[~S] bootstrapping function ~S with ~D args." frame function numargs)
+	  (args (stack-frame-ref nil frame 2)))
       (check-type function function)
-      (check-type numargs (integer 0 #xffff))
-      (with-inline-assembly (:returns :multiple-values)
-	(:load-lexical (:lexical-binding function) :esi)
-	(:movl (:ebp #x0c) :eax)
-	(:movl (:ebp #x10) :ebx)
-	(:call (:esi (:offset movitz-funobj code-vector%2op))))))
-  (error "Stack bootstrapper stop.")
+      (check-type args list)
+      (apply function args)))
+  (error "Nothing left to do for ~S." (current-run-time-context))
   (format *terminal-io* "~&stack-bootstrapper halt.")
   (loop (halt-cpu)))
 
 (defun control-stack-init-for-yield (stack function args)
   (check-type function function)
   (control-stack-init stack)
-  (control-stack-push (second args) stack)
-  (control-stack-push (first args) stack)
-  (control-stack-push (length args) stack)
+  (control-stack-push args stack)
   (control-stack-push function stack)
   (control-stack-enter-frame stack #'stack-bootstrapper)
   ;; Now pretend stack-bootstrapper called yield. First, the return address
@@ -202,7 +198,8 @@ NB! ensure that the table object isn't garbage-collected."
   stack)
   
 
-(defun yield (target-rtc fs)
+(defun yield (target-rtc fs &optional value)
+  (declare (dynamic-extent values))
   (assert (not (eq target-rtc (current-run-time-context))))
   (let ((my-stack (%run-time-context-slot 'stack-vector))
 	(target-stack (%run-time-context-slot 'stack-vector target-rtc)))
@@ -211,21 +208,24 @@ NB! ensure that the table object isn't garbage-collected."
 	  (ebp (control-stack-ebp target-stack)))
       (assert (location-in-object-p target-stack esp))
       (assert (location-in-object-p target-stack ebp))
-      (assert (eq (memref ebp -4) (asm-register :esi)) ()
-	"Cannot yield to a non-yield frame.")
+      (assert (eq (stack-frame-funobj nil ebp)
+		  (asm-register :esi)) ()
+	"Will not yield to a non-yield frame.")
       ;; Push eflags for later..
       (setf (memref (decf esp) 0) (eflags))
+      ;; Store EBP and ESP so we can get to them after the switch
+      (setf (%run-time-context-slot 'scratch1 target-rtc) ebp
+	    (%run-time-context-slot 'scratch2 target-rtc) esp)
       ;; Enable someone to yield back here..
       (setf (control-stack-ebp my-stack) (asm-register :ebp)
 	    (control-stack-esp my-stack) (asm-register :esp))
-      (with-inline-assembly (:returns :nothing)
-	(:cli)
+      (with-inline-assembly (:returns :eax)
 	(:load-lexical (:lexical-binding fs) :untagged-fixnum-ecx)
+	(:load-lexical (:lexical-binding value) :eax)
+	(:cli)
 	(:movw :cx :fs)
-	(:load-lexical (:lexical-binding ebp) :eax)
-	(:load-lexical (:lexical-binding esp) :ebx)
-	(:movl :eax :ebp)
-	(:movl :ebx :esp)
+	(:locally (:movl (:edi (:edi-offset scratch1)) :ebp))
+	(:locally (:movl (:edi (:edi-offset scratch2)) :esp))
 	(:popfl)))))
 
 (defun stack-yield (stack esp ebp &key eax ebx ecx edx esi eflags (dynamic-env 0) cushion)
