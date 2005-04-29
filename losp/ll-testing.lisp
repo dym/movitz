@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 14 08:18:43 2005
 ;;;;                
-;;;; $Id: ll-testing.lisp,v 1.5 2005/04/26 23:46:13 ffjeld Exp $
+;;;; $Id: ll-testing.lisp,v 1.6 2005/04/29 22:36:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -59,6 +59,8 @@ NB! ensure that the table object isn't garbage-collected."
   (values))
 
 
+(defmacro control-stack-fs (stack)
+  `(stack-frame-ref ,stack 0 2))
 
 (defmacro control-stack-esp (stack)
   `(stack-frame-ref ,stack 0 1))
@@ -137,17 +139,12 @@ NB! ensure that the table object isn't garbage-collected."
 		   :esi function)))
   stack)
 
-(defun test-tt ()
-  (multiple-value-bind (thread stack)
-      (muerte.init::threading)
-    (control-stack-bootstrap stack #'format t "Hello world!")))
-
-(defun make-thread (&optional (name (gensym "thread-")) (function #'invoke-debugger) &rest args)
+(defun make-thread (&key (name (gensym "thread-")) (function #'invoke-debugger) (args '(nil)))
   "Make a thread and initialize its stack to apply function to args."
-  (let* ((fs-index 8) ; a vacant spot in the global segment descriptor table..
+  (let* ((fs-index 8)			; a vacant spot in the global segment descriptor table..
 	 (fs (* 8 fs-index))
 	 (thread (muerte::clone-run-time-context :name name))
-	 (segment-descriptor-table muerte.init::*segment-descriptor-table*))
+	 (segment-descriptor-table (symbol-value 'muerte.init::*segment-descriptor-table*)))
     (setf (segment-descriptor segment-descriptor-table fs-index)
       (segment-descriptor segment-descriptor-table (truncate (segment-register :fs) 8)))
     (setf (segment-descriptor-base-location segment-descriptor-table fs-index)
@@ -157,7 +154,8 @@ NB! ensure that the table object isn't garbage-collected."
 					       function args)))
       (multiple-value-bind (ebp esp)
 	  (control-stack-fixate stack)
-	(setf (control-stack-ebp stack) ebp
+	(setf (control-stack-fs stack) fs
+	      (control-stack-ebp stack) ebp
 	      (control-stack-esp stack) esp))
       (setf (%run-time-context-slot 'dynamic-env thread) 0
 	    (%run-time-context-slot 'stack-vector thread) stack
@@ -168,7 +166,7 @@ NB! ensure that the table object isn't garbage-collected."
 								 (if (>= (length stack) 200)
 								     100
 								   0))))
-      (values thread fs))))
+      (values thread))))
 
 (defun stack-bootstrapper (&rest ignore)
   (declare (ignore ignore))
@@ -194,17 +192,17 @@ NB! ensure that the table object isn't garbage-collected."
 		      stack)		; XXX The extra 2 words skip the frame-setup,
 					; XXX which happens to be 8 bytes..
   (control-stack-enter-frame stack #'yield)
-  (control-stack-push 0 stack)		; XXX shouldn't need this?
   stack)
   
 
-(defun yield (target-rtc fs &optional value)
+(defun yield (target-rtc &optional value)
   (declare (dynamic-extent values))
   (assert (not (eq target-rtc (current-run-time-context))))
   (let ((my-stack (%run-time-context-slot 'stack-vector))
 	(target-stack (%run-time-context-slot 'stack-vector target-rtc)))
     (assert (not (eq my-stack target-stack)))
-    (let ((esp (control-stack-esp target-stack))
+    (let ((fs (control-stack-fs target-stack))
+	  (esp (control-stack-esp target-stack))
 	  (ebp (control-stack-ebp target-stack)))
       (assert (location-in-object-p target-stack esp))
       (assert (location-in-object-p target-stack ebp))
@@ -217,7 +215,8 @@ NB! ensure that the table object isn't garbage-collected."
       (setf (%run-time-context-slot 'scratch1 target-rtc) ebp
 	    (%run-time-context-slot 'scratch2 target-rtc) esp)
       ;; Enable someone to yield back here..
-      (setf (control-stack-ebp my-stack) (asm-register :ebp)
+      (setf (control-stack-fs my-stack) (segment-register :fs)
+	    (control-stack-ebp my-stack) (asm-register :ebp)
 	    (control-stack-esp my-stack) (asm-register :esp))
       (with-inline-assembly (:returns :eax)
 	(:load-lexical (:lexical-binding fs) :untagged-fixnum-ecx)

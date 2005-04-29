@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.14 2005/04/26 23:40:29 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.15 2005/04/29 22:36:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -270,7 +270,7 @@ Return the condition object, if there was one."
   (signal-simple 'simple-condition datum args)
   nil)
 
-(defun invoke-debugger (&optional condition)
+(defun invoke-debugger (condition)
   (when *debugger-hook*
     (let ((hook *debugger-hook*)
 	  (*debugger-hook* nil))
