@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.90 2005/04/20 06:54:50 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.91 2005/04/29 22:36:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -351,13 +351,6 @@
     :map-binary-read-delayed 'movitz-word
     :initarg :exception-handlers
     :accessor movitz-run-time-context-exception-handlers)
-;;;   (exception-handler-tails
-;;;    :binary-type word
-;;;    :initform nil
-;;;    :map-binary-write 'movitz-read-and-intern
-;;;    :map-binary-read-delayed 'movitz-word
-;;;    :initarg :exception-handler-tails
-;;;    :accessor movitz-run-time-context-exception-handler-tails)
    (interrupt-descriptor-table
     :binary-type word
     :accessor movitz-run-time-context-interrupt-descriptor-table
@@ -423,46 +416,6 @@
    (bochs-flags
     :binary-type lu32
     :initform 0)
-   ;; (align-segment-descriptors :binary-type 4)
-   (segment-descriptor-table :binary-type :label)
-   (segment-descriptor-0
-    :binary-type segment-descriptor
-    :initform (make-segment-descriptor))
-   (segment-descriptor-global-code	; 1: true flat code segment
-    :binary-type segment-descriptor
-    :initform (make-segment-descriptor :base 0 :limit #xfffff :type 14 :dpl 0
-				       :flags '(s p d/b g)))
-   (segment-descriptor-global-data	; 2: true flat data segment
-    :binary-type segment-descriptor
-    :initform (make-segment-descriptor :base 0 :limit #xfffff ; data segment
-				       :type 2 :dpl 3
-				       :flags '(s p d/b g)))
-   (segment-descriptor-shifted-code	; 3: 1 MB shifted flat code segment
-    :binary-type segment-descriptor
-    :initform (make-segment-descriptor :base (image-cs-segment-base *image*)
-				       :limit #xfff00 :type 14 :dpl 0
-				       :flags '(s p d/b g)))
-   (segment-descriptor-shifted-data	; 4: 1 MB shifted flat data segment
-    :binary-type segment-descriptor
-    :initform (make-segment-descriptor :base (image-ds-segment-base *image*)
-				       :limit #xfff00 ; data segment
-				       :type 2 :dpl 3
-				       :flags '(s p d/b g)))
-   (segment-descriptor-thread-context	; 5: same as normal shifted-data for initial context.
-    :binary-type segment-descriptor
-    :initform (make-segment-descriptor :base (image-ds-segment-base *image*)
-				       :limit #xfff00 ; data segment
-				       :type 2 :dpl 0
-				       :flags '(s p d/b g)))
-   (segment-descriptor-stack		; 6: same as normal shifted-data, DPL=0
-    :binary-type segment-descriptor
-    :initform (make-segment-descriptor :base (image-ds-segment-base *image*)
-				       :limit #xfff00 ; data segment
-				       :type 2 :dpl 0
-				       :flags '(s p d/b g)))
-   (segment-descriptor-7
-    :binary-type segment-descriptor
-    :initform (make-segment-descriptor))
    (raw-scratch0			; A non-GC-root scratch register
     :binary-type lu32
     :initform 0)
@@ -799,6 +752,31 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	     x)
     y))
 
+(defun make-initial-segment-descriptor-table ()
+  (let ((u32-list
+	 (let ((bt:*endian* :little-endian))
+	   (merge-bytes (with-binary-output-to-list (octet-list)
+			  (mapcar (lambda (init-args)
+				    (write-binary 'segment-descriptor octet-list
+						  (apply #'make-segment-descriptor init-args)))
+				  `(()	; 0
+				    (:base 0 :limit #xfffff ; 1: physical code
+					   :type 14 :dpl 0 :flags (s p d/b g))
+				    (:base 0 :limit #xfffff ; 2: physical data
+					   :type 2 :dpl 3 :flags (s p d/b g))
+				    (:base ,(image-cs-segment-base *image*) ; 3: logical code
+					   :limit #xfff00
+					   :type 14 :dpl 0 :flags (s p d/b g))
+				    (:base ,(image-ds-segment-base *image*) ; 4: logical data
+					   :limit #xfff00
+					   :type 2 :dpl 0 :flags (s p d/b g))
+				    )))
+			8 32))))
+    (movitz-read (make-movitz-vector (length u32-list)
+				     :initial-contents u32-list
+				     :element-type '(unsigned-byte 32)))))
+		     
+
 (defun make-movitz-image (&rest init-args &key start-address &allow-other-keys)
   (let ((*image* (apply #'make-instance 'symbolic-image
 			:nil-object (make-movitz-nil)
@@ -821,10 +799,6 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
       (ldb (byte 3 0) (image-nil-word *image*))
       (tag :null))
     (setf (image-run-time-context *image*) (make-movitz-run-time-context))
-    (unless (= 0 (mod (+ (image-nil-word *image*) (slot-offset 'movitz-run-time-context
-							       'segment-descriptor-table))
-		      16))
-      (warn "Segment descriptor table is not aligned on a 16-byte boundary."))
     (setf (image-t-symbol *image*) (movitz-read t))
     ;; (warn "NIL value: #x~X" (image-nil-word *image*))
     *image*))
@@ -879,6 +853,9 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
     (assert (plusp (dump-count *image*))))
   (setf (movitz-symbol-value (movitz-read 'muerte:*build-number*))
     (1+ *bootblock-build*))
+  (when (eq 'unbound (movitz-symbol-value (movitz-read 'muerte::*initial-segment-descriptor-table*)))
+    (setf (movitz-symbol-value (movitz-read 'muerte::*initial-segment-descriptor-table*))
+      (make-initial-segment-descriptor-table)))
   (let ((handler (movitz-env-symbol-function 'muerte::interrupt-default-handler)))
     (setf (movitz-run-time-context-exception-handlers (image-run-time-context *image*))
       (movitz-read (make-array 256 :initial-element handler))))
@@ -1611,10 +1588,15 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 			       (:cli)
 			       (:cld)	; clear direction flag => "normal" register GC roots.
 
-			       (:movw ,(1- (* 8 8)) (:esp -6))
-			       (:movl ,(+ (image-ds-segment-base *image*)
-					  (image-nil-word *image*)
-					  (global-constant-offset 'segment-descriptor-table))
+			       (:movw ,(1- (* 8 5)) (:esp -6))
+			       (:movl ,(+ (movitz-read-and-intern
+					   'muerte::*initial-segment-descriptor-table* 'word)
+					  (image-ds-segment-base *image*))
+				      :ecx)
+			       (:movl (:ecx ,(bt:slot-offset 'movitz-symbol 'value))
+				      :ecx)
+			       (:addl ,(+ (bt:slot-offset 'movitz-basic-vector 'data)
+					  (image-ds-segment-base *image*))
 				      :ecx)
 			       (:movl :ecx (:esp -4))
 			       (:lgdt (:esp -6))
@@ -1634,12 +1616,10 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 			       (:movw ,(* 4 8) :cx)
 			       (:movw :cx :ds)
 			       (:movw :cx :es)
+			       (:movw :cx :fs)
+			       (:movw :cx :ss)
 			       (:movw ,(* 2 8) :cx)
-			       (:movw :cx :gs) ; global context segment
-			       (:movw ,(* 5 8) :cx)
-			       (:movw :cx :fs) ; thread context segment
-			       (:movw ,(* 6 8) :cx)
-			       (:movw :cx :ss) ; stack segment
+			       (:movw :cx :gs) ; physical context segment
 
 			       (:movl ,(image-nil-word *image*) :edi)
 			       (:globally (:movl (:edi (:edi-offset stack-top)) :esp))

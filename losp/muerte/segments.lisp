@@ -10,13 +10,15 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu May  8 14:25:06 2003
 ;;;;                
-;;;; $Id: segments.lisp,v 1.12 2005/04/24 22:11:24 ffjeld Exp $
+;;;; $Id: segments.lisp,v 1.13 2005/04/29 22:36:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (provide :muerte/segments)
 
 (in-package muerte)
+
+(defvar *initial-segment-descriptor-table*)
 
 (defun segment-register (segment-register-name)
   "Return the value of an x86 segment register, such as :cs or :ds."
