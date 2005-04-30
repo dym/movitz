@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep 27 18:12:17 2001
 ;;;;                
-;;;; $Id: movitz-mode.el,v 1.8 2004/11/30 14:16:18 ffjeld Exp $
+;;;; $Id: movitz-mode.el,v 1.9 2005/04/30 21:19:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -33,8 +33,10 @@
   (or (and (< 6 (length fi:package))
 	   (string= "MUERTE." (upcase (substring fi:package 0 7))))
       (member (upcase fi:package)
-	      '("MUERTE" "X86" "X86-PC"))))
-
+	      '("MUERTE" "X86" "X86-PC"))
+      (member "MUERTE"
+	      (fi:eval-in-lisp
+	       "(cl:mapcar #'cl:package-name (cl:package-use-list \"%s\"))" (upcase fi:package)))))
 
 (defun movitz-defun-name-and-type ()
   (interactive)
