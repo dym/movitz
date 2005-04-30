@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.91 2005/04/29 22:36:01 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.92 2005/04/30 21:15:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -27,6 +27,19 @@
     :initform :bootup
     :map-binary-write 'movitz-read-and-intern
     :map-binary-read-delayed 'movitz-word)
+   (class
+    :binary-type word
+    :map-binary-write 'movitz-intern
+    :map-binary-read-delayed 'movitz-word
+    :initarg :class
+    :accessor run-time-context-class)
+   (slots
+    :binary-type word
+    :map-binary-write 'movitz-read-and-intern
+    :map-binary-read-delayed 'movitz-word
+    :initarg :slots
+    :initform #()
+    :accessor run-time-context-slots)
    (fast-car
     :binary-type code-vector-word
     :initform nil
@@ -150,10 +163,10 @@
     :reader movitz-run-time-context-null-symbol
     :initarg :null-symbol)
    (new-unbound-value
-    :binary-type lu32
-;;;    :map-binary-read-delayed 'movitz-word
-;;;    :map-binary-write 'movitz-read-and-intern
-    :initform #x7fffffff)
+    :binary-type word
+    :map-binary-read-delayed 'movitz-word
+    :map-binary-write 'movitz-read-and-intern
+    :initform 'unbound)
    ;; primitive functions global constants
    (pop-current-values
     :binary-type code-vector-word
@@ -598,8 +611,8 @@
 
 (defun unbound-value ()
   (declare (special *image*))
-  (slot-value (image-run-time-context *image*)
-	      'new-unbound-value))
+  (movitz-read (slot-value (image-run-time-context *image*)
+			   'new-unbound-value)))
 
 (defun edi-offset ()
   (declare (special *image*))
@@ -861,6 +874,9 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
       (movitz-read (make-array 256 :initial-element handler))))
   (setf (movitz-symbol-value (movitz-read 'muerte::*setf-namespace*))
     (movitz-read (movitz-environment-setf-function-names *movitz-global-environment*) t))
+  (setf (run-time-context-class (image-run-time-context *image*))
+    (muerte::movitz-find-class 'muerte::run-time-context))
+  (setf (run-time-context-slots (image-run-time-context *image*)) #(1 2 3))
   (let ((load-address (image-start-address *image*)))
     (setf (image-cons-pointer *image*) (- load-address
 					  (image-ds-segment-base *image*))
@@ -1450,6 +1466,7 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 	  (etypecase expr
 	    (null *movitz-nil*)
 	    ((member t) (movitz-read 'muerte.cl:t))
+	    ((eql unbound) (make-instance 'movitz-unbound-value))
 	    (symbol (intern-movitz-symbol expr))
 	    (integer (make-movitz-integer expr))
 	    (character (make-movitz-character expr))

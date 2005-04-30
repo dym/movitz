@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.50 2005/02/27 02:31:34 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.51 2005/04/30 21:15:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -151,11 +151,9 @@
   (ecase type
     (word
      (cond
-       ((eq expr 'unbound)
-	(slot-value (image-run-time-context *image*) 'new-unbound-value))
-       ((typep expr 'movitz-object)
-	(movitz-intern expr))
-       (t (movitz-intern (movitz-read expr)))))
+      ((typep expr 'movitz-object)
+       (movitz-intern expr))
+      (t (movitz-intern (movitz-read expr)))))
     (code-vector-word
      (movitz-intern-code-vector expr))))
 
@@ -533,6 +531,14 @@ integer (native lisp) value."
 (deftype movitz-string ()
   '(satisfies movitz-stringp))
 
+;;;
+
+(define-binary-class movitz-unbound-value (movitz-immediate-object)
+  ())
+
+(defmethod movitz-intern ((obj movitz-unbound-value) &optional type)
+  (declare (ignore type))
+  #x7fffffff)
 
 ;;; Symbols
 
