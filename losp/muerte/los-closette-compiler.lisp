@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.14 2004/06/07 22:14:06 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.15 2005/04/30 23:22:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -117,14 +117,14 @@
 	slot))
      (t (pushnew class-name *classes-with-old-slot-definitions*)
 	(muerte::translate-program (vector name ; 1
-						  initargs ; 3
-						  initform ; 5 
-						  initfunction ; 7
-						  allocation ; 9
-						  readers ; 11
-						  writers
-						  nil)
-					  :cl :muerte.cl))))
+					   initargs ; 3
+					   initform ; 5 
+					   initfunction ; 7
+					   allocation ; 9
+					   readers ; 11
+					   writers
+					   nil)
+				   :cl :muerte.cl))))
 
   (defun translate-direct-slot-definition (old-slot)
     (if (not (vectorp old-slot))
@@ -486,7 +486,7 @@
 		     (subclassp class *the-class-standard-class*))
 	    (break "Looking for slot ~S in class ~S, while std-class is ~S."
 		   slot-name class *the-class-standard-class*))
-	(let ((slot (find slot-name
+	  (let ((slot (find slot-name
 			    (std-slot-value class 'effective-slots)
 			    :key #'slot-definition-name)))
 	    (if (null slot)
@@ -568,9 +568,11 @@
 			      'make-instance-built-in-class)
 			     ((eq metaclass (movitz-find-class 'funcallable-standard-class nil))
 			      'movitz-make-instance)
-			     (t (warn "Unknown metaclass: ~S" metaclass)
-				'make-instance-built-in-class
-				#+ignore 'movitz-make-instance))
+			     ((eq metaclass (movitz-find-class 'run-time-context-class nil))
+			      'movitz-make-instance)
+			     (t (break "Unknown metaclass: ~S" metaclass)
+				#+ignore 'make-instance-built-in-class
+				'movitz-make-instance))
 			    metaclass
 			    :name name
 			    all-keys)))
@@ -600,18 +602,6 @@
   (defun movitz-make-instance-funcallable (metaclass &rest all-keys &key name direct-superclasses direct-slots &allow-other-keys)
     (declare (ignore all-keys))
     (let ((class (std-allocate-instance metaclass)))
-      #+ignore
-      (dolist (slot (class-slots (movitz-class-of class)))
-	(let ((slot-name (slot-definition-name slot)))
-	  (multiple-value-bind (init-key init-value foundp)
-	      (get-properties all-keys (slot-definition-initargs slot))
-	    (declare (ignore init-key))
-	    (if foundp
-		(setf (movitz-slot-value class slot-name) init-value)
-	      (when (not (null (slot-definition-initform slot)))
-		(warn "initform: ~S" (slot-definition-initform slot))
-		(setf (movitz-slot-value class slot-name)
-		  (eval (slot-definition-initform slot))))))))
       (setf (movitz-class-name class) name)
       (setf (class-direct-subclasses class) ())
       (setf (class-direct-methods class) ())
@@ -619,22 +609,38 @@
 					    :direct-slots direct-slots
 					    :direct-superclasses direct-superclasses)
       class))
+  
+  (defun movitz-make-instance-run-time-context (metaclass &rest all-keys &key name direct-superclasses direct-slots size slot-map &allow-other-keys)
+    (declare (ignore all-keys))
+    (let ((class (std-allocate-instance metaclass)))
+      (when size (setf (std-slot-value class 'size) size))
+      (setf (std-slot-value class 'slot-map) slot-map)
+      (setf (movitz-class-name class) name)
+      (setf (class-direct-subclasses class) ())
+      (setf (class-direct-methods class) ())
+      (std-after-initialization-for-classes class
+					    :direct-slots direct-slots
+					    :direct-superclasses direct-superclasses)
+      class))  
 
   (defun movitz-make-instance (class &rest all-keys)
     ;; (warn "movitz-make-instance: ~S ~S" class all-keys)
     (when (symbolp class)
       (setf class (movitz-find-class class)))
-    (if (eq class (movitz-find-class 'funcallable-standard-class nil))
-	(apply 'movitz-make-instance-funcallable class all-keys)
-      (let ((instance (std-allocate-instance class)))
-	(dolist (slot (class-slots (movitz-class-of instance)))
-	  (let ((slot-name (slot-definition-name slot)))
-	    (multiple-value-bind (init-key init-value foundp)
-		(get-properties all-keys (slot-definition-initargs slot))
-	      (declare (ignore init-key))
-	      (when foundp
-		(setf (movitz-slot-value instance slot-name) init-value)))))
-	instance)))
+    (cond
+     ((eq class (movitz-find-class 'funcallable-standard-class nil))
+      (apply 'movitz-make-instance-funcallable class all-keys) )
+     ((eq class (movitz-find-class 'run-time-context-class nil))
+      (apply 'movitz-make-instance-run-time-context class all-keys))
+     (t (let ((instance (std-allocate-instance class)))
+	  (dolist (slot (class-slots (movitz-class-of instance)))
+	    (let ((slot-name (slot-definition-name slot)))
+	      (multiple-value-bind (init-key init-value foundp)
+		  (get-properties all-keys (slot-definition-initargs slot))
+		(declare (ignore init-key))
+		(when foundp
+		  (setf (movitz-slot-value instance slot-name) init-value)))))
+	  instance))))
   
 ;;; make-instance-standard-class creates and initializes an instance of
 ;;; standard-class without falling into method lookup.  However, it cannot be

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.26 2005/01/25 13:52:25 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.27 2005/04/30 23:22:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1006,14 +1006,14 @@ next-emf as its target for call-next-method."
 (defclass infant-object (t) () (:metaclass built-in-class))
 (defclass unbound-value (t) () (:metaclass built-in-class))
 
-(defclass run-time-context (t)
-  ()
-  (:metaclass built-in-class)
-  (:size #.(bt:sizeof 'movitz::movitz-run-time-context))
-  (:slot-map #.(movitz::slot-map 'movitz::movitz-run-time-context
-			       (cl:+ (bt:slot-offset 'movitz::movitz-run-time-context
-						     'movitz::run-time-context-start)
-				     0))))
+;;;(defclass run-time-context (t)
+;;;  ()
+;;;  (:metaclass built-in-class)
+;;;  (:size #.(bt:sizeof 'movitz::movitz-run-time-context))
+;;;  (:slot-map #.(movitz::slot-map 'movitz::movitz-run-time-context
+;;;			       (cl:+ (bt:slot-offset 'movitz::movitz-run-time-context
+;;;						     'movitz::run-time-context-start)
+;;;				     0))))
 
 (defclass stream () ())
 
@@ -1040,13 +1040,7 @@ next-emf as its target for call-next-method."
 (defclass funcallable-standard-object (standard-object function) ())
 (defclass generic-function (metaobject funcallable-standard-object) ())
 (defclass standard-generic-function (generic-function)
-  (#+ignore
-   (name
-    :initarg :name)			; :accessor generic-function-name
-   #+ignore
-   (lambda-list				; :accessor generic-function-lambda-list
-    :initarg :lambda-list)
-   (methods
+  ((methods
     :initform ())			; :accessor generic-function-methods)
    (method-class			; :accessor generic-function-method-class
     :initarg :method-class)
@@ -1718,11 +1712,6 @@ in an instance whose metaclass is standard-class."))
       (write-string ")" stream)))
   object)
 
-(defmethod print-object ((x run-time-context) stream)
-  (print-unreadable-object (x stream :type t :identity t)
-    (format stream " ~S" (%run-time-context-slot 'name x)))
-  x)
-
 (defmethod print-object ((x illegal-object) stream)
   (error "Won't print illegal-object ~Z." x)
   ;; (print-unreadable-object (x stream :type t :identity t))
@@ -1912,3 +1901,32 @@ in an instance whose metaclass is standard-class."))
       (values))))
 
 
+;;;;
+
+(defclass run-time-context-class (std-slotted-class built-in-class) ())
+
+(defclass run-time-context (t)
+  ((name
+    :initarg :name
+    :accessor run-time-context-name)
+   (stack-vector
+    :initarg :stack-vector))
+  (:metaclass run-time-context-class)
+  (:size #.(bt:sizeof 'movitz::movitz-run-time-context))
+  (:slot-map #.(movitz::slot-map 'movitz::movitz-run-time-context
+			       (cl:+ (bt:slot-offset 'movitz::movitz-run-time-context
+						     'movitz::run-time-context-start)
+				     0))))
+
+(defmethod slot-value-using-class ((class run-time-context-class) object
+				   (slot standard-effective-slot-definition))
+  (let ((x (svref (%run-time-context-slot 'slots object)
+		  (slot-definition-location slot))))
+    (if (eq x (load-global-constant new-unbound-value))
+	(slot-unbound class object (slot-definition-name slot))
+      x)))
+
+(defmethod print-object ((x run-time-context) stream)
+  (print-unreadable-object (x stream :type t :identity t)
+    (format stream " ~S" (%run-time-context-slot 'name x)))
+  x)
