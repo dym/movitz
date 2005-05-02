@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.58 2005/04/26 23:45:00 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.59 2005/05/02 21:33:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -688,6 +688,26 @@
     (0 nil)
     (1 `(cons ,(car elements) nil))
     (t form)))
+
+
+(defmacro unbound-protect (x &optional error-continuation &environment env)
+  (cond
+   ((movitz:movitz-constantp x env)
+    `(values ,x))
+   (movitz::*compiler-use-into-unbound-protocol*
+    (let ((unbound-continue (gensym "unbound-continue-")))
+      `(with-inline-assembly (:returns :register)
+	 (:compile-form (:result-mode :register) ,x)
+	 (:cmpl -1 (:result-register))
+	 (:jo '(:sub-program (unbound)
+		(:compile-form (:result-mode :eax) ,error-continuation)
+		(:jmp ',unbound-continue)))
+	 ,unbound-continue)))
+   (t (let ((var (gensym)))
+	`(let ((,var ,x))
+	   (if (not (eq ,var (load-global-constant new-unbound-value)))
+	       ,var
+	     ,error-continuation))))))
 
 #+ignore
 (define-compiler-macro apply (&whole form function &rest args)
