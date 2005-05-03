@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.27 2005/04/30 23:22:19 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.28 2005/05/03 20:07:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -872,23 +872,40 @@ is no unspecialized method was called."))
 
 
 (defmacro define-effective-slot-reader (name location)
-  `(defun ,name (instance)
-     (with-inline-assembly (:returns :multiple-values)
-       (:compile-form (:result-mode :eax) instance)
-       (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
-	:movl (:eax (:offset movitz-std-instance slots))
-	      :eax)
-       (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
-	:movl (:eax (:offset movitz-basic-vector data ,(* location 4))) :eax)
-       (#.movitz:*compiler-global-segment-prefix*
-	:cmpl :eax ,(movitz::make-indirect-reference :edi (movitz::global-constant-offset
-							   'new-unbound-value)))
-       (:je '(:sub-program (unbound)
-	      (:compile-form (:result-mode :multiple-values)
-	       (slot-unbound-trampoline instance ,location))
-	      (:jmp 'done)))
-       (:clc)
-       done)))
+  (if movitz::*compiler-use-into-unbound-protocol*
+      `(defun ,name (instance)
+	 (with-inline-assembly (:returns :multiple-values)
+	   (:compile-form (:result-mode :eax) instance)
+	   (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+	    :movl (:eax (:offset movitz-std-instance slots))
+	    :eax)
+	   (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+	    :movl (:eax (:offset movitz-basic-vector data ,(* location 4))) :eax)
+	   (#.movitz:*compiler-global-segment-prefix*
+	    :cmpl  -1 :eax)
+	   (:jo '(:sub-program (unbound)
+		  (:compile-form (:result-mode :multiple-values)
+		   (slot-unbound-trampoline instance ,location))
+		  (:jmp 'done)))
+	   (:clc)
+	  done))
+    `(defun ,name (instance)
+       (with-inline-assembly (:returns :multiple-values)
+	 (:compile-form (:result-mode :eax) instance)
+	 (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+	  :movl (:eax (:offset movitz-std-instance slots))
+	  :eax)
+	 (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+	  :movl (:eax (:offset movitz-basic-vector data ,(* location 4))) :eax)
+	 (#.movitz:*compiler-global-segment-prefix*
+	  :cmpl :eax ,(movitz::make-indirect-reference :edi (movitz::global-constant-offset
+							     'new-unbound-value)))
+	 (:je '(:sub-program (unbound)
+		(:compile-form (:result-mode :multiple-values)
+		 (slot-unbound-trampoline instance ,location))
+		(:jmp 'done)))
+	 (:clc)
+	done))))
 
 (defparameter *standard-effective-slot-readers*
     #(standard-effective-slot-reader%0
@@ -911,30 +928,8 @@ for a slot at position i.")
 (define-effective-slot-reader standard-effective-slot-reader%6 6)
 (define-effective-slot-reader standard-effective-slot-reader%7 7)
 
-(defun compute-effective-slot-reader (class slot-definition)
-  (let* ((slot-name (slot-definition-name slot-definition))
-	 (slot (find-slot class slot-name)))
-    (assert slot (slot-name)
-      "No slot named ~S in class ~S." slot-name class)
-    (let ((slot-location (slot-definition-location slot)))
-      (check-type slot-location (integer 0 #xffff))
-      (etypecase class
-	(standard-class
-	 (if (and (< slot-location (length *standard-effective-slot-readers*))
-		  (svref *standard-effective-slot-readers* slot-location))
-	     (symbol-function (svref *standard-effective-slot-readers* slot-location))
-	   (lambda (instance)
-	     (let ((x (standard-instance-access instance slot-location)))
-	       (if (not (eq x (load-global-constant new-unbound-value)))
-		   x
-		 (slot-unbound-trampoline instance slot-location))))))
-	(funcallable-standard-class
-	 (lambda (instance)
-	   (let ((x (svref (std-gf-instance-slots instance) slot-location)))
-	     (if (not (eq x (load-global-constant new-unbound-value)))
-		 x
-	       (slot-unbound-trampoline instance slot-location)))))))))
 
+#+ignore
 (defun compute-effective-slot-writer (class slot-definition)
   (let* ((slot-name (slot-definition-name slot-definition))
 	 (slot (find-slot class slot-name)))
@@ -1211,7 +1206,7 @@ next-emf as its target for call-next-method."
 	      (push indicator initargs)))))))
   initargs)
 
-(defmethod make-instance ((class standard-class) &rest initargs)
+(defmethod make-instance ((class std-slotted-class) &rest initargs)
   (declare (dynamic-extent initargs))
   (let ((defaulted-initargs (compute-defaulted-initargs class initargs)))
     (apply 'initialize-instance
@@ -1274,10 +1269,14 @@ next-emf as its target for call-next-method."
 (define-slot-reader-method slot-definition-initform
     (standard-slot-definition initform))
 
-(defun find-slot (class slot-name)
+(defun find-slot (class slot-name &optional error-instance operation new-value)
   (dolist (slot (if (eq class *the-class-standard-class*)
 		    *the-slots-of-standard-class*
-		  (class-slots class)) #+ignore (error "The slot ~S doesn't exist in ~S." slot-name class))
+		  (class-slots class))
+	    (case error-instance
+	      ((nil))
+	      ((t) (error "No slot named ~S in class ~S." slot-name class))
+	      (t (slot-missing class error-instance slot-name operation new-value))))
     (when (eql slot-name (slot-definition-name slot))
       (return slot))))
 
@@ -1291,8 +1290,7 @@ next-emf as its target for call-next-method."
       val)))
 
 (defun std-gf-slot-value (instance slot-name)
-  (let ((slot (find-slot (std-gf-instance-class instance) slot-name)))
-    (assert slot)
+  (let ((slot (find-slot (std-gf-instance-class instance) slot-name t)))
     (let* ((location (slot-definition-location slot))
 	   (slots (std-gf-instance-slots instance))
 	   (val (svref slots location)))
@@ -1396,6 +1394,7 @@ next-emf as its target for call-next-method."
       (when (eql slot-name (slot-definition-name slot))
 	(return t)))))
 
+
 ;;; Specializers
 
 (defun eql-specializer-p (specializer)
@@ -1424,6 +1423,41 @@ I.e. does c1 appear before c2 in c-arg's class-precedence-list?"
   (if (eql-specializer-p specializer)
       (eql object (eql-specializer-object specializer))
     (typep object specializer)))
+
+
+;;;;
+
+(defmethod compute-effective-slot-reader ((class standard-class) slot)
+  (let ((slot-location (slot-definition-location slot)))
+    (check-type slot-location positive-fixnum)
+    (if (and (< slot-location (length *standard-effective-slot-readers*))
+	     (svref *standard-effective-slot-readers* slot-location))
+	(symbol-function (svref *standard-effective-slot-readers* slot-location))
+      (lambda (instance)
+	(unbound-protect (standard-instance-access instance slot-location)
+			 (slot-unbound-trampoline instance slot-location))))))
+
+(defmethod compute-effective-slot-reader ((class funcallable-standard-class) slot)
+  (let ((slot-location (slot-definition-location slot)))
+    (check-type slot-location positive-fixnum)
+    (lambda (instance)
+      (unbound-protect (svref (std-gf-instance-slots instance) slot-location)
+		       (slot-unbound-trampoline instance slot-location)))))
+
+(defmethod compute-effective-slot-writer ((class standard-class) slot)
+  (let ((slot-location (slot-definition-location slot)))
+    (check-type slot-location positive-fixnum)
+    (lambda (value instance)
+      (setf (standard-instance-access instance slot-location)
+	value))))
+
+(defmethod compute-effective-slot-writer ((class funcallable-standard-class) slot)
+  (let ((slot-location (slot-definition-location slot)))
+    (check-type slot-location positive-fixnum)
+    (lambda (value instance)
+      (setf (svref (std-gf-instance-slots instance) slot-location)
+	value))))
+
 
 
 ;;; compute-applicable-methods-using-classes
@@ -1560,8 +1594,12 @@ I.e. does c1 appear before c2 in c-arg's class-precedence-list?"
 							      *standard-slot-value-using-class*)
 							    (class-of object) object
 							    (accessor-method-slot-definition primary-method))))))
-	      (compute-effective-slot-reader (specializer-class (car specializers))
-					     (accessor-method-slot-definition primary-method)))
+	      (let* ((class (specializer-class (car specializers)))
+		     (slot (find-slot class
+				      (slot-definition-name
+				       (accessor-method-slot-definition primary-method))
+				      t)))
+		(compute-effective-slot-reader class slot)))
 	     ((and (typep primary-method 'standard-writer-method)
 		   ;; May we shortcut this writer method?
 		   (or (not *standard-setf-slot-value-using-class*) ; still bootstrapping..
@@ -1573,8 +1611,12 @@ I.e. does c1 appear before c2 in c-arg's class-precedence-list?"
 							      *standard-setf-slot-value-using-class*)
 							    value (class-of object) object
 							    (accessor-method-slot-definition primary-method))))))
-	      (compute-effective-slot-writer (specializer-class (cadr specializers))
-					     (accessor-method-slot-definition primary-method)))
+	      (let* ((class (specializer-class (cadr specializers)))
+		     (slot (find-slot class
+				      (slot-definition-name
+				       (accessor-method-slot-definition primary-method))
+				      t)))
+		(compute-effective-slot-writer class slot)))
 	     (t (compute-primary-emfun primaries))))
 	   ((null reverse-afters)
 	    (let ((emfun (compute-primary-emfun primaries))
@@ -1901,32 +1943,3 @@ in an instance whose metaclass is standard-class."))
       (values))))
 
 
-;;;;
-
-(defclass run-time-context-class (std-slotted-class built-in-class) ())
-
-(defclass run-time-context (t)
-  ((name
-    :initarg :name
-    :accessor run-time-context-name)
-   (stack-vector
-    :initarg :stack-vector))
-  (:metaclass run-time-context-class)
-  (:size #.(bt:sizeof 'movitz::movitz-run-time-context))
-  (:slot-map #.(movitz::slot-map 'movitz::movitz-run-time-context
-			       (cl:+ (bt:slot-offset 'movitz::movitz-run-time-context
-						     'movitz::run-time-context-start)
-				     0))))
-
-(defmethod slot-value-using-class ((class run-time-context-class) object
-				   (slot standard-effective-slot-definition))
-  (let ((x (svref (%run-time-context-slot 'slots object)
-		  (slot-definition-location slot))))
-    (if (eq x (load-global-constant new-unbound-value))
-	(slot-unbound class object (slot-definition-name slot))
-      x)))
-
-(defmethod print-object ((x run-time-context) stream)
-  (print-unreadable-object (x stream :type t :identity t)
-    (format stream " ~S" (%run-time-context-slot 'name x)))
-  x)
