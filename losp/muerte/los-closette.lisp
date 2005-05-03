@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.29 2005/05/03 21:34:57 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.30 2005/05/03 22:15:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -926,25 +926,6 @@ for a slot at position i.")
 (define-effective-slot-reader standard-effective-slot-reader%6 6)
 (define-effective-slot-reader standard-effective-slot-reader%7 7)
 
-
-#+ignore
-(defun compute-effective-slot-writer (class slot-definition)
-  (let* ((slot-name (slot-definition-name slot-definition))
-	 (slot (find-slot class slot-name)))
-    (assert slot (slot-name)
-      "No slot named ~S in class ~S." slot-name class)
-    (let ((slot-location (slot-definition-location slot)))
-      (assert slot-location)
-      (etypecase class
-	(standard-class
-	 (lambda (value instance)
-	   (setf (standard-instance-access instance slot-location)
-	     value)))
-	(funcallable-standard-class
-	 (lambda (value instance)
-	   (setf (svref (std-gf-instance-slots instance) slot-location)
-	     value)))))))
-
 (defun make-emfun (method next-emf)
   "Make an effective method function from method that will have
 next-emf as its target for call-next-method."
@@ -1262,23 +1243,20 @@ next-emf as its target for call-next-method."
       (return slot))))
 
 (defun std-slot-value (instance slot-name)
+  "Used while bootstrapping."
   (let* ((location (slot-definition-location (find-slot (std-instance-class instance) slot-name)))
-         (slots (std-instance-slots instance))
-         (val (svref slots location)))
-    (if (eq (load-global-constant new-unbound-value) val)
-        (error "The slot ~S is unbound in the object ~S."
-               slot-name instance)
-      val)))
+         (slots (std-instance-slots instance)))
+    (with-unbound-protect (svref slots location)
+      (error "The slot ~S is unbound in the object ~S."
+	     slot-name instance))))
 
 (defun std-gf-slot-value (instance slot-name)
   (let ((slot (find-slot (std-gf-instance-class instance) slot-name t)))
     (let* ((location (slot-definition-location slot))
-	   (slots (std-gf-instance-slots instance))
-	   (val (svref slots location)))
-      (if (eq (load-global-constant new-unbound-value) val)
-	  (error "The slot ~S is unbound in the object ~S."
-		 slot-name instance)
-	val))))
+	   (slots (std-gf-instance-slots instance)))
+      (with-unbound-protect (svref slots location)
+	(error "The slot ~S is unbound in the object ~S."
+	       slot-name instance)))))
 
 (defun slot-value (object slot-name)
   (let* ((class (class-of object))
@@ -1289,19 +1267,15 @@ next-emf as its target for call-next-method."
 
 (defmethod slot-value-using-class ((class standard-class) object
 				   (slot standard-effective-slot-definition))
-  (let ((x (standard-instance-access object (slot-definition-location slot))))
-    (if (eq x (load-global-constant new-unbound-value))
-	(slot-unbound class object (slot-definition-name slot))
-      x)))
+  (with-unbound-protect (standard-instance-access object (slot-definition-location slot))
+    (slot-unbound class object (slot-definition-name slot))))
 
 (defmethod slot-value-using-class ((class funcallable-standard-class) object
 				   (slot standard-effective-slot-definition))
   (let* ((location (slot-definition-location slot))
-         (slots (std-gf-instance-slots object))
-         (val (svref slots location)))
-    (if (eq (load-global-constant new-unbound-value) val)
-	(slot-unbound class object (slot-definition-name slot))        
-      val)))
+         (slots (std-gf-instance-slots object)))
+    (with-unbound-protect (svref slots location)
+      (slot-unbound class object (slot-definition-name slot)))))
 
 (defmethod slot-value-using-class ((class structure-class) object slot)
   (structure-ref object (structure-slot-location slot)))
@@ -1415,15 +1389,15 @@ I.e. does c1 appear before c2 in c-arg's class-precedence-list?"
 	     (svref *standard-effective-slot-readers* slot-location))
 	(symbol-function (svref *standard-effective-slot-readers* slot-location))
       (lambda (instance)
-	(unbound-protect (standard-instance-access instance slot-location)
-			 (slot-unbound-trampoline instance slot-location))))))
+	(with-unbound-protect (standard-instance-access instance slot-location)
+	  (slot-unbound-trampoline instance slot-location))))))
 
 (defmethod compute-effective-slot-reader ((class funcallable-standard-class) slot)
   (let ((slot-location (slot-definition-location slot)))
     (check-type slot-location positive-fixnum)
     (lambda (instance)
-      (unbound-protect (svref (std-gf-instance-slots instance) slot-location)
-		       (slot-unbound-trampoline instance slot-location)))))
+      (with-unbound-protect (svref (std-gf-instance-slots instance) slot-location)
+	(slot-unbound-trampoline instance slot-location)))))
 
 (defmethod compute-effective-slot-writer ((class standard-class) slot)
   (let ((slot-location (slot-definition-location slot)))
@@ -1757,10 +1731,8 @@ in an instance whose metaclass is standard-class."))
 	 (location (get class-name slot-name)))
     ;; (warn "access ~S of ~S at ~S" slot-name class-name location)
     (assert location)
-    (let ((x (standard-instance-access slot location)))
-      (if (eq x (load-global-constant new-unbound-value))
-	  (error "The slot ~S is unbound in the ~S ~Z." slot-name class-name slot)
-	x))))
+    (with-unbound-protect (standard-instance-access slot location)
+      (error "The slot ~S is unbound in the ~S ~Z." slot-name class-name slot))))
 
 (defun bootstrap-class-name (class)
   (standard-instance-access class 0))
@@ -1849,8 +1821,7 @@ in an instance whose metaclass is standard-class."))
 		    (std-slot-value method 'function)))
 		 (method-specializers
 		  (lambda (method)
-		    (std-slot-value method 'specializers)))
-		 )
+		    (std-slot-value method 'specializers))))
 	      (case (funobj-name gf)
 		((compute-applicable-methods-using-classes)
 		 (std-compute-applicable-methods-using-classes gf classes))

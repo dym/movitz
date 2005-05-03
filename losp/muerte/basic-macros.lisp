@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.60 2005/05/03 21:25:30 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.61 2005/05/03 22:15:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -690,7 +690,7 @@
     (t form)))
 
 
-(defmacro unbound-protect (x &optional error-continuation &environment env)
+(defmacro with-unbound-protect (x &body error-continuation &environment env)
   (cond
    ((movitz:movitz-constantp x env)
     `(values ,x))
@@ -700,14 +700,14 @@
 	 (:compile-form (:result-mode :register) ,x)
 	 (:cmpl -1 (:result-register))
 	 (:jo '(:sub-program (unbound)
-		(:compile-form (:result-mode :eax) ,error-continuation)
+		(:compile-form (:result-mode :eax) (progn ,@error-continuation))
 		(:jmp ',unbound-continue)))
 	 ,unbound-continue)))
    (t (let ((var (gensym)))
 	`(let ((,var ,x))
 	   (if (not (eq ,var (load-global-constant new-unbound-value)))
 	       ,var
-	     ,error-continuation))))))
+	     (progn ,@error-continuation)))))))
 
 (define-compiler-macro current-run-time-context ()
   `(with-inline-assembly (:returns :register)
