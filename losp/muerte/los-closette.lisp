@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.28 2005/05/03 20:07:50 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.29 2005/05/03 21:34:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -877,12 +877,11 @@ is no unspecialized method was called."))
 	 (with-inline-assembly (:returns :multiple-values)
 	   (:compile-form (:result-mode :eax) instance)
 	   (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
-	    :movl (:eax (:offset movitz-std-instance slots))
-	    :eax)
+	    :movl (:eax (:offset movitz-std-instance slots)) :eax)
 	   (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
 	    :movl (:eax (:offset movitz-basic-vector data ,(* location 4))) :eax)
 	   (#.movitz:*compiler-global-segment-prefix*
-	    :cmpl  -1 :eax)
+	    :cmpl -1 :eax)
 	   (:jo '(:sub-program (unbound)
 		  (:compile-form (:result-mode :multiple-values)
 		   (slot-unbound-trampoline instance ,location))
@@ -893,8 +892,7 @@ is no unspecialized method was called."))
        (with-inline-assembly (:returns :multiple-values)
 	 (:compile-form (:result-mode :eax) instance)
 	 (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
-	  :movl (:eax (:offset movitz-std-instance slots))
-	  :eax)
+	  :movl (:eax (:offset movitz-std-instance slots)) :eax)
 	 (#.movitz:*compiler-nonlocal-lispval-read-segment-prefix*
 	  :movl (:eax (:offset movitz-basic-vector data ,(* location 4))) :eax)
 	 (#.movitz:*compiler-global-segment-prefix*
@@ -973,10 +971,6 @@ next-emf as its target for call-next-method."
 (defclass sequence (t) () (:metaclass built-in-class))
 (defclass array (t) () (:metaclass built-in-class))
 (defclass character (t) () (:metaclass built-in-class))
-;;;(defclass hash-table (t) () (:metaclass built-in-class))
-;;;(defclass package (t) () (:metaclass built-in-class))
-;;;(defclass pathname (t) () (:metaclass built-in-class))
-;;;(defclass readtable (t) () (:metaclass built-in-class))
 (defclass list (sequence) () (:metaclass built-in-class))
 (defclass null (symbol list) () (:metaclass built-in-class))
 (defclass cons (list) () (:metaclass built-in-class))
@@ -1000,15 +994,6 @@ next-emf as its target for call-next-method."
 (defclass illegal-object (t) () (:metaclass built-in-class))
 (defclass infant-object (t) () (:metaclass built-in-class))
 (defclass unbound-value (t) () (:metaclass built-in-class))
-
-;;;(defclass run-time-context (t)
-;;;  ()
-;;;  (:metaclass built-in-class)
-;;;  (:size #.(bt:sizeof 'movitz::movitz-run-time-context))
-;;;  (:slot-map #.(movitz::slot-map 'movitz::movitz-run-time-context
-;;;			       (cl:+ (bt:slot-offset 'movitz::movitz-run-time-context
-;;;						     'movitz::run-time-context-start)
-;;;				     0))))
 
 (defclass stream () ())
 
@@ -1080,7 +1065,6 @@ next-emf as its target for call-next-method."
 (define-slot-writer-method (setf class-prototype-value) (class prototype))
 
 (defmethod class-slots ((class class)) nil)
-;; (defmethod class-slots ((class std-slotted-class)) nil)
 
 (define-slot-reader-method method-optional-arguments-p (standard-method optional-arguments-p))
 (define-slot-reader-method method-function (standard-method function))
@@ -1090,9 +1074,6 @@ next-emf as its target for call-next-method."
 
 (defmethod method-lambda-list ((method standard-method))
   (funobj-lambda-list (method-function method)))
-
-;;;(define-slot-reader-method generic-function-name (standard-generic-function name))
-;;;(define-slot-reader-method generic-function-lambda-list (standard-generic-function lambda-list))
 
 ;;;;
 
@@ -1463,11 +1444,6 @@ I.e. does c1 appear before c2 in c-arg's class-precedence-list?"
 ;;; compute-applicable-methods-using-classes
 
 (defun std-compute-applicable-methods-using-classes (gf classes)
-  #+ignore (warn "camuc of: ~S for classes ~S"
-		 (funobj-name gf)
-		 (mapcar (lambda (c)
-			   (standard-instance-access c 0))
-			 classes))
   (flet ((method-specific< (method1 method2)
 	   (do ((cspec1 (method-specializers method1) (cdr cspec1))
 		(cspec2 (method-specializers method2) (cdr cspec2))
@@ -1551,7 +1527,6 @@ I.e. does c1 appear before c2 in c-arg's class-precedence-list?"
 
 (defun std-compute-effective-method-function (gf methods)
   (declare (ignore gf))
-  ;; (warn "comp-eff-mf for ~S" (funobj-name gf))
   (list 'standard-combine methods))
 
 (defmethod compute-effective-method ((generic-function standard-generic-function)
