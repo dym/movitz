@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.15 2005/04/30 23:22:28 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.16 2005/05/03 19:49:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -610,11 +610,12 @@
 					    :direct-superclasses direct-superclasses)
       class))
   
-  (defun movitz-make-instance-run-time-context (metaclass &rest all-keys &key name direct-superclasses direct-slots size slot-map &allow-other-keys)
+  (defun movitz-make-instance-run-time-context (metaclass &rest all-keys &key name direct-superclasses direct-slots size slot-map plist &allow-other-keys)
     (declare (ignore all-keys))
     (let ((class (std-allocate-instance metaclass)))
       (when size (setf (std-slot-value class 'size) size))
-      (setf (std-slot-value class 'slot-map) slot-map)
+      (setf (std-slot-value class 'slot-map) slot-map
+	    (std-slot-value class 'plist) plist)
       (setf (movitz-class-name class) name)
       (setf (class-direct-subclasses class) ())
       (setf (class-direct-methods class) ())
