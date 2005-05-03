@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.17 2005/05/03 20:10:35 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.18 2005/05/03 21:25:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,10 +19,6 @@
 (provide :muerte/run-time-context)
 
 (in-package muerte)
-
-(define-compiler-macro current-run-time-context ()
-  `(with-inline-assembly (:returns :register)
-     (:locally (:movl (:edi (:edi-offset self)) (:result-register)))))
 
 ;;;;
 
@@ -144,43 +140,6 @@
       (code-vector-word
        (setf (memref context -6 :index (third slot) :type :code-vector) value)))))
 
-(defun %run-time-context-segment-base (slot-name
-				      &optional (context (current-run-time-context)))
-  (check-type context run-time-context)
-  (let ((slot (find-run-time-context-slot context slot-name)))
-    (ecase (second slot)
-      (segment-descriptor
-       (let ((index8 (* 4 (third slot)))
-	     (index16 (* 2 (third slot))))
-	 (+ (memref context (+ -6 2) :index index16 :type :unsigned-byte16)
-	    (ash (memref context (+ -6 4) :index index8 :type :unsigned-byte8) 16)
-	    (ash (memref context (+ -6 7) :index index8 :type :unsigned-byte8) 24)))))))
-
-(defun (setf %run-time-context-segment-base) (value slot-name
-					     &optional (context (current-run-time-context)))
-  (check-type context run-time-context)
-  (let ((slot (find-run-time-context-slot context slot-name)))
-    (ecase (second slot)
-      (segment-descriptor
-       (let ((index8 (* 4 (third slot)))
-	     (index16 (* 2 (third slot))))
-	 (setf (memref context (+ -6 2) :index index16 :type :unsigned-byte16) (ldb (byte 16 0) value)
-	       (memref context (+ -6 4) :index index8 :type :unsigned-byte8) (ldb (byte 8 16) value)
-	       (memref context (+ -6 7) :index index8 :type :unsigned-byte8) (ldb (byte 6 24) value)))))
-    value))
-
-(defun %run-time-context-ref (edi-offset)
-  "Get a run-time-context slot by its EDI-relative offset."
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) edi-offset)
-    (:leal (:eax #.(cl:* 1 movitz:+movitz-fixnum-factor+)) :ecx)
-    (:sarl #.movitz:+movitz-fixnum-shift+ :ecx)
-    (:testb 3 :cl)
-    (:jnz '(:sub-program ()
-	    (:compile-form (:result-mode :ignore)
-	     (error "Illegal edi-offset ~S" edi-offset))))
-    (:locally (:movl (:edi :ecx -1) :eax))))
-
 (defun clone-run-time-context (&key (parent (current-run-time-context))
 				    (name :anonymous))
   (check-type parent run-time-context)
@@ -189,21 +148,6 @@
 	  (%run-time-context-slot 'self context) context
 	  (%run-time-context-slot 'atomically-continuation context) 0)
     context))
-
-;;;(defun switch-to-context (context)
-;;;  (check-type context run-time-context)
-;;;  (with-inline-assembly (:returns :nothing)
-;;;    (:compile-form (:result-mode :eax) context)
-;;;    (:movw #.(cl:1- (cl:* 8 8)) (:esp -6))
-;;;    (:addl #.(cl:+ -6 (movitz::global-constant-offset 'movitz::segment-descriptor-table))
-;;;	   :eax)
-;;;    (:addl :edi :eax)
-;;;    (:locally (:addl (:edi (:edi-offset physical-address-offset)) :eax))
-;;;    (:movl :eax (:esp -4))
-;;;    (:lgdt (:esp -6))
-;;;    (:movw #x28 :ax)
-;;;    (:movw :ax :fs)
-;;;    (:locally (:movl (:edi (:edi-offset self)) :eax))))
 
 (defun %run-time-context-install-stack (context
 					&optional (control-stack

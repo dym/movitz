@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.59 2005/05/02 21:33:29 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.60 2005/05/03 21:25:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -708,6 +708,10 @@
 	   (if (not (eq ,var (load-global-constant new-unbound-value)))
 	       ,var
 	     ,error-continuation))))))
+
+(define-compiler-macro current-run-time-context ()
+  `(with-inline-assembly (:returns :register)
+     (:locally (:movl (:edi (:edi-offset self)) (:result-register)))))
 
 #+ignore
 (define-compiler-macro apply (&whole form function &rest args)
