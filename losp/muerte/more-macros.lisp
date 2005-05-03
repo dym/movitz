@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.24 2005/01/04 16:56:19 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.25 2005/05/03 20:09:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -331,22 +331,65 @@ respect to multiple threads."
 
 (define-compiler-macro %run-time-context-slot (&whole form &environment env slot-name
 					       &optional (context '(current-run-time-context)))
+  (if (not (and (movitz:movitz-constantp slot-name env)))
+      form
+    (let* ((slot-name (movitz::eval-form slot-name env))
+	   (slot-type (bt:binary-slot-type 'movitz::movitz-run-time-context
+					   (intern (symbol-name slot-name) :movitz))))
+      (if (equal context '(current-run-time-context))
+	  (ecase slot-type
+	    (movitz::word
+	     `(with-inline-assembly (:returns :eax)
+		(:locally (:movl (:edi (:edi-offset ,slot-name)) :eax))))
+	    (movitz::code-vector-word
+	     `(with-inline-assembly (:returns :eax)
+		(:movl ,(ldb (byte 32 0) (- movitz::+code-vector-word-offset+)) :eax)
+		(:locally (:addl (:edi (:edi-offset ,slot-name)) :eax))))
+	    (movitz::lu32
+	     `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		(:locally (:movl (:edi (:edi-offset ,slot-name)) :ecx)))))
+	(ecase slot-type
+	  (movitz::word
+	   `(with-inline-assembly (:returns :eax)
+	      (:compile-form (:result-mode :eax) ,context)
+	      (,movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+	       :movl (:eax :edi (:offset movitz-run-time-context ,slot-name 
+					 ,(- (movitz:tag :other)))) :eax)))
+	  (movitz::code-vector-word
+	   `(with-inline-assembly (:returns :eax)
+	      (:compile-form (:result-mode :eax) ,context)
+	      (:movl ,(ldb (byte 32 0) (- movitz::+code-vector-word-offset+)) :eax)
+	      (,movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+	       :addl (:eax :edi (:offset movitz-run-time-context ,slot-name
+					 ,(- (movitz:tag :other)))) :eax)))
+	  (movitz::lu32
+	   `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+	      (:compile-form (:result-mode :eax) ,context)
+	      (,movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+	       :movl (:eax :edi (:offset movitz-run-time-context ,slot-name
+					 ,(- (movitz:tag :other)))) :ecx))))))))
+	
+
+(define-compiler-macro (setf %run-time-context-slot) (&whole form &environment env value slot-name
+						      &optional (context '(current-run-time-context)))
   (if (not (and (movitz:movitz-constantp slot-name env)
 		(equal context '(current-run-time-context))))
       form
-    (let ((slot-name (movitz::eval-form slot-name env)))
-      (ecase (bt:binary-slot-type 'movitz::movitz-run-time-context
-				  (intern (symbol-name slot-name) :movitz))
-	(movitz::word
+    (let ((slot-name (movitz:movitz-eval slot-name env)))
+      (ecase (bt:binary-slot-type 'movitz::movitz-run-time-context (intern (symbol-name slot-name) :movitz))
+	(movitz:word
 	 `(with-inline-assembly (:returns :eax)
-	    (:locally (:movl (:edi (:edi-offset ,slot-name)) :eax))))
-	(movitz::code-vector-word
-	 `(with-inline-assembly (:returns :eax)
-	    (:movl ,(ldb (byte 32 0) (- movitz::+code-vector-word-offset+)) :eax)
-	    (:locally (:addl (:edi (:edi-offset ,slot-name)) :eax))))
-	(movitz::lu32
+	    (:compile-form (:result-mode :eax) ,value)
+	    (:locally (:movl :eax (:edi (:edi-offset ,slot-name))))))
+	(movitz:lu32
 	 `(with-inline-assembly (:returns :untagged-fixnum-ecx)
-	    (:locally (:movl (:edi (:edi-offset ,slot-name)) :ecx))))))))
+	    (:compile-form (:result-mode :untagged-fixnum-ecx) ,value)
+	    (:locally (:movl :ecx (:edi (:edi-offset ,slot-name))))))
+	(movitz:code-vector-word
+	 `(with-inline-assembly (:returns :eax)
+	    (:compile-form (:result-mode :eax) ,value)
+	    (:leal (:eax ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)) :ecx)
+	    (:locally (:movl :ecx (:edi (:edi-offset ,slot-name))))))))))
 
 (define-compiler-macro read-time-stamp-counter ()
   `(with-inline-assembly-case ()
