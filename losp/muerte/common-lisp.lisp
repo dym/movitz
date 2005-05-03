@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 20012000, 2002-2004,
+;;;;    Copyright (C) 20012000, 2002-2005,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      common-lisp.lisp
@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:41:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: common-lisp.lisp,v 1.12 2004/07/27 13:54:07 ffjeld Exp $
+;;;; $Id: common-lisp.lisp,v 1.13 2005/05/03 20:08:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -30,11 +30,11 @@
 (require :muerte/characters)
 (require :muerte/arrays)
 (require :muerte/sequences)
-(require :muerte/run-time-context)
 (require :muerte/inspect)
 (require :muerte/strings)
 (require :muerte/print)
 (require :muerte/los-closette)
+(require :muerte/run-time-context)
 (require :muerte/defstruct)
 (require :muerte/hash-tables)
 (require :muerte/ratios)
