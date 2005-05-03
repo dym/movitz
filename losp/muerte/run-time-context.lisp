@@ -10,11 +10,12 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.16 2005/04/26 23:43:56 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.17 2005/05/03 20:10:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (require :muerte/basic-macros)
+(require :muerte/los-closette)
 (provide :muerte/run-time-context)
 
 (in-package muerte)
@@ -22,6 +23,97 @@
 (define-compiler-macro current-run-time-context ()
   `(with-inline-assembly (:returns :register)
      (:locally (:movl (:edi (:edi-offset self)) (:result-register)))))
+
+;;;;
+
+(defclass run-time-context-class (std-slotted-class built-in-class) ())
+
+(defclass run-time-context (t)
+  ((name
+    :initarg :name
+    :accessor run-time-context-name)
+   (stack-vector
+    :initarg :stack-vector))
+  (:metaclass run-time-context-class)
+  (:size #.(bt:sizeof 'movitz::movitz-run-time-context))
+  (:slot-map #.(movitz::slot-map 'movitz::movitz-run-time-context
+			       (cl:+ (bt:slot-offset 'movitz::movitz-run-time-context
+						     'movitz::run-time-context-start)
+				     0))))
+
+(defmethod slot-value-using-class ((class run-time-context-class) object
+				   (slot standard-effective-slot-definition))
+  (let ((x (svref (%run-time-context-slot 'slots object)
+		  (slot-definition-location slot))))
+    (if (eq x (load-global-constant new-unbound-value))
+	(slot-unbound class object (slot-definition-name slot))
+      x)))
+
+(defmethod (setf slot-value-using-class) (new-value (class run-time-context-class) object
+					  (slot standard-effective-slot-definition))
+  (let ((location (slot-definition-location slot))
+	(slots (%run-time-context-slot 'slots object)))
+    (setf (svref slots location) new-value)))
+
+(defmethod slot-boundp-using-class ((class run-time-context-class) object
+				    (slot standard-effective-slot-definition))
+  (not (eq (load-global-constant new-unbound-value)
+	   (svref (%run-time-context-slot 'slots object)
+		  (slot-definition-location slot)))))
+
+(defmethod allocate-instance ((class run-time-context-class) &rest initargs)
+  (declare (dynamic-extent initargs) (ignore initargs))
+  (let ((x (clone-run-time-context)))
+    (setf (%run-time-context-slot 'class x) class)
+    (setf (%run-time-context-slot 'slots x)
+      (allocate-slot-storage (count-if 'instance-slot-p (class-slots class))
+			     (load-global-constant new-unbound-value)))
+    x))
+
+(defmethod initialize-instance ((instance run-time-context) &rest initargs)
+  (declare (dynamic-extent initargs))
+  (apply 'shared-initialize instance t initargs))
+
+(defmethod shared-initialize ((instance run-time-context) slot-names &rest all-keys)
+  (declare (dynamic-extent all-keys))
+  (dolist (slot (class-slots (class-of instance)))
+    (let ((slot-name (slot-definition-name slot)))
+      (multiple-value-bind (init-key init-value foundp)
+	  (get-properties all-keys (slot-definition-initargs slot))
+	(declare (ignore init-key))
+	(if foundp
+	    (setf (slot-value instance slot-name) init-value)
+	  (when (and (not (slot-boundp instance slot-name))
+		     (not (null (slot-definition-initfunction slot)))
+		     (or (eq slot-names t)
+			 (member slot-name slot-names)))
+	    (let ((initfunction (slot-definition-initfunction slot)))
+	      (setf (slot-value instance slot-name)
+		(etypecase initfunction
+		  (cons (cadr initfunction)) ; '(quote <obj>)
+		  (function (funcall initfunction))))))))))
+  instance)
+
+(defmethod compute-effective-slot-reader ((class run-time-context-class) slot)
+  (let ((slot-location (slot-definition-location slot)))
+    (check-type slot-location positive-fixnum)
+    (lambda (instance)
+      (unbound-protect (svref (%run-time-context-slot 'slots instance) slot-location)
+		       (slot-unbound-trampoline instance slot-location)))))
+
+(defmethod compute-effective-slot-writer ((class run-time-context-class) slot)
+  (let ((slot-location (slot-definition-location slot)))
+    (check-type slot-location positive-fixnum)
+    (lambda (value instance)
+      (setf (svref (%run-time-context-slot 'slots instance) slot-location)
+	value))))
+
+(defmethod print-object ((x run-time-context) stream)
+  (print-unreadable-object (x stream :type t :identity t)
+    (format stream " ~S" (%run-time-context-slot 'name x)))
+  x)
+
+;;;
 
 (defun current-run-time-context ()
   (current-run-time-context))
@@ -40,27 +132,6 @@
        (memref context -6 :index (third slot) :type :code-vector))
       (lu32
        (memref context -6 :index (third slot) :type :unsigned-byte32)))))
-
-(define-compiler-macro (setf %run-time-context-slot) (&whole form &environment env value slot-name
-						      &optional (context '(current-run-time-context)))
-  (if (not (and (movitz:movitz-constantp slot-name env)
-		(equal context '(current-run-time-context))))
-      form
-    (let ((slot-name (movitz:movitz-eval slot-name env)))
-      (ecase (bt:binary-slot-type 'movitz::movitz-run-time-context (intern (symbol-name slot-name) :movitz))
-	(movitz:word
-	 `(with-inline-assembly (:returns :eax)
-	    (:compile-form (:result-mode :eax) ,value)
-	    (:locally (:movl :eax (:edi (:edi-offset ,slot-name))))))
-	(movitz:lu32
-	 `(with-inline-assembly (:returns :untagged-fixnum-ecx)
-	    (:compile-form (:result-mode :untagged-fixnum-ecx) ,value)
-	    (:locally (:movl :ecx (:edi (:edi-offset ,slot-name))))))
-	(movitz:code-vector-word
-	 `(with-inline-assembly (:returns :eax)
-	    (:compile-form (:result-mode :eax) ,value)
-	    (:leal (:eax ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)) :ecx)
-	    (:locally (:movl :ecx (:edi (:edi-offset ,slot-name))))))))))
 
 (defun (setf %run-time-context-slot) (value slot-name &optional (context (current-run-time-context)))
   (check-type context run-time-context)
