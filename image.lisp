@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.93 2005/04/30 23:22:14 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.94 2005/05/03 20:12:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1586,6 +1586,7 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
     (array expr)
     (cons (mapcar #'movitz-print expr))
     ((or (satisfies movitz-null) movitz-run-time-context) nil)
+    (movitz-unbound-value 'unbound)
     (movitz-fixnum
      (movitz-fixnum-value expr))
     (movitz-std-instance expr)

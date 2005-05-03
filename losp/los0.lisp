@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.40 2005/04/24 16:46:03 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.41 2005/05/03 20:13:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1317,35 +1317,13 @@ Can be used to measure the overhead of primitive function."
 			       data)))
     (muerte.ip4:tftp/ethernet-write :129.242.19.132 "movitz-screendump.txt" data
 				    :quiet t
-				    :mac (muerte.ip4::polling-arp ip4::*ip4-router*
-								  (lambda ()
-								    (eql #\escape (muerte.x86-pc.keyboard:poll-char)))))))
-
-(defun mumbojumbo (x)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :untagged-fixnum-ecx) x)
-    (:movl 0 :eax)
-    (:cmpl -1 :ecx)
-    (:jno 'no-overflow)
-    (:movl 4 :eax)
-   no-overflow))
+				    :mac (muerte.ip4::polling-arp
+					  muerte.ip4::*ip4-router*
+					  (lambda ()
+					    (eql #\escape (muerte.x86-pc.keyboard:poll-char)))))))
 
 (defvar *segment-descriptor-table*)
 
-(defun threading ()
-  (let* ((thread (muerte::clone-run-time-context :name 'subthread))
-	 (stack (make-array 1022 :element-type '(unsigned-byte 32))))
-    (setf (segment-descriptor *segment-descriptor-table* 8)
-      (segment-descriptor *segment-descriptor-table* (truncate (segment-register :fs) 8)))
-    (warn "Thread ~S FS base: ~S"
-	  thread
-	  (setf (segment-descriptor-base-location *segment-descriptor-table* 8)
-	    (+ (object-location thread)
-	       (muerte::location-physical-offset))))
-    (format *terminal-io* "~&Switching...")
-    (setf (segment-register :fs) (* 8 8))
-    (format *terminal-io* "ok.~%")
-    (values thread stack)))
 
 (defun genesis ()
   ;; (install-shallow-binding)
@@ -1358,7 +1336,7 @@ Can be used to measure the overhead of primitive function."
     (format t "Extended memory: ~D KB~%" extended-memsize)
 
     (idt-init)
-    
+
     (setf *segment-descriptor-table*	; Ensure we have a GDT with 16 entries, in static-space.
       (muerte::install-global-segment-table
        (muerte::dump-global-segment-table :entries 16)))

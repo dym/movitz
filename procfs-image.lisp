@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.23 2005/04/24 20:36:44 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.24 2005/05/03 20:11:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -130,7 +130,9 @@
      (map 'vector #'movitz-print (movitz-vector-symbolic-data expr)))
     (movitz-cons
      (cons (movitz-print (movitz-car expr))
-	   (movitz-print (movitz-cdr expr))))))
+	   (movitz-print (movitz-cdr expr))))
+    (movitz-funobj
+     expr)))
 
 
 (defmethod report-gdtr ((image bochs-image))

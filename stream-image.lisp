@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Aug 27 14:46:50 2001
 ;;;;                
-;;;; $Id: stream-image.lisp,v 1.12 2005/04/20 06:51:57 ffjeld Exp $
+;;;; $Id: stream-image.lisp,v 1.13 2005/05/03 20:12:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -70,9 +70,12 @@
 		   (image-nil-object image))
 		  (:symbol
 		   ;; (warn "loading new symbol at ~S" word)
-		   (setf (image-stream-position image)
-		     (- word (tag :symbol)))
-		   (read-binary 'movitz-symbol (image-stream image)))
+		   (if (= word #x7fffffff)
+		       (make-instance 'movitz-unbound-value)
+		     (progn
+		       (setf (image-stream-position image)
+			 (- word (tag :symbol)))
+		       (read-binary 'movitz-symbol (image-stream image)))))
 		  (:other
 		   (setf (image-stream-position image)
 		     (+ 0 (extract-pointer word)))
