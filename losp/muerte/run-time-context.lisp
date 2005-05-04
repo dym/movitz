@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.20 2005/05/04 07:43:27 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.21 2005/05/04 22:47:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,9 +28,7 @@
   ((name
     :initarg :name
     :initform :anonymous
-    :accessor run-time-context-name)
-   (stack-vector
-    :initarg :stack-vector))
+    :accessor run-time-context-name))
   (:metaclass run-time-context-class)
   (:size #.(bt:sizeof 'movitz::movitz-run-time-context))
   (:slot-map #.(movitz::slot-map 'movitz::movitz-run-time-context
@@ -148,18 +146,18 @@
 	  (%run-time-context-slot 'atomically-continuation context) 0)
     context))
 
-(defun %run-time-context-install-stack (context
-					&optional (control-stack
-						   (make-array 8192 :element-type '(unsigned-byte 32)))
-						  (cushion 1024))
-  (check-type control-stack vector)
-  (assert (< cushion (array-dimension control-stack 0)))
-  (setf (%run-time-context-slot 'control-stack context) control-stack)
-  (setf (%run-time-context-slot 'stack-top context)
-    (+ (object-location control-stack) 8
-       (* 4 (array-dimension control-stack 0))))
-  (setf (%run-time-context-slot 'stack-bottom context)
-    (+ (object-location control-stack) 8
-       (* 4 cushion)))
-  control-stack)
+;;;(defun %run-time-context-install-stack (context
+;;;					&optional (control-stack
+;;;						   (make-array 8192 :element-type '(unsigned-byte 32)))
+;;;						  (cushion 1024))
+;;;  (check-type control-stack vector)
+;;;  (assert (< cushion (array-dimension control-stack 0)))
+;;;  (setf (%run-time-context-slot 'control-stack context) control-stack)
+;;;  (setf (%run-time-context-slot 'stack-top context)
+;;;    (+ (object-location control-stack) 8
+;;;       (* 4 (array-dimension control-stack 0))))
+;;;  (setf (%run-time-context-slot 'stack-bottom context)
+;;;    (+ (object-location control-stack) 8
+;;;       (* 4 cushion)))
+;;;  control-stack)
 
