@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.51 2005/04/24 22:10:26 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.52 2005/05/04 22:46:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -53,10 +53,10 @@ This variable should be initialized during bootup initialization.")
     (dit-frame-casf stack frame))
    (t (stack-frame-ref stack frame 0))))
 
-(defun stack-vector-designator (stack)
-  (etypecase stack
-    (null (%run-time-context-slot 'stack-vector))
-    (vector stack)))
+;;;(defun stack-vector-designator (stack)
+;;;  (etypecase stack
+;;;    (null (%run-time-context-slot 'stack-vector))
+;;;    (vector stack)))
 
 (define-compiler-macro current-stack-frame ()
   `(with-inline-assembly (:returns :eax)
