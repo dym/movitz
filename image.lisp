@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.94 2005/05/03 20:12:53 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.95 2005/05/04 22:47:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,11 +22,6 @@
     :initform :run-time-context)
    (padding
     :binary-type 3)
-   (name
-    :binary-type word
-    :initform :bootup
-    :map-binary-write 'movitz-read-and-intern
-    :map-binary-read-delayed 'movitz-word)
    (class
     :binary-type word
     :map-binary-write 'movitz-intern
@@ -38,8 +33,14 @@
     :map-binary-write 'movitz-read-and-intern
     :map-binary-read-delayed 'movitz-word
     :initarg :slots
-    :initform #()
+    :initform #(:init nil)
     :accessor run-time-context-slots)
+   (scratch1
+    :binary-type word
+    :initform 0)
+   (scratch2
+    :binary-type word
+    :initform 0)
    (fast-car
     :binary-type code-vector-word
     :initform nil
@@ -53,12 +54,6 @@
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
    (fast-cddr
-    :binary-type code-vector-word
-    :initform nil
-    :map-binary-write 'movitz-intern-code-vector
-    :map-binary-read-delayed 'movitz-word-code-vector
-    :binary-tag :primitive-function)
-   (fast-cdddr
     :binary-type code-vector-word
     :initform nil
     :map-binary-write 'movitz-intern-code-vector
@@ -118,11 +113,6 @@
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
-   ;; per thread parameters
-   (dynamic-env
-    :binary-type word
-    :initform 0)
-   ;; More per-thread parameters
    (unwind-protect-tag
     :binary-type word
     :map-binary-read-delayed 'movitz-word
@@ -133,6 +123,11 @@
     :map-binary-read-delayed 'movitz-word
     :map-binary-write 'movitz-read-and-intern
     :initform 'muerte::restart-protect-tag)
+   (new-unbound-value
+    :binary-type word
+    :map-binary-read-delayed 'movitz-word
+    :map-binary-write 'movitz-read-and-intern
+    :initform 'unbound)
    (stack-bottom			; REMEMBER BOCHS!
     :binary-type word
     :initform #x0ff000)
@@ -162,11 +157,6 @@
     :binary-type movitz-symbol
     :reader movitz-run-time-context-null-symbol
     :initarg :null-symbol)
-   (new-unbound-value
-    :binary-type word
-    :map-binary-read-delayed 'movitz-word
-    :map-binary-write 'movitz-read-and-intern
-    :initform 'unbound)
    ;; primitive functions global constants
    (pop-current-values
     :binary-type code-vector-word
@@ -288,21 +278,37 @@
     :binary-tag :global-function
     :map-binary-write 'movitz-intern
     :map-binary-read-delayed 'movitz-word)
-   (complicated-class-of
-    :binary-type word
-    :binary-tag :global-function
-    :map-binary-read-delayed 'movitz-word
-    :map-binary-write 'movitz-intern)
    (complicated-compare
     :binary-type word
     :binary-tag :global-function
     :map-binary-read-delayed 'movitz-word
     :map-binary-write 'movitz-intern)
+   (dynamic-env
+    :binary-type word
+    :initform 0)
+   (the-class-t
+    :binary-type word
+    :initform t
+    :map-binary-write (lambda (x type)
+			(declare (ignore type))
+			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
+						'word))
+    :map-binary-read-delayed 'movitz-word)
+   (copy-funobj
+    :binary-type word
+    ;; :accessor movitz-run-time-context-copy-funobj
+    :initform 'muerte::copy-funobj
+    :map-binary-write (lambda (name type)
+			(declare (ignore type))
+			(movitz-intern (movitz-env-named-function name))))
+
+
    (num-values
     :binary-type word			; Fixnum
     :initform 0)
    (values
     :binary-type #.(* 4 +movitz-multiple-values-limit+))
+   
    (cons-pointer
     :binary-type code-vector-word
     :initform nil
@@ -349,15 +355,68 @@
 					  map))
 			   'word)))
     :map-binary-read-delayed 'movitz-word)
-   ;; Some well-known classes
-   (the-class-t
+   (physical-address-offset
+    :binary-type lu32
+    :initform (image-ds-segment-base *image*))
+   (nursery-space
     :binary-type word
-    :initform t
-    :map-binary-write (lambda (x type)
-			(declare (ignore type))
-			(movitz-read-and-intern (funcall 'muerte::movitz-find-class x)
-						'word))
+    :initform nil
+    :map-binary-write 'movitz-read-and-intern
+    :map-binary-read-delayed (lambda (x type)
+			       (declare (ignore x type))
+			       (movitz-read nil)))
+   (self
+    :binary-type word
+    :initform 6
     :map-binary-read-delayed 'movitz-word)
+   (protect-non-pointer-area
+    :binary-type lu32
+    :initform 3)
+   (protect-non-pointer-count
+    :binary-type lu32
+    :initform nil
+    :map-binary-write (lambda (x type)
+			(declare (ignore x type))
+			(- (bt:slot-offset 'movitz-run-time-context 'non-pointers-end)
+			   (bt:slot-offset 'movitz-run-time-context 'non-pointers-start))))
+   (non-pointers-start :binary-type :label) ; ========= NON-POINTER-START =======
+   (bochs-flags
+    :binary-type lu32
+    :initform 0)
+   (raw-scratch0			; A non-GC-root scratch register
+    :binary-type lu32
+    :initform 0)
+   (atomically-continuation
+    :binary-type lu32
+    :initform 0)
+   (non-pointers-end :binary-type :label) ; ========= NON-POINTER-END =======
+   (ret-trampoline
+    :binary-type code-vector-word
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)
+   (dynamic-jump-next
+    :binary-type code-vector-word
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)
+   (copy-funobj-code-vector-slots
+    :binary-type code-vector-word
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function)
+   (complicated-class-of
+    :binary-type word
+    :binary-tag :global-function
+    :map-binary-read-delayed 'movitz-word
+    :map-binary-write 'movitz-intern)
+   (stack-vector
+    :binary-type word
+    :initform nil
+    :map-binary-write 'movitz-read-and-intern
+    :map-binary-read-delayed (lambda (x type)
+			       (declare (ignore x type))
+			       (movitz-read nil)))
    (exception-handlers
     :binary-type word
     :map-binary-write 'movitz-intern
@@ -381,82 +440,7 @@
     :initform nil
     :accessor movitz-run-time-context-global-properties
     :map-binary-write 'movitz-intern
-    :map-binary-read-delayed 'movitz-word)
-   (copy-funobj
-    :binary-type word
-    ;; :accessor movitz-run-time-context-copy-funobj
-    :initform 'muerte::copy-funobj
-    :map-binary-write (lambda (name type)
-			(declare (ignore type))
-			(movitz-intern (movitz-env-named-function name))))
-   (physical-address-offset
-    :binary-type lu32
-    :initform (image-ds-segment-base *image*))
-   (nursery-space
-    :binary-type word
-    :initform nil
-    :map-binary-write 'movitz-read-and-intern
-    :map-binary-read-delayed (lambda (x type)
-			       (declare (ignore x type))
-			       (movitz-read nil)))
-   (stack-vector
-    :binary-type word
-    :initform nil
-    :map-binary-write 'movitz-read-and-intern
-    :map-binary-read-delayed (lambda (x type)
-			       (declare (ignore x type))
-			       (movitz-read nil)))
-   (self
-    :binary-type word
-    :initform 6
-    :map-binary-read-delayed 'movitz-word)
-   (parent
-    :binary-type word
-    :initform nil
-    :map-binary-write 'movitz-read-and-intern
-    :map-binary-read-delayed 'movitz-word)
-   (protect-non-pointer-area
-    :binary-type lu32
-    :initform 3)
-   (protect-non-pointer-count
-    :binary-type lu32
-    :initform nil
-    :map-binary-write (lambda (x type)
-			(declare (ignore x type))
-			(- (bt:slot-offset 'movitz-run-time-context 'non-pointers-end)
-			   (bt:slot-offset 'movitz-run-time-context 'non-pointers-start))))
-   (non-pointers-start :binary-type :label) ; ========= NON-POINTER-START =======
-   (bochs-flags
-    :binary-type lu32
-    :initform 0)
-   (raw-scratch0			; A non-GC-root scratch register
-    :binary-type lu32
-    :initform 0)
-   (atomically-continuation
-    :binary-type lu32
-    :initform 0)
-   (non-pointers-end :binary-type :label) ; ========= NON-POINTER-END =======
-   (scratch1
-    :binary-type word
-    :initform 0)
-   (scratch2
-    :binary-type word
-    :initform 0)
-   (ret-trampoline
-    :binary-type code-vector-word
-    :map-binary-write 'movitz-intern-code-vector
-    :map-binary-read-delayed 'movitz-word-code-vector
-    :binary-tag :primitive-function)
-   (dynamic-jump-next
-    :binary-type code-vector-word
-    :map-binary-write 'movitz-intern-code-vector
-    :map-binary-read-delayed 'movitz-word-code-vector
-    :binary-tag :primitive-function)
-   (copy-funobj-code-vector-slots
-    :binary-type code-vector-word
-    :map-binary-write 'movitz-intern-code-vector
-    :map-binary-read-delayed 'movitz-word-code-vector
-    :binary-tag :primitive-function))
+    :map-binary-read-delayed 'movitz-word))
   (:slot-align null-symbol -5))
 
 (defun atomically-continuation-simple-pf (pf-name)
