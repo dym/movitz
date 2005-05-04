@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.30 2005/05/03 22:15:09 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.31 2005/05/04 08:00:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1667,18 +1667,16 @@ in an instance whose metaclass is standard-class."))
     (write object :stream stream)))
 
 (defmethod print-object ((object class) stream)
-  (print-unreadable-object (object stream :identity nil)
-    (format stream "~W ~W" (class-name (class-of object)) (class-name object)))
+  (print-unreadable-object (object stream :identity nil :type t)
+    (write (class-name object) :stream stream))
   object)
 
 (defmethod print-object ((object standard-object) stream)
-  (print-unreadable-object (object stream :identity t)
-    (write (class-name (class-of object))
-	   :stream stream))
+  (print-unreadable-object (object stream :identity t :type t))
   object)
 
 (defmethod print-object ((object structure-object) stream)
-  (let* ((class (class-of object)))
+  (let ((class (class-of object)))
     (format stream "#S(~S" (class-name class))
     (dolist (slot (class-slots class))
       (format stream " :~A ~S"
@@ -1704,8 +1702,9 @@ in an instance whose metaclass is standard-class."))
   object)
 
 (defmethod print-object ((x illegal-object) stream)
-  (error "Won't print illegal-object ~Z." x)
-  ;; (print-unreadable-object (x stream :type t :identity t))
+  (if *print-safely*
+      (print-unreadable-object (x stream :type t :identity t))
+    (error "Won't print illegal-object ~Z." x))
   x)
 
 ;;;

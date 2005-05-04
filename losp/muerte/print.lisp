@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.18 2005/02/25 08:00:11 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.19 2005/05/04 08:00:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -46,12 +46,14 @@
 
 (defvar *never-use-print-object* :after-clos-bootstrapped)
 
-(defun init-print-unreadable (object stream &optional type-p)
+(defun init-print-unreadable (object stream &optional type-p bodyless-p)
   (when *print-readably*
     (error 'print-not-readable :object object))
   (write-string "#<" stream)
   (when type-p
-    (write (type-of object) :stream stream))
+    (write (type-of object) :stream stream)
+    (unless bodyless-p
+      (write-char #\space stream)))
   nil)
 
 (defmacro print-unreadable-object ((object stream &key type identity) &body body)
@@ -60,7 +62,8 @@
     `(let ((,stream-var ,stream)
 	   (,object-var ,object))
        (init-print-unreadable ,object-var ,stream-var
-			      ,@(when type (list type)))
+			      ,@(when type (list type))
+			      ,@(when (and type (null body)) (list t)))
        ,@body
        ,(when identity
 	  `(when ,identity
@@ -194,7 +197,7 @@
 	(handler-case (internal-write object)
 	  (serious-condition (c)
 	    (print-unreadable-object (c *standard-output* :type t :identity t)
-	      (format t " (while printing ~Z)" object))))))))
+	      (format t "(while printing ~Z)" object))))))))
 
 (defun internal-write (object)
   (let ((stream *standard-output*))
@@ -311,8 +314,7 @@
 			 (write-char #\space stream))
 		       (write (aref object i)))
 		     (write-char #\) stream))))
-		(t (print-unreadable-object (object stream :identity t)
-		     (princ (type-of object) stream))))))
+		(t (print-unreadable-object (object stream :identity t :type t))))))
 	    (standard-gf-instance
 	     (print-unreadable-object (object stream)
 	       (format stream "gf ~S" (funobj-name object))))
