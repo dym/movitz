@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.137 2005/04/17 22:24:20 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.138 2005/05/04 22:47:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2317,6 +2317,7 @@ falling below the label."
 			 (setq p `((:call (:edi ,(global-constant-offset newf))))
 			       next-pc (nthcdr 2 pc))
 			 (explain nil "Changed [~S ~S] to ~S" i i2 newf)))
+		      #+ignore
 		      ((and (global-funcall-p i '(fast-cdr))
 			    (global-funcall-p i2 '(fast-cdr))
 			    (global-funcall-p i3 '(fast-cdr)))
