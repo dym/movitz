@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.18 2005/05/03 21:25:34 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.19 2005/05/04 06:17:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -39,11 +39,9 @@
 
 (defmethod slot-value-using-class ((class run-time-context-class) object
 				   (slot standard-effective-slot-definition))
-  (let ((x (svref (%run-time-context-slot 'slots object)
-		  (slot-definition-location slot))))
-    (if (eq x (load-global-constant new-unbound-value))
-	(slot-unbound class object (slot-definition-name slot))
-      x)))
+  (with-unbound-protect (svref (%run-time-context-slot 'slots object)
+			       (slot-definition-location slot))
+    (slot-unbound class object (slot-definition-name slot))))
 
 (defmethod (setf slot-value-using-class) (new-value (class run-time-context-class) object
 					  (slot standard-effective-slot-definition))
