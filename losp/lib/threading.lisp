@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 28 08:30:01 2005
 ;;;;                
-;;;; $Id: threading.lisp,v 1.2 2005/05/05 15:21:59 ffjeld Exp $
+;;;; $Id: threading.lisp,v 1.3 2005/05/05 20:52:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -26,7 +26,8 @@
 (in-package muerte)
 
 (defclass thread (run-time-context)
-  ()
+  ((segment-selector
+    :initform :segment-selector))
   (:metaclass run-time-context-class))
 
 (defmacro control-stack-ebp (stack)
@@ -109,11 +110,11 @@
 	(setf (control-stack-fs stack) fs
 	      (control-stack-ebp stack) ebp
 	      (control-stack-esp stack) esp))
-      (setf (%run-time-context-slot 'dynamic-env thread) 0
-	    (%run-time-context-slot 'stack-vector thread) stack
-	    (%run-time-context-slot 'stack-top thread) (+ 2 (object-location stack)
+      (setf (%run-time-context-slot thread 'dynamic-env) 0
+	    (%run-time-context-slot thread 'stack-vector) stack
+	    (%run-time-context-slot thread 'stack-top) (+ 2 (object-location stack)
 							  (length stack))
-	    (%run-time-context-slot 'stack-bottom thread) (+ (object-location stack) 2
+	    (%run-time-context-slot thread 'stack-bottom) (+ (object-location stack) 2
 							     (or cushion
 								 (if (>= (length stack) 200)
 								     100
@@ -123,8 +124,8 @@
 (defun yield (target-rtc &optional value)
   (declare (dynamic-extent values))
   (assert (not (eq target-rtc (current-run-time-context))))
-  (let ((my-stack (%run-time-context-slot 'stack-vector))
-	(target-stack (%run-time-context-slot 'stack-vector target-rtc)))
+  (let ((my-stack (%run-time-context-slot nil 'stack-vector))
+	(target-stack (%run-time-context-slot target-rtc 'stack-vector)))
     (assert (not (eq my-stack target-stack)))
     (let ((fs (control-stack-fs target-stack))
 	  (esp (control-stack-esp target-stack))
@@ -137,8 +138,8 @@
       ;; Push eflags for later..
       (setf (memref (decf esp) 0) (eflags))
       ;; Store EBP and ESP so we can get to them after the switch
-      (setf (%run-time-context-slot 'scratch1 target-rtc) ebp
-	    (%run-time-context-slot 'scratch2 target-rtc) esp)
+      (setf (%run-time-context-slot target-rtc 'scratch1) ebp
+	    (%run-time-context-slot target-rtc 'scratch2) esp)
       ;; Enable someone to yield back here..
       (setf (control-stack-fs my-stack) (segment-register :fs)
 	    (control-stack-ebp my-stack) (muerte::asm-register :ebp)

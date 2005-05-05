@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001, 2003-2004, 
+;;;;    Copyright (C) 2001, 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct 28 09:27:13 2003
 ;;;;                
-;;;; $Id: restarts.lisp,v 1.5 2004/11/12 14:52:24 ffjeld Exp $
+;;;; $Id: restarts.lisp,v 1.6 2005/05/05 20:51:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -33,12 +33,12 @@
 	   (restart-bind ,rest-specs ,@body))))))
 
 (defun dynamic-context->basic-restart (context)
-  (assert (< (%run-time-context-slot 'stack-bottom)
+  (assert (< (%run-time-context-slot nil 'stack-bottom)
 	     context
-	     (%run-time-context-slot 'stack-top)))
+	     (%run-time-context-slot nil 'stack-top)))
   (assert (eq (load-global-constant restart-tag)
 	      (stack-frame-ref nil context 1 :lisp)))
-  (let ((x (- (%run-time-context-slot 'stack-top) context)))
+  (let ((x (- (%run-time-context-slot nil 'stack-top) context)))
     (assert (below x #x1000000))
     (with-inline-assembly (:returns :eax)
       (:compile-form (:result-mode :eax) x)

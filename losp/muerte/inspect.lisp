@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.52 2005/05/04 22:46:44 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.53 2005/05/05 20:52:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -52,11 +52,6 @@ This variable should be initialized during bootup initialization.")
    ((eq 0 (stack-frame-funobj stack frame))
     (dit-frame-casf stack frame))
    (t (stack-frame-ref stack frame 0))))
-
-;;;(defun stack-vector-designator (stack)
-;;;  (etypecase stack
-;;;    (null (%run-time-context-slot 'stack-vector))
-;;;    (vector stack)))
 
 (define-compiler-macro current-stack-frame ()
   `(with-inline-assembly (:returns :eax)
@@ -322,7 +317,11 @@ Otherwise, stack-frame is an absolute location."
 	      (std-instance
 	       (and (typep y 'std-instance)
 		    (test std-instance-class)
-		    (test std-instance-slots)))))))))
+		    (test std-instance-slots)))
+	      (run-time-context
+	       (and (typep y 'run-time-context)
+		    (test %run-time-context-slot 'slots)
+		    (test %run-time-context-slot 'class)))))))))
 
 (define-compiler-macro %lispval-object (integer &environment env)
   "Return the object that is wrapped in the 32-bit integer lispval."

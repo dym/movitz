@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Jan  9 15:57:22 2002
 ;;;;                
-;;;; $Id: malloc-init.lisp,v 1.6 2004/10/11 13:52:01 ffjeld Exp $
+;;;; $Id: malloc-init.lisp,v 1.7 2005/05/05 20:52:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,7 +19,7 @@
 
 (in-package muerte.lib)
 
-(let* ((stack-vector (%run-time-context-slot 'muerte::stack-vector))
+(let* ((stack-vector (%run-time-context-slot nil 'muerte::stack-vector))
        ;; We assume the kernel static are ends with the stack-vector.
        (kernel-end-location (+ 2 (muerte:object-location stack-vector)
 			       (array-dimension stack-vector 0)))

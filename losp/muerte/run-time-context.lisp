@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.22 2005/05/05 15:17:22 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.23 2005/05/05 20:51:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -32,27 +32,27 @@
 
 (defmethod slot-value-using-class ((class run-time-context-class) object
 				   (slot standard-effective-slot-definition))
-  (with-unbound-protect (svref (%run-time-context-slot 'slots object)
+  (with-unbound-protect (svref (%run-time-context-slot object 'slots)
 			       (slot-definition-location slot))
     (slot-unbound class object (slot-definition-name slot))))
 
 (defmethod (setf slot-value-using-class) (new-value (class run-time-context-class) object
 					  (slot standard-effective-slot-definition))
   (let ((location (slot-definition-location slot))
-	(slots (%run-time-context-slot 'slots object)))
+	(slots (%run-time-context-slot object 'slots)))
     (setf (svref slots location) new-value)))
 
 (defmethod slot-boundp-using-class ((class run-time-context-class) object
 				    (slot standard-effective-slot-definition))
   (not (eq (load-global-constant new-unbound-value)
-	   (svref (%run-time-context-slot 'slots object)
+	   (svref (%run-time-context-slot object 'slots)
 		  (slot-definition-location slot)))))
 
 (defmethod allocate-instance ((class run-time-context-class) &rest initargs)
   (declare (dynamic-extent initargs) (ignore initargs))
   (let ((x (clone-run-time-context)))
-    (setf (%run-time-context-slot 'class x) class)
-    (setf (%run-time-context-slot 'slots x)
+    (setf (%run-time-context-slot x 'class) class)
+    (setf (%run-time-context-slot x 'slots)
       (allocate-slot-storage (count-if 'instance-slot-p (class-slots class))
 			     (load-global-constant new-unbound-value)))
     x))
@@ -85,14 +85,14 @@
   (let ((slot-location (slot-definition-location slot)))
     (check-type slot-location positive-fixnum)
     (lambda (instance)
-      (with-unbound-protect (svref (%run-time-context-slot 'slots instance) slot-location)
+      (with-unbound-protect (svref (%run-time-context-slot instance 'slots) slot-location)
 	(slot-unbound-trampoline instance slot-location)))))
 
 (defmethod compute-effective-slot-writer ((class run-time-context-class) slot)
   (let ((slot-location (slot-definition-location slot)))
     (check-type slot-location positive-fixnum)
     (lambda (value instance)
-      (setf (svref (%run-time-context-slot 'slots instance) slot-location)
+      (setf (svref (%run-time-context-slot instance 'slots) slot-location)
 	value))))
 
 (defmethod print-object ((x run-time-context) stream)
@@ -111,8 +111,9 @@
       (when errorp
 	(error "No run-time-context slot named ~S in ~S." slot-name context))))
 
-(defun %run-time-context-slot (slot-name &optional (context (current-run-time-context)))
-  (let ((slot (find-run-time-context-slot context slot-name)))
+(defun %run-time-context-slot (context slot-name)
+  (let* ((context (or context (current-run-time-context)))
+	 (slot (find-run-time-context-slot context slot-name)))
     (ecase (second slot)
       (word
        (memref context -6 :index (third slot)))
@@ -121,9 +122,10 @@
       (lu32
        (memref context -6 :index (third slot) :type :unsigned-byte32)))))
 
-(defun (setf %run-time-context-slot) (value slot-name &optional (context (current-run-time-context)))
-  (check-type context run-time-context)
-  (let ((slot (find-run-time-context-slot context slot-name)))
+(defun (setf %run-time-context-slot) (value context slot-name)
+  (let* ((context (or context (current-run-time-context)))
+	 (slot (find-run-time-context-slot context slot-name)))
+    (check-type context run-time-context)
     (ecase (second slot)
       (word
        (setf (memref context -6 :index (third slot)) value))
@@ -136,23 +138,8 @@
 				    (name :anonymous))
   (check-type parent run-time-context)
   (let ((context (%shallow-copy-object parent (movitz-type-word-size 'movitz-run-time-context))))
-    (setf (%run-time-context-slot 'slots context) (copy-seq (%run-time-context-slot 'slots parent))
-	  (%run-time-context-slot 'self context) context
-	  (%run-time-context-slot 'atomically-continuation context) 0)
+    (setf (%run-time-context-slot context 'slots) (copy-seq (%run-time-context-slot parent 'slots))
+	  (%run-time-context-slot context 'self) context
+	  (%run-time-context-slot context 'atomically-continuation) 0)
     context))
-
-;;;(defun %run-time-context-install-stack (context
-;;;					&optional (control-stack
-;;;						   (make-array 8192 :element-type '(unsigned-byte 32)))
-;;;						  (cushion 1024))
-;;;  (check-type control-stack vector)
-;;;  (assert (< cushion (array-dimension control-stack 0)))
-;;;  (setf (%run-time-context-slot 'control-stack context) control-stack)
-;;;  (setf (%run-time-context-slot 'stack-top context)
-;;;    (+ (object-location control-stack) 8
-;;;       (* 4 (array-dimension control-stack 0))))
-;;;  (setf (%run-time-context-slot 'stack-bottom context)
-;;;    (+ (object-location control-stack) 8
-;;;       (* 4 cushion)))
-;;;  control-stack)
 

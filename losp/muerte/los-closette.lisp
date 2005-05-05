@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.31 2005/05/04 08:00:42 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.32 2005/05/05 20:51:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -220,11 +220,11 @@ funcallable-instance will run the new function."
   (check-type class (or null class))
   #+ignore
   (case class-name
-    ((t) (setf (%run-time-context-slot 'the-class-t) class))
-    (null (setf (%run-time-context-slot 'the-class-null) class))
-    (symbol (setf (%run-time-context-slot 'the-class-symbol) class))
-    (fixnum (setf (%run-time-context-slot 'the-class-fixnum) class))
-    (cons (setf (%run-time-context-slot 'the-class-cons) class)))
+    ((t) (setf (%run-time-context-slot nil 'the-class-t) class))
+    (null (setf (%run-time-context-slot nil 'the-class-null) class))
+    (symbol (setf (%run-time-context-slot 'nil the-class-symbol) class))
+    (fixnum (setf (%run-time-context-slot nil 'the-class-fixnum) class))
+    (cons (setf (%run-time-context-slot nil 'the-class-cons) class)))
   (let ((map (load-global-constant classes)))
     (when (member class-name (svref map 0))
       (setf (svref map (1+ (position class-name (svref map 0))))

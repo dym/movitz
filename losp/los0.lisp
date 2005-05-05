@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.43 2005/05/05 18:09:28 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.44 2005/05/05 20:51:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1517,16 +1517,16 @@ Can be used to measure the overhead of primitive function."
 	      (let ((write-barrier *write-barrier*)
 		    (location (object-location object)))
 		(assert (not (location-in-object-p
-			      (los0::space-other (%run-time-context-slot 'nursery-space))
+			      (los0::space-other (%run-time-context-slot nil 'nursery-space))
 			      location)) ()
 		  "Write ~S to old-space at ~S." value location)
 		(unless (or (eq object write-barrier)
 			    #+ignore
-			    (location-in-object-p (%run-time-context-slot 'nursery-space)
+			    (location-in-object-p (%run-time-context-slot nil 'nursery-space)
 						  location)
-			    (location-in-object-p (%run-time-context-slot 'stack-vector)
+			    (location-in-object-p (%run-time-context-slot nil 'stack-vector)
 						  location))
-		  (if (location-in-object-p (%run-time-context-slot 'nursery-space)
+		  (if (location-in-object-p (%run-time-context-slot nil 'nursery-space)
 					    location)
 		      (vector-push 'stack-actually write-barrier)		      
 		    (vector-push object write-barrier))
@@ -1649,7 +1649,7 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
     (warn "Installing shallow-binding strategy.."))
   (without-interrupts
     (macrolet ((install (slot function)
-		 `(setf (%run-time-context-slot ',slot) (symbol-value ',function))))
+		 `(setf (%run-time-context-slot nil ',slot) (symbol-value ',function))))
       (install muerte:dynamic-variable-install dynamic-variable-install-shallow)
       (install muerte:dynamic-variable-uninstall dynamic-variable-uninstall-shallow)
       (install muerte::dynamic-unwind-next dynamic-unwind-next-shallow)
@@ -1666,7 +1666,7 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
 		       (%symbol-global-value name))
 		     (setf (%symbol-global-value name)
 		       (memref env 8)))))))
-      (install-shallow-env (%run-time-context-slot 'muerte::dynamic-env))))
+      (install-shallow-env (%run-time-context-slot nil 'muerte::dynamic-env))))
   (values))
 
 (defun deinstall-shallow-binding (&key quiet)
@@ -1674,13 +1674,13 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
     (warn "Deinstalling shallow-binding strategy.."))
   (without-interrupts
     (macrolet ((install (slot)
-		 `(setf (%run-time-context-slot ',slot) (symbol-value ',slot))))
+		 `(setf (%run-time-context-slot nil ',slot) (symbol-value ',slot))))
       (install muerte:dynamic-variable-install)
       (install muerte:dynamic-variable-uninstall)
       (install muerte::dynamic-unwind-next)
       (install muerte::dynamic-variable-store)
       (install muerte::dynamic-variable-lookup))
-    (loop for env = (%run-time-context-slot 'muerte::dynamic-env)
+    (loop for env = (%run-time-context-slot nil 'muerte::dynamic-env)
 	then (memref env 12)
 	while (plusp env)
 	do (let ((name (memref env 0)))

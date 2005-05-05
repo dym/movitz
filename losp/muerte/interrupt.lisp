@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.42 2005/04/26 23:44:18 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.43 2005/05/05 20:51:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -341,13 +341,13 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 		(with-inline-assembly (:returns :nothing) (:nop))))
 	  (70 (error "Unaligned memref access."))
 	  ((5 55)
-	   (let* ((old-bottom (prog1 (%run-time-context-slot 'stack-bottom)
-				(setf (%run-time-context-slot 'stack-bottom) 0)))
-		  (stack (%run-time-context-slot 'movitz::stack-vector))
+	   (let* ((old-bottom (prog1 (%run-time-context-slot nil 'stack-bottom)
+				(setf (%run-time-context-slot nil 'stack-bottom) 0)))
+		  (stack (%run-time-context-slot nil 'stack-vector))
 		  (real-bottom (- (object-location stack) 2))
 		  (stack-left (- old-bottom real-bottom))
 		  (old-es (segment-register :es))
-		  (old-dynamic-env (%run-time-context-slot 'dynamic-env))
+		  (old-dynamic-env (%run-time-context-slot nil 'dynamic-env))
 		  (new-bottom (cond
 			       ((< stack-left 50)
 				(princ "Halting CPU due to stack exhaustion.")
@@ -362,7 +362,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 			       (t (+ real-bottom (truncate stack-left 4)))))) ; Cushion the fall..
 	     (unwind-protect
 		 (progn
-		   (setf (%run-time-context-slot 'stack-bottom) new-bottom
+		   (setf (%run-time-context-slot nil 'stack-bottom) new-bottom
 			 ;; (%run-time-context-slot 'dynamic-env) 0
 			 (segment-register :es) (segment-register :ds))
 		   (format *debug-io* "~&Stack-warning: Bumped stack-bottom by ~D to #x~X. Reset ES.~%"
@@ -375,7 +375,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 			  old-dynamic-env))
 	       (format *debug-io* "~&Stack-warning: Resetting stack-bottom to #x~X.~%"
 		       old-bottom)
-	       (setf (%run-time-context-slot 'stack-bottom) old-bottom
+	       (setf (%run-time-context-slot nil 'stack-bottom) old-bottom
 		     ;; (%run-time-context-slot 'dynamic-env) old-dynamic-env
 		     (segment-register :es) old-es))))
 	  (69

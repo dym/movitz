@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.53 2005/05/05 19:35:18 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.54 2005/05/05 20:51:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -78,8 +78,8 @@
   (warn "install..")
   (install-los0-consing 4)
   (warn "nursery: ~Z, other: ~Z" 
-	(%run-time-context-slot 'muerte::nursery-space)
-	(space-other (%run-time-context-slot 'muerte::nursery-space)))
+	(%run-time-context-slot nil 'muerte::nursery-space)
+	(space-other (%run-time-context-slot nil 'muerte::nursery-space)))
   (warn "first cons: ~Z" (funcall 'truncate #x100000000 3))
   (warn "second cons: ~Z" (funcall 'truncate #x100000000 3))
   (halt-cpu)
@@ -243,9 +243,9 @@ duo-space where each space is KB-SIZE kilobytes."
 	(let ((*standard-output* *terminal-io*))
 	  (cond
 	   (*gc-running*
-	    (let* ((full-space (%run-time-context-slot 'muerte::nursery-space))
+	    (let* ((full-space (%run-time-context-slot nil 'muerte::nursery-space))
 		   (hack-space (make-duo-space (duo-space-end-location full-space) 102400)))
-	      (setf (%run-time-context-slot 'muerte::nursery-space) hack-space)
+	      (setf (%run-time-context-slot nil 'muerte::nursery-space) hack-space)
 	      (break "Recursive GC triggered. Full-space: ~Z, hack-space: ~Z"
 		     full-space hack-space)))
 	   (t (let ((*gc-running* t))
@@ -268,16 +268,16 @@ duo-space where each space is KB-SIZE kilobytes."
 		    (check-type code-vector code-vector)
 		    (if (eq context (current-run-time-context))
 			;; The point of this is to not trigger CLOS bootstrapping.
-			(setf (%run-time-context-slot ',slot) code-vector)
-		      (setf (%run-time-context-slot ',slot context) code-vector)))))
+			(setf (%run-time-context-slot nil ',slot) code-vector)
+		      (setf (%run-time-context-slot context ',slot) code-vector)))))
       (install-primitive los0-fast-cons muerte::fast-cons)
       (install-primitive los0-box-u32-ecx muerte::box-u32-ecx)
       (install-primitive los0-cons-pointer muerte::cons-pointer)
       (install-primitive los0-cons-commit muerte::cons-commit))
     (if (eq context (current-run-time-context))
-	(setf (%run-time-context-slot 'muerte::nursery-space)
+	(setf (%run-time-context-slot nil 'muerte::nursery-space)
 	  actual-duo-space)
-      (setf (%run-time-context-slot 'muerte::nursery-space context)
+      (setf (%run-time-context-slot context 'muerte::nursery-space)
 	actual-duo-space))
     ;; Pretend that the heap stops here, so that we don't have to scan
     ;; the entire tail end of memory, which isn't going to be used.
@@ -294,13 +294,13 @@ duo-space where each space is KB-SIZE kilobytes."
 
 (defun report-nursery (x location)
   "Write a message if x is inside newspace."
-  (when (object-in-space-p (%run-time-context-slot 'nursery-space) x)
+  (when (object-in-space-p (%run-time-context-slot nil 'nursery-space) x)
     (format t "~&~Z: ~S: ~S from ~S" x (type-of x) x location))
   x)
 
 (defun report-inactive-space (x location)
   "Check that x is not pointing into (what is presumably) oldspace."
-  (when (object-in-space-p (space-other (%run-time-context-slot 'nursery-space)) x)
+  (when (object-in-space-p (space-other (%run-time-context-slot nil 'nursery-space)) x)
     (break "~Z: ~S: ~S from ~S" x (type-of x) x location))
   x)
 
@@ -318,9 +318,9 @@ duo-space where each space is KB-SIZE kilobytes."
 
 #+ignore
 (defun kill-the-newborns ()
-  (let* ((oldspace (%run-time-context-slot 'nursery-space))
+  (let* ((oldspace (%run-time-context-slot nil 'nursery-space))
 	 (newspace (space-other oldspace)))
-    (setf (%run-time-context-slot 'nursery-space) newspace)
+    (setf (%run-time-context-slot nil 'nursery-space) newspace)
     (flet ((zap-oldspace (x location)
 	     (declare (ignore location))
 	     (if (object-in-space-p oldspace x)
@@ -332,7 +332,7 @@ duo-space where each space is KB-SIZE kilobytes."
       (values))))
 
 
-(defparameter *x* #1000(nil))		; Have this in static space.
+(defparameter *x* #4000(nil))		; Have this in static space.
 ;;;(defparameter *xx* #4000(nil))		; Have this in static space.
 
 (defparameter *code-vector-foo* 0)
@@ -344,13 +344,13 @@ duo-space where each space is KB-SIZE kilobytes."
   (setf (fill-pointer *old-code-vectors*) 0)
   (multiple-value-bind (newspace oldspace)
       (without-interrupts
-	(let* ((space0 (%run-time-context-slot 'nursery-space))
+	(let* ((space0 (%run-time-context-slot nil 'nursery-space))
 	       (space1 (space-other space0)))
 	  (check-type space0 (simple-array (unsigned-byte 32) 1))
 	  (check-type space1 (simple-array (unsigned-byte 32) 1))
 	  (assert (eq space0 (space-other space1)))
 	  (assert (= 2 (space-fresh-pointer space1)))
-	  (setf (%run-time-context-slot 'nursery-space) space1)
+	  (setf (%run-time-context-slot nil 'nursery-space) space1)
 	  (values space1 space0)))
     ;; Evacuate-oldspace is to be mapped over every potential pointer.
     (let ((*code-vector-foo* (incf *code-vector-foo* 2))
@@ -458,13 +458,13 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
 			     old old new new (objects-equalp old new) oldspace newspace i))))))
 	    (map-header-vals (lambda (x y)
 			       (declare (ignore y))
-			       (when (location-in-object-p (space-other (%run-time-context-slot 'nursery-space))
+			       (when (location-in-object-p (space-other (%run-time-context-slot nil 'nursery-space))
 							   (object-location x))
 				 (break "Seeing old object in values-vector: ~Z" x))
 			       x)
 			     #x38 #xb8)
 	    #+ignore
-	    (let* ((stack (%run-time-context-slot 'muerte::stack-vector))
+	    (let* ((stack (%run-time-context-slot nil 'muerte::stack-vector))
 		   (stack-start (- (length stack) (muerte::current-control-stack-depth))))
 	      (do ((i 0 (+ i 3)))
 		  ((>= i (length a)))
@@ -538,7 +538,7 @@ This is a debugging tool."
     (flet ((searcher (x ignore)
 	     (declare (ignore ignore))
 	     (when (and (typep x '(or muerte::tag1 muerte::tag6 muerte::tag7))
-			(not (eq x (%run-time-context-slot 'muerte::nursery-space)))
+			(not (eq x (%run-time-context-slot nil 'muerte::nursery-space)))
 			(location-in-object-p x location)
 			(not (member x results)))
 	       (push x results)
@@ -554,7 +554,7 @@ This is a debugging tool."
 				  (invoke-restart 'muerte::continue-map-header-vals)))))
 	(dolist (range muerte::%memory-map-roots%)
 	  (map-header-vals #'searcher (car range) (cdr range)))
-	(let ((nursery (%run-time-context-slot 'muerte::nursery-space)))
+	(let ((nursery (%run-time-context-slot nil 'muerte::nursery-space)))
 	  (map-header-vals #'searcher
 			   (+ 4 (object-location nursery))
 			   (+ 4 (object-location nursery) (space-fresh-pointer nursery))))
@@ -563,7 +563,7 @@ This is a debugging tool."
 
 (defun report-lispval (lispval &optional breakp newspace)
   (let* ((location (truncate lispval 4))
-	 (newspace (or newspace (%run-time-context-slot 'muerte::nursery-space)))
+	 (newspace (or newspace (%run-time-context-slot nil 'muerte::nursery-space)))
 	 (oldspace (space-other newspace)))
     (cond
      ((location-in-object-p newspace location)

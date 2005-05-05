@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.26 2005/05/05 18:08:20 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.27 2005/05/05 20:52:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -318,14 +318,15 @@ respect to multiple threads."
 			      ,format-control ,@format-arguments)
      ,@body))
 
-(define-compiler-macro %run-time-context-slot (&whole form &environment env slot-name
-					       &optional (context '(current-run-time-context)))
-  (if (not (and (movitz:movitz-constantp slot-name env)))
+(define-compiler-macro %run-time-context-slot (&whole form &environment env context slot-name)
+  (if (not (movitz:movitz-constantp slot-name env))
       form
     (let* ((slot-name (movitz::eval-form slot-name env))
 	   (slot-type (bt:binary-slot-type 'movitz::movitz-run-time-context
 					   (intern (symbol-name slot-name) :movitz))))
-      (if (equal context '(current-run-time-context))
+      (if (or (and (movitz:movitz-constantp context env)
+		   (eq nil (movitz:movitz-eval context env)))
+	      (equal context '(current-run-time-context)))
 	  (ecase slot-type
 	    (movitz::word
 	     `(with-inline-assembly (:returns :eax)
@@ -359,26 +360,31 @@ respect to multiple threads."
 					 ,(- (movitz:tag :other)))) :ecx))))))))
 	
 
-(define-compiler-macro (setf %run-time-context-slot) (&whole form &environment env value slot-name
-						      &optional (context '(current-run-time-context)))
-  (if (not (and (movitz:movitz-constantp slot-name env)
-		(equal context '(current-run-time-context))))
+(define-compiler-macro (setf %run-time-context-slot) (&whole form &environment env value context slot-name)
+  (if (not (movitz:movitz-constantp slot-name env))
       form
-    (let ((slot-name (movitz:movitz-eval slot-name env)))
-      (ecase (bt:binary-slot-type 'movitz::movitz-run-time-context (intern (symbol-name slot-name) :movitz))
-	(movitz:word
-	 `(with-inline-assembly (:returns :eax)
-	    (:compile-form (:result-mode :eax) ,value)
-	    (:locally (:movl :eax (:edi (:edi-offset ,slot-name))))))
-	(movitz:lu32
-	 `(with-inline-assembly (:returns :untagged-fixnum-ecx)
-	    (:compile-form (:result-mode :untagged-fixnum-ecx) ,value)
-	    (:locally (:movl :ecx (:edi (:edi-offset ,slot-name))))))
-	(movitz:code-vector-word
-	 `(with-inline-assembly (:returns :eax)
-	    (:compile-form (:result-mode :eax) ,value)
-	    (:leal (:eax ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)) :ecx)
-	    (:locally (:movl :ecx (:edi (:edi-offset ,slot-name))))))))))
+    (let* ((slot-name (movitz::eval-form slot-name env))
+	   (slot-type (bt:binary-slot-type 'movitz::movitz-run-time-context
+					   (intern (symbol-name slot-name) :movitz))))
+      (if (or (and (movitz:movitz-constantp context env)
+		   (eq nil (movitz:movitz-eval context env)))
+	      (equal context '(current-run-time-context)))
+	  (ecase slot-type
+	    (movitz:word
+	     `(with-inline-assembly (:returns :eax)
+		(:compile-form (:result-mode :eax) ,value)
+		(:locally (:movl :eax (:edi (:edi-offset ,slot-name))))))
+	    (movitz:lu32
+	     `(with-inline-assembly (:returns :untagged-fixnum-ecx)
+		(:compile-form (:result-mode :untagged-fixnum-ecx) ,value)
+		(:locally (:movl :ecx (:edi (:edi-offset ,slot-name))))))
+	    (movitz:code-vector-word
+	     `(with-inline-assembly (:returns :eax)
+		(:compile-form (:result-mode :eax) ,value)
+		(:leal (:eax ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)) :ecx)
+		(:locally (:movl :ecx (:edi (:edi-offset ,slot-name)))))))
+	;; FIXME
+	form))))
 
 (define-compiler-macro read-time-stamp-counter ()
   `(with-inline-assembly-case ()

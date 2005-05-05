@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.49 2005/03/09 07:24:16 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.50 2005/05/05 20:51:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -84,6 +84,19 @@ start-location and end-location."
 	    (assert (evenp scan) ()
 	      "Scanned struct-header ~S at odd location #x~X." x scan)
 	    (setf *scan-last* (%word-offset scan #.(movitz:tag :other))))
+	   ((scavenge-typep x :run-time-context)
+	    (assert (evenp scan) ()
+	      "Scanned run-time-context-header ~S at odd location #x~X." 
+	      (memref scan 0 :type :unsigned-byte32) scan)
+	    (incf scan)
+	    (let ((non-lispvals #.(cl:truncate (cl:+ -4 (bt:slot-offset 'movitz::movitz-run-time-context
+									'movitz::pointer-start)
+						     (movitz::image-nil-word movitz:*image*))
+					       4))
+		  (end (+ scan #.(movitz::movitz-type-word-size 'movitz::movitz-run-time-context))))
+	      (incf scan non-lispvals)
+	      (map-lisp-vals function scan (1+ end))
+	      (setf scan end)))
 	   ((scavenge-typep x :funobj)
 	    (assert (evenp scan) ()
 	      "Scanned funobj-header ~S at odd location #x~X." 
@@ -213,7 +226,9 @@ If so, return the actual code-vector pointer that matches."
 (defun scavenge-find-pf (function location)
   (loop for (slot-name type) in (slot-value (class-of (current-run-time-context)) 'slot-map)
       do (when (eq type 'code-vector-word)
-	   (let ((it (scavenge-match-code-vector function (%run-time-context-slot slot-name) location)))
+	   (let ((it (scavenge-match-code-vector function
+						 (%run-time-context-slot nil slot-name)
+						 location)))
 	     (when it (return it))))))
 
 (defun scavenge-find-code-vector (function location casf-funobj esi &optional primitive-function-p edx)
@@ -234,7 +249,9 @@ If so, return the actual code-vector pointer that matches."
 		    (scavenge-match-code-vector function x location)))))))
     (cond
      ((scavenge-match-code-vector function (symbol-value 'ret-trampoline) location))
-     ((scavenge-match-code-vector function (%run-time-context-slot 'dynamic-jump-next) location))
+     ((scavenge-match-code-vector function
+				  (%run-time-context-slot nil 'dynamic-jump-next)
+				  location))
      ((eq 0 casf-funobj)
       (let ((dit-code-vector (symbol-value 'default-interrupt-trampoline)))
 	(cond
