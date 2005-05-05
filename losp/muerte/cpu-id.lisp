@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Apr 15 22:47:13 2002
 ;;;;                
-;;;; $Id: cpu-id.lisp,v 1.10 2005/03/09 07:18:14 ffjeld Exp $
+;;;; $Id: cpu-id.lisp,v 1.11 2005/05/05 15:17:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -248,7 +248,7 @@ This is an illegal instruction on lesser CPUs, and a no-op on some, such as boch
 
 (defun load-idt (idt-vector)
   (assert (= #.(bt:enum-value 'movitz::movitz-vector-element-type :u32)
-	     (muerte:vector-element-type idt-vector)))
+	     (vector-element-type idt-vector)))
   (let ((limit (- (* (length idt-vector) 4)
 		  1)))
     ;; (format t "Load-idt: ~Z / ~D~%" idt-vector limit)

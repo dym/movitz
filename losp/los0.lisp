@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.41 2005/05/03 20:13:07 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.42 2005/05/05 15:16:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,7 +28,8 @@
 (require :lib/net/ip4)
 (require :lib/repl)
 
-(require :ll-testing)
+;; (require :ll-testing)
+(require :lib/threading)
 
 (defpackage muerte.init
   (:nicknames #:los0)
@@ -1040,7 +1041,7 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
 (define-toplevel-command :restart (&optional (r 0) &rest args)
   (declare (dynamic-extent args))
   (let* ((context (or *debugger-dynamic-context*
-		      (current-dynamic-context)))
+		      (muerte::current-dynamic-context)))
 	 (restart (typecase r
 		    (integer
 		     (find-restart-by-index r context))
@@ -1099,7 +1100,7 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
 
 (defun los0-debugger (condition)
   (without-interrupts
-    (let ((*debugger-dynamic-context* (current-dynamic-context))
+    (let ((*debugger-dynamic-context* (muerte::current-dynamic-context))
 	  (*standard-output* *debug-io*)
 	  (*standard-input* *debug-io*)
 	  (*debugger-condition* condition)
@@ -1245,11 +1246,11 @@ Can be used to measure the overhead of primitive function."
 	(:shrl 2 :ecx)
 	((:gs-override) :addb 1 (:ecx 158))
 	((:gs-override) :movb #x40 (:ecx 159)))
-      (do ((frame (stack-frame-uplink nil (current-stack-frame))
-		  (stack-frame-uplink nil frame)))
+      (do ((frame (muerte::stack-frame-uplink nil (muerte::current-stack-frame))
+		  (muerte::stack-frame-uplink nil frame)))
 	  ((plusp frame))
 	(when (eq (with-inline-assembly (:returns :eax) (:movl :esi :eax))
-		  (stack-frame-funobj nil frame))
+		  (muerte::stack-frame-funobj nil frame))
 	  (error "Double interrupt.")))
 ;;;      (dolist (range muerte::%memory-map-roots%)
 ;;;	(map-header-vals (lambda (x type)
@@ -1260,7 +1261,7 @@ Can be used to measure the overhead of primitive function."
 			  (declare (ignore foo))
 			  x)
 			nil
-			(current-stack-frame))
+			(muerte::current-stack-frame))
       (with-inline-assembly (:returns :nothing)
 	(:compile-form (:result-mode :ecx) muerte.x86-pc::*screen*)
 	(:shrl 2 :ecx)
@@ -1337,9 +1338,9 @@ Can be used to measure the overhead of primitive function."
 
     (idt-init)
 
-    (setf *segment-descriptor-table*	; Ensure we have a GDT with 16 entries, in static-space.
-      (muerte::install-global-segment-table
-       (muerte::dump-global-segment-table :entries 16)))
+;;;    (setf *segment-descriptor-table*	; Ensure we have a GDT with 16 entries, in static-space.
+;;;      (muerte::install-global-segment-table
+;;;       (muerte::dump-global-segment-table :entries 16)))
     
     (install-los0-consing :kb-size 500)
     #+ignore
@@ -1665,7 +1666,7 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
 		       (%symbol-global-value name))
 		     (setf (%symbol-global-value name)
 		       (memref env 8)))))))
-      (install-shallow-env (load-global-constant dynamic-env :thread-local t))))
+      (install-shallow-env (%run-time-context-slot 'muerte::dynamic-env))))
   (values))
 
 (defun deinstall-shallow-binding (&key quiet)
@@ -1679,7 +1680,7 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
       (install muerte::dynamic-unwind-next)
       (install muerte::dynamic-variable-store)
       (install muerte::dynamic-variable-lookup))
-    (loop for env = (load-global-constant dynamic-env :thread-local t)
+    (loop for env = (%run-time-context-slot 'muerte::dynamic-env)
 	then (memref env 12)
 	while (plusp env)
 	do (let ((name (memref env 0)))

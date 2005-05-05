@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 12 18:33:02 2003
 ;;;;                
-;;;; $Id: run-time-context.lisp,v 1.21 2005/05/04 22:47:17 ffjeld Exp $
+;;;; $Id: run-time-context.lisp,v 1.22 2005/05/05 15:17:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -27,14 +27,8 @@
 (defclass run-time-context (t)
   ((name
     :initarg :name
-    :initform :anonymous
     :accessor run-time-context-name))
-  (:metaclass run-time-context-class)
-  (:size #.(bt:sizeof 'movitz::movitz-run-time-context))
-  (:slot-map #.(movitz::slot-map 'movitz::movitz-run-time-context
-			       (cl:+ (bt:slot-offset 'movitz::movitz-run-time-context
-						     'movitz::run-time-context-start)
-				     0))))
+  (:metaclass run-time-context-class))
 
 (defmethod slot-value-using-class ((class run-time-context-class) object
 				   (slot standard-effective-slot-definition))
@@ -103,7 +97,8 @@
 
 (defmethod print-object ((x run-time-context) stream)
   (print-unreadable-object (x stream :type t :identity t)
-    (format stream "~S" (run-time-context-name x)))
+    (when (slot-boundp x 'name)
+      (format stream "~S" (run-time-context-name x))))
   x)
 
 ;;;

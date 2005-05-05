@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.51 2005/04/26 23:45:48 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.52 2005/05/05 15:16:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -283,7 +283,7 @@ and the correspondig returns mode (secondary value)."
 	  (setf (movitz-symbol-value (movitz-read name)) code-vector)
 	  (when symtab-property
 	    (setf (movitz-env-get name :symtab)
-	      (translate-program symtab :movitz :muerte)))
+	      (muerte::translate-program symtab :movitz :muerte)))
 	  (compiler-values ()))))))
 
 (define-special-operator define-prototyped-function (&form form)

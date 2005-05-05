@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001, 2003-2004, 
+;;;;    Copyright (C) 2001, 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon May 12 17:13:31 2003
 ;;;;                
-;;;; $Id: misc.lisp,v 1.7 2004/11/24 14:20:49 ffjeld Exp $
+;;;; $Id: misc.lisp,v 1.8 2005/05/05 15:16:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,7 +22,7 @@
 (defun checksum-octets (packet &optional (start 0) (end (length packet)))
   "Generate sum of 16-bit big-endian words for a sequence of octets."
   (typecase packet
-    (muerte:vector-u8
+    ((simple-array (unsigned-byte 8))
      (assert (<= 0 start end (length packet)))
      (with-inline-assembly (:returns :eax)
        (:compile-form (:result-mode :ebx) packet)
@@ -49,7 +49,7 @@
       end-checksum-loop
        (:shll #.movitz:+movitz-fixnum-shift+ :eax)
        (:cld)))
-    (t (muerte:with-subvector-accessor (packet-ref packet start end)
+    (t (muerte::with-subvector-accessor (packet-ref packet start end)
 	 (cond
 	  ((or (and (evenp start) (evenp end))
 	       (and (oddp start) (oddp end)))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 14 08:18:43 2005
 ;;;;                
-;;;; $Id: ll-testing.lisp,v 1.7 2005/05/05 10:28:52 ffjeld Exp $
+;;;; $Id: ll-testing.lisp,v 1.8 2005/05/05 15:16:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -93,18 +93,6 @@ NB! ensure that the table object isn't garbage-collected."
   (error "Stack stop.")
   (format *terminal-io* "~&Stack-stopper halt.")
   (loop (halt-cpu)))
-
-(defun control-stack-fixate (stack)
-  (let ((stack-base (+ 2 (object-location stack))))
-    (do ((frame (control-stack-ebp stack)))
-	((zerop (stack-frame-uplink stack frame)))
-      (assert (typep (stack-frame-funobj stack frame) 'function))
-      (let ((previous-frame frame))
-	(setf frame (stack-frame-uplink stack frame))
-	(incf (stack-frame-ref stack previous-frame 0)
-	      stack-base)))
-    (values (+ (control-stack-ebp stack) stack-base)
-	    (+ (control-stack-esp stack) stack-base))))	       
 
 (defun alloc-context (segment-descriptor-table)
   (let* ((fs-index 8)

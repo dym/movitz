@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri May  4 18:08:50 2001
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.10 2004/08/10 12:59:36 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.11 2005/05/05 15:17:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,7 +22,7 @@
 (defun idt-init ()
   (init-pic8259 32 40)
   (setf (pic8259-irq-mask) #xffff)
-  (load-idt (load-global-constant interrupt-descriptor-table))
+  (load-idt (muerte::load-global-constant muerte::interrupt-descriptor-table))
   nil)
 
 (defun timer-init ()

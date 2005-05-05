@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.50 2005/04/29 22:37:08 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.51 2005/05/05 15:16:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -333,17 +333,11 @@ duo-space where each space is KB-SIZE kilobytes."
 
 
 (defparameter *x* #4000(nil))		; Have this in static space.
-(defparameter *xx* #4000(nil))		; Have this in static space.
+;;;(defparameter *xx* #4000(nil))		; Have this in static space.
 
 (defparameter *code-vector-foo* 0)
 (defvar *old-code-vectors* #250())
 (defvar *new-code-vectors* #250())
-
-(defun debug (location x)
-  (setf (dummy x)
-    (let ((new (shallow-copy x)))
-      (warn "[~S] Migrating code-vector ~Z => ~Z." location x new)
-      new)))
 
 (defun stop-and-copy (&optional evacuator)
   (setf (fill-pointer *x*) 0)

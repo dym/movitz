@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001, 2003-2004, 
+;;;;    Copyright (C) 2001, 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul  8 15:13:24 2003
 ;;;;                
-;;;; $Id: textmode-console.lisp,v 1.4 2004/11/14 22:58:16 ffjeld Exp $
+;;;; $Id: textmode-console.lisp,v 1.5 2005/05/05 15:17:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -66,23 +66,23 @@
     nil))
 
 (defmethod (setf console-char) (character (console vga-text-console) x y)
-  (when (and (below x (console-width console))
-	     (below y (console-height console)))
+  (when (and (< x (console-width console))
+	     (< y (console-height console)))
     (let ((index (+ x (* y (stride console)))))
       (setf (memref-int (base console) :index index :type :unsigned-byte16)
 	(logior (ash (color console) 8) (char-code character)))))
   character)
 
 (defmethod console-char ((console vga-text-console) x y)
-  (when (and (below x (console-width console))
-	     (below y (console-height console)))
+  (when (and (< x (console-width console))
+	     (< y (console-height console)))
     (let* ((index (+ x (* y (stride console))))
 	   (code (memref-int (base console) :index index :type :unsigned-byte16)))
       (code-char (ldb (byte 8 0) code)))))
 
 (defmethod put-string ((console vga-text-console) string x y
 		       &optional (start 0) (end (length string)))
-  (when (below y (console-height console))
+  (when (< y (console-height console))
     (loop with color = (ash (color console) 8) with base = (base console)
 	for cursor upfrom (+ x (* y (stride console)))
 	for column from x below (console-width console)
@@ -93,7 +93,7 @@
   string)
 
 (defmethod clear-line ((console vga-text-console) x y)
-  (when (below y (console-height console))
+  (when (< y (console-height console))
     (loop with base = (base console)
 	for index upfrom (+ x (* y (stride console)))
 	for column from x below (console-width console)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.47 2005/04/30 21:16:12 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.48 2005/05/05 15:16:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1088,19 +1088,15 @@
   (:use muerte.mop muerte.common-lisp)
   (:import-from common-lisp cl:nil)
   (:shadow get-setf-expansion)
-  (:export translate-program
-	   decode-macro-lambda-list
-	   with-inline-assembly
-	   with-progn-results
-	   make-named-function
-	   without-function-prelude
-	   numargs-case
-	   movitz-accessor
-	   simple-read-from-string
+  (:export #:translate-program
+	   #:decode-macro-lambda-list
+	   #:with-inline-assembly
+	   #:make-named-function
+	   #:without-function-prelude
+	   #:numargs-case
+	   #:simple-read-from-string
 	   #:read-key
-	   print-word
-	   fixnump below
-	   print-unreadable-movitz-object
+	   #:fixnump
 	   #:newline
 	   
 	   #:*print-safely*
@@ -1119,17 +1115,9 @@
 	   #:*backtrace-print-level*
 	   #:backtrace
 
-	   #:stack-ref
-	   #:with-each-dynamic-context
-	   #:stack-frame-uplink
-	   #:current-stack-frame
-	   #:current-dynamic-context
-	   #:stack-frame-funobj
-	   #:stack-frame-call-site
-	   #:stack-frame-ref
-	   #:check-stack-limit
 	   #:dit-frame-ref
-	   #:dit-frame-casf
+	   #:check-stack-limit
+	   #:current-stack-frame
 	   #:interrupt-default-handler
 	   #:exception-handler
 
@@ -1157,51 +1145,41 @@
 	   
 	   #:movitz-type-slot-offset
 	   
-	   vector-element-type
-	   vector-element-size
-	   with-subvector-accessor
-	   svref%unsafe
-	   bvref-u16
-	   object-location
-	   object-tag
-	   location-in-object-p
-	   inline-malloc
-	   define-compile-time-variable
-	   define-primitive-function
-	   without-gc
-	   with-stack-check
-	   with-symbol-mutex
-	   spin-wait-pause
-	   char-whitespace-p
-	   wrong-argument-count
-	   throw-error
-	   *debugger-function*
-	   *debugger-invoked-stack-frame*
-	   *debugger-condition*
-	   *debugger-dynamic-context*
-	   pprint-clumps
-	   do-trace
-	   do-untrace
-	   malloc-initialize
-	   clos-bootstrap
-	   *forward-generic-function*
-	   halt-cpu
+	   #:object-location
+	   #:object-tag
+	   #:location-in-object-p
+	   #:define-compile-time-variable
+	   #:define-primitive-function
+	   #:without-gc
+	   #:with-stack-check
+	   #:with-symbol-mutex
+	   #:spin-wait-pause
+	   #:char-whitespace-p
+	   #:wrong-argument-count
+	   #:throw-error
+	   #:*debugger-function*
+	   #:*debugger-invoked-stack-frame*
+	   #:*debugger-condition*
+	   #:*debugger-dynamic-context*
+	   #:pprint-clumps
+	   #:do-trace
+	   #:do-untrace
+	   #:malloc-initialize
+	   #:clos-bootstrap
+	   #:*forward-generic-function*
+	   #:halt-cpu
 	   
-	   find-restart-by-index
-	   find-restart-from-context
-	   map-active-restarts
-	   with-basic-restart
+	   #:find-restart-by-index
+	   #:find-restart-from-context
+	   #:map-active-restarts
+	   #:with-basic-restart
 	   
 	   #:dynamic-variable-install
 	   #:dynamic-variable-uninstall
 
 	   #:code-vector
-	   #:vector-u8
-	   #:vector-u16
-	   #:vector-u32
 	   #:pointer
 	   #:basic-restart
-	   #:illegal-object
 	   #:run-time-context
 	   #:run-time-context-class
 	   #:current-run-time-context
@@ -1234,35 +1212,23 @@
 	   device-clear-input
 	   device-finish-record
 	   
-	   translate-program
-	   decode-macro-lambda-list
-	   decode-optional-formal
-	   decode-keyword-formal
-	   parse-declarations-and-body
-	   parse-docstring-declarations-and-body
-	   unfold-circular-list
-	   compute-function-block-name
+	   #:unfold-circular-list
+	   #:translate-program
+	   #:decode-macro-lambda-list
+	   #:decode-optional-formal
+	   #:decode-keyword-formal
+	   #:parse-declarations-and-body
+	   #:parse-docstring-declarations-and-body
+	   #:compute-function-block-name
 	   
-	   load-global-constant
-	   load-global-constant-u32
-	   runtime-context-slot
-	   movitz-accessor
-	   halt-cpu
+	   #:movitz-accessor
 	   #:%object-lispval
 	   #:%lispval-object
 	   #:objects-equalp
-	   word-nibble
-	   &edx
-	   
-	   #:un-backquote
-	   #:backquote-comma
-	   #:backquote-comma-at
-	   #:backquote-comma-dot
+	   #:&edx
 	   
 	   #:memref
 	   #:memref-int
-	   #:memcopy
-	   #:%copy-words
 
 	   #:io-port
 	   #:io-register8
@@ -1383,19 +1349,19 @@
 	   #:*compiler-allow-untagged-word-bits*
 	   )
   (:import-from muerte
-		#:translate-program
-		#:decode-macro-lambda-list
-		#:un-backquote
-		#:backquote-comma
-		#:backquote-comma-at
-		#:backquote-comma-dot
+		muerte::translate-program
+		muerte::decode-macro-lambda-list
+		muerte::un-backquote
+		muerte::backquote-comma
+		muerte::backquote-comma-at
+		muerte::backquote-comma-dot
 
-		#:decode-optional-formal
-		#:decode-keyword-formal
-		#:parse-declarations-and-body
-		#:parse-docstring-declarations-and-body
-		#:unfold-circular-list
-		#:compute-function-block-name
+		muerte::decode-optional-formal
+		muerte::decode-keyword-formal
+		muerte::parse-declarations-and-body
+		muerte::parse-docstring-declarations-and-body
+		muerte::unfold-circular-list
+		muerte::compute-function-block-name
 		))
 
 

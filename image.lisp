@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.97 2005/05/05 13:21:40 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.98 2005/05/05 15:16:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -572,8 +572,8 @@
     muerte:run-time-context
     muerte.mop:standard-effective-slot-definition
     muerte.mop:funcallable-standard-class
-    muerte:basic-restart
-    muerte:illegal-object))
+    muerte::basic-restart
+    muerte::illegal-object))
 
 (defun class-object-offset (name)
   (let ((name (translate-program name :cl :muerte.cl)))
