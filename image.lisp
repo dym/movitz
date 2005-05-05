@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.95 2005/05/04 22:47:58 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.96 2005/05/05 13:02:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -429,12 +429,6 @@
     :initform (make-array 256 :initial-element 'muerte::default-interrupt-trampoline)
     :map-binary-read-delayed 'movitz-word
     :map-binary-write 'map-interrupt-trampolines-to-idt)
-   (toplevel-funobj
-    :binary-type word
-    :initform nil
-    :accessor movitz-run-time-context-toplevel-funobj
-    :map-binary-write 'movitz-intern
-    :map-binary-read-delayed 'movitz-word)
    (global-properties
     :binary-type word
     :initform nil
@@ -885,7 +879,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
       (stable-sort (copy-list (image-load-time-funobjs *image*)) #'> :key #'third))
     (let* ((toplevel-funobj (make-toplevel-funobj *image*)))
       (setf (image-toplevel-funobj *image*) toplevel-funobj
-	    (movitz-run-time-context-toplevel-funobj (image-run-time-context *image*)) toplevel-funobj)
+	    #+ignore ((movitz-run-time-context-toplevel-funobj (image-run-time-context *image*)) toplevel-funobj))
       (format t "~&;; load-sequence:~%~<~A~>~%" (mapcar #'second (image-load-time-funobjs *image*)))
       (movitz-intern toplevel-funobj)
       (let ((init-code-address (+ (movitz-intern-code-vector (movitz-funobj-code-vector toplevel-funobj))
@@ -1056,7 +1050,8 @@ this image will not be Multiboot compatible."
 	(file-start-position (file-position stream))
 	(pad-size 0))
     (declare (special *record-all-funobjs*))
-    (loop for p upfrom (- (image-start-address image) (image-ds-segment-base image)) by 8
+    (loop with prev-obj
+	for p upfrom (- (image-start-address image) (image-ds-segment-base image)) by 8
 	until (>= p (image-cons-pointer image))
 	summing
 	  (let ((obj (image-memref image p nil)))
@@ -1068,7 +1063,8 @@ this image will not be Multiboot compatible."
 		  (let ((pad-delta (- new-pos (file-position stream))))
 		    (with-simple-restart (continue "Never mind.")
 		      (assert (<= 0 pad-delta 31) ()
-			"pad-delta ~S for ~S, p: ~S, new-pos: ~S" pad-delta obj p new-pos))
+			"pad-delta ~S for ~S (prev ~S), p: ~S, new-pos: ~S"
+			pad-delta obj prev-obj p new-pos))
 		    (incf pad-size pad-delta))
 		  (set-file-position stream new-pos obj))
 		;; (warn "Dump at address #x~X, filepos #x~X: ~A" p (file-position stream) obj)
@@ -1085,17 +1081,18 @@ this image will not be Multiboot compatible."
 		       (:code (incf code-vectors-numof)
 			      (incf code-vectors-size write-size))))
 		    (movitz-funobj (incf funobjs-numof)
-				(incf funobjs-size write-size))
+				   (incf funobjs-size write-size))
 		    (movitz-symbol (incf symbols-numof)
-				(incf symbols-size write-size)
-				(when (movitz-eql *movitz-nil* (movitz-symbol-package obj))
-				  (incf gensyms-numof)))
+				   (incf symbols-size write-size)
+				   (when (movitz-eql *movitz-nil* (movitz-symbol-package obj))
+				     (incf gensyms-numof)))
 		    (movitz-cons (incf conses-numof)
-			      (incf conses-size write-size)))
+				 (incf conses-size write-size)))
 		  (assert (= write-size (sizeof obj) (- (file-position stream) old-pos)) ()
 		    "Inconsistent write-size(~D)/sizeof(~D)/file-position delta(~D) ~
                        for object ~S."
 		    write-size (sizeof obj) (- (file-position stream) old-pos) obj)
+		  (setf prev-obj obj)
 		  write-size))))
 	finally
 	  (let ((total-size (file-position stream))
@@ -1582,7 +1579,9 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 (defmethod make-toplevel-funobj ((*image* symbolic-image))
   (declare (special *image*))
   (let ((toplevel-code (loop for (funobj) in (image-load-time-funobjs *image*)
-			   collect `(muerte::simple-funcall ,funobj))))
+			   collect `(muerte::simple-funcall ,funobj)))
+	;; We need toplevel-funobj's identity in the code below.
+	(toplevel-funobj (make-instance 'movitz-funobj-pass1)))
     (make-compiled-funobj 'muerte::toplevel-function ()
 			  '((muerte::without-function-prelude))
 			  `(muerte.cl:progn
@@ -1631,8 +1630,9 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 			       (:pushl 0)
 			       (:pushl 0)
 			       (:movl :esp :ebp)
-			       
-			       (:globally (:movl (:edi (:edi-offset toplevel-funobj)) :esi))
+
+			       (:movl '(:funcall ,(lambda () (movitz-intern toplevel-funobj)))
+				      :esi)
 			       (:pushl :esi)
 			       (:pushl :edi)
 			       (:cmpl #x2badb002 :eax)
@@ -1658,7 +1658,7 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 
 			     ,@toplevel-code
 			     (muerte::halt-cpu))
-			  nil t)))
+			  nil t :funobj toplevel-funobj)))
 
 (defun mkasm-write-word-eax-ebx ()
   (let ((loop-label (make-symbol "write-word-loop"))
