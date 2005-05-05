@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.25 2005/05/03 20:09:50 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.26 2005/05/05 18:08:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -225,17 +225,6 @@ respect to multiple threads."
   `(if ,eof-errorp
        (error 'end-of-file :stream ,stream)
        ,eof-value))
-
-
-(defmacro with-bochs-tracing ((&optional (value 1)) &body body)
-  "Bochs magic."
-  `(let ((old-flags (muerte::%run-time-context-slot 'bochs-flags)))
-     (unwind-protect
-	 (progn
-	   (setf (muerte::%run-time-context-slot 'bochs-flags) ,value)
-	   ,@body)
-       (setf (muerte::%run-time-context-slot 'bochs-flags) old-flags))))
-
 
 (defmacro handler-bind (bindings &body forms)
   (if (null bindings)
