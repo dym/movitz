@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.42 2005/05/05 15:16:54 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.43 2005/05/05 18:09:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1077,9 +1077,9 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
    (t (describe x)))
   (values))
 
-(muerte.toplevel:define-toplevel-command :bochs-trace (form)
-  (muerte::with-bochs-tracing ()
-    (eval form)))
+;;;(muerte.toplevel:define-toplevel-command :bochs-trace (form)
+;;;  (muerte::with-bochs-tracing ()
+;;;    (eval form)))
 
 (muerte.toplevel:define-toplevel-command :mapkey (code-char-form)
   (let* ((code-char (eval code-char-form))
