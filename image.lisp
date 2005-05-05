@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.96 2005/05/05 13:02:37 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.97 2005/05/05 13:21:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -428,13 +428,7 @@
     :accessor movitz-run-time-context-interrupt-descriptor-table
     :initform (make-array 256 :initial-element 'muerte::default-interrupt-trampoline)
     :map-binary-read-delayed 'movitz-word
-    :map-binary-write 'map-interrupt-trampolines-to-idt)
-   (global-properties
-    :binary-type word
-    :initform nil
-    :accessor movitz-run-time-context-global-properties
-    :map-binary-write 'movitz-intern
-    :map-binary-read-delayed 'movitz-word))
+    :map-binary-write 'map-interrupt-trampolines-to-idt))
   (:slot-align null-symbol -5))
 
 (defun atomically-continuation-simple-pf (pf-name)
@@ -940,12 +934,8 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	      do (let ((mname (movitz-read var))
 		       (mvalue (movitz-read (symbol-value var))))
 		   (setf (movitz-symbol-value mname) mvalue)))
-	  (setf (movitz-run-time-context-global-properties run-time-context)
-	    (movitz-read (list :packages (make-packages-hash)
-			       :trampoline-funcall%1op (find-primitive-function
-							'muerte::trampoline-funcall%1op)
-			       :trampoline-funcall%2op (find-primitive-function
-							'muerte::trampoline-funcall%2op)))))
+	  (setf (movitz-symbol-value (movitz-read 'muerte::*packages*))
+	    (movitz-read (make-packages-hash))))
 	(with-binary-file (stream path
 				  :check-stream t
 				  :direction :output

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.17 2005/04/20 06:52:26 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.18 2005/05/05 13:21:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -326,9 +326,6 @@
     (compiled-function
      x)
     (t (error "Not a function: ~S" x))))
-
-(defun get-global-property (property)
-  (getf (load-global-constant global-properties) property))
 
 (define-compiler-macro object-location (object)
   "The location is the object's address divided by fixnum-factor."
