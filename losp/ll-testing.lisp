@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 14 08:18:43 2005
 ;;;;                
-;;;; $Id: ll-testing.lisp,v 1.6 2005/04/29 22:36:49 ffjeld Exp $
+;;;; $Id: ll-testing.lisp,v 1.7 2005/05/05 10:28:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -139,34 +139,34 @@ NB! ensure that the table object isn't garbage-collected."
 		   :esi function)))
   stack)
 
-(defun make-thread (&key (name (gensym "thread-")) (function #'invoke-debugger) (args '(nil)))
-  "Make a thread and initialize its stack to apply function to args."
-  (let* ((fs-index 8)			; a vacant spot in the global segment descriptor table..
-	 (fs (* 8 fs-index))
-	 (thread (muerte::clone-run-time-context :name name))
-	 (segment-descriptor-table (symbol-value 'muerte.init::*segment-descriptor-table*)))
-    (setf (segment-descriptor segment-descriptor-table fs-index)
-      (segment-descriptor segment-descriptor-table (truncate (segment-register :fs) 8)))
-    (setf (segment-descriptor-base-location segment-descriptor-table fs-index)
-      (+ (object-location thread) (muerte::location-physical-offset)))
-    (let ((cushion nil)
-	  (stack (control-stack-init-for-yield (make-array 4094 :element-type '(unsigned-byte 32))
-					       function args)))
-      (multiple-value-bind (ebp esp)
-	  (control-stack-fixate stack)
-	(setf (control-stack-fs stack) fs
-	      (control-stack-ebp stack) ebp
-	      (control-stack-esp stack) esp))
-      (setf (%run-time-context-slot 'dynamic-env thread) 0
-	    (%run-time-context-slot 'stack-vector thread) stack
-	    (%run-time-context-slot 'stack-top thread) (+ 2 (object-location stack)
-							  (length stack))
-	    (%run-time-context-slot 'stack-bottom thread) (+ (object-location stack) 2
-							     (or cushion
-								 (if (>= (length stack) 200)
-								     100
-								   0))))
-      (values thread))))
+;;;(defun make-thread (&key (name (gensym "thread-")) (function #'invoke-debugger) (args '(nil)))
+;;;  "Make a thread and initialize its stack to apply function to args."
+;;;  (let* ((fs-index 8)			; a vacant spot in the global segment descriptor table..
+;;;	 (fs (* 8 fs-index))
+;;;	 (thread (muerte::clone-run-time-context :name name))
+;;;	 (segment-descriptor-table (symbol-value 'muerte.init::*segment-descriptor-table*)))
+;;;    (setf (segment-descriptor segment-descriptor-table fs-index)
+;;;      (segment-descriptor segment-descriptor-table (truncate (segment-register :fs) 8)))
+;;;    (setf (segment-descriptor-base-location segment-descriptor-table fs-index)
+;;;      (+ (object-location thread) (muerte::location-physical-offset)))
+;;;    (let ((cushion nil)
+;;;	  (stack (control-stack-init-for-yield (make-array 4094 :element-type '(unsigned-byte 32))
+;;;					       function args)))
+;;;      (multiple-value-bind (ebp esp)
+;;;	  (control-stack-fixate stack)
+;;;	(setf (control-stack-fs stack) fs
+;;;	      (control-stack-ebp stack) ebp
+;;;	      (control-stack-esp stack) esp))
+;;;      (setf (%run-time-context-slot 'dynamic-env thread) 0
+;;;	    (%run-time-context-slot 'stack-vector thread) stack
+;;;	    (%run-time-context-slot 'stack-top thread) (+ 2 (object-location stack)
+;;;							  (length stack))
+;;;	    (%run-time-context-slot 'stack-bottom thread) (+ (object-location stack) 2
+;;;							     (or cushion
+;;;								 (if (>= (length stack) 200)
+;;;								     100
+;;;								   0))))
+;;;      (values thread))))
 
 (defun stack-bootstrapper (&rest ignore)
   (declare (ignore ignore))
