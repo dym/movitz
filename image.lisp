@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.98 2005/05/05 15:16:38 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.99 2005/05/05 18:01:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,6 +22,19 @@
     :initform :run-time-context)
    (padding
     :binary-type 3)
+   (atomically-continuation
+    :binary-type lu32
+    :initform 0)
+   (raw-scratch0			; A non-GC-root scratch register
+    :binary-type lu32
+    :initform 0)
+   (pointer-start :binary-type :label)
+   (scratch1
+    :binary-type word
+    :initform 0)
+   (scratch2
+    :binary-type word
+    :initform 0)
    (class
     :binary-type word
     :map-binary-write 'movitz-intern
@@ -35,12 +48,6 @@
     :initarg :slots
     :initform #(:init nil)
     :accessor run-time-context-slots)
-   (scratch1
-    :binary-type word
-    :initform 0)
-   (scratch2
-    :binary-type word
-    :initform 0)
    (fast-car
     :binary-type code-vector-word
     :initform nil
@@ -369,27 +376,6 @@
     :binary-type word
     :initform 6
     :map-binary-read-delayed 'movitz-word)
-   (protect-non-pointer-area
-    :binary-type lu32
-    :initform 3)
-   (protect-non-pointer-count
-    :binary-type lu32
-    :initform nil
-    :map-binary-write (lambda (x type)
-			(declare (ignore x type))
-			(- (bt:slot-offset 'movitz-run-time-context 'non-pointers-end)
-			   (bt:slot-offset 'movitz-run-time-context 'non-pointers-start))))
-   (non-pointers-start :binary-type :label) ; ========= NON-POINTER-START =======
-   (bochs-flags
-    :binary-type lu32
-    :initform 0)
-   (raw-scratch0			; A non-GC-root scratch register
-    :binary-type lu32
-    :initform 0)
-   (atomically-continuation
-    :binary-type lu32
-    :initform 0)
-   (non-pointers-end :binary-type :label) ; ========= NON-POINTER-END =======
    (ret-trampoline
     :binary-type code-vector-word
     :map-binary-write 'movitz-intern-code-vector
