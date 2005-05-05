@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.63 2005/02/03 09:19:02 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.64 2005/05/05 13:59:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -529,18 +529,31 @@ BUFFER-SIZE is the number of words in the buffer."
 	    (:movl (:eax ,movitz:+other-type-offset+) :ecx)
 	    (:cmpb ,(movitz:tag :std-instance) :cl)
 	    (:jne 'not-std-instance)
-	    (:movl (:eax ,(bt:slot-offset 'movitz::movitz-std-instance 'movitz::class)) :eax)
+	    (,movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+	     :movl (:eax ,(bt:slot-offset 'movitz::movitz-std-instance 'movitz::class)) :eax)
 	    (:ret)
 	   not-std-instance
 	    (:cmpw ,(+ (movitz:tag :funobj)
 		       (ash (bt:enum-value 'movitz::movitz-funobj-type :generic-function) 8))
 		   :cx)
 	    (:jne 'not-std-gf-instance)
-	    (:movl (:eax ,(bt:slot-offset 'movitz::movitz-funobj-standard-gf
+	    (,movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+	     :movl (:eax ,(bt:slot-offset 'movitz::movitz-funobj-standard-gf
 					  'movitz::standard-gf-class))
 		   :eax)
 	    (:ret)
 	   not-std-gf-instance
+
+	    (:cmpb ,(movitz:tag :run-time-context) :cl)
+	    (:jne 'not-rtc)
+	    (,movitz:*compiler-nonlocal-lispval-read-segment-prefix*
+	     :movl (:eax (:offset movitz-run-time-context class
+				  ,(- (movitz::image-nil-word movitz:*image*)
+				      (movitz::tag :other))))
+	     :eax)
+	    (:ret)
+	   not-rtc
+	    
 	    (:globally (:movl (:edi (:edi-offset classes)) :ebx))
 	    (:cmpb ,(movitz:tag :bignum) :cl)
 	    (:jne 'not-bignum)
@@ -571,8 +584,6 @@ BUFFER-SIZE is the number of words in the buffer."
      (structure-object-class object))
     (character
      (find-class 'character))
-    (run-time-context
-     (find-class 'run-time-context))
     (null
      (find-class 'null))
     (cons
