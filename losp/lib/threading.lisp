@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 28 08:30:01 2005
 ;;;;                
-;;;; $Id: threading.lisp,v 1.1 2005/04/28 22:05:02 ffjeld Exp $
+;;;; $Id: threading.lisp,v 1.2 2005/05/05 15:21:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,11 +18,16 @@
 
 (defpackage threading
   (:use cl muerte)
-  (:export make-thread
+  (:export thread
+	   make-thread
 	   yield
 	   ))
 
-(in-package threading)
+(in-package muerte)
+
+(defclass thread (run-time-context)
+  ()
+  (:metaclass run-time-context-class))
 
 (defmacro control-stack-ebp (stack)
   `(stack-frame-ref ,stack 0 0))
@@ -46,6 +51,18 @@
     (control-stack-push function stack))
   stack)
 
+(defun control-stack-fixate (stack)
+  (let ((stack-base (+ 2 (object-location stack))))
+    (do ((frame (control-stack-ebp stack)))
+	((zerop (stack-frame-uplink stack frame)))
+      (assert (typep (stack-frame-funobj stack frame) 'function))
+      (let ((previous-frame frame))
+	(setf frame (stack-frame-uplink stack frame))
+	(incf (stack-frame-ref stack previous-frame 0)
+	      stack-base)))
+    (values (+ (control-stack-ebp stack) stack-base)
+	    (+ (control-stack-esp stack) stack-base))))	       
+
 (defun stack-bootstrapper (&rest ignore)
   "Control stacks are initialized with this function as their initial frame."
   (declare (ignore ignore))
@@ -57,7 +74,7 @@
       (check-type args list)
       (apply function args)))
   (error "Nothing left to do for ~S." (current-run-time-context))
-  (loop (halt-cpu)))
+  (loop (halt-cpu)))			; just to make sure
 
 (defun control-stack-init-for-yield (stack function args)
   "Make it so that a yield to stack will cause function to be applied to args."
@@ -79,7 +96,7 @@
   (let* ((fs-index 8) ; a vacant spot in the global segment descriptor table..
 	 (fs (* 8 fs-index))
 	 (thread (muerte::clone-run-time-context :name name))
-	 (segment-descriptor-table (symbol-value 'muerte.init::*segment-descriptor-table*)))
+	 (segment-descriptor-table nil #+ignore (symbol-value 'muerte.init::*segment-descriptor-table*)))
     (setf (segment-descriptor segment-descriptor-table fs-index)
       (segment-descriptor segment-descriptor-table (truncate (segment-register :fs) 8)))
     (setf (segment-descriptor-base-location segment-descriptor-table fs-index)
@@ -114,8 +131,8 @@
 	  (ebp (control-stack-ebp target-stack)))
       (assert (location-in-object-p target-stack esp))
       (assert (location-in-object-p target-stack ebp))
-      (assert (eq (stack-frame-funobj nil ebp)
-		  (asm-register :esi)) ()
+      (assert (eq (muerte::stack-frame-funobj nil ebp)
+		  (muerte::asm-register :esi)) ()
 	"Will not yield to a non-yield frame.")
       ;; Push eflags for later..
       (setf (memref (decf esp) 0) (eflags))
@@ -124,8 +141,8 @@
 	    (%run-time-context-slot 'scratch2 target-rtc) esp)
       ;; Enable someone to yield back here..
       (setf (control-stack-fs my-stack) (segment-register :fs)
-	    (control-stack-ebp my-stack) (asm-register :ebp)
-	    (control-stack-esp my-stack) (asm-register :esp))
+	    (control-stack-ebp my-stack) (muerte::asm-register :ebp)
+	    (control-stack-esp my-stack) (muerte::asm-register :esp))
       (with-inline-assembly (:returns :eax)
 	(:load-lexical (:lexical-binding fs) :untagged-fixnum-ecx)
 	(:load-lexical (:lexical-binding value) :eax)
