@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 28 08:30:01 2005
 ;;;;                
-;;;; $Id: threading.lisp,v 1.3 2005/05/05 20:52:21 ffjeld Exp $
+;;;; $Id: threading.lisp,v 1.4 2005/05/06 06:59:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -24,6 +24,27 @@
 	   ))
 
 (in-package muerte)
+
+(defclass segment-descriptor-manager ()
+  ((table
+    :accessor segment-descriptor-table
+    :initarg :table
+    :initform (dump-global-segment-table :entries 32))
+   (range-start
+    :initarg :range-start
+    :accessor range-start
+    :initform (1+ (ceiling (reduce #'max '(:cs :ds :es :ss :fs)
+				   :key #'segment-register)
+			   8)))))
+
+(defmethod allocate-segment-selector ((manager segment-descriptor-manager) &optional errorp)
+  (loop with table = (segment-descriptor-table manager)
+      for s from (range-start manager) below (/ (length table) 2)
+      do (when (zerop (ldb (byte 1 0) (segment-descriptor-avl-x-db-g table s)))
+	   (setf (ldb (byte 1 0) (segment-descriptor-avl-x-db-g table s)) 1)
+	   (return (* 8 s)))
+      finally (when errorp
+		(error "Unable to allocate a segment selector."))))
 
 (defclass thread (run-time-context)
   ((segment-selector
