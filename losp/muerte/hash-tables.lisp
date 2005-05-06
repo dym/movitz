@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb 19 19:09:05 2001
 ;;;;                
-;;;; $Id: hash-tables.lisp,v 1.4 2004/10/11 13:52:37 ffjeld Exp $
+;;;; $Id: hash-tables.lisp,v 1.5 2005/05/06 20:53:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -44,7 +44,7 @@
 	(equal (values #'equal #'sxhash)))
     (make-hash-table-object
      :test test
-     :bucket (make-array (* 2 size) :initial-element '#.movitz::+undefined-hash-key+)
+     :bucket (make-array (* 2 size) :initial-element '--no-hash-key--)
      :sxhash sxhash)))
 
 (defun hash-table-count (hash-table)
@@ -53,7 +53,7 @@
 	(count 0)
 	(i 0 (+ i 2)))
       ((>= i length) count)
-    (unless (eq (svref bucket i) '#.movitz::+undefined-hash-key+)
+    (unless (eq (svref bucket i) '--no-hash-key--)
       (incf count))))
 
 (defun hash-table-iterator (bucket index)
@@ -61,7 +61,7 @@
     (do ((length (array-dimension bucket 0)))
 	((>= index length) nil)
       (unless (eq (svref bucket index)
-		  '#.movitz::+undefined-hash-key+)
+		  '--no-hash-key--)
 	(return (+ index 2)))
       (incf index 2))))
 
@@ -130,7 +130,7 @@
     (do () (nil)
       (let ((k (svref%unsafe bucket i2)))
 	(cond
-	 ((eq '#.movitz::+undefined-hash-key+ k)
+	 ((eq k '--no-hash-key--)
 	  (return (values default nil)))
 	 ((funcall test key k)
 	  (return (values (svref%unsafe bucket (1+ i2)) t)))))
@@ -147,7 +147,7 @@ look up key0 as if it was in a singleton list (key0)."
     (do () (nil)
       (let ((k (svref%unsafe bucket i2)))
 	(cond
-	 ((eq '#.movitz::+undefined-hash-key+ k)
+	 ((eq k '--no-hash-key--)
 	  (return nil))
 	 ((eq key0 (car k))
 	  (return (svref%unsafe bucket (1+ i2))))))
@@ -165,7 +165,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
     (do () (nil)
       (let ((k (svref%unsafe bucket i2)))
 	(cond
-	 ((eq '#.movitz::+undefined-hash-key+ k)
+	 ((eq k '--no-hash-key--)
 	  (return nil))
 	 ((and (eq key0 (car k)) (eq key1 (cadr k)))
 	  (return (svref%unsafe bucket (1+ i2))))))
@@ -183,7 +183,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
       ((>= c bucket-length)
        (error "Hash-table bucket is full, needs rehashing, which isn't implemented."))
     (let ((k (svref%unsafe bucket index2)))
-      (when (or (eq '#.movitz::+undefined-hash-key+ k)
+      (when (or (eq k '--no-hash-key--)
 		(funcall test k key))
 	(return (setf (svref%unsafe bucket index2) key
 		      (svref%unsafe bucket (1+ index2)) value))))
@@ -197,7 +197,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 	    (index2 (rem (* 2 (sxhash-subvector key-string start end 8))
 			 bucket-length)
 		    (rem (+ 2 index2) bucket-length)))
-	  ((eq '#.movitz::+undefined-hash-key+
+	  ((eq '--no-hash-key--
 	       (svref%unsafe bucket index2))
 	   (values default nil))
 	(when ;; (string= key-string (svref bucket index2) :start1 start :end1 end))
@@ -221,19 +221,19 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 	(i 0 (+ i 2)))
       ((>= i bucket-length) nil)
     (let ((x (svref bucket index2)))
-      (when (or (eq '#.movitz::+undefined-hash-key+ x)
+      (when (or (eq x '--no-hash-key--)
 		(funcall (hash-table-test hash-table) x key))
-	(setf (svref bucket index2) '#.movitz::+undefined-hash-key+)
+	(setf (svref bucket index2) '--no-hash-key--)
 	;; Now we must rehash any entries that might have been
 	;; displaced by the one we have now removed.
 	(do ((i (rem (+ index2 2) bucket-length)
 		(rem (+ i 2) bucket-length)))
 	    ((= i index2))
 	  (let ((k (svref bucket i)))
-	    (when (eq x '#.movitz::+undefined-hash-key+)
+	    (when (eq x '--no-hash-key--)
 	      (return))
 	    (let ((v (svref bucket (1+ i))))
-	      (setf (svref bucket i) '#.movitz::+undefined-hash-key+) ; remove
+	      (setf (svref bucket i) '--no-hash-key--) ; remove
 	      (setf (gethash k hash-table) v)))) ; insert (hopefully this is safe..)
 	(return t)))))
 
@@ -242,7 +242,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 	(bucket-length (length bucket))
 	(i 0 (+ i 2)))
       ((>= i bucket-length) hash-table)
-    (setf (svref bucket i) '#.movitz::+undefined-hash-key+)))
+    (setf (svref bucket i) '--no-hash-key--)))
 
 (defun maphash (function hash-table)
   (with-hash-table-iterator (get-next-entry hash-table)
