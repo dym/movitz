@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.32 2005/05/05 20:51:36 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.33 2005/05/06 15:39:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -222,7 +222,7 @@ funcallable-instance will run the new function."
   (case class-name
     ((t) (setf (%run-time-context-slot nil 'the-class-t) class))
     (null (setf (%run-time-context-slot nil 'the-class-null) class))
-    (symbol (setf (%run-time-context-slot 'nil the-class-symbol) class))
+    (symbol (setf (%run-time-context-slot nil 'the-class-symbol) class))
     (fixnum (setf (%run-time-context-slot nil 'the-class-fixnum) class))
     (cons (setf (%run-time-context-slot nil 'the-class-cons) class)))
   (let ((map (load-global-constant classes)))
