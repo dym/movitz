@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 28 08:30:01 2005
 ;;;;                
-;;;; $Id: threading.lisp,v 1.5 2005/05/08 01:20:48 ffjeld Exp $
+;;;; $Id: threading.lisp,v 1.6 2005/05/08 13:41:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -56,6 +56,7 @@
 
 (defclass thread (run-time-context)
   ((segment-selector
+    :reader segment-selector
     :initarg :segment-selector))
   (:metaclass run-time-context-class))
 
@@ -64,9 +65,6 @@
 
 (defmacro control-stack-esp (stack)
   `(stack-frame-ref ,stack 0 1))
-
-(defmacro control-stack-fs (stack)
-  `(stack-frame-ref ,stack 0 2))
 
 (defmethod initialize-instance :after ((thread thread)
 				       &key (stack-size 2048) segment-selector stack-cushion
@@ -90,8 +88,7 @@
 					       function args)))
       (multiple-value-bind (ebp esp)
 	  (control-stack-fixate stack)
-	(setf (control-stack-fs stack) segment-selector
-	      (control-stack-ebp stack) ebp
+	(setf (control-stack-ebp stack) ebp
 	      (control-stack-esp stack) esp))
       (setf (%run-time-context-slot thread 'muerte::dynamic-env) 0)
       (setf (%run-time-context-slot thread 'muerte::stack-vector) stack)
@@ -166,7 +163,7 @@
   (let ((my-stack (%run-time-context-slot nil 'muerte::stack-vector))
 	(target-stack (%run-time-context-slot target-rtc 'muerte::stack-vector)))
     (assert (not (eq my-stack target-stack)))
-    (let ((fs (control-stack-fs target-stack))
+    (let ((fs (segment-selector target-rtc))
 	  (esp (control-stack-esp target-stack))
 	  (ebp (control-stack-ebp target-stack)))
       (assert (location-in-object-p target-stack esp))
@@ -180,8 +177,7 @@
       (setf (%run-time-context-slot target-rtc 'muerte::scratch1) ebp
 	    (%run-time-context-slot target-rtc 'muerte::scratch2) esp)
       ;; Enable someone to yield back here..
-      (setf (control-stack-fs my-stack) (segment-register :fs)
-	    (control-stack-ebp my-stack) (muerte::asm-register :ebp)
+      (setf (control-stack-ebp my-stack) (muerte::asm-register :ebp)
 	    (control-stack-esp my-stack) (muerte::asm-register :esp))
       (with-inline-assembly (:returns :eax)
 	(:load-lexical (:lexical-binding fs) :untagged-fixnum-ecx)
