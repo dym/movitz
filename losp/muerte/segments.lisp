@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu May  8 14:25:06 2003
 ;;;;                
-;;;; $Id: segments.lisp,v 1.13 2005/04/29 22:36:05 ffjeld Exp $
+;;;; $Id: segments.lisp,v 1.14 2005/05/08 01:19:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -162,13 +162,26 @@ This is the setter corresponding to the sgdt getter."
       (:cr3 (set-creg :cr3))
       (:cr4 (set-creg :cr4)))
     value))
+
+;;
+
+(defun (setf global-segment-descriptor-table) (table)
+  "Install <table> as the GDT.
+NB! you need ensure that the table object isn't garbage-collected."
+  (check-type table (vector (unsigned-byte 32)))
+  (let ((limit (1- (* 2 (length table))))
+	(base (+ 2 (+ (object-location table)
+		      (location-physical-offset)))))
+    (%lgdt base limit)
+    table))
     
-(defun segment-descriptor-base-location (table index)
+(defun segment-descriptor-base-location (table selector)
   (check-type table (and vector (not simple-vector)))
   (eval-when (:compile-toplevel)
     (assert (= 4 movitz::+movitz-fixnum-factor+)))
   ;; XXX This fails for locations above 2GB.
-  (let ((offset (+ (* index 8) (movitz-type-slot-offset 'movitz-basic-vector 'data))))
+  (let ((offset (+ (logand selector #xfff8)
+		   (movitz-type-slot-offset 'movitz-basic-vector 'data))))
     (logior (ash (memref table (+ 7 offset) :type :unsigned-byte8)
 		 22)
 	    (ash (memref table (+ 4 offset) :type :unsigned-byte8)
@@ -176,11 +189,12 @@ This is the setter corresponding to the sgdt getter."
 	    (ash (memref table (+ 2 offset) :type :unsigned-byte16)
 		 -2))))
 
-(defun (setf segment-descriptor-base-location) (base-location table index)
+(defun (setf segment-descriptor-base-location) (base-location table selector)
   (check-type table (and vector (not simple-vector)))
   (eval-when (:compile-toplevel)
     (assert (= 4 movitz::+movitz-fixnum-factor+)))
-  (let ((offset (+ (* index 8) (movitz-type-slot-offset 'movitz-basic-vector 'data))))
+  (let ((offset (+ (logand #xfff8 selector)
+		   (movitz-type-slot-offset 'movitz-basic-vector 'data))))
     (setf (memref table (+ 7 offset) :type :unsigned-byte8)
       (ldb (byte 8 22) base-location))
     (setf (memref table (+ 4 offset) :type :unsigned-byte8)
@@ -189,66 +203,91 @@ This is the setter corresponding to the sgdt getter."
       (ash (ldb (byte 14 0) base-location) 2))
     base-location))
 
-(defun segment-descriptor-limit (table index)
+(defun segment-descriptor-limit (table selector)
   (check-type table (and vector (not simple-vector)))
-  (let ((offset (+ (* index 8) (movitz-type-slot-offset 'movitz-basic-vector 'data))))
+  (let ((offset (+ (logand #xfff8 selector)
+		   (movitz-type-slot-offset 'movitz-basic-vector 'data))))
     (dpb (memref table (+ 6 offset) :type :unsigned-byte8)
 	 (byte 4 16)
 	 (memref table (+ 0 offset) :type :unsigned-byte16))))
 
-(defun (setf segment-descriptor-limit) (limit table index)
+(defun (setf segment-descriptor-limit) (limit table selector)
   (check-type table (and vector (not simple-vector)))
-  (let ((offset (+ (* index 8) (movitz-type-slot-offset 'movitz-basic-vector 'data))))
+  (let ((offset (+ (logand #xfff8 selector)
+		   (movitz-type-slot-offset 'movitz-basic-vector 'data))))
     (setf (memref table (+ 6 offset) :type :unsigned-byte8)
       (ldb (byte 4 16) limit))
     (setf (memref table (+ 0 offset) :type :unsigned-byte8)
       (ldb (byte 16 0) limit))
     limit))
 
-(defun segment-descriptor-type-s-dpl-p (table index)
+(defun segment-descriptor-type-s-dpl-p (table selector)
   "Access bits 40-47 of the segment descriptor."
   (check-type table (and vector (not simple-vector)))
-  (memref table (+ 5 (* index 8) (movitz-type-slot-offset 'movitz-basic-vector 'data))
+  (memref table (+ 5 (logand #xfff8 selector)
+		   (movitz-type-slot-offset 'movitz-basic-vector 'data))
 	  :type :unsigned-byte8))
 
-(defun (setf segment-descriptor-type-s-dpl-p) (bits table index)
+(defun (setf segment-descriptor-type-s-dpl-p) (bits table selector)
   "Access bits 40-47 of the segment descriptor."
   (check-type table (and vector (not simple-vector)))
-  (setf (memref table (+ 5 (* index 8) (movitz-type-slot-offset 'movitz-basic-vector 'data))
+  (setf (memref table (+ 5 (logand #xfff8 selector)
+			 (movitz-type-slot-offset 'movitz-basic-vector 'data))
 		:type :unsigned-byte8)
     bits))
 		   
-(defun segment-descriptor-avl-x-db-g (table index)
+(defun segment-descriptor-avl-x-db-g (table selector)
   "Access bits 52-55 of the segment descriptor."
   (check-type table (and vector (not simple-vector)))
   (ldb (byte 4 4)
-       (memref table (+ 6 (* index 8) (movitz-type-slot-offset 'movitz-basic-vector 'data))
+       (memref table (+ 6 (logand #xfff8 selector)
+			(movitz-type-slot-offset 'movitz-basic-vector 'data))
 	       :type :unsigned-byte8)))
 
-(defun (setf segment-descriptor-avl-x-db-g) (bits table index)
+(defun (setf segment-descriptor-avl-x-db-g) (bits table selector)
   "Access bits 52-55 of the segment descriptor."
   (check-type table (and vector (not simple-vector)))
   (setf (ldb (byte 4 4)
-	     (memref table (+ 6 (* index 8) (movitz-type-slot-offset 'movitz-basic-vector 'data))
+	     (memref table (+ 6 (logand #xfff8 selector)
+			      (movitz-type-slot-offset 'movitz-basic-vector 'data))
 		     :type :unsigned-byte8))
     bits))
 
-(defun segment-descriptor (table index)
+(defun segment-descriptor (table selector)
   "Access entire segment descriptor as a 64-bit integer."
   (check-type table (and vector (not simple-vector)))
-  (let ((offset (+ (* index 8) (movitz-type-slot-offset 'movitz-basic-vector 'data))))
+  (let ((offset (+ (logand #xfff8 selector)
+		   (movitz-type-slot-offset 'movitz-basic-vector 'data))))
     (logior (ash (memref table offset :index 1 :type :unsigned-byte32)
 		 32)
 	    (ash (memref table offset :index 0 :type :unsigned-byte32)
 		 0))))
 
-(defun (setf segment-descriptor) (value table index)
+(defun (setf segment-descriptor) (value table selector)
   "Access entire segment descriptor as a 64-bit integer."
   (check-type table (and vector (not simple-vector)))
-  (let ((offset (+ (* index 8) (movitz-type-slot-offset 'movitz-basic-vector 'data))))
+  (let ((offset (+ (logand #xfff8 selector)
+		   (movitz-type-slot-offset 'movitz-basic-vector 'data))))
     (setf (memref table offset :index 1 :type :unsigned-byte32)
       (ldb (byte 32 32) value))
     (setf (memref table offset :index 0 :type :unsigned-byte32)
       (ldb (byte 32 0) value))
     value))
   
+(defun dump-global-segment-table (&key table entries nofill)
+  "Dump contents of the current global (segment) descriptor table into a vector."
+  (multiple-value-bind (gdt-base gdt-limit)
+      (%sgdt)
+    (let* ((gdt-entries (/ (1+ gdt-limit) 8))
+	   (entries (or entries gdt-entries)))
+      (check-type entries (integer 1 8192))
+      (let ((table (or table
+		       (make-array (* 2 entries)
+				   :element-type '(unsigned-byte 32)
+				   :initial-element 0))))
+	(check-type table (vector (unsigned-byte 32)))
+	(unless nofill
+	  (loop for i upfrom 0 below (* 2 gdt-entries)
+	      do (setf (aref table i)
+		   (memref gdt-base 0 :index i :type :unsigned-byte32 :physicalp t))))
+	table))))
