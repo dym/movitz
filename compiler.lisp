@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.138 2005/05/04 22:47:38 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.139 2005/05/08 01:16:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1378,7 +1378,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
       (let* ((muerte.cl::*compile-file-pathname* path)
 	     (*package* (find-package :muerte))
 	     (funobj (make-instance 'movitz-funobj-pass1
-		       :name (intern (format nil "file-~A" path) :muerte)
+		       :name (intern (format nil "~A" path) :muerte)
 		       :lambda-list (movitz-read nil)))
 	     (funobj-env (make-local-movitz-environment nil funobj
 							:type 'funobj-env

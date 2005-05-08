@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb 19 19:09:05 2001
 ;;;;                
-;;;; $Id: hash-tables.lisp,v 1.5 2005/05/06 20:53:36 ffjeld Exp $
+;;;; $Id: hash-tables.lisp,v 1.6 2005/05/08 01:18:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -60,8 +60,7 @@
   (when index
     (do ((length (array-dimension bucket 0)))
 	((>= index length) nil)
-      (unless (eq (svref bucket index)
-		  '--no-hash-key--)
+      (unless (eq (svref bucket index) '--no-hash-key--)
 	(return (+ index 2)))
       (incf index 2))))
 

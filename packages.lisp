@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.48 2005/05/05 15:16:29 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.49 2005/05/08 01:16:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1116,6 +1116,9 @@
 	   #:backtrace
 
 	   #:dit-frame-ref
+	   #:stack-frame-ref
+	   #:stack-frame-uplink
+	   #:stack-frame-funobj
 	   #:check-stack-limit
 	   #:current-stack-frame
 	   #:interrupt-default-handler
@@ -1148,6 +1151,7 @@
 	   #:object-location
 	   #:object-tag
 	   #:location-in-object-p
+	   #:location-physical-offset
 	   #:define-compile-time-variable
 	   #:define-primitive-function
 	   #:without-gc

@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.51 2005/04/30 21:15:43 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.52 2005/05/08 01:17:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -992,7 +992,7 @@ integer (native lisp) value."
 
 
 (defconstant +undefined-hash-key+
-    'muerte::hash-table-undefined-key)
+    'muerte::--no-hash-key--)
 
 (defun movitz-sxhash (object)
   "Must match the SXHASH function in :cl/hash-tables."

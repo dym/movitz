@@ -10,42 +10,32 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 14 08:18:43 2005
 ;;;;                
-;;;; $Id: ll-testing.lisp,v 1.8 2005/05/05 15:16:45 ffjeld Exp $
+;;;; $Id: ll-testing.lisp,v 1.9 2005/05/08 01:18:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (provide :ll-testing)
 (in-package muerte)
 
-(defun dump-global-segment-table (&key table entries nofill)
-  "Dump contents of the current global (segment) descriptor table into a vector."
-  (multiple-value-bind (gdt-base gdt-limit)
-      (%sgdt)
-    (let* ((gdt-entries (/ (1+ gdt-limit) 8))
-	   (entries (or entries gdt-entries)))
-      (check-type entries (integer 1 8192))
-      (let ((table (or table
-		       (make-array (* 2 entries)
-				   :element-type '(unsigned-byte 32)
-				   :initial-element 0))))
-	(check-type table (vector (unsigned-byte 32)))
-	(unless nofill
-	  (loop for i upfrom 0 below (* 2 gdt-entries)
-	      do (setf (aref table i)
-		   (memref gdt-base 0 :index i :type :unsigned-byte32 :physicalp t))))
-	table))))
+;;;(defun dump-global-segment-table (&key table entries nofill)
+;;;  "Dump contents of the current global (segment) descriptor table into a vector."
+;;;  (multiple-value-bind (gdt-base gdt-limit)
+;;;      (%sgdt)
+;;;    (let* ((gdt-entries (/ (1+ gdt-limit) 8))
+;;;	   (entries (or entries gdt-entries)))
+;;;      (check-type entries (integer 1 8192))
+;;;      (let ((table (or table
+;;;		       (make-array (* 2 entries)
+;;;				   :element-type '(unsigned-byte 32)
+;;;				   :initial-element 0))))
+;;;	(check-type table (vector (unsigned-byte 32)))
+;;;	(unless nofill
+;;;	  (loop for i upfrom 0 below (* 2 gdt-entries)
+;;;	      do (setf (aref table i)
+;;;		   (memref gdt-base 0 :index i :type :unsigned-byte32 :physicalp t))))
+;;;	table))))
 
-(defun install-global-segment-table (table &optional entries)
-  "Install <table> as the GDT.
-NB! ensure that the table object isn't garbage-collected."
-  (check-type table (vector (unsigned-byte 32)))
-  (let ((entries (or entries (truncate (length table) 2))))
-    (check-type entries (integer 0 *))
-    (let ((limit (1- (* 8 entries)))
-	  (base (+ 2 (+ (object-location table)
-			(location-physical-offset)))))
-      (%lgdt base limit)
-      (values table limit))))
+
 
 
 (defun format-segment-table (table &key (start 0) (end (truncate (length table) 2)))

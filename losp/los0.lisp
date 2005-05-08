@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.44 2005/05/05 20:51:12 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.45 2005/05/08 01:20:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -44,7 +44,8 @@
 ;; 	#:muerte.ip6
 	#:muerte.ip4
 	#:muerte.mop
-	#:muerte.x86-pc.serial))
+	#:muerte.x86-pc.serial
+	#:threading))
 
 (require :los0-gc)			; Must come after defpackage.
 
@@ -1365,7 +1366,7 @@ Can be used to measure the overhead of primitive function."
       (setf *package* (find-package "INIT"))
       (when muerte::*multiboot-data*
 	(set-textmode +vga-state-90x30+))
-      
+
       (cond
        ((not (cpu-featurep :tsc))
 	(warn "This CPU has no time-stamp-counter. Timer-related functions will not work."))
@@ -1379,6 +1380,10 @@ Can be used to measure the overhead of primitive function."
 		       *standard-input* s
 		       *terminal-io* s
 		       *debug-io* s)))
+    
+    (setf threading:*segment-descriptor-table-manager*
+      (make-instance 'threading:segment-descriptor-table-manager))
+    
 ;;;    (ignore-errors
 ;;;     (setf (symbol-function 'write-char)
 ;;;       (muerte.x86-pc.serial::make-serial-write-char :baudrate 38400))

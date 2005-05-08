@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.43 2005/05/05 20:51:27 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.44 2005/05/08 01:18:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -304,8 +304,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	(case vector
 	  (0 (error 'division-by-zero))
 	  (3 (break "Break instruction at ~@Z." $eip))
-	  (4 (warn "into ~@Z" $eax)
-	     (if (not (eq (load-global-constant new-unbound-value)
+	  (4 (if (not (eq (load-global-constant new-unbound-value)
 			  (dereference $eax)))
 		 (error "Primitive overflow assertion failed.")
 	       (let ((name (dereference $ebx)))
