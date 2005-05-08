@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.99 2005/05/05 18:01:13 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.100 2005/05/08 22:02:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -310,12 +310,6 @@
 			(movitz-intern (movitz-env-named-function name))))
 
 
-   (num-values
-    :binary-type word			; Fixnum
-    :initform 0)
-   (values
-    :binary-type #.(* 4 +movitz-multiple-values-limit+))
-   
    (cons-pointer
     :binary-type code-vector-word
     :initform nil
@@ -414,7 +408,12 @@
     :accessor movitz-run-time-context-interrupt-descriptor-table
     :initform (make-array 256 :initial-element 'muerte::default-interrupt-trampoline)
     :map-binary-read-delayed 'movitz-word
-    :map-binary-write 'map-interrupt-trampolines-to-idt))
+    :map-binary-write 'map-interrupt-trampolines-to-idt)
+   (num-values
+    :binary-type word			; Fixnum
+    :initform 0)
+   (values
+    :binary-type #.(* 4 +movitz-multiple-values-limit+)))
   (:slot-align null-symbol -5))
 
 (defun atomically-continuation-simple-pf (pf-name)
