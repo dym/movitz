@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.44 2005/05/08 01:18:43 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.45 2005/05/09 06:20:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -145,13 +145,13 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 
 	    (:locally (:movl 0 (:edi (:edi-offset atomically-continuation))))
 	    
-	    ;; Do RET atomicification
-;;;	    (:movl (:ebp ,(dit-frame-offset :eip)) :ecx)
-;;;	    ((:cs-override) :cmpb ,(realpart (ia-x86:asm :ret)) (:ecx))
-;;;	    (:jne 'not-at-ret-instruction)
-;;;	    (:globally (:movl (:edi (:edi-offset ret-trampoline)) :ecx))
-;;;	    (:movl :ecx (:ebp ,(dit-frame-offset :eip)))
-;;;	   not-at-ret-instruction
+	    ;; Do RET promotion of EIP.
+	    (:movl (:ebp ,(dit-frame-offset :eip)) :ecx)
+	    ((:cs-override) :cmpb ,(realpart (ia-x86:asm :ret)) (:ecx))
+	    (:jne 'not-at-ret-instruction)
+	    (:globally (:movl (:edi (:edi-offset ret-trampoline)) :ecx))
+	    (:movl :ecx (:ebp ,(dit-frame-offset :eip)))
+	   not-at-ret-instruction
 	    
 	    (:xorl :eax :eax)		; Ensure safe value
 	    (:xorl :edx :edx)		; Ensure safe value
