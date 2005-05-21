@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.17 2005/04/19 06:50:04 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.18 2005/05/21 22:36:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -30,13 +30,132 @@
 	   #:format-udp-header
 	   #:*ip4-nic*
 	   #:*ip4-ip*
-	   #:*ip4-router*))
+	   #:*ip4-router*
+	   
+	   #:with-ip4-header))
 
 (in-package muerte.ip4)
 
 (defvar *ip4-nic* nil)
 (defvar *ip4-ip* nil)
 (defvar *ip4-router* nil)
+
+#|    RFC 760: http://www.faqs.org/rfcs/rfc760.html
+    0                   1                   2                   3   
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |Version|  IHL  |Type of Service|          Total Length         |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |         Identification        |Flags|      Fragment Offset    |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |  Time to Live |    Protocol   |         Header Checksum       |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                       Source Address                          |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                    Destination Address                        |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                    Options                    |    Padding    |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|#
+
+(defmacro with-ip4-header ((ip4 packet &key (start 0)) &body body)
+  (let ((packet-var (gensym "ip4-packet-"))
+	(start-var (gensym "ip4-packet-start"))
+	(offset-var (gensym "ip4-packet-offset-")))
+    (macrolet ((mmem (offset type)
+		 ```(memref ,packet-var (+ ,',offset ,offset-var) :type ,',type :endian :big)))
+      `(let* ((,start-var ,start)
+	      (,packet-var (ensure-data-vector ,packet ,start-var 20))
+	      (,offset-var (+ ,start-var (movitz-type-slot-offset 'movitz-basic-vector 'data))))
+	 (macrolet ((,ip4 (slot)
+		      (ecase slot
+			(:version
+			 `(ldb (byte 4 4) ,,(mmem 0 :unsigned-byte8)))
+			(:ihl		; IP header-length in 32-bit units.
+			 `(ldb (byte 4 0) ,,(mmem 0 :unsigned-byte8)))
+			(:tos		; type-of-service
+			 ,(mmem 1 :unsigned-byte8))
+			(:length
+			 ,(mmem 2 :unsigned-byte16))
+			(:identification
+			 ,(mmem 4 :unsigned-byte16))
+			(:ttl
+			 ,(mmem 8 :unsigned-byte8))
+			(:protocol
+			 ,(mmem 9 :unsigned-byte8))
+			(:checksum
+			 ,(mmem 10 :unsigned-byte16))
+			((:compute-checksum)
+			 `(logxor #xffff (mem-checksum ,',packet-var ,',offset-var 20) #+ignore
+				  (checksum-octets ,',packet-var ,',start-var (+ 20 ,',start-var))))
+			(:source
+			 ,(mmem 12 :unsigned-byte32))
+			(:destination
+			 ,(mmem 16 :unsigned-byte32))
+			(:address-length 4)
+			(:address-offset `(+ 12 ,',offset-var))
+			(:end `(+ 20 ,',start-var)))))
+	   ,@body)))))
+
+(defmacro with-udp-header ((udp packet &key (start '(ip :end))) &body body)
+  (let ((packet-var (gensym "udp-packet-"))
+	(start-var (gensym "udp-packet-start"))
+	(offset-var (gensym "udp-packet-offset-")))
+    (macrolet ((mmem (offset type)
+		 ```(memref ,packet-var (+ ,',offset ,offset-var) :type ,',type :endian :big)))
+      `(let* ((,start-var ,start)
+	      (,packet-var (ensure-data-vector ,packet ,start-var 20))
+	      (,offset-var (+ ,start-var (movitz-type-slot-offset 'movitz-basic-vector 'data))))
+	 (macrolet ((,udp (slot &optional arg)
+		      (ecase slot
+			(:source-port
+			 ,(mmem 0 :unsigned-byte16))
+			(:destination-port
+			 ,(mmem 2 :unsigned-byte16))
+			(:length
+			 ,(mmem 4 :unsigned-byte16))
+			(:checksum
+			 ,(mmem 6 :unsigned-byte16))
+			((:compute-checksum)
+			 `(logxor #xffff
+				  (add-u16-ones-complement (mem-checksum ,',packet-var
+									 (,arg :address-offset)
+									 (* 2 (,arg :address-length)))
+							   +ip-protocol-udp+
+							   (,',udp :length)
+							   (mem-checksum ,',packet-var ,',offset-var
+									 (,',udp :length)))))
+			(:end `(+ 8 ,',start-var)))))
+	   ,@body)))))
+	   
+
+(defun mem-checksum (packet offset length)
+  (with-inline-assembly (:returns :eax)
+    (:compile-form (:result-mode :ebx) packet)
+    (:compile-form (:result-mode :ecx) offset)
+    (:compile-form (:result-mode :esi) length)
+    ;; (:movl :eax :ecx)			; ecx = start
+    ;; (:subl :eax :esi)			; esi = (- end start)
+    ;; (:movl 0 :eax)
+    (:xorl :eax :eax)
+    (:testl :esi :esi)
+    (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
+    (:xorl :edx :edx)
+    (:std)
+   checksum-loop
+    (:movw (:ebx 0 :ecx) :ax)
+    (:xchgb :al :ah)
+    (:addl 2 :ecx)
+    (:addl :eax :edx)
+    (:subl #.(cl:* 2 movitz:+movitz-fixnum-factor+) :esi)
+    (:jnbe 'checksum-loop)
+    (:movw :dx :ax)
+    (:shrl 16 :edx)
+    (:addw :dx :ax)
+    (:movl (:ebp -4) :esi)
+   end-checksum-loop
+    (:shll #.movitz:+movitz-fixnum-shift+ :eax)
+    (:cld)))
 
 (defmacro ip4-ref (packet start offset type)
   `(memref ,packet (+ (muerte:movitz-type-slot-offset 'movitz-basic-vector 'data)
@@ -457,6 +576,12 @@
 (defun ip4-address (specifier &optional (start 0))
   (or (ignore-errors
        (typecase specifier
+	 ((unsigned-byte 32)
+	  (assert (= 0 start))
+	  (loop with address = (make-array 4 :element-type '(unsigned-byte 8))
+	      for i from 0 to 3
+	      do (setf (aref address (- 3 i)) (ldb (byte 8 (* 8 i)) specifier))
+	      finally (return address)))
 	 ((simple-array (unsigned-byte 8) (*))
 	  (if (= start 0)
 	      specifier
@@ -487,14 +612,17 @@
 		 muerte.x86-pc.ne2k:*ne2k-probe-addresses*)))
       (assert ethernet ethernet "No ethernet device.")
       (setf *ip4-nic* ethernet)))
-  (unless *ip4-ip*
-    (setf *ip4-ip* (ip4-address ip)))
-  (unless *ip4-router*
-    (setf *ip4-router* (ip4-address router)))
-  ;; This is to announce our presence on the LAN..
-  (assert (polling-arp *ip4-router* (lambda ()
-				      (eql #\space (muerte.x86-pc.keyboard:poll-char))))
-      () "Unable to resolve ~/ip4:pprint-ip4/ by ARP." *ip4-router*)
+  (when ip
+    (unless *ip4-ip*
+      (setf *ip4-ip* (ip4-address ip))))
+  (when router
+    (unless *ip4-router*
+      (setf *ip4-router* (ip4-address router))))
+  (when *ip4-router*
+    ;; This is to announce our presence on the LAN..
+    (assert (polling-arp *ip4-router* (lambda ()
+					(eql #\space (muerte.x86-pc.keyboard:poll-char))))
+	() "Unable to resolve ~/ip4:pprint-ip4/ by ARP." *ip4-router*))
   (values *ip4-nic* *ip4-ip*))
 
 (defun ip4-test ()

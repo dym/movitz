@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:25:31 2002
 ;;;;                
-;;;; $Id: ethernet.lisp,v 1.7 2004/12/09 14:18:37 ffjeld Exp $
+;;;; $Id: ethernet.lisp,v 1.8 2005/05/21 22:37:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -60,6 +60,7 @@
 	   #:+ether-type-mswin-heartbeat+
 	   #:+ether-type-loopback+
 
+	   #:with-ether-header
 	   ))
 	   
 (in-package muerte.ethernet)
@@ -77,6 +78,25 @@
   (12 type))
 
 ;;; Packet accessors
+
+(defmacro with-ether-header ((ether packet &key (start 0)) &body body)
+  (let* ((packet-var (gensym "ether-packet-"))
+	 (offset-var (gensym "ether-packet-offset-"))
+	 (start-var (gensym "ether-packet-start-")))
+    `(let* ((,start-var ,start)
+	    (,packet-var (ensure-data-vector ,packet ,start-var 14))
+	    (,offset-var (+ ,start-var (movitz-type-slot-offset 'movitz-basic-vector 'data))))       
+       (macrolet ((,ether (slot)
+		    (ecase slot
+		      (:source
+		       `(memrange ,',packet-var ,',offset-var 6 6 :unsigned-byte8))
+		      (:destination
+		       `(memrange ,',packet-var ,',offset-var 0 6 :unsigned-byte8))
+		      (:type
+		       `(memref ,',packet-var (+ ,',offset-var 12) :type :unsigned-byte16 :endian :big))
+		      (:end `(+ ,',start-var 14)))))
+	 ,@body))))
+       
 
 (defmacro packet-ref (packet start offset type)
   `(memref ,packet (+ (muerte:movitz-type-slot-offset 'movitz-basic-vector 'data)
@@ -141,6 +161,7 @@
 (defconstant +ether-type-loopback+ #x9000)
 
 ;;;
+
 
 (defun format-ethernet-packet (packet source destination type &key (start 0) (source-start 0)
 								   (destination-start 0))

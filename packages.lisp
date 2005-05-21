@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.49 2005/05/08 01:16:40 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.50 2005/05/21 22:38:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1233,6 +1233,7 @@
 	   
 	   #:memref
 	   #:memref-int
+	   #:memrange
 
 	   #:io-port
 	   #:io-register8
@@ -1264,6 +1265,9 @@
 	   #:segment-descriptor-limit
 	   #:control-register-lo12
 	   #:control-register-hi20
+	   #:ensure-data-vector
+	   #:vector-read
+	   #:vector-read-more-p
 	   ))
 
 

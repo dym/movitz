@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.139 2005/05/08 01:16:26 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.140 2005/05/21 22:38:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -6639,7 +6639,8 @@ and a list of any intervening unwind-protect environment-slots."
 	 ((movitz-subtypep type0 '(integer 0 0))
 	  (cond
 	   ((eql destination loc1)
-	    (break "NOP add: ~S" instruction))
+	    #+ignore (break "NOP add: ~S" instruction)
+	    nil)
 	   ((and (member destination-location '(:eax :ebx :ecx :edx))
 		 (member loc1 '(:eax :ebx :ecx :edx)))
 	    `((:movl ,loc1 ,destination-location)))
@@ -6653,7 +6654,8 @@ and a list of any intervening unwind-protect environment-slots."
 	  ;; (warn "zero-add ~S => ~S [~S]" loc0 destination-location result-type)
 	  (cond
 	   ((eql destination loc0)
-	    (break "NOP add: ~S" instruction))
+	    #+ignore (break "NOP add: ~S" instruction)
+	    nil)
 	   ((and (member destination-location '(:eax :ebx :ecx :edx))
 		 (member loc0 '(:eax :ebx :ecx :edx)))
 	    `((:movl ,loc0 ,destination-location)))
