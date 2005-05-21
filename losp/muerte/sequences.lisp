@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.19 2004/12/15 13:58:34 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.20 2005/05/21 22:33:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -670,7 +670,25 @@
       (declare (dynamic-extent more-sequences)
 	       (ignore function first-sequence more-sequences))
       (error "MAP not implemented."))))
-	
+
+(defun map-for-string (function first-sequence &rest more-sequences)
+  (numargs-case
+   (2 (function first-sequence)
+      (with-funcallable (mapf function)
+	(let ((result (make-string (length first-sequence))))
+	  (sequence-dispatch first-sequence
+	    (vector
+	     (do ((i 0 (1+ i)))
+		 ((>= i (length result)) result)
+	       (setf (char result i) (mapf (aref first-sequence i)))))
+	    (list
+	     (do ((i 0 (1+ i)))
+		 ((>= i (length result)) result)
+	       (setf (char result i) (mapf (pop first-sequence)))))))))
+   (t (function first-sequence &rest more-sequences)
+      (declare (ignore function first-sequence more-sequences))
+      (error "MAP not implemented."))))
+
 
 (defun map (result-type function first-sequence &rest more-sequences)
   "=> result"
@@ -680,6 +698,8 @@
     (apply 'map-for-nil function first-sequence more-sequences))
    ((eq 'list result-type)
     (apply 'map-for-list function first-sequence more-sequences))
+   ((eq 'string result-type)
+    (apply 'map-for-string function first-sequence more-sequences))
    (t (error "MAP not implemented."))))
 
 (defun fill (sequence item &key (start 0) end)
