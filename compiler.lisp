@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.140 2005/05/21 22:38:51 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.141 2005/05/23 16:45:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3964,10 +3964,6 @@ loading borrowed bindings."
 	      (:lexical-binding
 	       (append (make-immediate-move x :eax)
 		       (make-store-lexical result-mode :eax nil funobj frame-map)))
-	      (:untagged-fixnum-eax
-	       (let ((value (movitz-fixnum-value object)))
-		 (check-type value (unsigned-byte 16))
-		 (make-immediate-move value :eax)))
 	      (:untagged-fixnum-ecx
 	       (let ((value (movitz-fixnum-value object)))
 		 (check-type value (signed-byte 30))
@@ -3981,6 +3977,9 @@ loading borrowed bindings."
 		       '((:clc)))))))
 	 (movitz-heap-object
 	  (ecase (result-mode-type result-mode)
+	    (:untagged-fixnum-ecx
+	     (let ((value (movitz-bignum-value object)))
+	       (make-immediate-move (ldb (byte 32 0) value) :ecx)))
 	    (:lexical-binding
 	     (append `((:movl ,(new-make-compiled-constant-reference movitz-obj funobj)
 			      :eax))
