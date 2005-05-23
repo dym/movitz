@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri May 13 23:24:01 2005
 ;;;;                
-;;;; $Id: dhcp.lisp,v 1.1 2005/05/21 22:36:33 ffjeld Exp $
+;;;; $Id: dhcp.lisp,v 1.2 2005/05/23 23:30:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -103,6 +103,13 @@
   (declare (dynamic-extent options))
   (loop while options
       do (ecase (pop options)
+	   (:lease-time
+	    (vector-push 51 packet)
+	    (vector-push 4 packet)
+	    (let ((time (pop options)))
+	      (check-type time (unsigned-byte 32))
+	      (loop for b from 24 downto 0 by 8
+		  do (vector-push (ldb (byte 8 b) time) packet))))
 	   (:message-type
 	    (vector-push 53 packet)
 	    (vector-push 1 packet)
@@ -168,6 +175,11 @@
 		      (subseq packet
 			      (fill-pointer packet)
 			      (incf (fill-pointer packet) length)))))
+	  (51 (assert (= 4 (vector-read packet)))
+	      (cons :lease-time
+		    (loop with time = 0 repeat 4
+			do (setf time (+ (* 256 time) (vector-read packet)))
+			finally (return time))))
 	  (53 (assert (= 1 (vector-read packet)))
 	      (cons :message-type
 		    (let ((message-type (vector-read packet)))
@@ -193,7 +205,7 @@
 			       (fill-pointer packet)
 			       (incf (fill-pointer packet) length)))))))))
 
-(defun format-dhcp-request (nic)
+(defun format-dhcp-request (nic &rest dhcp-options &key (message-type :dhcpdiscover))
   (let ((packet (make-ethernet-packet)))
     (with-ether-header (ether packet)
       (setf (ether :source) (mac-address nic)
@@ -217,8 +229,8 @@
 		  (dhcp :chaddr) (mac-address nic)
 		  (dhcp :magic) +dhcp-magic+)
 	    (setf (fill-pointer packet) (dhcp :end))
+	    (apply #'dhcp-push-options packet dhcp-options)
 	    (dhcp-push-options packet
-			       :message-type :dhcpdiscover
 			       :client-identifier (mac-address nic)
 			       :end)
 	    (setf (ip :length) (- (fill-pointer packet) (ether :end))
@@ -230,25 +242,26 @@
 	    packet))))))
 
 (defun dhcp-request (&optional (nic (or *ip4-nic* (ip4-init))))
-  (transmit nic (format-dhcp-request nic))
-  (loop with packet = (make-ethernet-packet)
-      when (and (receive nic packet)
-		(with-ether-header (ether packet)
-		  (format t "~&From ~@/ethernet:pprint-mac/ to ~:/ethernet:pprint-mac/..~%"
-			  packet packet)
-		  (with-ip4-header (ip packet :start (ether :end))
-		    (warn "Seeing ~/ip4:pprint-ip4/ from ~/ip4:pprint-ip4/."
-			  (ip4-address (ip :destination))
-			  (ip4-address (ip :source)))
-		    (with-udp-header (udp packet)
-		      (with-dhcp-header (dhcp packet)
-			(and (= 4 (ip :version))
-			     (= 17 (ip :protocol))
-			     (= 68 (udp :destination-port))
-			     (= +dhcp-magic+ (dhcp :magic))
-			     (setf (fill-pointer packet)
-			       (dhcp :end))))))))
+  (loop  with packet = (make-ethernet-packet)
+      repeat 5
+      do (transmit nic (format-dhcp-request nic))
+	 (sleep 1/2)
+      when (loop while (receive nic packet)
+	       thereis (with-ether-header (ether packet)
+			 (with-ip4-header (ip packet :start (ether :end))
+			   (when (and (= 4 (ip :version))
+				      (= 17 (ip :protocol)))
+			     (warn "Seeing UDP ~/ip4:pprint-ip4/ from ~/ip4:pprint-ip4/."
+				   (ip4-address (ip :destination))
+				   (ip4-address (ip :source)))
+			     (with-udp-header (udp packet)
+			       (when (= 68 (udp :destination-port))
+				 (with-dhcp-header (dhcp packet)
+				   (and (= +dhcp-magic+ (dhcp :magic))
+					(setf (fill-pointer packet)
+					  (dhcp :end))))))))))
       return (values packet (parse-dhcp-options packet))))
+
 
 	  
     
