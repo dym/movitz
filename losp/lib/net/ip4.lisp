@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.18 2005/05/21 22:36:16 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.19 2005/05/24 07:14:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -31,8 +31,8 @@
 	   #:*ip4-nic*
 	   #:*ip4-ip*
 	   #:*ip4-router*
-	   
-	   #:with-ip4-header))
+	   #:with-ip4-header
+	   #:dhcp-init))
 
 (in-package muerte.ip4)
 

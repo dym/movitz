@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri May 13 23:24:01 2005
 ;;;;                
-;;;; $Id: dhcp.lisp,v 1.2 2005/05/23 23:30:38 ffjeld Exp $
+;;;; $Id: dhcp.lisp,v 1.3 2005/05/24 07:15:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -56,14 +56,15 @@
      +---------------------------------------------------------------+
 |#
 
-(defmacro with-dhcp-header ((dhcp packet &key (start '(udp :end))) &body body)
+(defmacro with-dhcp-header ((dhcp packet &key start) &body body)
   (let* ((dhcp-ref (gensym "dhcp-ref-"))
 	 (start-var (gensym "dhcp-start-"))
 	 (packet-var (gensym "dhcp-packet-"))
 	 (offset-var (gensym "dhcp-packet-start-")))
-    `(let* ((,start-var ,start)
-	    (,packet-var (ensure-data-vector ,packet ,start-var 232))
+    `(let* ((,packet-var ,packet)
+	    (,start-var ,(or start `(fill-pointer ,packet-var)))
 	    (,offset-var (+ ,start-var (movitz-type-slot-offset 'movitz-basic-vector 'data))))
+       (ensure-data-vector ,packet ,start-var 232)
        (macrolet ((,dhcp-ref (offset type)
 		    `(memref ,',packet-var (+ ,',offset-var ,offset) :type ,type :endian :big))
 		  (,dhcp (slot)
@@ -77,7 +78,7 @@
 		      (:flags
 		       `(,',dhcp-ref 10 :unsigned-byte16))
 		      ((:ciaddr :yiaddr :siaddr :giaddr)
-		       `(,',dhcp-ref ,(+ 12 (position slot '(:ciaddr :yiaddr :siaddr :giaddr)))
+		       `(,',dhcp-ref ,(+ 12 (* 4 (position slot '(:ciaddr :yiaddr :siaddr :giaddr))))
 				     :unsigned-byte32))
 		      (:chaddr
 		       `(memrange ,',packet-var 0 (+ ,',offset-var 28) 16 :unsigned-byte8))
@@ -102,7 +103,7 @@
 (defun dhcp-push-options (packet &rest options)
   (declare (dynamic-extent options))
   (loop while options
-      do (ecase (pop options)
+      do (case (pop options)
 	   (:lease-time
 	    (vector-push 51 packet)
 	    (vector-push 4 packet)
@@ -133,16 +134,17 @@
       unless (= 0 option)
       collect
 	(case option
-	  (1 (assert (= 4 (vector-read packet)))
+	  (1 (assert (= 4 (vector-read packet)) () "Wrong length for subnet-mask.")
 	     (cons :subnet-mask
 		   (subseq packet
 			   (fill-pointer packet)
 			   (incf (fill-pointer packet) 4))))
 	  (3 (let ((length (vector-read packet)))
 	       (cons :routers
-		     (subseq packet
-			     (fill-pointer packet)
-			     (incf (fill-pointer packet) length)))))
+		     (loop repeat (truncate length 4)
+			 collect (subseq packet
+					 (fill-pointer packet)
+					 (incf (fill-pointer packet) 4))))))
 	  (6 (let ((length (vector-read packet)))
 	       (cons :dns-servers
 		     (subseq packet
@@ -160,7 +162,7 @@
 			   (subseq packet
 				   (fill-pointer packet)
 				   (incf (fill-pointer packet) length))))))
-	  (28 (assert (= 4 (vector-read packet)))
+	  (28 (assert (= 4 (vector-read packet)) () "Wrong length for broadcast.")
 	      (cons :broadcast
 		    (subseq packet
 			    (fill-pointer packet)
@@ -175,7 +177,7 @@
 		      (subseq packet
 			      (fill-pointer packet)
 			      (incf (fill-pointer packet) length)))))
-	  (51 (assert (= 4 (vector-read packet)))
+	  (51 (assert (= 4 (vector-read packet)) () "Wrong length for lease-time.")
 	      (cons :lease-time
 		    (loop with time = 0 repeat 4
 			do (setf time (+ (* 256 time) (vector-read packet)))
@@ -205,7 +207,7 @@
 			       (fill-pointer packet)
 			       (incf (fill-pointer packet) length)))))))))
 
-(defun format-dhcp-request (nic &rest dhcp-options &key (message-type :dhcpdiscover))
+(defun format-dhcp-request (nic &rest dhcp-options &key (xid 0) (message-type :dhcpdiscover))
   (let ((packet (make-ethernet-packet)))
     (with-ether-header (ether packet)
       (setf (ether :source) (mac-address nic)
@@ -213,7 +215,7 @@
 	    (ether :type) +ether-type-ip4+)
       (with-ip4-header (ip packet :start (ether :end))
 	(with-udp-header (udp packet)
-	  (with-dhcp-header (dhcp packet)
+	  (with-dhcp-header (dhcp packet :start (udp :end))
 	    (setf (ip :version) 4
 		  (ip :protocol) 17
 		  (ip :ihl) 5
@@ -226,6 +228,7 @@
 		  (dhcp :hlen ) 6
 		  (dhcp :hops) 0
 		  (dhcp :secs) 0
+		  (dhcp :xid) xid
 		  (dhcp :chaddr) (mac-address nic)
 		  (dhcp :magic) +dhcp-magic+)
 	    (setf (fill-pointer packet) (dhcp :end))
@@ -241,10 +244,12 @@
 		  (udp :checksum) (udp :compute-checksum ip))
 	    packet))))))
 
-(defun dhcp-request (&optional (nic (or *ip4-nic* (ip4-init))))
-  (loop  with packet = (make-ethernet-packet)
+(defun dhcp-request (&optional (nic (or *ip4-nic* (ip4-init))) &rest dhcp-options)
+  (declare (dynamic-extent dhcp-options))
+  (loop with packet = (make-ethernet-packet)
+      with xid = (random 10000)
       repeat 5
-      do (transmit nic (format-dhcp-request nic))
+      do (transmit nic (apply #'format-dhcp-request nic :xid xid dhcp-options))
 	 (sleep 1/2)
       when (loop while (receive nic packet)
 	       thereis (with-ether-header (ether packet)
@@ -256,15 +261,25 @@
 				   (ip4-address (ip :source)))
 			     (with-udp-header (udp packet)
 			       (when (= 68 (udp :destination-port))
+				 (setf (fill-pointer packet)
+				   (udp :end))
 				 (with-dhcp-header (dhcp packet)
-				   (and (= +dhcp-magic+ (dhcp :magic))
-					(setf (fill-pointer packet)
-					  (dhcp :end))))))))))
-      return (values packet (parse-dhcp-options packet))))
+				   (and (= xid (dhcp :xid))
+					(= +dhcp-magic+ (dhcp :magic))))))))))
+      return packet))
 
-
-	  
-    
-  
-    
-  
+(defun dhcp-init ()
+  (let ((packet (dhcp-request)))
+    (if (not packet)
+	(warn "DHCP lookup failed.")
+      (with-dhcp-header (dhcp packet)
+	(setf (fill-pointer packet) (dhcp :end))
+	(let ((options (parse-dhcp-options packet)))
+	  (setf *ip4-ip* (ip4-address (dhcp :yiaddr))
+		*ip4-router* (first (cdr (assoc :routers options))))
+	  (format *terminal-io* "Setting IP ~/ip4:pprint-ip4/ ~@[~A~]~@[.~A~] router ~/ip4:pprint-ip4/."
+		  *ip4-ip*
+		  (cdr (assoc :host-name options))
+		  (cdr (assoc :domain-name options))
+		  *ip4-router*)))))
+  (values))
