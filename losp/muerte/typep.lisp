@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.43 2005/04/15 07:00:31 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.44 2005/05/24 06:33:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -585,13 +585,6 @@
   (typep x 'code-vector))
 
 ;;;
-
-(define-typep rational (x &optional (lower-limit '*) (upper-limit '*))
-  (and (typep x 'rational)
-       (or (eq lower-limit '*)
-	   (<= lower-limit x))
-       (or (eq upper-limit '*)
-	   (<= x upper-limit))))
 
 (define-typep and (x &rest types)
   (declare (dynamic-extent types))

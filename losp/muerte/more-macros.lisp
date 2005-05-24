@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.27 2005/05/05 20:52:10 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.28 2005/05/24 06:33:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -404,6 +404,22 @@ respect to multiple threads."
 	 (when ,var (sti))))))
 
 
+(define-compiler-macro dit-frame-ref (&whole form stack frame reg
+				      &optional (type :lisp)
+				      &environment env)
+  (if (not (and (movitz:movitz-constantp stack env)
+		(eq nil (movitz:movitz-eval stack env))))
+      form
+    `(memref ,frame (dit-frame-offset ,reg) :type ,type)))
+
+(define-compiler-macro (setf dit-frame-ref) (&whole form value stack frame reg
+					     &optional (type :lisp)
+					     &environment env)
+  (if (not (and (movitz:movitz-constantp stack env)
+		(eq nil (movitz:movitz-eval stack env))))
+      form
+    `(setf (memref ,frame (dit-frame-offset ,reg) :type ,type) ,value)))
+
 ;;; Some macros that aren't implemented, and we want to give compiler errors.
 
 (defmacro define-unimplemented-macro (name)
@@ -414,3 +430,4 @@ respect to multiple threads."
 
 (define-unimplemented-macro with-open-file)
 (define-unimplemented-macro restart-case)
+

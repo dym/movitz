@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.46 2005/05/21 22:37:32 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.47 2005/05/24 06:33:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -563,9 +563,8 @@
 			    (,offset-var ,offset)
 			    (,index-var ,index))
 			(with-inline-assembly (:returns :untagged-fixnum-ecx)
-			  (:load-lexical (:lexical-binding ,value-var) :eax)
-			  (:call-global-pf unbox-u32)
 			  (:compile-two-forms (:eax :edx) ,index-var ,offset-var)
+			  (:load-lexical (:lexical-binding ,value-var) :untagged-fixnum-ecx)
 			  (:load-lexical (:lexical-binding ,object-var) :ebx)
 			  ,@(when (eq endian :big)
 			      `((:bswap :ecx)))
@@ -1202,31 +1201,3 @@
 
 ;; (define-compiler-macro memrange (object ))
 
-(defun memrange (object offset index length type)
-  (ecase type
-    (:unsigned-byte8
-     (let ((vector (make-array length :element-type '(unsigned-byte 8))))
-       (loop for i upfrom index as j upfrom 0 repeat length
-	   do (setf (aref vector j) (memref object offset :index i :type :unsigned-byte8)))
-       vector))))
-
-(defun (setf memrange) (value object offset index length type)
-  (ecase type
-    (:unsigned-byte8
-     (etypecase value
-       ((unsigned-byte 8)
-	(loop for i upfrom index repeat length
-	    do (setf (memref object offset :index i :type :unsigned-byte8) value)))
-       (vector
-	(loop for i upfrom index as x across value repeat length
-	    do (setf (memref object offset :index i :type :unsigned-byte8) x)))))
-    (:character
-     (etypecase value
-       (character
-	(loop for i upfrom index repeat length
-	    do (setf (memref object offset :index i :type :character) value)))
-       (string
-	(loop for i upfrom index as x across value repeat length
-	    do (setf (memref object offset :index i :type :character) x))))))
-  value)
-     

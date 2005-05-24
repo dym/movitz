@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.18 2005/05/05 13:21:46 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.19 2005/05/24 06:33:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -384,3 +384,47 @@ interpreted as a lispval, and consequently a fixnum."
     (error "The value of ~S, ~S, is not of type ~S."
 	   place-name value type))
    (t (error "~S is not of type ~S." value type))))
+
+(defun memrange (object offset index length type)
+  (ecase type
+    (:unsigned-byte8
+     (let ((vector (make-array length :element-type '(unsigned-byte 8))))
+       (let ((i index))
+	 (dotimes (j length)
+	   (setf (aref vector j)
+	     (memref object offset :index i :type :unsigned-byte8))
+	   (incf i)))
+       vector))))
+
+(defun (setf memrange) (value object offset index length type)
+  (ecase type
+    (:unsigned-byte8
+     (etypecase value
+       ((unsigned-byte 8)
+	(do ((end (+ index length))
+	     (i index (1+ i)))
+	    ((>= i end))
+	  (setf (memref object offset :index i :type :unsigned-byte8) value)))
+       (vector
+	(do ((end (+ index length))
+	     (i index (1+ i))
+	     (j 0 (1+ j)))
+	    ((or (>= i end) (>= j (length value))))
+	  (setf (memref object offset :index i :type :unsigned-byte8)
+	    (aref value j))))))
+    (:character
+     (etypecase value
+       (character
+	(do ((end (+ index length))
+	     (i index (1+ i)))
+	    ((>= i end))
+	  (setf (memref object offset :index i :type :character) value)))
+       (string
+	(do ((end (+ index length))
+	     (i index (1+ i))
+	     (j 0 (1+ j)))
+	    ((or (>= i end) (>= j (length value))))
+	  (setf (memref object offset :index i :type :character)
+	    (char value j)))))))
+  value)
+     

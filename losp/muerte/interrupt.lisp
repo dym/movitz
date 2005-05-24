@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.45 2005/05/09 06:20:55 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.46 2005/05/24 06:33:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -55,24 +55,8 @@
   (defun dit-frame-offset (name)
     (* 4 (dit-frame-index name))))
 
-(define-compiler-macro dit-frame-ref (&whole form stack frame reg
-				      &optional (type :lisp)
-				      &environment env)
-  (if (not (and (movitz:movitz-constantp stack env)
-		(eq nil (movitz:movitz-eval stack env))))
-      form
-    `(memref ,frame (dit-frame-offset ,reg) :type ,type)))
-
 (defun dit-frame-ref (stack frame reg &optional (type :lisp))
   (stack-frame-ref stack (+ frame (dit-frame-index reg)) 0 type))
-
-(define-compiler-macro (setf dit-frame-ref) (&whole form value stack frame reg
-					     &optional (type :lisp)
-					     &environment env)
-  (if (not (and (movitz:movitz-constantp stack env)
-		(eq nil (movitz:movitz-eval stack env))))
-      form
-    `(setf (memref ,frame (dit-frame-offset ,reg) :type ,type) ,value)))
 
 (defun (setf dit-frame-ref) (value stack frame reg &optional (type :lisp))
   (setf (stack-frame-ref stack (+ frame (dit-frame-index reg)) 0 type)
