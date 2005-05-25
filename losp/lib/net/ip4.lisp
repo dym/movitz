@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr 30 13:52:57 2003
 ;;;;                
-;;;; $Id: ip4.lisp,v 1.19 2005/05/24 07:14:53 ffjeld Exp $
+;;;; $Id: ip4.lisp,v 1.20 2005/05/25 19:46:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -242,40 +242,42 @@
 	  (ash x -16)))))
 
 (defun ip-input (stack packet start)
-  (let ((header-size (* 4 (ip-header-length packet start))))
-    (cond
-     ((not (checksum-ok (checksum-octets packet start (+ start header-size))))
-      (warn "IP4 header checksum failed (from ~@/ip4:pprint-ip4/ to ~:/ip4:pprint-ip4/ proto ~A len ~D)."
-	    packet packet
-	    (integer-name 'ip-protocol (ip-protocol packet start) nil)
-	    (length packet))
-      #+ignore
-      (loop for y from 0 below (length packet) by 16
-	  do (fresh-line)
-	     (loop for x from y below (min (length packet) (+ y 16))
-		 when (zerop (rem x 4))
-		 do (format t " ")
-		 do (format t " ~2,'0X" (aref packet x)))
-	     (write-string "   ")
-	     (loop for x from y below (min (length packet) (+ y 16))
-		 as c = (code-char (aref packet x))
-		 do (write-char (if (alphanumericp c) c #\.)))))
-     ((mismatch packet (address stack)
-		:start1 (+ start +ip-header-destination+)
-		:end1 (+ start +ip-header-destination+ 4))
-      #+ignore
-      (warn "IPv4 Packet from ~@/ip4:pprint-ip4/ not for me, but for ~:/ip4:pprint-ip4/."
-	    packet packet))
-     (t (named-integer-case ip-protocol (ip-protocol packet start)
-	  (icmp
-	   (icmp-input stack packet start (+ start header-size)))
-	  (udp
-	   (udp-input stack packet start (+ start header-size)))
-	  (tcp
-	   (tcp-input stack packet start (+ start header-size)))
-	  (t (warn "Unknown IPv4 protocol ~A received from ~@/ip4:pprint-ip4/."
-		   (integer-name 'ip-protocol (ip-protocol packet start) nil)
-		   packet)))))))
+  (with-ip4-header (ip packet :start start)
+    (let ((header-size (* 4 (ip :ihl))))
+      (cond
+       ((not (or (= 0 (ip :checksum))
+		 (checksum-ok (checksum-octets packet start (+ start header-size)))))
+	(warn "IP4 header checksum failed #x~X (from ~@/ip4:pprint-ip4/ to ~:/ip4:pprint-ip4/ proto ~A len ~D)."
+	      (checksum-octets packet start (+ start header-size))
+	      packet packet
+	      (integer-name 'ip-protocol (ip-protocol packet start) nil)
+	      (length packet))
+	(loop for y from 0 below (length packet) by 16
+	    do (fresh-line)
+	       (loop for x from y below (min (length packet) (+ y 16))
+		   when (zerop (rem x 4))
+		   do (format t " ")
+		   do (format t " ~2,'0X" (aref packet x)))
+	       (write-string "   ")
+	       (loop for x from y below (min (length packet) (+ y 16))
+		   as c = (code-char (aref packet x))
+		   do (write-char (if (alphanumericp c) c #\.)))))
+       ((mismatch packet (address stack)
+		  :start1 (+ start +ip-header-destination+)
+		  :end1 (+ start +ip-header-destination+ 4))
+	#+ignore
+	(warn "IPv4 Packet from ~@/ip4:pprint-ip4/ not for me, but for ~:/ip4:pprint-ip4/."
+	      packet packet))
+       (t (named-integer-case ip-protocol (ip :protocol)
+	    (icmp
+	     (icmp-input stack packet start (+ start header-size)))
+	    (udp
+	     (udp-input stack packet start (+ start header-size)))
+	    (tcp
+	     (tcp-input stack packet start (+ start header-size)))
+	    (t (warn "Unknown IPv4 protocol ~A received from ~@/ip4:pprint-ip4/."
+		     (integer-name 'ip-protocol (ip :protocol) nil)
+		     packet))))))))
 
 
 
@@ -307,7 +309,7 @@
 	    (= +ether-type-ip4+
 	       (arp-prot-type packet start))
 	    (not (mismatch (address stack) packet :start2 (+ start 24) :end2 (+ start 28))))
-       (warn "arp request from ~v/ip4:pprint-ip4/." (+ start 14) packet)
+       (warn "arp request from ~v/ip4:pprint-ip4/ len ~D." (+ start 14) packet (length packet))
        (transmit (interface stack)
 		 (format-ethernet-packet (format-arp-request nil +arp-op-reply+
 							     (address stack)
@@ -316,12 +318,12 @@
 							     :target-hardware-address packet
 							     :target-hardware-address-start (+ start 8))
 					 (mac-address (interface stack))
-					 packet
-					 muerte.ethernet:+ether-type-arp+
-					 :destination-start (+ start 8))))
+					 (ether-source packet)
+					 muerte.ethernet:+ether-type-arp+)))
       (t (unknown-packet stack packet)
-	 #+ignore (warn "ARP request for not me ~/ip4:pprint-ip4/: ~v/ip4:pprint-ip4/."
-			(address stack) (+ start 24) packet))))
+	 #+ignore
+	 (warn "ARP request for not me ~/ip4:pprint-ip4/: ~v/ip4:pprint-ip4/."
+	       (address stack) (+ start 24) packet))))
     (#.+arp-op-reply+
      (warn "Received an ARP reply: ~v/ip4:pprint-ip4/ is ~v/ethernet:pprint-mac/."
 	   (+ start 14) packet
