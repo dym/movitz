@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 30 15:19:43 2001
 ;;;;                
-;;;; $Id: packages.lisp,v 1.9 2005/05/05 13:21:50 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.10 2005/05/29 22:03:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -39,9 +39,11 @@
   (package-object-use-list (find-package package-name)))
 
 (defun find-package (name)
-  (if (packagep name)
-      name
-    (find-package-string (string name))))
+  (typecase name
+    (package name)
+    (null (find-package 'common-lisp))	; This can be practical..
+    ((or symbol string) (find-package-string (string name)))
+    (t (error "Not a package name: ~S" name))))
 
 (defun find-package-string (name &optional (start 0) (end (length name)) (key 'identity))
   (values (gethash-string name start end *packages* nil key)))

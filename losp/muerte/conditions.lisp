@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.15 2005/04/29 22:36:23 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.16 2005/05/29 22:03:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -280,8 +280,9 @@ Return the condition object, if there was one."
     (setf *debugger-function* #'muerte.init::my-debugger))
   (cond
    ((not *debugger-function*)
-    (format t "~&No debugger in *debugger-function*. Trying to abort.")
-    (invoke-restart (or (find-restart 'abort)
+    (format t "~&No debugger in *debugger-function*. Trying to continue or abort.")
+    (invoke-restart (or (find-restart 'continue)
+			(find-restart 'abort)
 			(format t "~%Condition for debugger: ~Z" condition)
 			(format t "~%No abort restart is active. Halting CPU.")
 			(halt-cpu))))
