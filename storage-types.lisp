@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.52 2005/05/08 01:17:05 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.53 2005/06/09 22:18:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -343,7 +343,8 @@ integer (native lisp) value."
 		   :u16 3
 		   :u32 4
 		   :bit 5
-		   :code 6)
+		   :code 6
+		   :indirects 7)
     :initarg :element-type
     :reader movitz-vector-element-type)
    (fill-pointer

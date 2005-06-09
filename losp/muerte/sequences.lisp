@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.20 2005/05/21 22:33:40 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.21 2005/06/09 22:19:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -58,24 +58,27 @@
 
 (defun length (sequence)
   (etypecase sequence
-    (simple-array
-     (macrolet
-	 ((do-it ()
-	    `(with-inline-assembly (:returns :eax)
-	       (:compile-form (:result-mode :ebx) sequence)
-	       (:movl (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
-		      :eax)
-	       (:testl ,(logxor #xffffffff (1- (expt 2 14))) :eax)
-	       (:jnz 'basic-vector-length-ok)
-	       (:movzxw (:ebx #.(bt:slot-offset 'movitz::movitz-basic-vector 'movitz::fill-pointer))
-			:eax)
-	      basic-vector-length-ok)))
-       (do-it)))
     (list
      (do ((x sequence (cdr x))
 	  (length 0 (1+ length)))
 	 ((null x) length)
-       (declare (index length))))))
+       (declare (index length))))
+    (indirect-vector
+     (memref sequence (movitz-type-slot-offset 'movitz-basic-vector 'data)
+	     :index 2))
+    ((simple-array * 1)
+     (macrolet
+	 ((do-it ()
+	    `(with-inline-assembly (:returns :eax)
+	       (:compile-form (:result-mode :ebx) sequence)
+	       (:movl (:ebx (:offset movitz-basic-vector num-elements))
+		      :eax)
+	       (:testl ,(logxor #xffffffff (1- (expt 2 14))) :eax)
+	       (:jnz 'basic-vector-length-ok)
+	       (:movzxw (:ebx (:offset movitz-basic-vector fill-pointer))
+			:eax)
+	      basic-vector-length-ok)))
+       (do-it)))))
 
 (defun length%list (sequence)
   (do ((length 0 (1+ length))

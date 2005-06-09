@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.50 2005/05/21 22:37:53 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.51 2005/06/09 22:19:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -21,10 +21,6 @@
 
 (in-package muerte)
 
-(defun vector-element-type (object)
-  (memref object (movitz-type-slot-offset 'movitz-basic-vector 'element-type)
-	  :type :unsigned-byte8))
-
 (defmacro vector-double-dispatch ((s1 s2) &rest clauses)
   (flet ((make-double-dispatch-value (et1 et2)
 	   (+ (* #x100 (bt:enum-value 'movitz::movitz-vector-element-type et1))
@@ -33,8 +29,8 @@
        #+ignore
        (warn "vdd: ~X" (+ (* #x100 (vector-element-type ,s1))
 	      (vector-element-type ,s2)))
-       (case (+ (ash (vector-element-type ,s1) 8)
-		(vector-element-type ,s2))
+       (case (+ (ash (vector-element-type-code ,s1) 8)
+		(vector-element-type-code ,s2))
 	 ,@(loop for (keys . forms) in clauses
 	       if (atom keys)
 	       collect (cons keys forms)
@@ -42,18 +38,36 @@
 	       collect (cons (make-double-dispatch-value (first keys) (second keys))
 			     forms))))))
 
-(define-compiler-macro vector-element-type (object)
-  `(memref ,object (movitz-type-slot-offset 'movitz-basic-vector 'element-type)
-	   :type :unsigned-byte8))
+(defmacro with-indirect-vector ((var form &key (check-type t)) &body body)
+  `(let ((,var ,form))
+     ,(when check-type `(check-type ,var indirect-vector))
+     (macrolet ((,var (slot)
+		  (let ((index (position slot '(displaced-to displaced-offset
+						fill-pointer length))))
+		    (assert index () "Unknown indirect-vector slot ~S." slot)
+		    `(memref ,',var (movitz-type-slot-offset 'movitz-basic-vector 'data)
+			     :index ,index))))
+       ,@body)))
 
-(defun (setf vector-element-type) (numeric-element-type vector)
+(define-compiler-macro vector-element-type-code (object)
+  `(let ((x (memref ,object (movitz-type-slot-offset 'movitz-basic-vector 'element-type)
+		    :type :unsigned-byte8)))
+     (if (/= x ,(bt:enum-value 'movitz::movitz-vector-element-type :indirects))
+	 x
+       (memref ,object (movitz-type-slot-offset 'movitz-basic-vector 'fill-pointer)
+	       :index 1 :type :unsigned-byte8))))
+
+(defun vector-element-type-code (object)
+  (vector-element-type-code object))
+
+(defun (setf vector-element-type-code) (numeric-element-type vector)
   (check-type vector vector)
   (setf (memref vector (movitz-type-slot-offset 'movitz-basic-vector 'element-type)
 		:type :unsigned-byte8)    
     numeric-element-type))
 
 (defun array-element-type (array)
-  (ecase (vector-element-type array)
+  (ecase (vector-element-type-code array)
     (#.(bt:enum-value 'movitz::movitz-vector-element-type :any-t)
        t)
     (#.(bt:enum-value 'movitz::movitz-vector-element-type :character)
@@ -111,13 +125,17 @@
 
 (defun array-dimension (array axis-number)
   (etypecase array
+    (indirect-vector
+     (assert (eq 0 axis-number))
+     (with-indirect-vector (indirect array :check-type nil)
+       (indirect length)))
     ((simple-array * 1)
-     (assert (zerop axis-number))
+     (assert (eq 0 axis-number))
      (memref array (movitz-type-slot-offset 'movitz-basic-vector 'num-elements)))))
 
 (defun array-dimensions (array)
-  (check-type array array)
-  1)
+  (etypecase array
+    (vector 1)))
 
 (defun shrink-vector (vector new-size)
   (check-type vector vector)
@@ -142,13 +160,18 @@
 
 (defun array-has-fill-pointer-p (array)
   (etypecase array
-    (simple-array
+    (indirect-vector
+     t)
+    ((simple-array * 1)
      (%basic-vector-has-fill-pointer-p array))
     (array nil)))
   
 (defun fill-pointer (vector)
   (etypecase vector
-    (simple-array
+    (indirect-vector
+     (memref vector (movitz-type-slot-offset 'movitz-basic-vector 'data)
+	     :index 2))
+    ((simple-array * 1)
      (assert (%basic-vector-has-fill-pointer-p vector) (vector)
        "Vector has no fill-pointer.")
      (%basic-vector-fill-pointer vector))))
@@ -157,7 +180,7 @@
   (check-type vector vector)
   (let ((length (the fixnum
 		  (memref vector (movitz-type-slot-offset 'movitz-basic-vector 'num-elements)))))
-    (ecase (vector-element-type vector)
+    (ecase (vector-element-type-code vector)
       (#.(bt:enum-value 'movitz::movitz-vector-element-type :any-t)
 	 (%shallow-copy-object vector (+ 2 length)))
       (#.(bt:enum-value 'movitz::movitz-vector-element-type :u32)
@@ -173,14 +196,28 @@
 
 (defun (setf fill-pointer) (new-fill-pointer vector)
   (etypecase vector
-    (simple-array
+    (indirect-vector
      (macrolet
 	 ((do-it ()
 	    `(with-inline-assembly (:returns :eax)
 	       (:compile-two-forms (:eax :ebx) new-fill-pointer vector)
 	       (:testb ,movitz:+movitz-fixnum-zmask+ :al)
 	       (:jnz 'illegal-fill-pointer)
-	       (:movl (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+	       (:movl (:ebx (:offset movitz-basic-vector data) 12) :ecx)
+	       (:cmpl :ebx :ecx)
+	       (:jg '(:sub-program (illegal-fill-pointer)
+		       (:compile-form (:result-mode :ignore)
+			(error "Illegal fill-pointer: ~W." new-fill-pointer))))
+	       (:movl :eax (:ebx (:offset movitz-basic-vector data) 8)))))
+       (do-it)))
+    ((simple-array * 1)
+     (macrolet
+	 ((do-it ()
+	    `(with-inline-assembly (:returns :eax)
+	       (:compile-two-forms (:eax :ebx) new-fill-pointer vector)
+	       (:testb ,movitz:+movitz-fixnum-zmask+ :al)
+	       (:jnz 'illegal-fill-pointer)
+	       (:movl (:ebx (:offset movitz-basic-vector num-elements))
 		      :ecx)
 	       (:testl ,(logxor #xffffffff (1- (expt 2 14))) :ecx)
 	       (:jnz '(:sub-program ()
@@ -190,7 +227,7 @@
 	       (:jc '(:sub-program (illegal-fill-pointer)
 		       (:compile-form (:result-mode :ignore)
 			(error "Illegal fill-pointer: ~W." new-fill-pointer))))
-	       (:movw :ax (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::fill-pointer))))))
+	       (:movw :ax (:ebx (:offset movitz-basic-vector fill-pointer))))))
        (do-it)))))
 
 (defun vector-aref%unsafe (vector index)
@@ -263,18 +300,22 @@
   (numargs-case
    (2 (array index)
       (etypecase array
-	(simple-array
+	(indirect-vector
+	 (with-indirect-vector (indirect array :check-type nil)
+	   (aref (indirect displaced-to) (+ index (indirect displaced-offset)))))
+	(vector
 	 (macrolet
 	     ((do-it ()
 		`(with-inline-assembly (:returns :eax)
-		   (:declare-label-set basic-vector-dispatcher
-				       ,(loop with x = (make-list 8 :initial-element 'unknown)
-					    for et in '(:any-t :character :u8 :u32 :code :bit)
-					    do (setf (elt x (bt:enum-value
-							     'movitz::movitz-vector-element-type
-							     et))
-						 et)
-					    finally (return x)))
+		   (:declare-label-set
+		    basic-vector-dispatcher
+		    ,(loop with x = (make-list 8 :initial-element 'unknown)
+			 for et in '(:any-t :character :u8 :u32 :code :bit)
+			 do (setf (elt x (bt:enum-value
+					  'movitz::movitz-vector-element-type
+					  et))
+			      et)
+			 finally (return x)))
 		   (:compile-two-forms (:eax :ebx) array index)
 		   (:movl (:eax ,movitz:+other-type-offset+) :ecx)
 		   (:testb ,movitz:+movitz-fixnum-zmask+ :bl)
@@ -338,7 +379,11 @@
   (numargs-case
    (3 (value vector index)
       (etypecase vector
-	(simple-array
+	(indirect-vector
+	 (with-indirect-vector (indirect vector :check-type nil)
+	   (setf (aref (indirect displaced-to) (+ index (indirect displaced-offset)))
+	     value)))
+	(vector
 	 (macrolet
 	     ((do-it ()
 		`(with-inline-assembly (:returns :eax)
@@ -512,27 +557,36 @@
 ;;; string accessors
 
 (defun char (string index)
-  (check-type string string)
   (assert (below index (array-dimension string 0)))
-  (memref string (movitz-type-slot-offset 'movitz-basic-vector 'data)
-	  :index index :type :character))
+  (etypecase string
+    (simple-string
+     (memref string (movitz-type-slot-offset 'movitz-basic-vector 'data)
+	     :index index :type :character))
+    (string
+     (with-indirect-vector (indirect string)
+       (char (indirect displaced-to) (+ index (indirect displaced-offset)))))))
 
 (defun (setf char) (value string index)
-  (check-type string string)
-  (check-type value character)
   (assert (below index (array-dimension string 0)))
-  (setf (memref string (movitz-type-slot-offset 'movitz-basic-vector 'data)
-		:index index :type :character) value))
+  (etypecase string
+    (simple-string
+     (check-type value character)
+     (setf (memref string (movitz-type-slot-offset 'movitz-basic-vector 'data)
+		   :index index :type :character) value))
+    (string
+     (with-indirect-vector (indirect string)
+       (setf (char (indirect displaced-to) (+ index (indirect displaced-offset)))
+	 value)))))
 
 (defun schar (string index)
-  (check-type string string)
+  (check-type string simple-string)
   (assert (below index (length string)))
   (memref string (movitz-type-slot-offset 'movitz-basic-vector 'data)
 	  :index index
 	  :type :character))
 
 (defun (setf schar) (value string index)
-  (check-type string string)
+  (check-type string simple-string)
   (check-type value character)
   (assert (below index (length string)))
   (setf (memref string (movitz-type-slot-offset 'movitz-basic-vector 'data)
@@ -593,23 +647,31 @@
 (defun subvector-accessors (vector start end)
   "Check that vector is a vector, that start and end are within vector's bounds,
 and return accessors for that subsequence (fast & unsafe accessors, that is)."
-  (check-type vector vector)
   (when (and start end)
     (assert (<= 0 start end))
     (assert (<= end (array-dimension vector 0))))
-  (case (vector-element-type vector)
-    (#.(bt:enum-value 'movitz::movitz-vector-element-type :any-t)
-       (values #'svref%unsafe #'(setf svref%unsafe)))
-    (#.(bt:enum-value 'movitz::movitz-vector-element-type :character)
-       (values #'char%unsafe #'(setf char%unsafe)))
-    (#.(bt:enum-value 'movitz::movitz-vector-element-type :u8)
-       (values #'u8ref%unsafe #'(setf u8ref%unsafe)))
-    (#.(bt:enum-value 'movitz::movitz-vector-element-type :u32)
-       (values #'u32ref%unsafe #'(setf u32ref%unsafe)))
-    (#.(bt:enum-value 'movitz::movitz-vector-element-type :code)
-       (values #'u8ref%unsafe #'(setf u8ref%unsafe)))
-    (t (warn "don't know about vector's element-type: ~S" vector)
-       (values #'aref #'(setf aref)))))
+  (etypecase vector
+    (indirect-vector
+     (with-indirect-vector (indirect vector)
+       (if (= 0 (indirect displaced-offset))
+	   (values #'aref #'(setf aref))
+	 (let ((offset (indirect displaced-offset)))
+	   (values (lambda (a i) (aref a (+ i offset)))
+		   (lambda (v a i) (setf (aref a (+ i offset)) v)))))))
+    (vector
+     (case (vector-element-type-code vector)
+       (#.(bt:enum-value 'movitz::movitz-vector-element-type :any-t)
+	  (values #'svref%unsafe #'(setf svref%unsafe)))
+       (#.(bt:enum-value 'movitz::movitz-vector-element-type :character)
+	  (values #'char%unsafe #'(setf char%unsafe)))
+       (#.(bt:enum-value 'movitz::movitz-vector-element-type :u8)
+	  (values #'u8ref%unsafe #'(setf u8ref%unsafe)))
+       (#.(bt:enum-value 'movitz::movitz-vector-element-type :u32)
+	  (values #'u32ref%unsafe #'(setf u32ref%unsafe)))
+       (#.(bt:enum-value 'movitz::movitz-vector-element-type :code)
+	  (values #'u8ref%unsafe #'(setf u8ref%unsafe)))
+       (t (warn "don't know about vector's element-type: ~S" vector)
+	  (values #'aref #'(setf aref)))))))
 
 (defmacro with-subvector-accessor ((name vector-form &optional start end) &body body)
   "Installs name as an accessor into vector-form, bound by start and end."
@@ -803,29 +865,125 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
       (replace array initial-contents)))
     array))
 
+(defun make-indirect-vector (displaced-to displaced-offset fill-pointer length)
+  (let ((x (make-basic-vector%t 4 0 nil nil)))
+    (setf (vector-element-type-code x)
+      #.(bt:enum-value 'movitz::movitz-vector-element-type :indirects))
+    (set-indirect-vector x displaced-to displaced-offset 
+			 (vector-element-type-code displaced-to)
+			 fill-pointer length)))
+
+(defun set-indirect-vector (x displaced-to displaced-offset et-code fill-pointer length)
+  (check-type displaced-to vector)
+  (let ((displaced-offset (or displaced-offset 0)))
+    (assert (<= (+ displaced-offset length) (length displaced-to)) ()
+      "Displaced-to is outside legal range.")
+    (setf (memref x (movitz-type-slot-offset 'movitz-basic-vector 'fill-pointer)
+		  :index 1 :type :unsigned-byte8)
+      et-code)
+    (with-indirect-vector (indirect x)
+      (setf (indirect displaced-to) displaced-to
+	    (indirect displaced-offset) displaced-offset
+	    (indirect fill-pointer) (etypecase fill-pointer
+				 ((eql nil) length)
+				 ((eql t) length)
+				 ((integer 0 *) fill-pointer))
+	    (indirect length) length))
+    x))
+
+(defun make-basic-vector (size element-type fill-pointer initial-element initial-contents)
+  (let ((upgraded-element-type (upgraded-array-element-type element-type)))
+    (cond
+     ;; These should be replaced by subtypep sometime.
+     ((eq upgraded-element-type 'character)
+      (make-basic-vector%character size fill-pointer initial-element initial-contents))
+     ((eq upgraded-element-type 'bit)
+      (make-basic-vector%bit size fill-pointer initial-element initial-contents))
+     ((member upgraded-element-type '(u8 (unsigned-byte 8)) :test #'equal)
+      (make-basic-vector%u8 size fill-pointer initial-element initial-contents))
+     ((member upgraded-element-type '(u32 (unsigned-byte 32)) :test #'equal)
+      (make-basic-vector%u32 size fill-pointer initial-element initial-contents))
+     ((eq upgraded-element-type 'code)
+      (make-basic-vector%code size fill-pointer initial-element initial-contents))
+     (t (make-basic-vector%t size fill-pointer initial-element initial-contents)))))
+
 (defun make-array (dimensions &key element-type initial-element initial-contents adjustable
 				   fill-pointer displaced-to displaced-index-offset)
-  (declare (ignore adjustable displaced-to displaced-index-offset))
   (let ((size (cond ((integerp dimensions)
                      dimensions)
                     ((and (consp dimensions) (null (cdr dimensions)))
                      (car dimensions))
                     (t
                      (error "Multi-dimensional arrays not supported.")))))
-    (let ((upgraded-element-type (upgraded-array-element-type element-type)))
-      (cond
-       ;; These should be replaced by subtypep sometime.
-       ((eq upgraded-element-type 'character)
-	(make-basic-vector%character size fill-pointer initial-element initial-contents))
-       ((eq upgraded-element-type 'bit)
-	(make-basic-vector%bit size fill-pointer initial-element initial-contents))
-       ((member upgraded-element-type '(u8 (unsigned-byte 8)) :test #'equal)
-	(make-basic-vector%u8 size fill-pointer initial-element initial-contents))
-       ((member upgraded-element-type '(u32 (unsigned-byte 32)) :test #'equal)
-	(make-basic-vector%u32 size fill-pointer initial-element initial-contents))
-       ((eq upgraded-element-type 'code)
-	(make-basic-vector%code size fill-pointer initial-element initial-contents))
-       (t (make-basic-vector%t size fill-pointer initial-element initial-contents))))))
+    (cond
+     (displaced-to
+      (make-indirect-vector displaced-to displaced-index-offset fill-pointer size))
+     ((or adjustable
+	  (and fill-pointer (not (typep size '(unsigned-byte 14)))))
+      (make-indirect-vector (make-basic-vector size element-type nil
+					       initial-element initial-contents)
+			    0 fill-pointer size))
+     (t (make-basic-vector size element-type fill-pointer initial-element initial-contents)))))
+
+(defun adjust-array (array new-dimensions
+		     &key element-type (initial-element nil initial-element-p)
+			  initial-contents fill-pointer
+			  displaced-to displaced-index-offset)
+  (etypecase array
+    (indirect-vector
+     (let ((new-length (cond ((integerp new-dimensions)
+			      new-dimensions)
+			     ((and (consp new-dimensions) (null (cdr new-dimensions)))
+			      (car new-dimensions))
+			     (t (error "Multi-dimensional arrays not supported.")))))
+       (with-indirect-vector (indirect array)
+	 (cond
+	  (displaced-to
+	   (check-type displaced-to vector)
+	   (set-indirect-vector array displaced-to displaced-index-offset
+				(vector-element-type-code array)
+				(case fill-pointer
+				  ((nil) (indirect fill-pointer))
+				  ((t) new-length)
+				  (t fill-pointer))
+				new-length))
+	  ((and (= 0 (indirect displaced-offset))
+		(/= new-length (array-dimension array 0)))
+	   (let* ((old (indirect displaced-to))
+		  (new (make-array new-length :element-type (array-element-type old))))
+	     (dotimes (i (array-dimension old 0))
+	       (setf (aref new i) (aref old i)))
+	     (when initial-element-p
+	       (fill new initial-element :start (array-dimension old 0)))
+	     (setf (indirect displaced-to) new
+		   (indirect length) new-length)
+	     (when fill-pointer
+	       (setf (fill-pointer array) fill-pointer))))
+	  (t (error "Sorry, don't know how to adjust ~S." array)))))
+     array)
+    (vector
+     (let ((new-length (cond ((integerp new-dimensions)
+			      new-dimensions)
+			     ((and (consp new-dimensions) (null (cdr new-dimensions)))
+			      (car new-dimensions))
+			     (t (error "Multi-dimensional arrays not supported.")))))
+       (let ((new (if (= (array-dimension array 0) new-length)
+		      array
+		    (let* ((old array)
+			   (new (make-array new-length :element-type (array-element-type old))))
+		      (dotimes (i (array-dimension old 0))
+			(setf (aref new i) (aref old i)))
+		      (when initial-element-p
+			(fill new initial-element :start (array-dimension old 0)))
+		      new))))
+	 (case fill-pointer
+	   ((nil))
+	   ((t) (setf (fill-pointer new) new-length))
+	   (t (setf (fill-pointer new) fill-pointer)))
+	 new)))))
+
+(defun adjustable-array-p (array)
+  (typep array 'indirect-vector))
 
 (defun vector (&rest objects)
   "=> vector"
@@ -863,15 +1021,19 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
   (< (fill-pointer vector) (array-dimension vector 0)))
 
 (defun vector-push-extend (new-element vector &optional extension)
-  (declare (ignore extension))
   (check-type vector vector)
   (let ((p (fill-pointer vector)))
-    (declare (type (unsigned-byte 16) p))
     (cond
      ((< p (array-dimension vector 0))
       (setf (aref vector p) new-element
 	    (fill-pointer vector) (1+ p)))
-     (t (error "Vector-push extending not implemented yet.")))
+     ((not (adjustable-array-p vector))
+      (error "Can't extend non-adjustable array."))
+     (t (adjust-array vector (+ (array-dimension vector 0)
+				(or extension
+				    (max 1 (array-dimension vector 0))))
+		      :fill-pointer (1+ p))
+	(setf (aref vector p) new-element)))
     p))
 
 
