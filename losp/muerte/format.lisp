@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Mar 23 01:18:36 2002
 ;;;;                
-;;;; $Id: format.lisp,v 1.10 2005/01/25 13:46:10 ffjeld Exp $
+;;;; $Id: format.lisp,v 1.11 2005/06/10 18:35:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -30,9 +30,11 @@
   (declare (dynamic-extent args))
   (let ((destination
 	 (case destination
-	   ((nil) (make-array (* 3 (length control))
+	   ((nil) (make-array (+ (length control)
+				 (* 8 (count #\~ control)))
 			      :element-type 'character
-			      :fill-pointer 0))
+			      :fill-pointer 0
+			      :adjustable t))
 	   ((t) *standard-output*)
 	   (otherwise destination))))
     (etypecase control
@@ -180,8 +182,8 @@ clause."
 	      (#\/ (let* ((name-end (or (position #\/ control-string :start (incf i))
 					(error "Call function name not terminated in ~S."
 					       control-string)))
-			  (function-name (simple-read-from-string control-string nil nil
-								  :start i :end name-end)))
+			  (function-name (read-from-string control-string nil nil
+							   :start i :end name-end)))
 		     (check-type function-name symbol)
 		     (setf i name-end)
 		     (apply function-name *standard-output* (pop args)
