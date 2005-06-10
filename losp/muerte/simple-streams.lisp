@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001, 2003-2004, 
+;;;;    Copyright (C) 2001, 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 29 13:39:43 2003
 ;;;;                
-;;;; $Id: simple-streams.lisp,v 1.7 2004/11/24 16:19:02 ffjeld Exp $
+;;;; $Id: simple-streams.lisp,v 1.8 2005/06/10 18:35:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -427,9 +427,7 @@
        (%check stream :output)
        (funcall-stm-handler-2 j-write-char character (sm melded-stream stream))))
     (string
-     (assert (vector-push-extend character stream)
-	 () "Vector-push-extend for string stream failed pushing ~S into ~S."
-	 character stream))))
+     (vector-push-extend character stream))))
 
 (defun %read-line (stream eof-error-p eof-value recursive-p)
   (declare (ignore recursive-p))
