@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.51 2005/06/09 22:19:02 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.52 2005/06/10 23:08:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -644,9 +644,9 @@
 
 ;;; fast vector access
 
-(defun subvector-accessors (vector start end)
+(defun subvector-accessors (vector &optional start end)
   "Check that vector is a vector, that start and end are within vector's bounds,
-and return accessors for that subsequence (fast & unsafe accessors, that is)."
+and return basic-vector and accessors for that subsequence."
   (when (and start end)
     (assert (<= 0 start end))
     (assert (<= end (array-dimension vector 0))))
@@ -654,37 +654,37 @@ and return accessors for that subsequence (fast & unsafe accessors, that is)."
     (indirect-vector
      (with-indirect-vector (indirect vector)
        (if (= 0 (indirect displaced-offset))
-	   (values #'aref #'(setf aref))
+	   (subvector-accessors (indirect displaced-to) start end)
 	 (let ((offset (indirect displaced-offset)))
-	   (values (lambda (a i) (aref a (+ i offset)))
+	   (values vector
+		   (lambda (a i) (aref a (+ i offset)))
 		   (lambda (v a i) (setf (aref a (+ i offset)) v)))))))
     (vector
      (case (vector-element-type-code vector)
        (#.(bt:enum-value 'movitz::movitz-vector-element-type :any-t)
-	  (values #'svref%unsafe #'(setf svref%unsafe)))
+	  (values vector #'svref%unsafe #'(setf svref%unsafe)))
        (#.(bt:enum-value 'movitz::movitz-vector-element-type :character)
-	  (values #'char%unsafe #'(setf char%unsafe)))
+	  (values vector #'char%unsafe #'(setf char%unsafe)))
        (#.(bt:enum-value 'movitz::movitz-vector-element-type :u8)
-	  (values #'u8ref%unsafe #'(setf u8ref%unsafe)))
+	  (values vector #'u8ref%unsafe #'(setf u8ref%unsafe)))
        (#.(bt:enum-value 'movitz::movitz-vector-element-type :u32)
-	  (values #'u32ref%unsafe #'(setf u32ref%unsafe)))
+	  (values vector #'u32ref%unsafe #'(setf u32ref%unsafe)))
        (#.(bt:enum-value 'movitz::movitz-vector-element-type :code)
-	  (values #'u8ref%unsafe #'(setf u8ref%unsafe)))
+	  (values vector #'u8ref%unsafe #'(setf u8ref%unsafe)))
        (t (warn "don't know about vector's element-type: ~S" vector)
-	  (values #'aref #'(setf aref)))))))
+	  (values vector #'aref #'(setf aref)))))))
 
 (defmacro with-subvector-accessor ((name vector-form &optional start end) &body body)
   "Installs name as an accessor into vector-form, bound by start and end."
   (let ((reader (gensym "sub-vector-reader-"))
 	(writer (gensym "sub-vector-writer-"))
 	(vector (gensym "sub-vector-")))
-    `(let ((,vector ,vector-form))
-       (multiple-value-bind (,reader ,writer)
-	   (subvector-accessors ,vector ,start ,end)
-	 (declare (ignorable ,reader ,writer))
-	 (macrolet ((,name (index)
-		      `(accessor%unsafe (,',reader ,',writer) ,',vector ,index)))
-	   ,@body)))))
+    `(multiple-value-bind (,vector ,reader ,writer)
+	 (subvector-accessors ,vector-form ,start ,end)
+       (declare (ignorable ,reader ,writer))
+       (macrolet ((,name (index)
+		    `(accessor%unsafe (,',reader ,',writer) ,',vector ,index)))
+	 ,@body))))
 
 (defmacro accessor%unsafe ((reader writer) &rest args)
   (declare (ignore writer))
