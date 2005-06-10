@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu May  8 14:25:06 2003
 ;;;;                
-;;;; $Id: segments.lisp,v 1.14 2005/05/08 01:19:41 ffjeld Exp $
+;;;; $Id: segments.lisp,v 1.15 2005/06/10 21:15:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -45,11 +45,20 @@ which is a great way to crash the machine. So know what you're doing."
 		  (:movw :cx ,reg))))
     (ecase segment-register-name
       (:ss (set-sreg :ss))
-      (:cs (set-sreg :cs))
       (:ds (set-sreg :ds))
       (:es (set-sreg :es))
       (:fs (set-sreg :fs))
-      (:gs (set-sreg :gs))))
+      (:gs (set-sreg :gs))
+      (:cs (without-interrupts
+	     (with-inline-assembly (:returns :nothing)
+	       (:load-lexical (:lexical-binding value) :untagged-fixnum-ecx)
+	       (:declare-label-set jmp-table (jmp-target))
+	       (:pushl :ecx)		; push selector
+	       (:pushl (:esi (:offset movitz-funobj constant0) 'jmp-table))
+	       (:jmp-segment (:esp))
+	      jmp-target
+	       (:popl :ecx)
+	       (:popl :ecx))))))
   value)
 
 (defun %sgdt ()
