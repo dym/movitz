@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.50 2005/05/21 22:38:29 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.51 2005/06/10 23:05:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1253,6 +1253,7 @@
 	   #:cpu-featurep
 	   #:find-cpu-features
 	   #:*cpu-features*
+	   #:*gc-hooks*
 	   #:write-cpu-vendor-string
 	   #:read-time-stamp-counter
 	   #:clear-time-stamp-counter

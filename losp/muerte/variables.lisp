@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2003-2004, 
+;;;;    Copyright (C) 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov  5 21:53:34 2003
 ;;;;                
-;;;; $Id: variables.lisp,v 1.8 2004/09/15 10:22:59 ffjeld Exp $
+;;;; $Id: variables.lisp,v 1.9 2005/06/10 23:05:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -42,5 +42,7 @@
 (defvar *multiboot-data* nil)
 
 (defvar internal-time-units-per-second)
+
+(defvar *gc-hooks* nil)
 
 (declaim (special *build-number*))

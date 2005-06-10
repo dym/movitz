@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.54 2005/05/05 20:51:09 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.55 2005/06/10 23:05:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -493,7 +493,8 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
 	  (format t "Old space: ~/muerte:pprint-clumps/, new space: ~
 ~/muerte:pprint-clumps/, freed: ~/muerte:pprint-clumps/.~%"
 		  old-size new-size (- old-size new-size))))
-
+      (dolist (hook *gc-hooks*)
+	(funcall hook))
       (initialize-space oldspace)
       (fill oldspace #x13 :start 2)
       ;; (setf *gc-stack2* *gc-stack*)
