@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu May  8 14:25:06 2003
 ;;;;                
-;;;; $Id: segments.lisp,v 1.15 2005/06/10 21:15:18 ffjeld Exp $
+;;;; $Id: segments.lisp,v 1.16 2005/06/10 22:43:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -176,9 +176,9 @@ This is the setter corresponding to the sgdt getter."
 
 (defun (setf global-segment-descriptor-table) (table)
   "Install <table> as the GDT.
-NB! you need ensure that the table object isn't garbage-collected."
+NB! you need to ensure that the table object isn't garbage-collected."
   (check-type table (vector (unsigned-byte 32)))
-  (let ((limit (1- (* 2 (length table))))
+  (let ((limit (1- (* 4 (length table))))
 	(base (+ 2 (+ (object-location table)
 		      (location-physical-offset)))))
     (%lgdt base limit)
