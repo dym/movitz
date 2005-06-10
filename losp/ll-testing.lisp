@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 14 08:18:43 2005
 ;;;;                
-;;;; $Id: ll-testing.lisp,v 1.9 2005/05/08 01:18:02 ffjeld Exp $
+;;;; $Id: ll-testing.lisp,v 1.10 2005/06/10 23:04:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -40,12 +40,13 @@
 
 (defun format-segment-table (table &key (start 0) (end (truncate (length table) 2)))
   (loop for i from start below end
-      do (format t "~&~2D: base: #x~8,'0X, limit: #x~5,'0X, type-s-dpl-p: ~8,'0b, avl-x-db-g: ~4,'0b~%"
-		 i
-		 (* 4 (segment-descriptor-base-location table i))
-		 (segment-descriptor-limit table i)
-		 (segment-descriptor-type-s-dpl-p table i)
-		 (segment-descriptor-avl-x-db-g table i)))
+      as selector = (* i 8)
+      do (format t "~&~3X: base: #x~8,'0X, limit: #x~5,'0X, type-s-dpl-p: ~8,'0b, avl-x-db-g: ~4,'0b~%"
+		 selector
+		 (* 4 (segment-descriptor-base-location table selector))
+		 (segment-descriptor-limit table selector)
+		 (segment-descriptor-type-s-dpl-p table selector)
+		 (segment-descriptor-avl-x-db-g table selector)))
   (values))
 
 
