@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 28 08:30:01 2005
 ;;;;                
-;;;; $Id: threading.lisp,v 1.7 2005/05/08 22:05:13 ffjeld Exp $
+;;;; $Id: threading.lisp,v 1.8 2005/06/10 23:09:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -33,8 +33,11 @@
   ((table
     :reader segment-descriptor-table
     :initarg :table
-    :initform (setf (muerte::global-segment-descriptor-table)
-		(muerte::dump-global-segment-table :entries 64)))
+    :initform (let ((table (muerte::dump-global-segment-table :entries 64)))
+		(push (lambda ()
+			(setf (muerte::global-segment-descriptor-table) table))
+		      *gc-hooks*)
+		(setf (muerte::global-segment-descriptor-table) table)))
    (clients
     :initform (make-array 64))
    (range-start
