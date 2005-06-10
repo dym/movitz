@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct 17 21:50:42 2001
 ;;;;                
-;;;; $Id: read.lisp,v 1.11 2004/10/11 13:53:11 ffjeld Exp $
+;;;; $Id: read.lisp,v 1.12 2005/06/10 18:35:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -342,6 +342,10 @@ of string delimited by start and end."
 				  (substring string i token-end))))))))))
       (t (return-from simple-read-from-string
 	   (simple-read-token string :start i :end end))))))
+
+(defun read-from-string (&rest args)
+  (declare (dynamic-extent args))
+  (apply #'simple-read-from-string args))
 
 (defun un-backquote (form level)
   "Dont ask.."
