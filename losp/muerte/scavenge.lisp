@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.50 2005/05/05 20:51:55 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.51 2005/06/10 23:06:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -180,8 +180,12 @@ start-location and end-location."
 	      (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
 	      (incf scan (1+ (logand (1+ len) -2)))))
 	   ((scavenge-typep x :basic-vector)
-	    (if (scavenge-wide-typep x :basic-vector
-				     #.(bt:enum-value 'movitz:movitz-vector-element-type :any-t))
+	    (if (or (scavenge-wide-typep x :basic-vector
+					 #.(bt:enum-value 'movitz:movitz-vector-element-type
+							  :any-t))
+		    (scavenge-wide-typep x :basic-vector
+					 #.(bt:enum-value 'movitz:movitz-vector-element-type
+							  :indirects)))
 		(setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
 	      (error "Scanned unknown basic-vector-header ~S at location #x~X." x scan)))
 	   ((and (eq x 3) (eq x2 0))
