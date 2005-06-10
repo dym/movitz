@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.53 2005/05/05 20:52:02 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.54 2005/06/10 23:07:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -388,13 +388,13 @@ Obviously, this correspondence is not guaranteed to hold e.g. across GC."
 	   (+ -1 object-location
 	      (movitz-type-word-size 'movitz-basic-vector)
 	      (* 2 (truncate (+ (array-dimension object 0) 7) 8)))))
-      (vector-u16
+      ((simple-array (unsigned-byte 16) 1)
        (<= object-location
 	   location
 	   (+ -1 object-location
 	      (movitz-type-word-size 'movitz-basic-vector)
 	      (* 2 (truncate (+ (array-dimension object 0) 3) 4)))))
-      ((or vector-u32 simple-vector)
+      ((or simple-vector (simple-array (unsigned-byte 32) 1))
        (<= object-location
 	   location
 	   (+ -1 object-location
