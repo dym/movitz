@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.54 2005/06/10 23:07:07 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.55 2005/06/11 00:02:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -257,7 +257,7 @@ Otherwise, stack-frame is an absolute location."
     (symbol
      (copy-symbol old t))
     (vector
-     (copy-vector old))
+     (shallow-copy-vector old))
     (function
      (copy-funobj old))
     (structure-object

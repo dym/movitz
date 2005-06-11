@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.52 2005/06/10 23:08:16 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.53 2005/06/11 00:01:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -176,23 +176,25 @@
        "Vector has no fill-pointer.")
      (%basic-vector-fill-pointer vector))))
 
-(defun copy-vector (vector)
-  (check-type vector vector)
+(defun shallow-copy-vector (vector)
+  (check-type vector (simple-array * 1))
   (let ((length (the fixnum
 		  (memref vector (movitz-type-slot-offset 'movitz-basic-vector 'num-elements)))))
-    (ecase (vector-element-type-code vector)
-      (#.(bt:enum-value 'movitz::movitz-vector-element-type :any-t)
-	 (%shallow-copy-object vector (+ 2 length)))
-      (#.(bt:enum-value 'movitz::movitz-vector-element-type :u32)
-	 (%shallow-copy-non-pointer-object vector (+ 2 length)))
+    (ecase (memref vector (movitz-type-slot-offset 'movitz-basic-vector 'element-type)
+		   :type :unsigned-byte8)
+      ((#.(bt:enum-value 'movitz::movitz-vector-element-type :any-t)
+	#.(bt:enum-value 'movitz::movitz-vector-element-type :indirects))
+       (%shallow-copy-object vector (+ 2 length)))
+      ((#.(bt:enum-value 'movitz::movitz-vector-element-type :u32))
+       (%shallow-copy-non-pointer-object vector (+ 2 length)))
       ((#.(bt:enum-value 'movitz::movitz-vector-element-type :character)
 	#.(bt:enum-value 'movitz::movitz-vector-element-type :u8)
 	#.(bt:enum-value 'movitz::movitz-vector-element-type :code))
        (%shallow-copy-non-pointer-object vector	(+ 2 (truncate (+ 3 length) 4))))
-      (#.(bt:enum-value 'movitz::movitz-vector-element-type :u16)
-	 (%shallow-copy-non-pointer-object vector (+ 2 (truncate (+ 1 length) 2))))
-      (#.(bt:enum-value 'movitz::movitz-vector-element-type :bit)
-	 (%shallow-copy-non-pointer-object vector (+ 2 (truncate (+ 31 length) 32)))))))
+      ((#.(bt:enum-value 'movitz::movitz-vector-element-type :u16))
+       (%shallow-copy-non-pointer-object vector (+ 2 (truncate (+ 1 length) 2))))
+      ((#.(bt:enum-value 'movitz::movitz-vector-element-type :bit))
+       (%shallow-copy-non-pointer-object vector (+ 2 (truncate (+ 31 length) 32)))))))
 
 (defun (setf fill-pointer) (new-fill-pointer vector)
   (etypecase vector
