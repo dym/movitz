@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.55 2005/06/10 23:05:44 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.56 2005/06/11 00:01:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -411,15 +411,14 @@ duo-space where each space is KB-SIZE kilobytes."
 	(dolist (range muerte::%memory-map-roots%)
 	  (map-header-vals evacuator (car range) (cdr range))))
       ;; Scan newspace, Cheney style.
-      (with-simple-restart (nil "Cheney-scanning newspace.")
-	(loop with newspace-location = (+ 2 (object-location newspace))
-	    with scan-pointer = 2
-	    as fresh-pointer = (space-fresh-pointer newspace)
-	    while (< scan-pointer fresh-pointer)
-	    do (map-header-vals evacuator
-				(+ newspace-location scan-pointer)
-				(+ newspace-location (space-fresh-pointer newspace)))
-	       (setf scan-pointer fresh-pointer)))
+      (loop with newspace-location = (+ 2 (object-location newspace))
+	  with scan-pointer = 2
+	  as fresh-pointer = (space-fresh-pointer newspace)
+	  while (< scan-pointer fresh-pointer)
+	  do (map-header-vals evacuator
+			      (+ newspace-location scan-pointer)
+			      (+ newspace-location (space-fresh-pointer newspace)))
+	     (setf scan-pointer fresh-pointer))
       ;; Consistency check..
       (map-stack-vector (lambda (x foo)
 			  (declare (ignore foo))
