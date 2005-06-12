@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.10 2005/05/04 22:47:02 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.11 2005/06/12 21:27:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -255,3 +255,19 @@ Cons cell is in EBX, which is preserved."
     (:compile-form (:result-mode :eax) car)
     (:compile-form (:result-mode :ebx) cdr)
     (:call-local-pf fast-cons)))
+
+(defun copy-tree (tree)
+  (if (not (consp tree))
+      tree
+    (cons (copy-tree (car tree))
+	  (copy-tree (cdr tree)))))
+
+(defun tree-equal (tree-1 tree-2 &key test test-not)
+  (labels ((te (tree-1 tree-2 test)
+	     (if (not (consp tree-1))
+		 (funcall test tree-1 tree-2)
+	       (if (not (consp tree-2))
+		   nil
+		 (and (te (car tree-1) (car tree-2) test)
+		      (te (cdr tree-1) (cdr tree-2) test))))))
+    (te tree-1 tree-2 (or test (and test-not (complement test-not)) #'eql))))
