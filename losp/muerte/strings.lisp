@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 17:05:25 2001
 ;;;;                
-;;;; $Id: strings.lisp,v 1.2 2004/01/19 11:23:47 ffjeld Exp $
+;;;; $Id: strings.lisp,v 1.3 2005/06/12 20:01:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -30,7 +30,7 @@
        (do ((i start1 (1+ i))
 	    (j start2 (1+ j)))
 	   ((>= i end1) t)
-	 (unless (char= (schar string1 i) (schar string2 j))
+	 (unless (char= (char string1 i) (char string2 j))
 	   (return nil)))))
 
 (defun string/= (string1 string2 &key (start1 0) end1 (start2 0) end2)
@@ -45,7 +45,7 @@
        (do ((i start1 (1+ i))
 	    (j start2 (1+ j)))
 	   ((>= i end1) t)
-	 (unless (char-equal (schar string1 i) (schar string2 j))
+	 (unless (char-equal (char string1 i) (char string2 j))
 	   (return nil)))))
 
 (defun string-not-equal (string1 string2 &key (start1 0) end1 (start2 0) end2)
@@ -69,16 +69,16 @@
   (let* ((length (- end start))
 	 (cased-string (make-string length)))
     (dotimes (i length)
-      (setf (schar cased-string i)
-	(char-upcase (schar string (+ i start)))))
+      (setf (char cased-string i)
+	(char-upcase (char string (+ i start)))))
     cased-string))
 
 (defun string-downcase (string &key (start 0) (end (length string)))
   (let* ((length (- end start))
 	 (cased-string (make-string length)))
     (dotimes (i length)
-      (setf (schar cased-string i)
-	(char-downcase (schar string (+ i start)))))
+      (setf (char cased-string i)
+	(char-downcase (char string (+ i start)))))
     cased-string))
 
 (defun string-capitalize (string &key (start 0) end)
@@ -90,8 +90,8 @@
 	  (j 0 (1+ j))
 	  (between-words-p t))
 	((>= i end) capitalized-string)
-      (setf (schar capitalized-string j)
-	(let ((c (schar string i)))
+      (setf (char capitalized-string j)
+	(let ((c (char string i)))
 	  (cond
 	   ((and between-words-p (char-alpha-p c))
 	    (setf between-words-p nil)
