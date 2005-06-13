@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb 19 19:09:05 2001
 ;;;;                
-;;;; $Id: hash-tables.lisp,v 1.6 2005/05/08 01:18:29 ffjeld Exp $
+;;;; $Id: hash-tables.lisp,v 1.7 2005/06/13 23:00:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -31,7 +31,8 @@
 (defstruct (hash-table (:constructor make-hash-table-object))
   test
   bucket
-  sxhash)
+  sxhash
+  count)
 
 (defun make-hash-table (&key (test 'eql) (size 47) rehash-size rehash-threshold)
   (declare (ignore rehash-size rehash-threshold))
@@ -45,16 +46,17 @@
     (make-hash-table-object
      :test test
      :bucket (make-array (* 2 size) :initial-element '--no-hash-key--)
-     :sxhash sxhash)))
+     :sxhash sxhash
+     :count 0)))
 
-(defun hash-table-count (hash-table)
-  (do* ((bucket (hash-table-bucket hash-table))
-	(length (length bucket))
-	(count 0)
-	(i 0 (+ i 2)))
-      ((>= i length) count)
-    (unless (eq (svref bucket i) '--no-hash-key--)
-      (incf count))))
+;;;(defun hash-table-count (hash-table)
+;;;  (do* ((bucket (hash-table-bucket hash-table))
+;;;	(length (length bucket))
+;;;	(count 0)
+;;;	(i 0 (+ i 2)))
+;;;      ((>= i length) count)
+;;;    (unless (eq (svref bucket i) '--no-hash-key--)
+;;;      (incf count))))
 
 (defun hash-table-iterator (bucket index)
   (when index
@@ -182,12 +184,30 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
       ((>= c bucket-length)
        (error "Hash-table bucket is full, needs rehashing, which isn't implemented."))
     (let ((k (svref%unsafe bucket index2)))
-      (when (or (eq k '--no-hash-key--)
-		(funcall test k key))
+      (cond
+       ((eq k '--no-hash-key--)
+	(let ((new-count (1+ (hash-table-count hash-table))))
+	  (cond
+	   ((>= (truncate (* new-count 8) 3) bucket-length)
+	    ;; Rehash..
+	    (setf (hash-table-bucket hash-table) (make-array (* 2 (+ bucket-length 7))
+							     :initial-element '--no-hash-key--)
+		  (hash-table-count hash-table) 0)
+	    (do ((i 0 (+ i 2)))
+		((>= i bucket-length))
+	      (let ((old-key (svref%unsafe bucket i)))
+		(unless (eq old-key '--no-hash-key--)
+		  (setf (gethash old-key hash-table)
+		    (svref%unsafe bucket (1+ i))))))
+	    (return (setf (gethash key hash-table) value)))
+	   (t (return (setf (hash-table-count hash-table) new-count
+			    (svref%unsafe bucket index2) key
+			    (svref%unsafe bucket (1+ index2)) value))))))
+       ((funcall test k key)
 	(return (setf (svref%unsafe bucket index2) key
-		      (svref%unsafe bucket (1+ index2)) value))))
-    (when (>= (incf index2 2) bucket-length)
-      (setf index2 0))))
+		      (svref%unsafe bucket (1+ index2)) value)))
+       ((>= (incf index2 2) bucket-length)
+	(setf index2 0))))))
 
 (defun gethash-string (key-string start end hash-table &optional default (key 'identity))
   (let ((bucket (hash-table-bucket hash-table)))
@@ -223,6 +243,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
       (when (or (eq x '--no-hash-key--)
 		(funcall (hash-table-test hash-table) x key))
 	(setf (svref bucket index2) '--no-hash-key--)
+	(decf (hash-table-count hash-table))
 	;; Now we must rehash any entries that might have been
 	;; displaced by the one we have now removed.
 	(do ((i (rem (+ index2 2) bucket-length)
@@ -237,6 +258,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 	(return t)))))
 
 (defun clrhash (hash-table)
+  (setf (hash-table-count hash-table) 0)
   (do* ((bucket (hash-table-bucket hash-table))
 	(bucket-length (length bucket))
 	(i 0 (+ i 2)))

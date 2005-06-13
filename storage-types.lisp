@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.53 2005/06/09 22:18:55 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.54 2005/06/13 23:00:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1021,7 +1021,8 @@ integer (native lisp) value."
 
 (defun make-movitz-hash-table (lisp-hash)
   (let* ((undef (movitz-read +undefined-hash-key+))
-	 (hash-size (* 2 (truncate (+ 25 (hash-table-count lisp-hash)) 1/3)))
+	 (hash-count (hash-table-count lisp-hash))
+	 (hash-size (logand -2 (truncate (* 2 4/3 (+ 7 hash-count)))))
 	 (bucket-data (make-array hash-size :initial-element undef)))
     (multiple-value-bind (hash-test hash-sxhash)
 	(ecase (hash-table-test lisp-hash)
@@ -1044,18 +1045,20 @@ integer (native lisp) value."
       (let* ((bucket (make-movitz-vector hash-size :initial-contents bucket-data))
 	     (lh (make-instance 'movitz-struct
 		   :class (muerte::movitz-find-class 'muerte::hash-table)
-		   :length 3
+		   :length 4
 		   :slot-values (list hash-test ; test-function
 				      bucket
-				      hash-sxhash))))
+				      hash-sxhash
+				      hash-count))))
 	lh))))
 
 (defmethod update-movitz-object ((movitz-hash movitz-struct) (lisp-hash hash-table))
   "Keep <movitz-hash> in sync with <lisp-hash>."
-  (assert (= 3 (length (movitz-struct-slot-values movitz-hash))))
+  (assert (= 4 (length (movitz-struct-slot-values movitz-hash))))
   (let* ((undef (movitz-read +undefined-hash-key+))
 	 (old-bucket (second (movitz-struct-slot-values movitz-hash)))
-	 (hash-size (* 2 (truncate (+ 25 (hash-table-count lisp-hash)) 1/3)))
+	 (hash-count (hash-table-count lisp-hash))
+	 (hash-size (logand -2 (truncate (* 2 4/3 (+ 7 hash-count)))))
 	 (bucket-data (or (and old-bucket
 			       (= (length (movitz-vector-symbolic-data old-bucket))
 				  hash-size)
@@ -1082,7 +1085,8 @@ integer (native lisp) value."
 			 (svref bucket-data (1+ pos)) movitz-value)))
       (setf (first (movitz-struct-slot-values movitz-hash)) hash-test
 	    (second (movitz-struct-slot-values movitz-hash)) (movitz-read bucket-data)
-	    (third (movitz-struct-slot-values movitz-hash)) hash-sxhash)
+	    (third (movitz-struct-slot-values movitz-hash)) hash-sxhash
+	    (fourth (movitz-struct-slot-values movitz-hash)) hash-count)
       movitz-hash)))
 					     
 ;;;
