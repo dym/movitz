@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.144 2005/05/24 06:32:27 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.145 2005/06/15 21:48:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3606,8 +3606,8 @@ loading borrowed bindings."
 			 (dest-location (new-binding-location destination frame-map :default nil)))
 		    (cond
 		     ((not dest-location) ; unknown, e.g. a borrowed-binding.
-		      (append (install-for-single-value binding binding-location :ecx nil)
-			      (make-store-lexical result-mode :ecx nil funobj frame-map)))
+		      (append (install-for-single-value binding binding-location :edx nil)
+			      (make-store-lexical result-mode :edx nil funobj frame-map)))
 		     ((equal binding-location dest-location)
 		      nil)
 		     ((member binding-location '(:eax :ebx :ecx :edx))
@@ -3655,6 +3655,8 @@ loading borrowed bindings."
 	  (if (not shared-reference-p)
 	      (let ((tmp-reg (chose-free-register protect-registers)
 			     #+ignore(if (eq source :eax) :ebx :eax)))
+		(when (eq :ecx source)
+		  (break "loading a word from ECX?"))
 		`((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
 			 ,tmp-reg)
 		  (:movl ,source (-1 ,tmp-reg))))
