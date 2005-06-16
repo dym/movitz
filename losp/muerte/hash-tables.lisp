@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb 19 19:09:05 2001
 ;;;;                
-;;;; $Id: hash-tables.lisp,v 1.7 2005/06/13 23:00:25 ffjeld Exp $
+;;;; $Id: hash-tables.lisp,v 1.8 2005/06/16 10:00:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -49,20 +49,11 @@
      :sxhash sxhash
      :count 0)))
 
-;;;(defun hash-table-count (hash-table)
-;;;  (do* ((bucket (hash-table-bucket hash-table))
-;;;	(length (length bucket))
-;;;	(count 0)
-;;;	(i 0 (+ i 2)))
-;;;      ((>= i length) count)
-;;;    (unless (eq (svref bucket i) '--no-hash-key--)
-;;;      (incf count))))
-
 (defun hash-table-iterator (bucket index)
   (when index
     (do ((length (array-dimension bucket 0)))
 	((>= index length) nil)
-      (unless (eq (svref bucket index) '--no-hash-key--)
+      (unless (eq (svref%unsafe bucket index) '--no-hash-key--)
 	(return (+ index 2)))
       (incf index 2))))
 
@@ -75,8 +66,8 @@
 		    `(when (setq ,',bucket-index-var
 			     (hash-table-iterator ,',bucket-var ,',bucket-index-var))
 		       (values t
-			       (svref ,',bucket-var (- ,',bucket-index-var 2))
-			       (svref ,',bucket-var (- ,',bucket-index-var 1))))))
+			       (svref%unsafe ,',bucket-var (- ,',bucket-index-var 2))
+			       (svref%unsafe ,',bucket-var (- ,',bucket-index-var 1))))))
 	 ,@declarations-and-body))))
 
 (defun sxhash-subvector (vector start end &optional (limit 8))
@@ -114,7 +105,8 @@
   (typecase object
     (null 0)
     (symbol
-     (movitz-accessor-u16 object movitz-symbol hash-key))
+     (memref object (movitz-type-slot-offset 'movitz-symbol 'hash-key)
+	     :type :unsigned-byte16))
     (t (with-inline-assembly (:returns :eax)
 	 (:compile-form (:result-mode :eax) object)
 	 (:andl #.(cl:logxor #xffffffff movitz::+movitz-fixnum-zmask+) :eax)))))
@@ -128,6 +120,7 @@
 	 (bucket-length (length bucket))
 	 (start-i2 (rem (ash (funcall (hash-table-sxhash hash-table) key) 1) bucket-length))
 	 (i2 start-i2))
+    (declare (type index i2))
     (do () (nil)
       (let ((k (svref%unsafe bucket i2)))
 	(cond
@@ -179,10 +172,8 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
   (do* ((test (hash-table-test hash-table))
 	(bucket (hash-table-bucket hash-table))
 	(bucket-length (length bucket))
-	(index2 (rem (ash (funcall (hash-table-sxhash hash-table) key) 1) bucket-length))
-	(c 2 (+ c 2)))
-      ((>= c bucket-length)
-       (error "Hash-table bucket is full, needs rehashing, which isn't implemented."))
+	(index2 (rem (ash (funcall (hash-table-sxhash hash-table) key) 1) bucket-length)))
+      (nil)
     (let ((k (svref%unsafe bucket index2)))
       (cond
        ((eq k '--no-hash-key--)
@@ -262,15 +253,17 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
   (do* ((bucket (hash-table-bucket hash-table))
 	(bucket-length (length bucket))
 	(i 0 (+ i 2)))
-      ((>= i bucket-length) hash-table)
-    (setf (svref bucket i) '--no-hash-key--)))
+      ((>= i bucket-length))
+    (setf (svref bucket i) '--no-hash-key--))
+  hash-table)
 
 (defun maphash (function hash-table)
-  (with-hash-table-iterator (get-next-entry hash-table)
-    (do () (nil)
-      (multiple-value-bind (entry-p key value)
-	  (get-next-entry)
-	(if (not entry-p)
-	    (return nil)
-	  (funcall function key value))))))
+  (with-funcallable (map function)
+    (with-hash-table-iterator (get-next-entry hash-table)
+      (do () (nil)
+	(multiple-value-bind (entry-p key value)
+	    (get-next-entry)
+	  (if (not entry-p)
+	      (return nil)
+	    (map key value)))))))
 	
