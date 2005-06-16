@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.145 2005/06/15 21:48:19 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.146 2005/06/16 08:46:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5549,10 +5549,10 @@ compile-time types of each argument. Fifth: The combined functional-p."
 			  (setf arguments-self-evaluating-p nil)
 			  (assert (eq :load-lexical (caar code)) ()
 			    "comp-lex-var produced for ~S~% ~S" form code)
-			  (pushnew (second code) arguments-lexical-variables))
+			  (pushnew (cadar code) arguments-lexical-variables))
 			 (t (setf arguments-self-evaluating-p nil
 				  arguments-are-load-lexicals-p nil)))
-		       code))))
+			 code))))
 	 (multiple-value-bind (code01 functionalp01 modifies01 all0 all1)
 	     (make-compiled-two-forms-into-registers (first argument-forms) :eax
 						     (second argument-forms) :ebx
@@ -5564,6 +5564,14 @@ compile-time types of each argument. Fifth: The combined functional-p."
 		 (types (list* (type-specifier-primary (compiler-values-getf all0 :type))
 			       (type-specifier-primary (compiler-values-getf all1 :type))
 			       (nreverse arguments-types))))
+	     #+ignore
+	     (when (and (= 4 (length argument-forms))
+			(string= "WINDOW-TREE" (first argument-forms)))
+	       (warn "final0: ~s, f1: ~S, typ: ~S, asep: ~S, aall: ~S"
+		     final0 final1
+		     types
+		     arguments-self-evaluating-p
+		     arguments-are-load-lexicals-p))
 	     (cond
 	      ((or arguments-self-evaluating-p
 		   (and (typep final0 'lexical-binding)
@@ -5592,9 +5600,9 @@ compile-time types of each argument. Fifth: The combined functional-p."
 		       types
 		       arguments-functional-p))
 	      ((and arguments-are-load-lexicals-p
-		    (not (operators-present-in-code-p code01
-						      '(:store-lexical)
-						      arguments-lexical-variables)))
+		    (not (some (lambda (arg-binding)
+				 (code-uses-binding-p code01 arg-binding :store t :load nil))
+			       arguments-lexical-variables)))
 	       (values (append arguments-code code01)
 		       (+ -2 (length argument-forms))
 		       nil
