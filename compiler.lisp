@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.146 2005/06/16 08:46:04 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.147 2005/06/16 20:55:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5564,14 +5564,6 @@ compile-time types of each argument. Fifth: The combined functional-p."
 		 (types (list* (type-specifier-primary (compiler-values-getf all0 :type))
 			       (type-specifier-primary (compiler-values-getf all1 :type))
 			       (nreverse arguments-types))))
-	     #+ignore
-	     (when (and (= 4 (length argument-forms))
-			(string= "WINDOW-TREE" (first argument-forms)))
-	       (warn "final0: ~s, f1: ~S, typ: ~S, asep: ~S, aall: ~S"
-		     final0 final1
-		     types
-		     arguments-self-evaluating-p
-		     arguments-are-load-lexicals-p))
 	     (cond
 	      ((or arguments-self-evaluating-p
 		   (and (typep final0 'lexical-binding)
@@ -5585,15 +5577,6 @@ compile-time types of each argument. Fifth: The combined functional-p."
 	      ((and arguments-are-load-lexicals-p
 		    (typep final0 '(or lexical-binding movitz-object))
 		    (typep final1 '(or lexical-binding movitz-object)))
-	       (values (append arguments-code code01)
-		       (+ -2 (length argument-forms))
-		       nil
-		       types
-		       arguments-functional-p))
-	      ((and (typep final0 '(or lexical-binding movitz-object))
-		    (typep final1 '(or lexical-binding movitz-object))
-		    (not (modifies-member final0 arguments-modifies))
-		    (not (modifies-member final1 arguments-modifies)))
 	       (values (append arguments-code code01)
 		       (+ -2 (length argument-forms))
 		       nil
