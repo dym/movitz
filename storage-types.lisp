@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.54 2005/06/13 23:00:17 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.55 2005/07/21 18:48:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1019,10 +1019,13 @@ integer (native lisp) value."
     (t (warn "Don't know how to take SXHASH of ~S." object)
        0)))
 
+(defvar *hash-table-size-factor* 5/4)
+
 (defun make-movitz-hash-table (lisp-hash)
   (let* ((undef (movitz-read +undefined-hash-key+))
 	 (hash-count (hash-table-count lisp-hash))
-	 (hash-size (logand -2 (truncate (* 2 4/3 (+ 7 hash-count)))))
+	 (hash-size (logand -2 (truncate (* 2 (+ 7 hash-count)
+					    *hash-table-size-factor*))))
 	 (bucket-data (make-array hash-size :initial-element undef)))
     (multiple-value-bind (hash-test hash-sxhash)
 	(ecase (hash-table-test lisp-hash)
@@ -1058,7 +1061,8 @@ integer (native lisp) value."
   (let* ((undef (movitz-read +undefined-hash-key+))
 	 (old-bucket (second (movitz-struct-slot-values movitz-hash)))
 	 (hash-count (hash-table-count lisp-hash))
-	 (hash-size (logand -2 (truncate (* 2 4/3 (+ 7 hash-count)))))
+	 (hash-size (logand -2 (truncate (* 2 (+ 7 hash-count)
+					    *hash-table-size-factor*))))
 	 (bucket-data (or (and old-bucket
 			       (= (length (movitz-vector-symbolic-data old-bucket))
 				  hash-size)
