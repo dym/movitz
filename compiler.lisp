@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.147 2005/06/16 20:55:42 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.148 2005/07/21 17:28:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -848,28 +848,35 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 				 req-location opt-location)))
 		      (cond
 		       ((not optp-location)
-			())
-		       ((= optp-location (1+ stack-setup-pre))
-			(incf stack-setup-pre 1)
-			`((:pushl :edx)))
+			(make-stack-setup-code (- stack-frame-size stack-setup-pre)))
+		       ((and (integerp optp-location)
+			     (= optp-location (1+ stack-setup-pre)))
+			(append `((:pushl :edx))
+				(make-stack-setup-code (- stack-frame-size stack-setup-pre 1))))
+		       ((integerp optp-location)
+			(append (make-stack-setup-code (- stack-frame-size stack-setup-pre))
+				`((:movl :edx (:ebp ,(stack-frame-offset optp-location))))))
 		       (t (error "Can't deal with optional-p at ~S, after (~S ~S)."
 				 optp-location req-location opt-location)))
-		      (make-stack-setup-code (- stack-frame-size stack-setup-pre))
-		      (when (binding-lended-p req-binding)
-			(let ((lended-cons-position (getf (binding-lending req-binding)
-							  :stack-cons-location)))
-			  (etypecase req-location
-			    (integer
-			     `((:movl (:ebp ,(stack-frame-offset req-location)) :edx)
-			       (:movl :edi (:ebp ,(stack-frame-offset lended-cons-position))) ; cdr 
-			       (:movl :edx (:ebp ,(stack-frame-offset (1+ lended-cons-position)))) ; car
-			       (:leal (:ebp 1 ,(stack-frame-offset (1+ lended-cons-position)))
-				      :edx)
-			       (:movl :edx (:ebp ,(stack-frame-offset req-location))))))))
-		      (when (binding-lended-p opt-binding)
-			(error "Can't deal with lending optional right now."))
-		      (when (and optp-binding (binding-lended-p optp-binding))
-			(error "Can't deal with lending optionalp right now."))
+		      (flet ((make-lending (location lended-cons-position)
+			       (etypecase req-location
+				 (integer
+				  `((:movl (:ebp ,(stack-frame-offset location)) :edx)
+				    (:movl :edi (:ebp ,(stack-frame-offset lended-cons-position))) ; cdr 
+				    (:movl :edx (:ebp ,(stack-frame-offset (1+ lended-cons-position)))) ; car
+				    (:leal (:ebp 1 ,(stack-frame-offset (1+ lended-cons-position)))
+					   :edx)
+				    (:movl :edx (:ebp ,(stack-frame-offset location))))))))
+			(append
+			 (when (binding-lended-p req-binding)
+			   (make-lending req-location (getf (binding-lending req-binding)
+							    :stack-cons-location)))
+			 (when (binding-lended-p opt-binding)
+			   (make-lending opt-location (getf (binding-lending opt-binding)
+							    :stack-cons-location)))
+			 (when (and optp-binding (binding-lended-p optp-binding))
+			   (make-lending optp-location (getf (binding-lending optp-binding)
+							     :stack-cons-location)))))
 		      resolved-code
 		      (make-compiled-function-postlude funobj function-env
 						       use-stack-frame-p)))))
