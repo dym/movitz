@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 14 08:18:43 2005
 ;;;;                
-;;;; $Id: ll-testing.lisp,v 1.10 2005/06/10 23:04:45 ffjeld Exp $
+;;;; $Id: ll-testing.lisp,v 1.11 2005/08/11 21:33:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -35,19 +35,6 @@
 ;;;		   (memref gdt-base 0 :index i :type :unsigned-byte32 :physicalp t))))
 ;;;	table))))
 
-
-
-
-(defun format-segment-table (table &key (start 0) (end (truncate (length table) 2)))
-  (loop for i from start below end
-      as selector = (* i 8)
-      do (format t "~&~3X: base: #x~8,'0X, limit: #x~5,'0X, type-s-dpl-p: ~8,'0b, avl-x-db-g: ~4,'0b~%"
-		 selector
-		 (* 4 (segment-descriptor-base-location table selector))
-		 (segment-descriptor-limit table selector)
-		 (segment-descriptor-type-s-dpl-p table selector)
-		 (segment-descriptor-avl-x-db-g table selector)))
-  (values))
 
 
 (defmacro control-stack-fs (stack)

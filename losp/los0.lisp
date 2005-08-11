@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.46 2005/06/09 22:21:08 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.47 2005/08/11 21:33:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -29,8 +29,9 @@
 (require :lib/net/dhcp)
 (require :lib/repl)
 
-;; (require :ll-testing)
 (require :lib/threading)
+
+;; (require :lice-0.1/all)
 
 (defpackage muerte.init
   (:nicknames #:los0)
@@ -133,6 +134,7 @@
 	((error (lambda (c)
 		  (format t "error: ~S ~S" c x))))
       (error "This is an error. ~S" foo))))
+
 
 (defun fooo (v w)
   (tagbody
@@ -1317,9 +1319,24 @@ Can be used to measure the overhead of primitive function."
 
 (defvar *segment-descriptor-table*)
 
+(defun format-segment-table (table &key (start 0) (end (truncate (length table) 2)))
+  (loop for i from start below end
+      as selector = (* i 8)
+      do (format t "~&~3X: base: #x~8,'0X, limit: #x~5,'0X, type-s-dpl-p: ~8,'0b, avl-x-db-g: ~4,'0b~%"
+		 selector
+		 (* 4 (segment-descriptor-base-location table selector))
+		 (segment-descriptor-limit table selector)
+		 (segment-descriptor-type-s-dpl-p table selector)
+		 (segment-descriptor-avl-x-db-g table selector)))
+  (values))
+
+(defun memdump (start length)
+  (loop for addr upfrom start repeat length
+      collect (memref-int addr :type :unsigned-byte8)))
 
 (defun genesis ()
   ;; (install-shallow-binding)
+  (setf *debugger-function* #'los0-debugger)
   (let ((extended-memsize 0))
     ;;  Find out how much extended memory we have 
     (setf (io-port #x70 :unsigned-byte8) #x18)
@@ -1330,15 +1347,14 @@ Can be used to measure the overhead of primitive function."
 
     (idt-init)
 
-;;;    (setf *segment-descriptor-table*	; Ensure we have a GDT with 16 entries, in static-space.
-;;;      (muerte::install-global-segment-table
-;;;       (muerte::dump-global-segment-table :entries 16)))
-    
+    (setf *segment-descriptor-table*	; Ensure we have a GDT with 16 entries, in static-space.
+      (setf (global-segment-descriptor-table)
+	(muerte::dump-global-segment-table :entries 16)))
+
     (install-los0-consing :kb-size 500)
     #+ignore
     (install-los0-consing :kb-size (max 50 (truncate (- extended-memsize 2048) 2))))
 
-  (setf *debugger-function* #'los0-debugger)
   (clos-bootstrap)
   (setf *package* (find-package "INIT"))
   ;; (install-shallow-binding)

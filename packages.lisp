@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.51 2005/06/10 23:05:38 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.52 2005/08/11 21:32:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1264,6 +1264,9 @@
 	   #:segment-descriptor
 	   #:segment-descriptor-base-location
 	   #:segment-descriptor-limit
+	   #:segment-descriptor-type-s-dpl-p
+	   #:segment-descriptor-avl-x-db-g
+	   #:global-segment-descriptor-table
 	   #:control-register-lo12
 	   #:control-register-hi20
 	   #:ensure-data-vector
