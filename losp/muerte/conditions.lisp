@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.16 2005/05/29 22:03:04 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.17 2005/08/11 21:34:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -280,6 +280,8 @@ Return the condition object, if there was one."
     (setf *debugger-function* #'muerte.init::my-debugger))
   (cond
    ((not *debugger-function*)
+    (let ((*never-use-print-object* t))
+      (backtrace :spartan t))
     (format t "~&No debugger in *debugger-function*. Trying to continue or abort.")
     (invoke-restart (or (find-restart 'continue)
 			(find-restart 'abort)
