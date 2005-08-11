@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2003-2004, 
+;;;;    Copyright (C) 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromsoe, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Dec 14 22:33:42 2003
 ;;;;                
-;;;; $Id: pci.lisp,v 1.8 2004/11/30 14:16:57 ffjeld Exp $
+;;;; $Id: pci.lisp,v 1.9 2005/08/11 21:17:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -53,7 +53,8 @@
 (defvar *bios32-base* nil)
 (defvar *pcibios-entry* nil)
 
-(defun pci-far-call (address &key (cs 8) (eax 0) (ebx 0) (ecx 0) (edx 0) (esi 0) (edi 0))
+(defun pci-far-call (address &key (cs 8) (eax 0) (ebx 0) (ecx 0) (edx 0) (esi 0) (edi 0)
+				  (ds (segment-register :gs)))
   "Make a 'far call' to cs:address with the provided values for eax and ebx.
 Returns the boolean status of CF, and the values of registers EAX, EBX, ECX, and EDX.
 The stack discipline is broken during this call, so we disable interrupts
@@ -71,6 +72,7 @@ in a somewhat feeble attempt to avoid trouble."
       (:movl (:esp) :ebp)
       (:locally (:movl :esp (:edi (:edi-offset :atomically-continuation))))
       (:pushl :edi)			; Save EDI so we can restore it later.
+      (:pushw :ds)			; Ditto for DS
       (:load-lexical (:lexical-binding cs) :untagged-fixnum-ecx)
       (:pushl :ecx)			; Code segment
       (:load-lexical (:lexical-binding address) :untagged-fixnum-ecx)
@@ -85,15 +87,19 @@ in a somewhat feeble attempt to avoid trouble."
       (:pushl :ecx)			; push ESI
       (:load-lexical (:lexical-binding edi) :untagged-fixnum-ecx)
       (:pushl :ecx)			; push EDI
+      (:load-lexical (:lexical-binding ds) :untagged-fixnum-ecx)
+      (:movl :ecx :ebx)
       (:load-lexical (:lexical-binding ecx) :untagged-fixnum-ecx)
+      (:movw :bx :ds)
       (:popl :edi)
       (:popl :esi)
       (:popl :edx)
       (:popl :ebx)
       (:popl :eax)
-      (:call-segment (:esp))
+      ((:ss-override) :call-segment (:esp))
       (:leal (:esp 8) :esp)		; Skip cs:address
-      (:popl :edi)			; First of all, restore EDI!
+      (:popw :ds)			; First of all, restore DS..
+      (:popl :edi)			; .. and EDI.
       (:locally (:movl :edi (:edi (:edi-offset scratch2))))
       (:jnc 'cf=0)
       (:locally (:pushl (:edi (:edi-offset t-symbol))))
