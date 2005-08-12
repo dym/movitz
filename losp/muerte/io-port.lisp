@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 21 22:14:08 2001
 ;;;;                
-;;;; $Id: io-port.lisp,v 1.13 2005/03/02 17:15:43 ffjeld Exp $
+;;;; $Id: io-port.lisp,v 1.14 2005/08/12 22:44:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -206,7 +206,8 @@ that reads from <io-base-form> plus some offset."
     `(let ((,io-var ,io-base-form))
        ;; (check-type ,io-var (unsigned-byte 16))
        (symbol-macrolet ((,name ,io-var))
-	 (macrolet ((,name (offset) `(io-register8 ,',io-var ,offset)))
+	 (macrolet ((,name (offset &optional (type :unsigned-byte8))
+		      `(io-port (+ ,',io-var ,offset) ,type)))
 	   ,@body)))))
 
 (define-compiler-macro io-register8x2 (io-base offset-hi offset-lo)
