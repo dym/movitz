@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 21 22:14:08 2001
 ;;;;                
-;;;; $Id: io-port.lisp,v 1.15 2005/08/12 22:50:22 ffjeld Exp $
+;;;; $Id: io-port.lisp,v 1.16 2005/08/12 22:55:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -169,6 +169,19 @@
 	      (:movl :edi :eax)
 	      (:cld))
 	    ,value-var))
+	(:unsigned-byte32
+	 `(let ((,value-var ,value)
+		(,port-var ,port))
+	    (with-inline-assembly (:returns :untagged-fixnum-ecx)
+	      (:load-lexical (:lexical-binding ,port-var) :edx)
+	      (:load-lexical (:lexical-binding ,value-var) :untagged-fixnum-ecx)
+	      (:std)
+	      (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+	      (:movl :ecx :eax)
+	      (:outl :eax :dx)
+	      (:movl :edi :edx)
+	      (:movl :edi :eax)
+	      (:cld))))
 	(:character
 	 `(let ((,value-var ,value)
 		(,port-var ,port))
@@ -190,7 +203,9 @@
     (:unsigned-byte8
      (setf (io-port port :unsigned-byte8) value))
     (:unsigned-byte16
-     (setf (io-port port :unsigned-byte8) value))
+     (setf (io-port port :unsigned-byte16) value))
+    (:unsigned-byte32
+     (setf (io-port port :unsigned-byte32) value))
     (:character
      (setf (io-port port :character) value))))
 
