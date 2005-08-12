@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.46 2005/05/24 06:33:28 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.47 2005/08/12 20:28:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -116,6 +116,8 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    (:pushl :ecx)
 	    (:movcr :cr2 :ecx)
 	    (:locally (:pushl :ecx))
+	    (:movw #x20 :cx)
+	    (:movw :cx :ds)
 	    ,@(loop for reg in (sort (copy-list '(:eax :ebx :edx :esi))
 				     #'>
 				     :key #'dit-frame-index)
