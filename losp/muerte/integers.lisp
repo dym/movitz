@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.106 2005/05/24 06:33:24 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.107 2005/08/12 21:37:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1559,6 +1559,16 @@
 		   (:compile-form (:result-mode :eax) x)
 		   (:leal ((:ecx ,movitz:+movitz-fixnum-factor+)) :ecx)
 		   (:andl :ecx :eax)))
+		((fixnum positive-bignum)
+		 (let ((result (copy-bignum y)))
+		   (with-inline-assembly (:returns :eax)
+		     (:compile-two-forms (:eax :untagged-fixnum-ecx) result x)
+		     (:andl :ecx (:eax (:offset movitz-bignum bigit0))))))
+		((positive-bignum fixnum)
+		 (let ((result (copy-bignum x)))
+		   (with-inline-assembly (:returns :eax)
+		     (:compile-two-forms (:eax :untagged-fixnum-ecx) result y)
+		     (:andl :ecx (:eax (:offset movitz-bignum bigit0))))))
 		((positive-bignum positive-bignum)
 		 (if (< (%bignum-bigits y) (%bignum-bigits x))
 		     (logand y x)
