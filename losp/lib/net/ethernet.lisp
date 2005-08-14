@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:25:31 2002
 ;;;;                
-;;;; $Id: ethernet.lisp,v 1.8 2005/05/21 22:37:21 ffjeld Exp $
+;;;; $Id: ethernet.lisp,v 1.9 2005/08/14 12:13:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -189,6 +189,12 @@
     :initarg :promiscuous-p
     :initform nil
     :accessor promiscuous-p)))
+
+(defmethod print-object ((x ethernet-device) s)
+  (print-unreadable-object (x s :type t :identity t)
+    (when (slot-boundp x 'mac-address)
+      (pprint-mac s (mac-address x)))))
+
 
 (defgeneric transmit (device packet &optional start end))
 (defgeneric receive (device &optional packet start))
