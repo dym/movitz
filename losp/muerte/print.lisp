@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.19 2005/05/04 08:00:39 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.20 2005/08/14 12:13:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -258,7 +258,7 @@
 				 (every (lambda (c)
 					  (or (upper-case-p c)
 					      (member c '(#\+ #\- #\% #\$ #\* #\@ #\. #\&
-							  #\/ #\< #\> #\=))
+							  #\/ #\< #\> #\= #\_))
 					      (digit-char-p c)))
 					name)
 				 (not (every (lambda (c)
