@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:25:31 2002
 ;;;;                
-;;;; $Id: ethernet.lisp,v 1.9 2005/08/14 12:13:27 ffjeld Exp $
+;;;; $Id: ethernet.lisp,v 1.10 2005/08/14 18:52:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -170,6 +170,8 @@
 	(ether-type packet start) type)
   packet)
 
+(deftype mac-address ()
+  '(vector (unsigned-byte 8) 6))
 
 (defclass ethernet-device ()
   ((mac-address
