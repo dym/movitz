@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.33 2005/05/06 15:39:44 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.34 2005/08/14 18:50:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1554,7 +1554,7 @@ I.e. does c1 appear before c2 in c-arg's class-precedence-list?"
 		   (or (not *standard-setf-slot-value-using-class*) ; still bootstrapping..
 		       (not (let ((value (car args))
 				  (object (cadr args)))
-			      (gf-nonstandard-specialized-p #'slot-value-using-class
+			      (gf-nonstandard-specialized-p #'(setf slot-value-using-class)
 							    (if (typep object 'funcallable-standard-class)
 								*standard-gf-setf-slot-value-using-class*
 							      *standard-setf-slot-value-using-class*)
