@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.12 2005/01/04 11:35:25 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.13 2005/08/14 12:13:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -292,12 +292,14 @@ the function sets up itself. Its parent env. must be a funobj-env."))
 ;;;	(warn "..with body ~W" macro-function)
 	(let ((expansion (funcall macro-function form environment)))
 	  (cond
-;; 	    ((member (if (atom form) form (car form))
-;; 		     '(do) :test #'string=)
-;; 		     (warn "Expanded ~S to ~S" form expansion)
-;; 		     expansion)
+	   #+ignore ((member (if (atom form) form (car form))
+			     '(setf pcnet-reg) :test #'string=)
+		     (warn "Expanded ~S to ~S" form expansion)
+		     expansion)
 	   (t
-	    ;; (warn "Expanded macro named ~A." (if (atom form) form (car form)))
+	    #+ignore (warn "Expanded ~A:~%~S."
+			   (if (atom form) form (car form))
+			   expansion)
 	    expansion)))))
 
 (defun movitz-macroexpand-1 (form &optional env)
