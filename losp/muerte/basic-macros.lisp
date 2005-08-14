@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.61 2005/05/03 22:15:38 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.62 2005/08/14 16:39:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -106,9 +106,6 @@
 
 (define-compiler-macro cond (&body cond-body)
   (cons 'compiled-cond cond-body))
-
-(defmacro if (test-form then-form &optional else-form)
-  `(cond (,test-form ,then-form) (t ,else-form)))
 
 (define-compiler-macro if (test-form then-form &optional else-form &environment env)
   (when (and (movitz:movitz-constantp then-form env) (movitz:movitz-constantp else-form env))
