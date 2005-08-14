@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.45 2005/06/09 22:19:10 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.46 2005/08/14 12:04:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -42,9 +42,7 @@
 	     (t (error "~S fell through an etypecase where the legal types were ~S."
 		       ,keyform
 		       ',(loop for c in clauses
-			     if (listp (car c))
-			     append (car c)
-			     else collect (car c))))))
+			     collect (car c))))))
 
 (define-compile-time-variable *simple-typespecs*
     ;; map symbol typespecs to typep-functions.
@@ -492,6 +490,17 @@
 	   ',fname))
        (defun ,fname ,lambda ,@body))))
 
+(defun expand-type (type-specifier)
+  (typecase type-specifier
+    (symbol
+     (let ((typep-function (gethash type-specifier *derived-typespecs*)))
+       (when typep-function
+	 (funcall typep-function))))
+    (cons
+     (let ((typep-function (gethash (car type-specifier) *derived-typespecs*)))
+       (when typep-function
+	 (apply typep-function (cdr type-specifier)))))))
+
 (defun typep (object type-specifier)
   (block nil
     (typecase type-specifier
@@ -568,7 +577,26 @@
        (or (eq '* cdr) (typep (cdr x) cdr))))
 
 (deftype vector (&optional (element-type '*) (size '*))
-  `(simple-array ,element-type (,size)))
+  (if (eq size '*)
+      `(array ,element-type 1)
+    `(array ,element-type (,size))))
+
+(define-typep array (x &optional (element-type '*) (dimension-spec '*))
+  (and (typep x 'array)
+       (or (eq element-type '*)
+	   (do ((xet (array-element-type x))
+		(aet element-type (expand-type aet)))
+	       ((eq nil aet) nil)
+	     (when (equal xet aet) (return t))))
+       (or (eq dimension-spec '*)
+	   (if (integerp dimension-spec)
+	       (= dimension-spec (array-rank x))
+	     (and (= (length dimension-spec) (array-rank x))
+		  (every (lambda (xdim adim)
+			   (or (eq xdim '*) (= xdim adim)))
+			 dimension-spec
+			 (array-dimensions x)))))))
+      
 
 (define-simple-typep (atom atom) (x)
   (typep x 'atom))
@@ -669,14 +697,22 @@
 
 (defun coerce (object result-type)
   "=> result"
-  (cond
-   ((typep object result-type)
-    object)
-   ((and (eq result-type 'list)
-	 (typep object 'sequence))
-    (map 'list #'identity object))
-   ((and (typep object 'sequence)
-	 (member result-type '(vector array)))
-    (make-array (length object) :initial-contents object))
-   (t (error "Don't know how to coerce ~S to ~S." object result-type))))
+  (flet ((c (object result-type actual-type)
+	   (cond
+	    ((typep object result-type)
+	     object)
+	    ((member result-type '(list array vector))
+	     (map result-type #'identity object))
+	    ((and (consp result-type)
+		  (eq (car result-type) 'vector))
+	     (let* ((p (cdr result-type))
+		    (et (if p (pop p) t))
+		    (size (if p (pop p) nil)))
+	       (make-array (or size (length object))
+			   :initial-contents object
+			   :element-type et)))
+	    ((not (eq nil result-type))
+	     (c object (expand-type result-type) actual-type))
+	    (t (error "Don't know how to coerce ~S to ~S." object actual-type)))))
+    (c object result-type result-type)))
 
