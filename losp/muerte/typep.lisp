@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.47 2005/08/14 12:26:10 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.48 2005/08/14 18:52:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -589,7 +589,7 @@
 	       ((eq nil aet) nil)
 	     (when (equal xet aet) (return t))))
        (or (eq dimension-spec '*)
-	   (if (integerp dimension-spec)
+	   (if (typep dimension-spec 'integer)
 	       (= dimension-spec (array-rank x))
 	     (and (= (length dimension-spec) (array-rank x))
 		  (every (lambda (xdim adim)
