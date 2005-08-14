@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.53 2005/06/11 00:01:56 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.54 2005/08/14 11:35:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -134,8 +134,17 @@
      (memref array (movitz-type-slot-offset 'movitz-basic-vector 'num-elements)))))
 
 (defun array-dimensions (array)
+  (let (r)
+    (dotimes (d (array-rank array))
+      (push (array-dimension array d) r))
+    (nreverse r)))
+
+(defun array-rank (array)
   (etypecase array
-    (vector 1)))
+    (indirect-vector
+     1)
+    ((simple-array * 1)
+     1)))
 
 (defun shrink-vector (vector new-size)
   (check-type vector vector)
