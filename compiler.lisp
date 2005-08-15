@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.148 2005/07/21 17:28:46 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.149 2005/08/15 21:44:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3446,62 +3446,86 @@ loading borrowed bindings."
 		   (first (set-difference '(:eax :ebx :edx)
 					  protect-registers))
 		   (error "Unable to chose a temporary register.")))
-	     (install-for-single-value (lexb lexb-location result-mode indirect-p)
-	       (cond
-		((and (eq result-mode :untagged-fixnum-ecx)
-		      (integerp lexb-location))
-		 (assert (not indirect-p))
-		 (assert (not (member :eax protect-registers)))
-		 (append (install-for-single-value lexb lexb-location :eax nil)
-			 `((,*compiler-global-segment-prefix*
-			    :call (:edi ,(global-constant-offset 'unbox-u32))))))
-		((integerp lexb-location)
-		 (append `((:movl ,(make-indirect-reference :ebp (stack-frame-offset lexb-location))
-				  ,(single-value-register result-mode)))
-			 (when indirect-p
-			   `((:movl (-1 ,(single-value-register result-mode))
-				    ,(single-value-register result-mode))))))
-		(t (ecase (operator lexb-location)
-		     (:push
-		      (assert (member result-mode '(:eax :ebx :ecx :edx)))
-		      (assert (not indirect-p))
-		      `((:popl ,result-mode)))
-		     (:eax
-		      (assert (not indirect-p))
-		      (ecase result-mode
-			((:ebx :ecx :edx :esi) `((:movl :eax ,result-mode)))
-			((:eax :single-value) nil)
-			(:untagged-fixnum-ecx
-			 `((,*compiler-global-segment-prefix*
-			    :call (:edi ,(global-constant-offset 'unbox-u32)))))))
-		     ((:ebx :ecx :edx)
-		      (assert (not indirect-p))
-		      (unless (eq result-mode lexb-location)
-			(ecase result-mode
-			  ((:eax :single-value) `((:movl ,lexb-location :eax)))
-			  ((:ebx :ecx :edx :esi) `((:movl ,lexb-location ,result-mode)))
-			  (:untagged-fixnum-ecx
-			   `((:movl ,lexb-location :ecx)
-			     (:sarl ,movitz:+movitz-fixnum-shift+ :ecx))))))
-		     (:argument-stack
-		      (assert (<= 2 (function-argument-argnum lexb)) ()
-			"lexical :argument-stack argnum can't be ~A." (function-argument-argnum lexb))
-		      (cond
-		       ((eq result-mode :untagged-fixnum-ecx)
+	     (install-for-single-value (lexb lexb-location result-mode indirect-p
+					&optional binding-type)
+	       (let ((decoded-type (when binding-type
+				     (apply #'encoded-type-decode binding-type))))
+		 (cond
+		  ((and (eq result-mode :untagged-fixnum-ecx)
+			(integerp lexb-location))
+		   (cond
+;;;		    ((and binding-type
+;;;			  (not (movitz-subtypep decoded-type '(unsigned-byte 32))))
+;;;		     (error "Can't load a value of type ~S as ~S."
+;;;			    :untagged-fixnum-ecx))
+		    ((and binding-type
+			  (type-specifier-singleton decoded-type))
+		     (warn "Immloadlex: ~S"
+			   (type-specifier-singleton decoded-type))
+		     (make-immediate-move (movitz-immediate-value
+					   (car (type-specifier-singleton decoded-type)))
+					  :ecx))
+		    (t
+		     (assert (not indirect-p))
+		     (assert (not (member :eax protect-registers)))
+		     (append (install-for-single-value lexb lexb-location :eax nil)
+			     `((,*compiler-global-segment-prefix*
+				:call (:edi ,(global-constant-offset 'unbox-u32))))))))
+		  ((integerp lexb-location)
+		   (append `((:movl ,(make-indirect-reference :ebp (stack-frame-offset lexb-location))
+				    ,(single-value-register result-mode)))
+			   (when indirect-p
+			     `((:movl (-1 ,(single-value-register result-mode))
+				      ,(single-value-register result-mode))))))
+		  ((eq lexb-location result-mode)
+		   ())
+		  (t (when (and (eq result-mode :untagged-fixnum-ecx)
+				binding-type
+				(type-specifier-singleton decoded-type))
+		       (break "xxx Immloadlex: ~S ~S"
+			     (operator lexb-location)
+			     (type-specifier-singleton decoded-type)))
+		     (ecase (operator lexb-location)
+		       (:push
+			(assert (member result-mode '(:eax :ebx :ecx :edx)))
 			(assert (not indirect-p))
-			`((:movl (:ebp ,(argument-stack-offset lexb)) :ecx)
-			  (:sarl ,+movitz-fixnum-shift+ :ecx)))
-		       (t (append `((:movl (:ebp ,(argument-stack-offset lexb))
-					   ,(single-value-register result-mode)))
-				  (when indirect-p
-				    `((:movl (-1 ,(single-value-register result-mode))
-					     ,(single-value-register result-mode))))))))
-		     (:untagged-fixnum-ecx
-		      (ecase result-mode
-			((:eax :ebx :ecx :edx)
-			 `((:leal ((:ecx ,+movitz-fixnum-factor+)) ,result-mode)))
-			(:untagged-fixnum-ecx
-			 nil))))))))
+			`((:popl ,result-mode)))
+		       (:eax
+			(assert (not indirect-p))
+			(ecase result-mode
+			  ((:ebx :ecx :edx :esi) `((:movl :eax ,result-mode)))
+			  ((:eax :single-value) nil)
+			  (:untagged-fixnum-ecx
+			   `((,*compiler-global-segment-prefix*
+			      :call (:edi ,(global-constant-offset 'unbox-u32)))))))
+		       ((:ebx :ecx :edx)
+			(assert (not indirect-p))
+			(unless (eq result-mode lexb-location)
+			  (ecase result-mode
+			    ((:eax :single-value) `((:movl ,lexb-location :eax)))
+			    ((:ebx :ecx :edx :esi) `((:movl ,lexb-location ,result-mode)))
+			    (:untagged-fixnum-ecx
+			     `((:movl ,lexb-location :ecx)
+			       (:sarl ,movitz:+movitz-fixnum-shift+ :ecx))))))
+		       (:argument-stack
+			(assert (<= 2 (function-argument-argnum lexb)) ()
+			  "lexical :argument-stack argnum can't be ~A." (function-argument-argnum lexb))
+			(cond
+			 ((eq result-mode :untagged-fixnum-ecx)
+			  (assert (not indirect-p))
+			  `((:movl (:ebp ,(argument-stack-offset lexb)) :ecx)
+			    (:sarl ,+movitz-fixnum-shift+ :ecx)))
+			 (t (append `((:movl (:ebp ,(argument-stack-offset lexb))
+					     ,(single-value-register result-mode)))
+				    (when indirect-p
+				      `((:movl (-1 ,(single-value-register result-mode))
+					       ,(single-value-register result-mode))))))))
+		       (:untagged-fixnum-ecx
+			(ecase result-mode
+			  ((:eax :ebx :ecx :edx)
+			   `((:leal ((:ecx ,+movitz-fixnum-factor+)) ,result-mode)))
+			  (:untagged-fixnum-ecx
+			   nil)))))))))
       (etypecase binding
 	(forwarding-binding
 	 (assert (not (binding-lended-p binding)) (binding)
@@ -3545,7 +3569,8 @@ loading borrowed bindings."
 			      ,tmp-register)
 		       (:movl (,tmp-register -1) ,tmp-register))))))))))
 	(located-binding
-	 (let ((binding-location (new-binding-location binding frame-map)))
+	 (let ((binding-type (binding-store-type binding))
+	       (binding-location (new-binding-location binding frame-map)))
 	   (cond
 	    ((and (binding-lended-p binding)
 		  (not shared-reference-p))
@@ -3607,7 +3632,8 @@ loading borrowed bindings."
 		       `((:cmpl :edi (:ebp ,(argument-stack-offset binding)))
 			 (:je ',(operands result-mode)))))))
 		 (:untagged-fixnum-ecx
-		  (install-for-single-value binding binding-location :untagged-fixnum-ecx nil))
+		  (install-for-single-value binding binding-location :untagged-fixnum-ecx nil
+					    binding-type))
 		 (:lexical-binding
 		  (let* ((destination result-mode)
 			 (dest-location (new-binding-location destination frame-map :default nil)))
@@ -3639,16 +3665,9 @@ loading borrowed bindings."
 		    (not (binding-lended-p binding))))
       (binding)
     "funny binding: ~W" binding)
-  (if (typep source 'constant-object-binding)
+  (if (and nil (typep source 'constant-object-binding))
       (make-load-constant (constant-object source) binding funobj frame-map)
-    (let ((protect-registers (cons source protect-registers))
-	  #+ignore (source (if (not (typep source 'constant-object-binding))
-			       source
-			     (etypecase (constant-object source)
-			       (movitz-null
-				:edi)
-			       (movitz-immediate-object
-				(movitz-immediate-value (constant-object source)))))))
+    (let ((protect-registers (cons source protect-registers)))
       (cond
        ((eq :untagged-fixnum-ecx source)
 	(if (eq :untagged-fixnum-ecx
@@ -3690,28 +3709,72 @@ loading borrowed bindings."
 	       `((:movl (:ebp ,(argument-stack-offset binding)) ,tmp-reg)
 		 (:movl ,source (,tmp-reg -1))))))))
        (t (let ((location (new-binding-location binding frame-map)))
-	    (if (integerp location)
-		`((:movl ,source (:ebp ,(stack-frame-offset location))))
-	      (ecase (operator location)
-		((:push)
-		 `((:pushl ,source)))
-		((:eax :ebx :ecx :edx)
-		 (unless (eq source location)
-		   `((:movl ,source ,location))))
-		(:argument-stack
-		 (assert (<= 2 (function-argument-argnum binding)) ()
-		   "store-lexical argnum can't be ~A." (function-argument-argnum binding))
-		 `((:movl ,source (:ebp ,(argument-stack-offset binding)))))
-		(:untagged-fixnum-ecx
-		 (cond
-		  ((eq source :untagged-fixnum-ecx)
-		   nil)
-		  ((eq source :eax)
-		   `((,*compiler-global-segment-prefix*
-		      :call (:edi ,(global-constant-offset 'unbox-u32)))))
-		  (t `((:movl ,source :eax)
-		       (,*compiler-global-segment-prefix*
-			:call (:edi ,(global-constant-offset 'unbox-u32)))))))))))))))
+	    (cond
+	     ((member source '(:eax :ebx :ecx :edx :edi :esp))
+	      (if (integerp location)
+		  `((:movl ,source (:ebp ,(stack-frame-offset location))))
+		(ecase (operator location)
+		  ((:push)
+		   `((:pushl ,source)))
+		  ((:eax :ebx :ecx :edx)
+		   (unless (eq source location)
+		     `((:movl ,source ,location))))
+		  (:argument-stack
+		   (assert (<= 2 (function-argument-argnum binding)) ()
+		     "store-lexical argnum can't be ~A." (function-argument-argnum binding))
+		   `((:movl ,source (:ebp ,(argument-stack-offset binding)))))
+		  (:untagged-fixnum-ecx
+		   (assert (not (eq source :edi)))
+		   (cond
+		    ((eq source :untagged-fixnum-ecx)
+		     nil)
+		    ((eq source :eax)
+		     `((,*compiler-global-segment-prefix*
+			:call (:edi ,(global-constant-offset 'unbox-u32)))))
+		    (t `((:movl ,source :eax)
+			 (,*compiler-global-segment-prefix*
+			  :call (:edi ,(global-constant-offset 'unbox-u32))))))))))
+	     ((not (bindingp source))
+	      (error "Unknown source for store-lexical: ~S" source))
+	     ((binding-singleton source)
+	      (assert (not shared-reference-p))
+	      (let ((value (car (binding-singleton source))))
+		(etypecase value
+		  (movitz-fixnum
+		   (let ((immediate (movitz-immediate-value value)))
+		     (if (integerp location)
+			 (let ((tmp (chose-free-register protect-registers)))
+			   (append (make-immediate-move immediate tmp)
+				   `((:movl ,tmp (:ebp ,(stack-frame-offset location))))))
+		       #+ignore (if (= 0 immediate)
+				      (let ((tmp (chose-free-register protect-registers)))
+					`((:xorl ,tmp ,tmp)
+					  (:movl ,tmp (:ebp ,(stack-frame-offset location)))))
+				    `((:movl ,immediate (:ebp ,(stack-frame-offset location)))))
+		       (ecase (operator location)
+			 ((:argument-stack)
+			  `((:movl ,immediate (:ebp ,(argument-stack-offset binding)))))
+			 ((:eax :ebx :edx)
+			  (make-immediate-move immediate location))
+			 ((:untagged-fixnum-ecx)
+			  (make-immediate-move (movitz-fixnum-value value) :ecx))))))
+		  (movitz-heap-object
+		   (etypecase location
+		     ((member :eax :ebx :edx)
+		      (make-load-constant value location funobj frame-map))
+		     (integer
+		      (let ((tmp (chose-free-register protect-registers)))
+			(append (make-load-constant value tmp funobj frame-map)
+				(make-store-lexical binding tmp shared-reference-p
+						    funobj frame-map
+						    :protect-registers protect-registers))))
+		     ((eql :untagged-fixnum-ecx)
+		      (check-type value movitz-bignum)
+		      (let ((immediate (movitz-bignum-value value)))
+			(check-type immediate (unsigned-byte 32))
+			(make-immediate-move immediate :ecx)))
+		     )))))	       
+	     (t (error "Generalized lexb source for store-lexical not implemented: ~S" source)))))))))
 
 (defun finalize-code (code funobj frame-map)
   ;; (print-code 'to-be-finalized code)
@@ -3980,7 +4043,7 @@ loading borrowed bindings."
 		       (make-store-lexical result-mode :eax nil funobj frame-map)))
 	      (:untagged-fixnum-ecx
 	       (let ((value (movitz-fixnum-value object)))
-		 (check-type value (signed-byte 30))
+		 (check-type value (unsigned-byte 32))
 		 (make-immediate-move value :ecx)))
 	      (:push
 	       `((:pushl ,x)))
@@ -6179,16 +6242,6 @@ and a list of any intervening unwind-protect environment-slots."
 			   (borrowed-binding-target binding)))
 	      (error "Can't install non-local binding ~W." binding)))))))
 
-(defun binding-type-specifier (binding)
-  (break "nix binding-type-specifier: ~S" binding)
-  (etypecase binding
-    (forwarding-binding
-     (binding-type-specifier (forwarding-binding-target binding)))
-    (constant-object-binding
-     `(eql ,(constant-object binding)))
-    (binding
-     `(binding-type ,binding))))
-
 (defun binding-store-subtypep (binding type-specifier)
   "Is type-specifier a supertype of all values ever stored to binding?
    (Assuming analyze-bindings has put this information into binding-store-type.)"
@@ -6197,6 +6250,11 @@ and a list of any intervening unwind-protect environment-slots."
     (multiple-value-call #'encoded-subtypep
       (values-list (binding-store-type binding))
       (type-specifier-encode type-specifier))))
+
+(defun binding-singleton (binding)
+  (let ((btype (binding-store-type binding)))
+    (when btype
+      (type-specifier-singleton (apply #'encoded-type-decode btype)))))
 
 ;;;;;;;
 ;;;;;;; Extended-code handlers
