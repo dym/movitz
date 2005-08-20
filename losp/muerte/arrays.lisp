@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.54 2005/08/14 11:35:52 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.55 2005/08/20 20:24:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1076,28 +1076,6 @@ and return basic-vector and accessors for that subsequence."
 (defun bvref-u16 (vector offset index)
   "View <vector> as an sequence of octets, access the big-endian 16-bit word at position <index> + <offset>."
   (bvref-u16 vector offset index))
-
-(define-typep array (x &optional (element-type '*) (dimension-spec '*))
-  (and (typep x 'array)
-       (or (eq element-type '*)
-	   (eq element-type t)
-	   (equalp (array-element-type x)
-		   (upgraded-array-element-type element-type)))
-       (or (eq dimension-spec '*)
-	   (and (integerp dimension-spec)
-		(= dimension-spec (array-dimensions x)))
-	   (and (listp dimension-spec)
-		(do ((array-rank (array-dimensions x))
-		     (d 0 (1+ d))
-		     (q dimension-spec))
-		    ((null q) (= d array-rank))
-		  (let ((dim (pop q)))
-		    (cond
-		     ((>= d array-rank)
-		      (return nil))
-		     ((eq dim '*))
-		     ((= dim (array-dimension x d)))
-		     (t (return nil)))))))))
 
 (defun ensure-data-vector (vector start length)
   (let ((end (typecase vector
