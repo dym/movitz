@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001, 2003-2004, 
+;;;;    Copyright (C) 2001, 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.22 2005/01/03 11:52:33 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.23 2005/08/20 20:30:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -153,7 +153,7 @@ with the single member of <type-specifier>."
 			(<= max (+ (car sub-range) epsilon))))
 		(d (and min (cdr sub-range) ; subtrahend starts above sub-range?
 			(<= (+ (cdr sub-range) epsilon) min))))
-	    ;; (warn "abcd: ~S ~S ~S ~S" a b c d)
+	    #+ignore (warn "abcd: ~S ~S ~S ~S" a b c d)
 	    (cond
 	     ((and a b)
 	      ;; sub-range is eclipsed by the subtrahend.
@@ -173,8 +173,8 @@ with the single member of <type-specifier>."
 		(numscope-add-range new-numscope (+ max epsilon) (cdr sub-range) epsilon)))
 	     ((and (not d) b)		; (warn "right prune ~D with [~D-~D]" sub-range min max)
 	      (setf new-numscope
-		(numscope-add-range new-numscope (car sub-range) min epsilon)))
-	     (t (error "I am confused!")))))
+		(numscope-add-range new-numscope (car sub-range) (- min epsilon) epsilon)))
+	     (t (break "I am confused!")))))
 	new-numscope))))
 
 (defun numscope-complement (numscope &optional (epsilon 1))
@@ -277,34 +277,35 @@ and any element of range1."
 	      :initial-value (code first-type)))))
 
 (defun encoded-type-decode (code integer-range members include complement)
-  (if (let ((mask (1- (ash 1 (position :tail *tb-bitmap*)))))
-	(= mask (logand mask code)))
-      (not complement)
-    (let ((sub-specs include))
-      (loop for x in *tb-bitmap* as bit upfrom 0
-	  do (when (logbitp bit code)
-	       (push x sub-specs)))
-      (when (not (null members))
-	(push (cons 'member members) sub-specs))
-      (when (numscope-allp integer-range)
-	(pushnew 'integer sub-specs))
-      (when (and (not (member 'integer sub-specs))
-		 integer-range)
-	(dolist (sub-range integer-range)
-	  (push (list 'integer
-		      (or (car sub-range) '*)
-		      (or (cdr sub-range) '*))
-		sub-specs)))
-      (cond
-       ((null sub-specs)
-	(if complement t nil))
-       ((not (cdr sub-specs))
-	(if (not complement)
-	    (car sub-specs)
-	  (list 'not (car sub-specs))))
-       (t (if (not complement)
-	      (cons 'or sub-specs)
-	    (list 'not (cons 'or sub-specs))))))))
+  (cond
+   ((let ((mask (1- (ash 1 (position :tail *tb-bitmap*)))))
+      (= mask (logand mask code)))
+    (not complement))
+   (t (let ((sub-specs include))
+	(loop for x in *tb-bitmap* as bit upfrom 0
+	    do (when (logbitp bit code)
+		 (push x sub-specs)))
+	(when (not (null members))
+	  (push (cons 'member members) sub-specs))
+	(when (numscope-allp integer-range)
+	  (pushnew 'integer sub-specs))
+	(when (and (not (member 'integer sub-specs))
+		   integer-range)
+	  (dolist (sub-range integer-range)
+	    (push (list 'integer
+			(or (car sub-range) '*)
+			(or (cdr sub-range) '*))
+		  sub-specs)))
+	(cond
+	 ((null sub-specs)
+	  (if complement t nil))
+	 ((not (cdr sub-specs))
+	  (if (not complement)
+	      (car sub-specs)
+	    (list 'not (car sub-specs))))
+	 (t (if (not complement)
+		(cons 'or sub-specs)
+	      (list 'not (cons 'or sub-specs)))))))))
 		  
 (defun type-values (codes &key integer-range members include complement)
   ;; Members: A list of objects explicitly included in type.
@@ -312,6 +313,8 @@ and any element of range1."
   (check-type include list)
   (check-type members list)
   (check-type integer-range list)
+  (when (eq 'and (car include))
+    (break "foo"))
   (let ((new-intscope integer-range)
 	(new-members ()))
     (dolist (member members)		; move integer members into integer-range
@@ -392,6 +395,19 @@ and any element of range1."
 			   (not (encoded-typep t nil x code0 integer-range0 members0 include0 nil)))
 			 members1)
 	      nil nil))
+     ((and (or integer-range0 integer-range1)
+	   (encoded-emptyp code0 nil members0 nil complement0)
+	   (encoded-emptyp code1 nil members1 nil complement1)
+	   (flet ((integer-super-p (x)
+		    (member x '(rational real number t))))
+	     (and (every #'integer-super-p include0)
+		  (every #'integer-super-p include1))))
+      (type-values () :integer-range (numscope-intersection integer-range0
+							    integer-range1)))
+     ((and (= code0 code1) (equal integer-range0 integer-range1)
+	   (equal members0 members1) (equal include0 include1)
+	   (eq complement0 complement1))
+      (values code0 integer-range0 members0 include0 complement0))
      ((and include0 (null include1))
       ;; (and (or a b c) d) => (or (and a d) (and b d) (and c d))
       (values (logand code0 code1)
@@ -413,19 +429,19 @@ and any element of range1."
 		      include1)
 	      nil))
      (t ;; (warn "and with two includes: ~S ~S" include0 include1)
-	(type-values () :include `(and ,(encoded-type-decode code0 integer-range0 members0
-							     include0 complement0)
-				       ,(encoded-type-decode code1 integer-range1 members1
-							     include1 complement1))))))
+	(type-values () :include `((and ,(encoded-type-decode code0 integer-range0 members0
+							      include0 complement0)
+					,(encoded-type-decode code1 integer-range1 members1
+							      include1 complement1)))))))
    ((and complement0 complement1)
     (multiple-value-bind (code integer-range members include complement)
 	(encoded-types-or code0 integer-range0 members0 include0 (not complement0)
 			  code1 integer-range1 members1 include1 (not complement1))
       (values code integer-range members include (not complement))))
-   (t (type-values () :include `(and ,(encoded-type-decode code0 integer-range0 members0
-							   include0 complement0)
-				     ,(encoded-type-decode code1 integer-range1 members1
-							   include1 complement1))))))
+   (t (type-values () :include `((and ,(encoded-type-decode code0 integer-range0 members0
+							    include0 complement0)
+				      ,(encoded-type-decode code1 integer-range1 members1
+							    include1 complement1)))))))
 
 (defun encoded-types-or (code0 integer-range0 members0 include0 complement0
 			 code1 integer-range1 members1 include1 complement1)
@@ -659,7 +675,8 @@ If it isn't, also return wether we _know_ it isn't."
   (cond
    ((or complement include (not (= 0 code)))
     nil)
-   ((= 1 (length members))
+   ((and (= 1 (length members))
+	 (= 0 code) (null intscope) (null include) (not complement))
     members)
    ((and (= 1 (length intscope))
 	 (caar intscope)
@@ -680,7 +697,7 @@ If it isn't, also return wether we _know_ it isn't."
   "Return the integer type that can result from adding a member of type0 to a member of type1."
   ;; (declare (ignore members0 members1))
   (cond
-   ((or include0 include1 members0 members1)
+   ((or include0 include1 members0 members1 (/= 0 code0) (/= 0 code1))
     ;; We can't know..
     'number)
    ((or complement0 complement1)

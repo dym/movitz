@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.101 2005/05/21 22:38:39 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.102 2005/08/20 20:31:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -957,60 +957,61 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	      (format t "~&;; Image file size: ~D octets.~%" image-end)
 	      ;; Write simple stage1 bootblock into sector 0..
 	      (format t "~&;; Dump count: ~D." (incf (dump-count *image*)))
-	      (set-file-position stream 0)
 	      (flet ((global-slot-position (slot-name)
 		       (+ 512
 			  (image-nil-word *image*)
 			  (image-ds-segment-base *image*)
 			  (global-constant-offset slot-name)
 			  (- load-address))))
-		(let ((bootblock (make-bootblock kernel-size
-						 load-address
-						 init-code-address)))
-		  (setf (image-bootblock *image*) bootblock)
-		  (write-sequence bootblock stream)
-		  (let* ((stack-vector-address (+ (image-nil-word *image*)
-						  (global-constant-offset 'stack-vector)
-						  (image-ds-segment-base *image*)))
-			 (stack-vector-position (- (+ stack-vector-address 512)
-						   load-address)))
-		    (declare (ignore stack-vector-position))
-		    #+ignore(warn "stack-v-pos: ~S => ~S" 
-				  stack-vector-position
-				  stack-vector-word)
-		    (set-file-position stream (global-slot-position 'stack-vector) 'stack-vector)
-		    (write-binary 'word stream stack-vector-word)
-		    (set-file-position stream (global-slot-position 'stack-bottom) 'stack-bottom)
-		    (write-binary 'lu32 stream (+ 8 (* 4 4096) ; cushion
-						  (- stack-vector-word (tag :other))))
-		    (set-file-position stream (global-slot-position 'stack-top) 'stack-top)
-		    (write-binary 'lu32 stream (+ 8 (- stack-vector-word (tag :other))
-						  (* 4 (movitz-vector-num-elements stack-vector)))))
-		  (if (not multiboot-p)
-		      (format t "~&;; No multiboot header.")
-		    ;; Update multiboot header, symbolic and in the file..
-		    (let* ((mb (image-multiboot-header *image*))
-			   (mb-address (+ (movitz-intern mb)
-					  (slot-offset 'multiboot-header 'magic)
-					  (image-ds-segment-base *image*)))
-			   (mb-file-position (- (+ mb-address 512)
-						load-address
-						(slot-offset 'multiboot-header 'magic))))
-		      (when (< load-address #x100000)
-			(warn "Multiboot load-address #x~x is below the 1MB mark."
-			      load-address))
-		      (when (> (+ mb-file-position (sizeof mb)) 8192)
-			(warn "Multiboot header at position ~D is above the 8KB mark, ~
+		(with-simple-restart (continue "Don't write a floppy bootloader.")
+		  (let ((bootblock (make-bootblock kernel-size
+						   load-address
+						   init-code-address)))
+		    (setf (image-bootblock *image*) bootblock)
+		    (set-file-position stream 0)
+		    (write-sequence bootblock stream)))
+		(let* ((stack-vector-address (+ (image-nil-word *image*)
+						(global-constant-offset 'stack-vector)
+						(image-ds-segment-base *image*)))
+		       (stack-vector-position (- (+ stack-vector-address 512)
+						 load-address)))
+		  (declare (ignore stack-vector-position))
+		  #+ignore(warn "stack-v-pos: ~S => ~S" 
+				stack-vector-position
+				stack-vector-word)
+		  (set-file-position stream (global-slot-position 'stack-vector) 'stack-vector)
+		  (write-binary 'word stream stack-vector-word)
+		  (set-file-position stream (global-slot-position 'stack-bottom) 'stack-bottom)
+		  (write-binary 'lu32 stream (+ 8 (* 4 4096) ; cushion
+						(- stack-vector-word (tag :other))))
+		  (set-file-position stream (global-slot-position 'stack-top) 'stack-top)
+		  (write-binary 'lu32 stream (+ 8 (- stack-vector-word (tag :other))
+						(* 4 (movitz-vector-num-elements stack-vector)))))
+		(if (not multiboot-p)
+		    (format t "~&;; No multiboot header.")
+		  ;; Update multiboot header, symbolic and in the file..
+		  (let* ((mb (image-multiboot-header *image*))
+			 (mb-address (+ (movitz-intern mb)
+					(slot-offset 'multiboot-header 'magic)
+					(image-ds-segment-base *image*)))
+			 (mb-file-position (- (+ mb-address 512)
+					      load-address
+					      (slot-offset 'multiboot-header 'magic))))
+		    (when (< load-address #x100000)
+		      (warn "Multiboot load-address #x~x is below the 1MB mark."
+			    load-address))
+		    (when (> (+ mb-file-position (sizeof mb)) 8192)
+		      (warn "Multiboot header at position ~D is above the 8KB mark, ~
 this image will not be Multiboot compatible."
-			      (+ mb-file-position (sizeof mb))))
-		      (set-file-position stream mb-file-position 'multiboot-header)
-		      ;; (format t "~&;; Multiboot load-address: #x~X." load-address)
-		      (setf (header-address mb) mb-address
-			    (load-address mb) load-address
-			    (load-end-address mb) (+ load-address kernel-size)
-			    (bss-end-address mb) (+ load-address kernel-size)
-			    (entry-address mb) init-code-address)
-		      (write-binary-record mb stream)))))))))))
+			    (+ mb-file-position (sizeof mb))))
+		    (set-file-position stream mb-file-position 'multiboot-header)
+		    ;; (format t "~&;; Multiboot load-address: #x~X." load-address)
+		    (setf (header-address mb) mb-address
+			  (load-address mb) load-address
+			  (load-end-address mb) (+ load-address kernel-size)
+			  (bss-end-address mb) (+ load-address kernel-size)
+			  (entry-address mb) init-code-address)
+		    (write-binary-record mb stream))))))))))
   (values))
 
 (defun dump-image-core (image stream)

@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.149 2005/08/15 21:44:23 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.150 2005/08/20 20:30:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -473,7 +473,7 @@ Side-effects each binding's binding-store-type."
 		 (assert (or (typep type 'binding)
 			     (eql 1 (type-specifier-num-values type))) ()
 		   "store-lexical with multiple-valued type: ~S for ~S" type binding)
-		 ;; (warn "store ~S type ~S, thunk ~S" binding type thunk)
+		 #+ignore (warn "store ~S type ~S, thunk ~S" binding type thunk)
 		 (let ((analysis (or (gethash binding binding-usage)
 				     (setf (gethash binding binding-usage)
 				       (make-type-analysis-with-declaration binding)))))
@@ -492,14 +492,14 @@ Side-effects each binding's binding-store-type."
 			    (values-list (type-analysis-encoded-type analysis))
 			    (type-specifier-encode type))))))))
 	       (analyze-code (code)
+		 #+ignore (print-code 'analyze code)
 		 (dolist (instruction code)
 		   (when (listp instruction)
 		     (multiple-value-bind (store-binding store-type thunk thunk-args)
 			 (find-written-binding-and-type instruction)
 		       (when store-binding
-			 #+ignore
-			 (warn "store: ~S binding ~S type ~S thunk ~S"
-			       instruction store-binding store-type thunk)
+			 #+ignore (warn "store: ~S binding ~S type ~S thunk ~S"
+					instruction store-binding store-type thunk)
 			 (analyze-store store-binding store-type thunk thunk-args)))
 		     (analyze-code (instruction-sub-program instruction)))))
 	       (analyze-funobj (funobj)
@@ -617,6 +617,8 @@ of all function-bindings seen."
 		 ;; Binding is local to this funobj
 		 (typecase binding
 		   (forwarding-binding
+		    (process-binding funobj (forwarding-binding-target binding) usages)
+		    #+ignore
 		    (setf (forwarding-binding-target binding)
 		      (process-binding funobj (forwarding-binding-target binding) usages)))
 		   (function-binding
@@ -2377,7 +2379,14 @@ falling below the label."
     :accessor binding-env)
    (declarations
     :initarg :declarations
-    :accessor binding-declarations)))
+    :accessor binding-declarations)
+   (extent-env
+    :accessor binding-extent-env
+    :initform nil)))
+
+(defmethod (setf binding-env) :after (env (binding binding))
+  (unless (binding-extent-env binding)
+    (setf (binding-extent-env binding) env)))
 
 (defmethod print-object ((object binding) stream)
   (print-unreadable-object (object stream :type t :identity t)
@@ -2387,12 +2396,13 @@ falling below the label."
 		   (binding-name object))
 	      (when (and (binding-target object)
 			 (not (eq object (binding-target object))))
-		(binding-name (binding-target object)))
+		(binding-name (forwarding-binding-target object)))
 	      (when (and #+ignore (slot-exists-p object 'store-type)
 			 #+ignore (slot-boundp object 'store-type)
 			 (binding-store-type object))
-		(apply #'encoded-type-decode
-		       (binding-store-type object)))))))
+		(or (apply #'encoded-type-decode
+			   (binding-store-type object))
+		    'empty))))))
 
 (defclass constant-object-binding (binding)
   ((object
@@ -2653,11 +2663,11 @@ the sub-program options (&optional label) as secondary value."
 	      '((:int 100))
 	      :test #'equalp)))
   
-(defun sub-environment-p (env1 env2)
-  (cond
-   ((eq env1 env2) t)
-   ((null env1) nil)
-   (t (sub-environment-p (movitz-environment-uplink env1) env2))))
+#+ignore (defun sub-environment-p (env1 env2)
+	   (cond
+	    ((eq env1 env2) t)
+	    ((null env1) nil)
+	    (t (sub-environment-p (movitz-environment-uplink env1) env2))))
 
 (defun find-code-constants-and-jumpers (code &key include-programs)
   "Return code's constants (a plist of constants and their usage-counts) and jumper-sets."
@@ -3006,7 +3016,7 @@ the sub-program options (&optional label) as secondary value."
    sub-environments found in CODE. A frame-map which is an assoc from
    bindings to stack-frame locations."
   ;; Then assign them to locations in the stack-frame.
-  ;; (warn "assigning code:~%~{~&    ~A~}" code)
+  #+ignore (warn "assigning code:~%~{~&    ~A~}" code)
   (check-type function-env function-env)
   (assert (= initial-stack-frame-position
 	     (1+ (frame-map-size frame-map))))
@@ -3022,10 +3032,42 @@ the sub-program options (&optional label) as secondary value."
 	     (error "SEFEW: ~S" function-env))
 	    ;; The floor of this env is the roof of its extent-uplink.
 	    (t (assign-env-bindings (movitz-environment-extent-uplink env)))))
+	 ;; PROMOTE FORW-BINDINGS TO UPPER ENV!!
 	 (assign-env-bindings (env)
 	   (or (getf env-roof-map env nil)
 	       (let* ((stack-frame-position (env-floor env))
 		      (bindings-to-locate
+		       (loop for binding being the hash-keys of var-counts
+			   when (eq env (binding-extent-env binding))
+			   unless (let ((variable (binding-name binding)))
+				    (cond
+				     ((not (typep binding 'lexical-binding)))
+				     ((typep binding 'lambda-binding))
+				     ((typep binding 'constant-object-binding))
+				     ((typep binding 'forwarding-binding)
+				      ;; Immediately "assign" to target.
+				      (when (plusp (or (car (gethash binding var-counts)) 0))
+					(setf (new-binding-location binding frame-map)
+					  (forwarding-binding-target binding)))
+				      t)
+				     ((typep binding 'borrowed-binding))
+				     ((typep binding 'funobj-binding))
+				     ((and (typep binding 'fixed-required-function-argument)
+					   (plusp (or (car (gethash binding var-counts)) 0)))
+				      (prog1 nil ; may need lending-cons
+					(setf (new-binding-location binding frame-map)
+					  `(:argument-stack ,(function-argument-argnum binding)))))
+				     ((unless (or (movitz-env-get variable 'ignore nil
+								  (binding-env binding) nil)
+						  (movitz-env-get variable 'ignorable nil
+								  (binding-env binding) nil)
+						  (typep binding 'hidden-rest-function-argument)
+						  (third (gethash binding var-counts)))
+					(warn "Unused variable: ~S"
+					      (binding-name binding))))
+				     ((not (plusp (or (car (gethash binding var-counts)) 0))))))
+			   collect binding)
+		       #+ignore
 		       (loop for (variable . binding) in (movitz-environment-bindings env)
 			   unless (cond
 				   ((not (typep binding 'lexical-binding)))
@@ -3087,6 +3129,22 @@ the sub-program options (&optional label) as secondary value."
 							     (cdr init-pc))
 						15)
 					    count)))))))))
+		 #+ignore (labels ((dox (env upper)
+				     (if (or (not env)
+					     (not (sub-env-p env function-env)))
+					 0
+				       (let ((level (dox (funcall upper env) upper)))
+					 (format t "~%~v{ ~}~S" level t env)
+					 (+ level 4)))))
+			    (warn "At ~S binding ~S:~{ ~S~}: Extent: ~A~%Bind: ~A" 
+				  stack-frame-position
+				  env bindings-to-locate
+				  (with-output-to-string (*standard-output*)
+				    (dox env #'movitz-environment-extent-uplink))
+				  (with-output-to-string (*standard-output*)
+				    (when bindings-to-locate
+				      (dox (binding-env (first bindings-to-locate))
+					   #'movitz-environment-uplink)))))
 		 ;; First, make several passes while trying to locate bindings
 		 ;; into registers.
 		 (loop repeat 100 with try-again = t and did-assign = t
@@ -3181,6 +3239,8 @@ the sub-program options (&optional label) as secondary value."
 			(setf (new-binding-location binding frame-map)
 			  `(:argument-stack ,(function-argument-argnum binding))))
 		       (located-binding
+			#+ignore (warn "Assigning ~S at ~S"
+				       binding stack-frame-position)
 			(setf (new-binding-location binding frame-map)
 			  (post-incf stack-frame-position))))))
 		 (setf (getf env-roof-map env)
@@ -3190,7 +3250,7 @@ the sub-program options (&optional label) as secondary value."
 		   ;; do (warn "bind: ~S: ~S" binding (eq function-env (find-function-env env funobj)))
 	  when (sub-env-p env function-env)
 	  do (assign-env-bindings (binding-env binding)))
-      ;; (warn "Frame-map:~{ ~A~}"  frame-map)
+      #+ignore (warn "Frame-map:~{ ~A~}"  frame-map)
       frame-map)))
 
 
@@ -3269,7 +3329,7 @@ the sub-program options (&optional label) as secondary value."
   "Resolve a binding in terms of forwarding."
   (etypecase binding
     (forwarding-binding
-     (forwarding-binding-target binding))
+     (binding-target (forwarding-binding-target binding)))
     (binding
      binding)))
 
@@ -3460,8 +3520,8 @@ loading borrowed bindings."
 ;;;			    :untagged-fixnum-ecx))
 		    ((and binding-type
 			  (type-specifier-singleton decoded-type))
-		     (warn "Immloadlex: ~S"
-			   (type-specifier-singleton decoded-type))
+		     #+ignore (warn "Immloadlex: ~S"
+				    (type-specifier-singleton decoded-type))
 		     (make-immediate-move (movitz-immediate-value
 					   (car (type-specifier-singleton decoded-type)))
 					  :ecx))
@@ -3571,6 +3631,7 @@ loading borrowed bindings."
 	(located-binding
 	 (let ((binding-type (binding-store-type binding))
 	       (binding-location (new-binding-location binding frame-map)))
+	   #+ignore (warn "~S type: ~S" binding binding-type)
 	   (cond
 	    ((and (binding-lended-p binding)
 		  (not shared-reference-p))
@@ -5349,13 +5410,32 @@ the first one takes preference. Note that :non-local-exit might also be returned
 	  :result-mode :eax
 	  :forward form-info)))))
   
-(define-compiler compile-form-unprotected (&all all &form form &result-mode result-mode)
+(define-compiler compile-form-unprotected (&all downstream &form form &result-mode result-mode
+						&extent extent)
   "3.1.2.1 Form Evaluation. May not honor RESULT-MODE.
 That is, RESULT-MODE is taken to be a suggestion, not an imperative."
-  (typecase form
-    (symbol (compiler-call #'compile-symbol :forward all))
-    (cons   (compiler-call #'compile-cons :forward all))
-    (t      (compiler-call #'compile-self-evaluating :forward all))))
+  (compiler-values-bind (&all upstream)
+      (typecase form
+	(symbol (compiler-call #'compile-symbol :forward downstream))
+	(cons   (compiler-call #'compile-cons :forward downstream))
+	(t      (compiler-call #'compile-self-evaluating :forward downstream)))
+    (when (typep (upstream :final-form) 'lexical-binding)
+      (labels ((fix-extent (binding)
+		 (cond
+		  ((sub-env-p extent (binding-extent-env binding))
+		   #+ignore (warn "Binding ~S OK in ~S wrt. ~S."
+				  binding
+				  (binding-extent-env binding)
+				  (downstream :env)))
+		  (t #+ignore (break "Binding ~S escapes from ~S to ~S"
+				     binding (binding-extent-env binding)
+				     extent)
+		      (setf (binding-extent-env binding) extent)))
+		 (when (typep binding 'forwarding-binding)
+		   (fix-extent (forwarding-binding-target binding)))))
+	(when extent
+	  (fix-extent (upstream :final-form)))))
+    (compiler-values (upstream))))
 
 (defun lambda-form-p (form)
   (and (listp form)
@@ -6092,17 +6172,20 @@ in ECX the number of values (as fixnum)."
       (:jne ',push-values-loop)
       ,push-values-done)))
 
+(defun stack-add (x y)
+  (if (and (integerp x) (integerp y))
+      (+ x y)
+    t))
+
+(define-modify-macro stack-incf (&optional (delta 1)) stack-add)
+
 (defun stack-delta (inner-env outer-env)
   "Calculate the amount of stack-space used (in 32-bit stack slots) at the time
 of <inner-env> since <outer-env>,
 the number of intervening dynamic-slots (special bindings, unwind-protects, and catch-tags),
 and a list of any intervening unwind-protect environment-slots."
   (labels 
-      ((stack-distance-add (x y)
-	 (if (and (integerp x) (integerp y))
-	     (+ x y)
-	   t))
-       (find-stack-delta (env stack-distance num-dynamic-slots unwind-protects)
+      ((find-stack-delta (env stack-distance num-dynamic-slots unwind-protects)
 	 #+ignore (warn "find-stack-delta: ~S dist ~S, slots ~S" env
 			(stack-used env) (num-dynamic-slots env))
 	 (cond
@@ -6116,8 +6199,8 @@ and a list of any intervening unwind-protect environment-slots."
 	  ((null env)
 	   (values nil 0 nil))
 	  (t (find-stack-delta (movitz-environment-uplink env)
-			       (stack-distance-add stack-distance (stack-used env))
-			       (stack-distance-add num-dynamic-slots (num-dynamic-slots env))
+			       (stack-add stack-distance (stack-used env))
+			       (stack-add num-dynamic-slots (num-dynamic-slots env))
 			       (if (typep env 'unwind-protect-env)
 				   (cons env unwind-protects)
 				 unwind-protects))))))
@@ -6334,6 +6417,8 @@ and a list of any intervening unwind-protect environment-slots."
        ((not (typep init-with-register 'binding))
 	(assert init-with-type)
 	(values binding init-with-type)	)
+       ((and init-with-type (not (bindingp init-with-type)))
+	(values binding init-with-type))
        (t (values binding t
 		  (lambda (x) x)
 		  (list init-with-register)))))
@@ -6701,12 +6786,18 @@ and a list of any intervening unwind-protect environment-slots."
 	(warn "Add for lend0: ~S" destination))
       (let ((loc0 (new-binding-location (binding-target term0) frame-map :default nil))
 	    (loc1 (new-binding-location (binding-target term1) frame-map :default nil)))
-;;;	(warn "add: ~A" instruction)
+	#+ignore
+	(warn "add: ~A for ~A" instruction result-type)
 	#+ignore
 	(warn "add for: ~S is ~A, from ~A/~A and ~A/~A."
 	      destination result-type
 	      term0 loc0
 	      term1 loc1)
+	#+ignore
+	(when (eql loc0 loc1)
+	  (warn "add for:~%~A/~A in ~S~&~A/~A in ~S."
+		term0 loc0 (binding-extent-env (binding-target term0))
+		term1 loc1 (binding-extent-env (binding-target term1))))
 	(cond
 	 ((type-specifier-singleton result-type)
 	  ;; (break "constant add: ~S" instruction)
@@ -6744,7 +6835,7 @@ and a list of any intervening unwind-protect environment-slots."
 	 ((and (movitz-subtypep type0 'fixnum)
 	       (movitz-subtypep type1 'fixnum)
 	       (movitz-subtypep result-type 'fixnum))
-	  ;; (warn "ADDX: ~S" instruction)
+	  #+ignore (warn "ADDX: ~S" instruction)
 	  (cond
 	   ((and (type-specifier-singleton type0)
 		 (eq loc1 destination-location))
@@ -6752,10 +6843,14 @@ and a list of any intervening unwind-protect environment-slots."
 	     ((member destination-location '(:eax :ebx :ecx :edx))
 	      `((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
 		       ,destination)))
-	     (t (assert (integerp loc1))
-		(break "check that this is correct..")
-		`((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
-			 (:ebp ,(stack-frame-offset loc1)))))))
+	     ((integerp loc1)
+	      ;; (break "check that this is correct..")
+	      `((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
+		       (:ebp ,(stack-frame-offset loc1)))))
+	     ((eq :argument-stack (operator loc1))
+	      `((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
+		       (:ebp ,(argument-stack-offset (binding-target term1))))))
+	     (t (error "Don't know how to add this for loc1 ~S" loc1))))
 	   ((and (type-specifier-singleton type0)
 		 (eq term1 destination)
 		 (integerp destination-location))
@@ -6768,41 +6863,44 @@ and a list of any intervening unwind-protect environment-slots."
 	    (append `((:addl ,(movitz-immediate-value (car (type-specifier-singleton type0)))
 			     ,loc1))
 		    (make-store-lexical destination loc1 nil funobj frame-map)))
-	   (t #+ignore (warn "ADD: ~A/~S = ~A/~S + ~A/~S,~%~A ~A"
-			     destination-location
-			     destination
-			     loc0 term0
-			     loc1 term1
-			     (type-specifier-singleton type0)
-			     (eq loc1 destination))
+	   ((and (integerp loc0) (integerp loc1)
+		 (member destination-location '(:eax :ebx :ecx :edx)))
+	    (append `((:movl (:ebp ,(stack-frame-offset loc0)) ,destination-location)
+		      (:addl (:ebp ,(stack-frame-offset loc1)) ,destination-location))))
+	   (t (warn "ADD: ~A/~S = ~A/~S + ~A/~S"
+		    destination-location
+		    destination
+		    loc0 term0
+		    loc1 term1)
+	      #+ignore (warn "map: ~A" frame-map)
 ;;; 	    (warn "ADDI: ~S" instruction)
-	    (append (cond
-		     ((type-specifier-singleton type0)
-		      (append (make-load-lexical term1 :eax funobj nil frame-map)
-			      (make-load-constant (car (type-specifier-singleton type0))
-						  :ebx funobj frame-map)))
-		     ((type-specifier-singleton type1)
-		      (append (make-load-lexical term0 :eax funobj nil frame-map)
-			      (make-load-constant (car (type-specifier-singleton type1))
-						  :ebx funobj frame-map)))
-		     ((and (eq :eax loc0) (eq :ebx loc1))
-		      nil)
-		     ((and (eq :ebx loc0) (eq :eax loc1))
-		      nil)		; terms order isn't important
-		     ((eq :eax loc1)
-		      (append
-		       (make-load-lexical term0 :ebx funobj nil frame-map)))
-		     (t (append
-			 (make-load-lexical term0 :eax funobj nil frame-map)
-			 (make-load-lexical term1 :ebx funobj nil frame-map))))
-		    `((:movl (:edi ,(global-constant-offset '+)) :esi))
-		    (make-compiled-funcall-by-esi 2)
-		    (etypecase destination
-		      (symbol
-		       (unless (eq destination :eax)
-			 `((:movl :eax ,destination))))
-		      (binding
-		       (make-store-lexical destination :eax nil funobj frame-map)))))))
+	      (append (cond
+		       ((type-specifier-singleton type0)
+			(append (make-load-lexical term1 :eax funobj nil frame-map)
+				(make-load-constant (car (type-specifier-singleton type0))
+						    :ebx funobj frame-map)))
+		       ((type-specifier-singleton type1)
+			(append (make-load-lexical term0 :eax funobj nil frame-map)
+				(make-load-constant (car (type-specifier-singleton type1))
+						    :ebx funobj frame-map)))
+		       ((and (eq :eax loc0) (eq :ebx loc1))
+			nil)
+		       ((and (eq :ebx loc0) (eq :eax loc1))
+			nil)		; terms order isn't important
+		       ((eq :eax loc1)
+			(append
+			 (make-load-lexical term0 :ebx funobj nil frame-map)))
+		       (t (append
+			   (make-load-lexical term0 :eax funobj nil frame-map)
+			   (make-load-lexical term1 :ebx funobj nil frame-map))))
+		      `((:movl (:edi ,(global-constant-offset '+)) :esi))
+		      (make-compiled-funcall-by-esi 2)
+		      (etypecase destination
+			(symbol
+			 (unless (eq destination :eax)
+			   `((:movl :eax ,destination))))
+			(binding
+			 (make-store-lexical destination :eax nil funobj frame-map)))))))
 	 (t (append (cond
 		     ((type-specifier-singleton type0)
 		      (append (make-load-lexical term1 :eax funobj nil frame-map)
@@ -6848,12 +6946,13 @@ and a list of any intervening unwind-protect environment-slots."
 	(rotatef x y)
 	(rotatef x-type y-type)
 	(rotatef x-singleton y-singleton))
-      (let (;; (x-loc (new-binding-location (binding-target x) frame-map :default nil))
+      (let (#+ignore (x-loc (new-binding-location (binding-target x) frame-map :default nil))
 	    (y-loc (new-binding-location (binding-target y) frame-map :default nil)))
 	#+ignore
-	(warn "eql ~S/~S ~S/~S"
-	      x x-loc
-	      y y-loc)
+	(warn "eql ~S/~S xx~Xxx ~S/~S: ~S"
+	      x x-loc (binding-target y)
+	      y y-loc
+	      instruction)
 	(flet ((make-branch ()
 		 (ecase (operator return-mode)
 		   (:boolean-branch-on-false

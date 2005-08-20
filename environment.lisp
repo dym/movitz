@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.13 2005/08/14 12:13:07 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.14 2005/08/20 20:30:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -225,7 +225,7 @@ the function sets up itself. Its parent env. must be a funobj-env."))
       (find-function-env (movitz-environment-uplink env) funobj)))
 
 (defun sub-env-p (sub-env env)
-  "Check if sub-env is a sub-environment of env."
+  "Check if sub-env is a sub-environment (or eq) of env."
   (cond
    ((not sub-env)
     nil)

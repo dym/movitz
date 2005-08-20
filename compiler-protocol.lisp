@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct 10 13:02:03 2001
 ;;;;                
-;;;; $Id: compiler-protocol.lisp,v 1.3 2004/02/12 17:51:02 ffjeld Exp $
+;;;; $Id: compiler-protocol.lisp,v 1.4 2005/08/20 20:30:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -159,26 +159,29 @@ COMPILER-VALUES."
 				 ((&funobj funobj-var) (copy-symbol 'funobj) funobj-p)
 				 ((&env env-var) (copy-symbol 'env) env-p)
 				 ((&top-level-p top-level-p-var) (copy-symbol 'top-level-p) top-level-p-p)
-				 ((&result-mode result-mode-var) (copy-symbol 'result-mode) result-mode-p))
+				 ((&result-mode result-mode-var) (copy-symbol 'result-mode) result-mode-p)
+				 ((&extent extent-var) (copy-symbol 'extent) extent-p))
 			   &body defun-body)
   (multiple-value-bind (body docstring)
       (if (and (cdr defun-body)
 	       (stringp (car defun-body)))
 	  (values (cdr defun-body) (list (car defun-body)))
 	(values defun-body nil))
-    `(defun ,name (,form-var ,funobj-var ,env-var ,top-level-p-var ,result-mode-var)
+    `(defun ,name (,form-var ,funobj-var ,env-var ,top-level-p-var ,result-mode-var ,extent-var)
        ,@docstring
        (declare (,(if all-p 'ignorable 'ignore)
 		    ,@(unless form-p (list form-var))
 		  ,@(unless funobj-p (list funobj-var))
 		  ,@(unless env-p (list env-var))
 		  ,@(unless top-level-p-p (list top-level-p-var))
-		  ,@(unless result-mode-p (list result-mode-var))))
+		  ,@(unless result-mode-p (list result-mode-var))
+		  ,@(unless extent-p (list extent-var))))
        (macrolet ((default-compiler-values-producer () '',name)
 		  ,@(when all-p
 		      `((,all-var (v) (ecase v (:form ',form-var) (:funobj ',funobj-var)
 					     (:env ',env-var) (:top-level-p ',top-level-p-var)
-					     (:result-mode ',result-mode-var))))))
+					     (:result-mode ',result-mode-var)
+					     (:extent ',extent-var))))))
 	 ,@body))))
 
 (defmacro compiler-call (compiler-name &rest all-keys
@@ -186,6 +189,7 @@ COMPILER-VALUES."
 			      ((:form form-var) nil form-p)
 			      ((:funobj funobj-var) nil funobj-p)
 			      ((:env env-var) nil env-p)
+			      ((:extent extent-var) nil extent-p)
 			      ((:top-level-p top-level-p-var) nil top-level-p-p)
 			      ((:result-mode result-mode-var) :ignore result-mode-p))
   (assert (not (and defaults forward)) ()
@@ -208,7 +212,8 @@ COMPILER-VALUES."
 		   ,(if funobj-p funobj-var `(,defaults :funobj))
 		   inner-env
 		   ,(when top-level-p-p top-level-p-var) ; default to nil, no forwarding.
-		   ,(if result-mode-p result-mode-var `(,defaults :result-mode)))))
+		   ,(if result-mode-p result-mode-var `(,defaults :result-mode))
+		   ,(if extent-p extent-var `(,defaults :extent)))))
    (forward
     `(let* ((outer-env ,(if env-p env-var `(,forward :env)))
 	    (inner-env ,(if (not with-stack-used)
@@ -222,15 +227,17 @@ COMPILER-VALUES."
 		,(if funobj-p funobj-var `(,forward :funobj))
 		inner-env
 		,(if top-level-p-p top-level-p-var `(,forward :top-level-p))
-		,(if result-mode-p result-mode-var `(,forward :result-mode)))))
+		,(if result-mode-p result-mode-var `(,forward :result-mode))
+		,(if extent-p extent-var `(,forward :extent)))))
    ((not with-stack-used)
-    `(funcall ,compiler-name ,form-var ,funobj-var ,env-var ,top-level-p-var ,result-mode-var))
+    `(funcall ,compiler-name ,form-var ,funobj-var ,env-var
+	      ,top-level-p-var ,result-mode-var ,extent-var))
    (t (assert env-p () ":env is required when with-stack-used is given.")
       `(funcall ,compiler-name ,form-var ,funobj-var
 		(make-instance 'with-things-on-stack-env
 		  :uplink ,env-var :stack-used ,with-stack-used
 		  :funobj (movitz-environment-funobj ,env-var))
-		,top-level-p-var ,result-mode-var))))
+		,top-level-p-var ,result-mode-var ,extent-var))))
 
 (defmacro define-special-operator (name formals &body body)
   (let* ((movitz-name (intern (symbol-name (translate-program name :cl :muerte.cl))
