@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2003-2004, 
+;;;;    Copyright (C) 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.9 2004/11/23 16:00:20 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.10 2005/08/20 20:23:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -41,27 +41,32 @@
      (:testb 1 :cl)))
 
 (define-compiler-macro + (&whole form &rest operands &environment env)
-  (case (length operands)
-    (0 0)
-    (1 (first operands))
-    (2 `(let ((x ,(first operands))
-	      (y ,(second operands)))
-	  (++%2op x y)))
-    (t (multiple-value-bind (constant-term non-constants)
-	   (loop for operand in operands
-	       if (movitz:movitz-constantp operand env)
-	       sum (movitz:movitz-eval operand env) into constant-term
-	       else collect operand into non-constant-operands
-	       finally (return (values constant-term non-constant-operands)))
-	 (cond
-	  ((null non-constants)
-	   constant-term)
-	  ((and (= 0 constant-term)
-		(not (cdr non-constants)))
-	   (car non-constants))
-	  ((= 0 constant-term)
-	   `(+ (+ ,(first non-constants) ,(second non-constants)) ,@(cddr non-constants)))
-	  (t `(+ (+ ,constant-term ,(first non-constants)) ,@(cdr non-constants))))))))
+  (flet ((term (x) (if (and nil (symbolp x))
+		       (gensym (format nil "term-~A-" x))
+		     (gensym "term-"))))
+    (case (length operands)
+      (0 0)
+      (1 (first operands))
+      (2 (let ((term1 (term (first operands)))
+	       (term2 (term (second operands))))
+	   `(let ((,term1 ,(first operands))
+		  (,term2 ,(second operands)))
+	      (++%2op ,term1 ,term2))))
+      (t (multiple-value-bind (constant-term non-constants)
+	     (loop for operand in operands
+		 if (movitz:movitz-constantp operand env)
+		 sum (movitz:movitz-eval operand env) into constant-term
+		 else collect operand into non-constant-operands
+		 finally (return (values constant-term non-constant-operands)))
+	   (cond
+	    ((null non-constants)
+	     constant-term)
+	    ((and (= 0 constant-term)
+		  (not (cdr non-constants)))
+	     (car non-constants))
+	    ((= 0 constant-term)
+	     `(+ (+ ,(first non-constants) ,(second non-constants)) ,@(cddr non-constants)))
+	    (t `(+ (+ ,constant-term ,(first non-constants)) ,@(cdr non-constants)))))))))
 
 (define-compiler-macro 1+ (number)
   `(+ 1 ,number))
@@ -256,7 +261,7 @@
 	     (case f1
 	       (0 `(progn ,factor2 0))
 	       (1 factor2)
-	       (2 `(let ((x ,factor2)) (+ x x)))
+	       (2 `(let ((x2 ,factor2)) (+ x2 x2)))
 	       (t `(no-macro-call * ,factor1 ,factor2)))))
 	  (t `(no-macro-call * ,factor1 ,factor2)))))
     (t `(* (* ,(first operands) ,(second operands)) ,@(cddr operands)))))
