@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 21 22:14:08 2001
 ;;;;                
-;;;; $Id: io-port.lisp,v 1.17 2005/08/15 00:06:19 ffjeld Exp $
+;;;; $Id: io-port.lisp,v 1.18 2005/08/20 20:27:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -308,8 +308,7 @@
   "Syntax for easy access to IO registers. <name> is installed as a local macro
 that reads from <io-base-form> plus some offset."
   (let ((io-var (gensym "io-base-")))
-    `(let ((,io-var ,io-base-form))
-       ;; (check-type ,io-var (unsigned-byte 16))
+    `(let ((,io-var (check-the (unsigned-byte 16) ,io-base-form)))
        (symbol-macrolet ((,name ,io-var))
 	 (macrolet ((,name (offset &optional (type :unsigned-byte8))
 		      `(io-port (+ ,',io-var ,offset) ,type)))
