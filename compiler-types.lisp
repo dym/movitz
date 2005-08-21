@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.23 2005/08/20 20:30:14 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.24 2005/08/21 17:51:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -499,9 +499,8 @@ and any element of range1."
 	 (type-values 'cons :members '(nil)))
 	(sequence
 	 (type-values '(vector cons) :members '(nil)))
-	(t (let ((deriver (and (boundp 'muerte::*compiler-derived-typespecs*)
-			       (gethash type-specifier
-					(symbol-value 'muerte::*compiler-derived-typespecs*)))))
+	(t (let ((deriver (and (boundp '*image*)
+			       (gethash type-specifier muerte::*compiler-derived-typespecs*))))
 	     (if deriver
 		 (type-specifier-encode (funcall deriver))
 	       (type-values () :include (list type-specifier)))))))
@@ -563,10 +562,10 @@ and any element of range1."
 	     (type-values () :include (list type-specifier)))))
 	((array vector binding-type)
 	 (type-values () :include (list type-specifier)))
-	(t (let ((deriver (and (boundp 'muerte::*compiler-derived-typespecs*)
-			       (gethash (intern (symbol-name (car type-specifier))
-						:muerte.cl)
-					(symbol-value 'muerte::*compiler-derived-typespecs*)))))
+	(t (let ((deriver (and (boundp '*image*)
+			       (gethash (translate-program (car type-specifier)
+							   :cl :muerte.cl)
+					muerte::*compiler-derived-typespecs*))))
 	     (assert deriver (type-specifier)
 	       "Unknown type ~S." type-specifier)
 	     (type-specifier-encode (apply deriver (cdr type-specifier))))))))))
