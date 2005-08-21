@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.17 2005/05/05 15:17:35 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.18 2005/08/21 13:47:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -27,8 +27,6 @@
 (define-compile-time-variable *the-slots-of-standard-class* nil)
 (define-compile-time-variable *the-position-of-standard-effective-slots* nil)
 (define-compile-time-variable *the-class-standard-class* nil)
-
-(defvar *the-effective-slot-positions* nil)
 
 (eval-when (:compile-toplevel)		; extends to EOF
 
@@ -521,18 +519,17 @@
 	val)))
   
   (defun (setf std-slot-value) (value instance slot-name)
-    (setq slot-name (translate-program slot-name :cl :muerte.cl))
-    (let* ((location (slot-location (movitz-class-of instance) slot-name))
+    (let* ((location (slot-location (movitz-class-of instance)
+				    (translate-program slot-name :cl :muerte.cl)))
 	   (slots (std-instance-slots instance)))
       (setf (svref slots location) (muerte::translate-program value :cl :muerte.cl))))
   
-  (defun movitz-slot-value (object slot-name)
-    (setq slot-name (translate-program slot-name :cl :muerte.cl))
-    (std-slot-value object slot-name))
+  (defun movitz-slot-vale (object slot-name)
+    (std-slot-value object (translate-program slot-name :cl :muerte.cl)))
 
   (defun (setf movitz-slot-value) (new-value object slot-name)
-    (setq slot-name (translate-program slot-name :cl :muerte.cl))
-    (setf (std-slot-value object slot-name) new-value))
+    (setf (std-slot-value object (translate-program slot-name :cl :muerte.cl))
+      new-value))
   
   (defun std-slot-exists-p (instance slot-name)
     (not (null (find slot-name (class-slots (movitz-class-of instance))
@@ -577,27 +574,6 @@
 			    :name name
 			    all-keys)))
 	  (setf (movitz-find-class name) class)))))
-;;;      (when old-class
-;;;	
-;;;      (let (
-;;;	(cond
-;;;	 (old-class
-;;;	  (setf (std-instance-class old-class) (std-instance-class new-class)
-;;;		(std-instance-slots old-class) (std-instance-slots new-class)
-;;;		(std-instance-class new-class) (movitz::movitz-read 'dead-class-instance!)
-;;;		(std-instance-slots new-class) (movitz::movitz-read 'dead-class-instance!)
-;;;		(class-precedence-list old-class) (std-compute-class-precedence-list old-class))
-;;;	  (let ((supers (class-direct-superclasses old-class)))
-;;;	    (dolist (superclass supers)
-;;;	      (setf (class-direct-subclasses superclass)
-;;;		(delete new-class (class-direct-subclasses superclass)))
-;;;	      (pushnew old-class (class-direct-subclasses superclass))))
-;;;	  old-class)
-;;;	 ((not old-class)
-;;;	  (setf (movitz-find-class name) new-class)
-;;;	  new-class)))))
-
-;;;
   
   (defun movitz-make-instance-funcallable (metaclass &rest all-keys &key name direct-superclasses direct-slots &allow-other-keys)
     (declare (ignore all-keys))
@@ -1134,7 +1110,7 @@
 	    (generic-function-lambda-list gf) lambda-list
 	    (generic-function-methods gf) ()
 	    (generic-function-method-class gf) method-class
-	    (generic-function-method-combination gf) (symbol-value '*the-standard-method-combination*))
+	    (generic-function-method-combination gf) *the-standard-method-combination*)
       (finalize-generic-function gf)
       gf))
 
