@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.153 2005/08/21 22:06:48 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.154 2005/08/21 23:30:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -6715,7 +6715,7 @@ and a list of any intervening unwind-protect environment-slots."
 		(let ((x (multiple-value-call #'encoded-integer-types-add
 			   (type-specifier-encode type0)
 			   (type-specifier-encode type1))))
-		  ;; (warn "thunked: ~S ~S -> ~S" term0 term1 x)
+		  #+ignore (warn "thunked: ~S ~S -> ~S" term0 term1 x)
 		  x))
 	      (list term0 term1)
 	      ))))
