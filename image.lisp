@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.103 2005/08/21 12:11:41 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.104 2005/08/21 13:47:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -923,9 +923,9 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 							:cl :muerte.cl))))
 		     (t (warn "not a symbol for plist: ~S has ~S" symbol plist)))))
 	  ;; pull in global properties
-	  (loop for var in (image-compile-time-variables *image*)
+	  (loop for (var value) on (image-compile-time-variables *image*) by #'cddr
 	      do (let ((mname (movitz-read var))
-		       (mvalue (movitz-read (symbol-value var))))
+		       (mvalue (movitz-read value)))
 		   (setf (movitz-symbol-value mname) mvalue)))
 	  (setf (movitz-symbol-value (movitz-read 'muerte::*packages*))
 	    (movitz-read (make-packages-hash))))
