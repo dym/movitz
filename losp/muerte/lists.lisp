@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.11 2005/06/12 21:27:07 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.12 2005/08/21 19:00:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -94,6 +94,7 @@
        (fast x (cddr fast))		;Fast pointer: leaps by 2.
        (slow x (cdr slow)))		;Slow pointer: leaps by 1.
       (nil)
+    (declare (type (index 2) n))
     ;; If fast pointer hits the end, return the count.
     (when (endp fast) (return n))
     (when (endp (cdr fast)) (return (+ n 1)))
@@ -127,10 +128,11 @@
        (r list)
        (i 0 (+ i 1)))
       ((atom l) r)
+    (declare (index i))
     (if (>= i n) (pop r))))
 
 (defun nthcdr (n list)
-  (do ()
+  (do ((n (check-the fixnum n)))
       ((or (null list) (not (plusp n))) list)
     (decf n)
     (setf list (cdr list))))
