@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb 19 19:09:05 2001
 ;;;;                
-;;;; $Id: hash-tables.lisp,v 1.8 2005/06/16 10:00:51 ffjeld Exp $
+;;;; $Id: hash-tables.lisp,v 1.9 2005/08/21 17:56:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -120,7 +120,7 @@
 	 (bucket-length (length bucket))
 	 (start-i2 (rem (ash (funcall (hash-table-sxhash hash-table) key) 1) bucket-length))
 	 (i2 start-i2))
-    (declare (type index i2))
+    (declare (type (index 2) i2))
     (do () (nil)
       (let ((k (svref%unsafe bucket i2)))
 	(cond

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.21 2005/06/09 22:19:05 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.22 2005/08/21 17:56:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,8 +19,8 @@
   
 (in-package muerte)
 
-(deftype index ()
-  '(integer 0 #x1ffffffe))
+(deftype index (&optional (step 1))
+  `(integer 0 ,(- #x1fffffff step)))
 
 (defun sequencep (x)
   (or (typep x 'vector)
