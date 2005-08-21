@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.34 2005/08/14 18:50:12 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.35 2005/08/21 17:55:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1310,11 +1310,13 @@ next-emf as its target for call-next-method."
 	(and (slot-missing class object slot-name 'slot-boundp) t)
       (slot-boundp-using-class class object slot))))
 
-(defmethod slot-boundp-using-class ((class standard-class) object (slot standard-effective-slot-definition))
+(defmethod slot-boundp-using-class
+    ((class standard-class) object (slot standard-effective-slot-definition))
   (not (eq (load-global-constant new-unbound-value)
 	   (standard-instance-access object (slot-definition-location slot)))))
   
-(defmethod slot-boundp-using-class ((class funcallable-standard-class) object (slot standard-effective-slot-definition))
+(defmethod slot-boundp-using-class
+    ((class funcallable-standard-class) object (slot standard-effective-slot-definition))
   (not (eq (load-global-constant new-unbound-value)
 	   (svref (std-gf-instance-slots object) (slot-definition-location slot)))))
 
@@ -1329,12 +1331,14 @@ next-emf as its target for call-next-method."
 	       object)
       (slot-makunbound-using-class class object slot))))
 
-(defmethod slot-makunbound-using-class ((class standard-class) object (slot standard-effective-slot-definition))
+(defmethod slot-makunbound-using-class
+    ((class standard-class) object (slot standard-effective-slot-definition))
   (setf (standard-instance-access object (slot-definition-location slot))
     (load-global-constant new-unbound-value))
   object)
   
-(defmethod slot-makunbound-using-class ((class funcallable-standard-class) object (slot standard-effective-slot-definition))
+(defmethod slot-makunbound-using-class
+    ((class funcallable-standard-class) object (slot standard-effective-slot-definition))
   (setf (svref (std-gf-instance-slots object) (slot-definition-location slot))
     (load-global-constant new-unbound-value))
   object)

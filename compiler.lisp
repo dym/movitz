@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.151 2005/08/21 15:27:19 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.152 2005/08/21 17:51:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -6920,6 +6920,12 @@ and a list of any intervening unwind-protect environment-slots."
 			     `((:movl :eax ,destination))))
 			  (binding
 			   (make-store-lexical destination :eax nil funobj frame-map))))))))
+	 ((and (movitz-subtypep result-type '(unsigned-byte 32))
+	       (warn "Unknown u32 ADD: ~A/~S = ~A/~S + ~A/~S"
+		      destination-location
+		      destination
+		      loc0 term0
+		      loc1 term1)))
 	 (t (append (cond
 		     ((type-specifier-singleton type0)
 		      (append (make-load-lexical term1 :eax funobj nil frame-map)
