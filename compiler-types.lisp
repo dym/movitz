@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.24 2005/08/21 17:51:34 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.25 2005/08/21 23:29:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -395,15 +395,18 @@ and any element of range1."
 			   (not (encoded-typep t nil x code0 integer-range0 members0 include0 nil)))
 			 members1)
 	      nil nil))
-     ((and (or integer-range0 integer-range1)
-	   (encoded-emptyp code0 nil members0 nil complement0)
+     ((and (encoded-emptyp code0 nil members0 include0 complement0)
 	   (encoded-emptyp code1 nil members1 nil complement1)
 	   (flet ((integer-super-p (x)
 		    (member x '(rational real number t))))
-	     (and (every #'integer-super-p include0)
-		  (every #'integer-super-p include1))))
-      (type-values () :integer-range (numscope-intersection integer-range0
-							    integer-range1)))
+	     (every #'integer-super-p include1)))
+      (type-values () :integer-range integer-range0))
+     ((and (encoded-emptyp code0 nil members0 nil complement0)
+	   (encoded-emptyp code1 nil members1 include1 complement1)
+	   (flet ((integer-super-p (x)
+		    (member x '(rational real number t))))
+	     (every #'integer-super-p include0)))
+      (type-values () :integer-range integer-range1))
      ((and (= code0 code1) (equal integer-range0 integer-range1)
 	   (equal members0 members1) (equal include0 include1)
 	   (eq complement0 complement1))
