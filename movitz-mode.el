@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep 27 18:12:17 2001
 ;;;;                
-;;;; $Id: movitz-mode.el,v 1.9 2005/04/30 21:19:42 ffjeld Exp $
+;;;; $Id: movitz-mode.el,v 1.10 2005/08/21 12:11:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -107,9 +107,10 @@
    (dont-run-bochs-p
     (message "Dumping Movitz image...done. Bootblock ID: %d. Running qemu.."
 	     (fi:eval-in-lisp "movitz::*bootblock-build*"))
-    (call-process "/bin/sh" nil 0 nil "-c"
-		  (format "DISPLAY=\"%s\" cd ~/clnet/movitz && qemu -fda los0-image -boot a"
-			  display-shortcut)))
+;;     (call-process "/bin/sh" nil 0 nil "-c"
+;; 		  (format "DISPLAY=\"%s\" cd ~/clnet/movitz && qemu -fda los0-image -boot a"
+;; 			  display-shortcut))
+    )
    (t (message "Dumping Movitz image...done. Bootblock ID: %d. Running bochs on \"%s\"..."
 	       (fi:eval-in-lisp "movitz::*bootblock-build*")
 	       display-shortcut)
@@ -212,25 +213,13 @@
      ((string= "method" defun-type)
       (message "Movitz disassembling %s %s %s..." defun-type defun-name lambda-list)
       (fi:eval-in-lisp
-       "(cl:let* ((method-name (cl:let ((cl:*package* (cl:find-package :%s)))
+       "(cl:let* ((gf-name (cl:let ((cl:*package* (cl:find-package :%s)))
                                   (cl:read-from-string \"%s\")))
-                  (gf (movitz::movitz-env-named-function method-name))
                   (qualifiers (cl:read-from-string \"%s\"))
                   (lambda-list (cl:let ((cl:*package* (cl:find-package :%s)))
                                  (cl:read-from-string \"%s\")))
-                  (specializing-lambda-list
-                     (cl:subseq lambda-list 0
-                                (cl:position-if (cl:lambda (x)
-                                                  (cl:and (cl:symbolp x)
-                                                       (cl:char= #\\& (cl:char (cl:string x) 0))))
-                                                lambda-list)))
-                  (specializers (cl:mapcar #'muerte::find-specializer
-                                  (cl:mapcar (cl:lambda (x) (cl:if (cl:consp x) (cl:second x) 'muerte.cl:t))
-                                             specializing-lambda-list)))
-                  (method (muerte::movitz-find-method gf qualifiers specializers))
-                  (funobj (muerte::movitz-slot-value method 'muerte::function))
                   (cl:*print-base* 16))
-         (movitz::movitz-disassemble-funobj funobj))"
+         (movitz::movitz-disassemble-method gf-name lambda-list qualifiers))"
        fi:package defun-name options fi:package lambda-list)
       (switch-to-buffer "*common-lisp*")
       (message "Movitz disassembling %s %s...done." defun-type defun-name))
@@ -312,6 +301,7 @@
   (put 'with-inline-assembly tag '(like prog))
   (put 'with-inline-assembly-case tag '(like prog))
   (put 'do-case tag '(like prog))
+  (put 'select tag '(like case))
   (put 'compiler-typecase tag '(like case)))
 
 

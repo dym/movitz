@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.102 2005/08/20 20:31:05 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.103 2005/08/21 12:11:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1299,6 +1299,26 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
     (assert funobj (module)
       "No load funobj found for module ~S." module)
     (movitz-disassemble-funobj funobj :name module)))
+
+(defun movitz-disassemble-method (name lambda-list &optional qualifiers)
+  (let* ((gf (or (movitz-env-named-function name)
+		 (error "No function named ~S." name)))
+	 (specializing-lambda-list
+	  (subseq lambda-list 0
+		  (position-if (lambda (x)
+				 (and (symbolp x)
+				      (char= #\& (char (string x) 0))))
+			       lambda-list)))
+	 (specializers (mapcar #'muerte::find-specializer
+			       (mapcar (lambda (x)
+					 (if (consp x)
+					     (second x)
+					   'muerte.cl::t))
+				       specializing-lambda-list)))
+	 (method (muerte::movitz-find-method gf qualifiers specializers))
+	 (funobj (muerte::movitz-slot-value method 'muerte::function))
+	 (*print-base* 16))
+    (movitz-disassemble-funobj funobj)))
 
 (defparameter *recursive-disassemble-remember-funobjs* nil)
 
