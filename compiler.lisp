@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.154 2005/08/21 23:30:04 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.155 2005/08/22 23:05:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3464,7 +3464,7 @@ bindings are located in the appropriate register, so no stack location is needed
        (t (list base-register offset))))))
 
 (defun make-load-lexical (binding result-mode funobj shared-reference-p frame-map
-			  &key tmp-register protect-registers)
+			  &key tmp-register protect-registers override-binding-type)
   "When tmp-register is provided, use that for intermediate storage required when
 loading borrowed bindings."
   #+ignore
@@ -3494,10 +3494,6 @@ loading borrowed bindings."
 		  ((and (eq result-mode :untagged-fixnum-ecx)
 			(integerp lexb-location))
 		   (cond
-;;;		    ((and binding-type
-;;;			  (not (movitz-subtypep decoded-type '(unsigned-byte 32))))
-;;;		     (error "Can't load a value of type ~S as ~S."
-;;;			    :untagged-fixnum-ecx))
 		    ((and binding-type
 			  (type-specifier-singleton decoded-type))
 		     #+ignore (warn "Immloadlex: ~S"
@@ -3505,6 +3501,12 @@ loading borrowed bindings."
 		     (make-immediate-move (movitz-immediate-value
 					   (car (type-specifier-singleton decoded-type)))
 					  :ecx))
+		    ((and binding-type
+			  (movitz-subtypep decoded-type '(and fixnum (unsigned-byte 32))))
+		     (assert (not indirect-p))
+		     (append (install-for-single-value lexb lexb-location :ecx nil)
+			     `((:shrl ,+movitz-fixnum-shift+ :ecx))))
+		    #+ignore ((warn "utecx ~S bt: ~S" lexb decoded-type))
 		    (t
 		     (assert (not indirect-p))
 		     (assert (not (member :eax protect-registers)))
@@ -3571,7 +3573,8 @@ loading borrowed bindings."
 	 (assert (not (binding-lended-p binding)) (binding)
 	   "Can't lend a forwarding-binding ~S." binding)
 	 (make-load-lexical (forwarding-binding-target binding)
-			    result-mode funobj shared-reference-p frame-map))
+			    result-mode funobj shared-reference-p frame-map
+			    :override-binding-type (binding-store-type binding)))
 	(constant-object-binding
 	 (assert (not (binding-lended-p binding)) (binding)
 	   "Can't lend a constant-reference-binding ~S." binding)
@@ -3609,7 +3612,8 @@ loading borrowed bindings."
 			      ,tmp-register)
 		       (:movl (,tmp-register -1) ,tmp-register))))))))))
 	(located-binding
-	 (let ((binding-type (binding-store-type binding))
+	 (let ((binding-type (or override-binding-type
+				 (binding-store-type binding)))
 	       (binding-location (new-binding-location binding frame-map)))
 	   #+ignore (warn "~S type: ~S ~:[~;lended~]"
 			  binding
@@ -6820,47 +6824,47 @@ and a list of any intervening unwind-protect environment-slots."
 			      `((:movl :eax ,destination))))
 			   (binding
 			    (make-store-lexical destination :eax nil funobj frame-map))))))
-	  (cond
-	   ((type-specifier-singleton result-type)
-	    ;; (break "constant add: ~S" instruction)
-	    (make-load-constant (car (type-specifier-singleton result-type))
-				destination funobj frame-map))
-	   ((movitz-subtypep type0 '(integer 0 0))
+	  (let ((constant0 (let ((x (type-specifier-singleton type0)))
+			     (when x (movitz-immediate-value (car x)))))
+		(constant1 (let ((x (type-specifier-singleton type1)))
+			     (when x (movitz-immediate-value (car x))))))
 	    (cond
-	     ((eql destination loc1)
-	      #+ignore (break "NOP add: ~S" instruction)
-	      nil)
-	     ((and (member destination-location '(:eax :ebx :ecx :edx))
-		   (member loc1 '(:eax :ebx :ecx :edx)))
-	      `((:movl ,loc1 ,destination-location)))
-	     ((integerp loc1)
-	      (make-load-lexical term1 destination-location funobj nil frame-map))
-	     #+ignore
-	     ((integerp destination-location)
-	      (make-store-lexical destination-location loc1 nil funobj frame-map))
-	     (t (break "Unknown X zero-add: ~S" instruction))))
-	   ((movitz-subtypep type1 '(integer 0 0))
-	    ;; (warn "zero-add ~S => ~S [~S]" loc0 destination-location result-type)
-	    (cond
-	     ((eql destination loc0)
-	      #+ignore (break "NOP add: ~S" instruction)
-	      nil)
-	     ((and (member destination-location '(:eax :ebx :ecx :edx))
-		   (member loc0 '(:eax :ebx :ecx :edx)))
-	      `((:movl ,loc0 ,destination-location)))
-	     ((integerp loc0)
-	      (make-load-lexical term0 destination-location funobj nil frame-map))
-	     #+ignore
-	     ((integerp destination-location)
-	      (make-store-lexical destination-location loc0 nil funobj frame-map))
-	     (t (break "Unknown Y zero-add: ~S" instruction))))
-	   ((and (movitz-subtypep type0 'fixnum)
-		 (movitz-subtypep type1 'fixnum)
-		 (movitz-subtypep result-type 'fixnum))
-	    (let ((constant0 (let ((x (type-specifier-singleton type0)))
-			       (when x (movitz-immediate-value (car x)))))
-		  (constant1 (let ((x (type-specifier-singleton type1)))
-			       (when x (movitz-immediate-value (car x))))))
+	     ((type-specifier-singleton result-type)
+	      ;; (break "constant add: ~S" instruction)
+	      (make-load-constant (car (type-specifier-singleton result-type))
+				  destination funobj frame-map))
+	     ((movitz-subtypep type0 '(integer 0 0))
+	      (cond
+	       ((eql destination loc1)
+		#+ignore (break "NOP add: ~S" instruction)
+		nil)
+	       ((and (member destination-location '(:eax :ebx :ecx :edx))
+		     (member loc1 '(:eax :ebx :ecx :edx)))
+		`((:movl ,loc1 ,destination-location)))
+	       ((integerp loc1)
+		(make-load-lexical term1 destination-location funobj nil frame-map))
+	       #+ignore
+	       ((integerp destination-location)
+		(make-store-lexical destination-location loc1 nil funobj frame-map))
+	       (t (break "Unknown X zero-add: ~S" instruction))))
+	     ((movitz-subtypep type1 '(integer 0 0))
+	      ;; (warn "zero-add ~S => ~S [~S]" loc0 destination-location result-type)
+	      (cond
+	       ((eql destination loc0)
+		#+ignore (break "NOP add: ~S" instruction)
+		nil)
+	       ((and (member destination-location '(:eax :ebx :ecx :edx))
+		     (member loc0 '(:eax :ebx :ecx :edx)))
+		`((:movl ,loc0 ,destination-location)))
+	       ((integerp loc0)
+		(make-load-lexical term0 destination-location funobj nil frame-map))
+	       #+ignore
+	       ((integerp destination-location)
+		(make-store-lexical destination-location loc0 nil funobj frame-map))
+	       (t (break "Unknown Y zero-add: ~S" instruction))))
+	     ((and (movitz-subtypep type0 'fixnum)
+		   (movitz-subtypep type1 'fixnum)
+		   (movitz-subtypep result-type 'fixnum))
 	      (assert (not (and constant0 (zerop constant0))))
 	      (assert (not (and constant1 (zerop constant1))))
 	      (cond
@@ -6933,6 +6937,18 @@ and a list of any intervening unwind-protect environment-slots."
 		       constant1
 		       (member loc0 '(:eax :ebx :ecx :edx)))
 		  `((:leal (,loc0 ,constant1) ,destination-location)))
+		 ((and (member destination-location '(:eax :ebx :ecx :edx))
+		       constant0
+		       (eq :argument-stack (operator loc1)))
+		  `((:movl (:ebp ,(argument-stack-offset (binding-target term1)))
+			   ,destination-location)
+		    (:addl ,constant0 ,destination-location)))
+		 ((and (member destination-location '(:eax :ebx :ecx :edx))
+		       constant1
+		       (eq :argument-stack (operator loc0)))
+		  `((:movl (:ebp ,(argument-stack-offset (binding-target term0)))
+			   ,destination-location)
+		    (:addl ,constant1 ,destination-location)))
 		 (t (warn "Unknown fixnum ADD: ~A/~S = ~A/~S + ~A/~S"
 			  destination-location
 			  destination
@@ -6979,8 +6995,28 @@ and a list of any intervening unwind-protect environment-slots."
 				 (binding-lended-p (binding-target term0))
 				 (binding-lended-p (binding-target term1)))))
 	       (t (warn "Unknown fixnum add: ~S" instruction)
-		  (make-default-add)))))
-	   (t (make-default-add))))))))
+		  (make-default-add))))
+	     #+ignore
+	     ((and (movitz-subtypep result-type '(unsigned-byte 32))
+		   (movitz-subtypep type0 'fixnum)
+		   (movitz-subtypep type1 'fixnum))
+	      (cond
+	       ((and (not (binding-lended-p (binding-target term0)))
+		     (not (binding-lended-p (binding-target term1)))
+		     (not (and (bindingp destination)
+			       (binding-lended-p (binding-target destination)))))
+		(cond
+		 ((and (not constant0)
+		       (not constant1)
+		       (member destination-location '(:eax :ebx :edx)))
+		  (print-code instruction
+			      (append (make-load-lexical term0 :untagged-fixnum-ecx funobj nil frame-map)
+				      `((,*compiler-local-segment-prefix*
+					 :movl :ecx (:edi ,(global-constant-offset 'raw-scratch0))))
+				      )))
+		 (t (make-default-add))))
+	       (t (make-default-add))))
+	     (t (make-default-add)))))))))
 
 ;;;;;;;
 
