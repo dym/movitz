@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.155 2005/08/22 23:05:35 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.156 2005/08/23 21:42:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -455,11 +455,18 @@ Side-effects each binding's binding-store-type."
 			  (binding-store-type binding)))
 		  ((typep binding 'function-argument)
 		   t)
+		  ((let ((analysis (gethash binding binding-usage)))
+		     (assert (and (and analysis
+				       (null (type-analysis-thunks analysis))))
+			 (binding)
+		       "Can't resolve unresolved binding ~S." binding)))
+		  (*compiler-trust-user-type-declarations-p*
+		   (let ((analysis (gethash binding binding-usage)))
+		     (multiple-value-call #'encoded-type-decode
+		       (apply #'encoded-types-and
+			      (append (type-analysis-declared-encoded-type analysis)
+				      (type-analysis-encoded-type analysis))))))
 		  (t (let ((analysis (gethash binding binding-usage)))
-		       (assert (and (and analysis
-					 (null (type-analysis-thunks analysis))))
-			   (binding)
-			 "Can't resolve unresolved binding ~S." binding)
 		       (apply #'encoded-type-decode
 			      (type-analysis-encoded-type analysis))))))
 	       (type-is-t (type-specifier)
@@ -523,8 +530,22 @@ Side-effects each binding's binding-store-type."
 					 if (not (every #'binding-resolved-p thunk-args))
 					 collect (cons thunk thunk-args)
 					 else
-					 do (setf (type-analysis-encoded-type analysis)
-					      (multiple-value-list
+					 do #+ignore
+					 (warn "because ~S=>~S->~S completing ~S: ~S and ~S"
+					       thunk thunk-args
+					       (mapcar #'binding-resolve thunk-args)
+					       binding
+					       (type-analysis-declared-encoded-type analysis)
+					       (multiple-value-list
+						(multiple-value-call
+						    #'encoded-types-or
+						  (values-list
+						   (type-analysis-encoded-type analysis))
+						  (type-specifier-encode
+						   (apply thunk (mapcar #'binding-resolve
+									thunk-args))))))
+					 (setf (type-analysis-encoded-type analysis)
+					   (multiple-value-list
 					       (multiple-value-call
 						   #'encoded-types-and
 						 (values-list
@@ -5564,6 +5585,8 @@ preceding code). As secondary value, returns the new :returns value."
     #+ignore (when (and (eq result-mode :function)
 			(eq operator (movitz-print (movitz-funobj-name funobj))))
 	       (warn "Tail-recursive call detected."))
+    (when (eq operator 'muerte.cl::declare)
+      (break "Compiling funcall to ~S" 'muerte.cl::declare))
     (pushnew (cons operator muerte.cl::*compile-file-pathname*)
 	     (image-called-functions *image*)
 	     :key #'first)
@@ -6406,6 +6429,10 @@ and a list of any intervening unwind-protect environment-slots."
 	(values binding init-with-type)	)
        ((and init-with-type (not (bindingp init-with-type)))
 	(values binding init-with-type))
+       ((and init-with-type
+	     (bindingp init-with-type)
+	     (binding-store-type init-with-type))
+	(apply #'encoded-type-decode (binding-store-type init-with-type)))
        (t (values binding t
 		  (lambda (x) x)
 		  (list init-with-register)))))
