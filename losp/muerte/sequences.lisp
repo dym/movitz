@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.24 2005/08/22 17:03:00 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.25 2005/08/23 16:09:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -121,44 +121,46 @@
 			  (result (funcall-function (sequence-ref (prog1 index (incf index)))
 						    (sequence-ref (prog1 index (incf index))))
 				  (funcall-function result (sequence-ref (prog1 index (incf index))))))
-			((= index end) result))))))))))
+			((= index end) result)
+		      (declare (index index)))))))))))
    (t (function sequence &key (key 'identity) from-end
 		(start 0) (end (length sequence))
 		(initial-value nil initial-value-p))
       (when from-end
 	(error "REDUCE from-end is not implemented."))
-      (with-funcallable (funcall-function function)
-	(with-funcallable (key)
-	  (case (- end start)
-	    (0 (if initial-value-p
-		   initial-value
-		 (funcall-function)))
-	    (1 (if initial-value-p
-		   (funcall-function initial-value (key (elt sequence start)))
-		 (key (elt sequence start))))
-	    (t (sequence-dispatch sequence
-		 (list
-		  (do* ((counter (1+ start) (1+ counter))
-			(list (nthcdr start sequence))
-			(result (funcall-function (if initial-value-p
-						      initial-value
-						    (key (pop list)))
-						  (key (pop list)))
-				(funcall-function result (key (pop list)))))
-		      ((or (null list)
-			   (= end counter))
-		       result)
-		    (declare (index counter))))
-		 (vector
-		  (with-subvector-accessor (sequence-ref sequence start end)
-		    (do* ((index start)
+      (let ((start (check-the index start)))
+	(with-funcallable (funcall-function function)
+	  (with-funcallable (key)
+	    (case (- end start)
+	      (0 (if initial-value-p
+		     initial-value
+		   (funcall-function)))
+	      (1 (if initial-value-p
+		     (funcall-function initial-value (key (elt sequence start)))
+		   (key (elt sequence start))))
+	      (t (sequence-dispatch sequence
+		   (list
+		    (do* ((counter (1+ start) (1+ counter))
+			  (list (nthcdr start sequence))
 			  (result (funcall-function (if initial-value-p
 							initial-value
+						      (key (pop list)))
+						    (key (pop list)))
+				  (funcall-function result (key (pop list)))))
+			((or (null list)
+			     (= end counter))
+			 result)
+		      (declare (index counter))))
+		   (vector
+		    (with-subvector-accessor (sequence-ref sequence start end)
+		      (do* ((index start)
+			    (result (funcall-function (if initial-value-p
+							  initial-value
+							(key (sequence-ref (prog1 index (incf index)))))
 						      (key (sequence-ref (prog1 index (incf index)))))
-						    (key (sequence-ref (prog1 index (incf index)))))
-				  (funcall-function result (sequence-ref (prog1 index (incf index))))))
-			((= index end) result)
-		      (declare (index index)))))))))))))
+				    (funcall-function result (sequence-ref (prog1 index (incf index))))))
+			  ((= index end) result)
+			(declare (index index))))))))))))))
 
 (defun subseq (sequence start &optional end)
   (sequence-dispatch sequence
@@ -591,6 +593,7 @@
 	      (i 0 (1+ i))
 	      (p first-sequence (cdr p)))
 	     ((or (endp p) (>= i end)) result-sequence)
+	   (declare (index i))
 	   (setf (result-ref i) (map (car p))))))
       ((list vector)
        (with-subvector-accessor (first-ref first-sequence)
@@ -598,6 +601,7 @@
 	      (i 0 (1+ i))
 	      (p result-sequence (cdr p)))
 	     ((or (endp p) (>= i end)) result-sequence)
+	   (declare (index i))
 	   (setf (car p) (map (first-ref i)))))))))
 
 (defun map-for-nil (function first-sequence &rest more-sequences)
@@ -629,6 +633,7 @@
 		    (j 0 (1+ j)))
 		   ((or (>= i len1)
 			(>= j len2)))
+		 (declare (index i j))
 		 (mapf (first-sequence-ref i) (second-sequence-ref j))))))
 	  )))
    (t (function first-sequence &rest more-sequences)
@@ -665,6 +670,7 @@
 		   ((or (>= i len1)
 			(>= j len2))
 		    (nreverse result))
+		 (declare (index i j))
 		 (push (mapf (first-sequence-ref i) (second-sequence-ref j))
 		       result))))))
 	((list vector)
@@ -676,6 +682,7 @@
 		  (j 0 (1+ j)))
 		 ((or (endp p) (>= j len2))
 		  (nreverse result))
+	       (declare (index j))
 	       (push (mapf (car p) (second-sequence-ref j))
 		     result)))))
 	((vector list)
@@ -687,6 +694,7 @@
 		  (j 0 (1+ j)))
 		 ((or (endp p) (>= j len1))
 		  (nreverse result))
+	       (declare (index j))
 	       (push (mapf (first-sequence-ref j) (car p))
 		     result)))))))
    (t (function first-sequence &rest more-sequences)
@@ -703,10 +711,12 @@
 	    (vector
 	     (do ((i 0 (1+ i)))
 		 ((>= i (length result)) result)
+	       (declare (index i))
 	       (setf (char result i) (mapf (aref first-sequence i)))))
 	    (list
 	     (do ((i 0 (1+ i)))
 		 ((>= i (length result)) result)
+	       (declare (index i))
 	       (setf (char result i) (mapf (pop first-sequence)))))))))
    (t (function first-sequence &rest more-sequences)
       (declare (ignore function first-sequence more-sequences))
@@ -727,116 +737,127 @@
 
 (defun fill (sequence item &key (start 0) end)
   "=> sequence"
-  (etypecase sequence
-    (list
-     (do ((p (nthcdr start sequence) (cdr p))
-	  (i start (1+ i)))
-	 ((or (null p) (and end (>= i end))))
-       (setf (car p) item)))
-    ((simple-array (unsigned-byte 32) 1)
-     (let* ((length (array-dimension sequence 0))
-	    (end (or end length)))
-       (unless (<= 0 end length)
-	 (error 'index-out-of-range :index end :range length))
-       (do ((i start (1+ i)))
-	   ((>= i end))
-	 (declare (type index i))
-	 (setf (memref sequence (movitz-type-slot-offset 'movitz-basic-vector 'data)
-		       :index i
-		       :type :unsigned-byte32)
-	   item))))
-    (vector
-     (let ((end (or end (length sequence))))
-       (with-subvector-accessor (sequence-ref sequence start end)
+  (let ((start (check-the index start)))
+    (etypecase sequence
+      (list
+       (do ((p (nthcdr start sequence) (cdr p))
+	    (i start (1+ i)))
+	   ((or (null p) (and end (>= i end))))
+	 (declare (index i))
+	 (setf (car p) item)))
+      ((simple-array (unsigned-byte 32) 1)
+       (let* ((length (array-dimension sequence 0))
+	      (end (or end length)))
+	 (unless (<= 0 end length)
+	   (error 'index-out-of-range :index end :range length))
 	 (do ((i start (1+ i)))
 	     ((>= i end))
 	   (declare (index i))
-	   (setf (sequence-ref i) item))))))
+	   (setf (memref sequence (movitz-type-slot-offset 'movitz-basic-vector 'data)
+			 :index i
+			 :type :unsigned-byte32)
+	     item))))
+      (vector
+       (let ((end (or end (length sequence))))
+	 (with-subvector-accessor (sequence-ref sequence start end)
+	   (do ((i start (1+ i)))
+	       ((>= i end))
+	     (declare (index i))
+	     (setf (sequence-ref i) item)))))))
   sequence)
 
 (defun replace (sequence-1 sequence-2 &key (start1 0) end1 (start2 0) end2)
-  (cond
-   ((and (eq sequence-1 sequence-2)
-	 (<= start2 start1 (or end2 start1)))
-    (if (= start1 start2)
-	sequence-1			; no need to copy anything
-      ;; must copy in reverse direction
-      (sequence-dispatch sequence-1
-	(vector
-	 (let ((l (length sequence-1)))
-	   (setf end1 (or end1 l)
-		 end2 (or end2 l))
-	   (assert (<= 0 start2 end2 l)))
-	 (with-subvector-accessor (sequence-1-ref sequence-1 start1 end1)
-	   (do* ((length (min (- end1 start1) (- end2 start2)))
-		 (i (+ start1 length -1) (1- i))
-		 (j (+ start2 length -1) (1- j)))
-	       ((< i start1) sequence-1)
-	     (declare (index i j length))
-	     (setf (sequence-1-ref i)
-	       (sequence-1-ref j)))))
-	(list
-	 (let* ((length (length sequence-1))
-		(reverse-list (nreverse sequence-1))
-		(size (min (- (or end1 length) start1) (- (or end2 length) start2))))
-	   (do ((p (nthcdr (- length start1 size) reverse-list) (cdr p))
-		(q (nthcdr (- length start2 size) reverse-list) (cdr q))
-		(i 0 (1+ i)))
-	       ((>= i size) (nreverse reverse-list))
-	     (setf (car p) (car q))))))))
-   ;; (not (eq sequence-1 sequence-2)) ..
-   (t (sequence-dispatch sequence-1
-	(vector
-	 (setf end1 (or end1 (length sequence-1)))
-	 (sequence-dispatch sequence-2
-	   (vector
-	    (setf end2 (or end2 (length sequence-2)))
-	    (with-subvector-accessor (sequence-1-ref sequence-1 start1 end1)
-	      (with-subvector-accessor (sequence-2-ref sequence-2 start2 end2)
-		(cond
-		 ((< (- end1 start1) (- end2 start2))
-		  (do ((i start1 (1+ i))
-		       (j start2 (1+ j)))
-		      ((>= i end1) sequence-1)
-		    (setf (sequence-1-ref i) (sequence-2-ref j))))
-		 (t (do ((i start1 (1+ i))
+  (let ((start1 (check-the index start1))
+	(start2 (check-the index start2)))
+    (cond
+     ((and (eq sequence-1 sequence-2)
+	   (<= start2 start1 (or end2 start1)))
+      (if (= start1 start2)
+	  sequence-1			; no need to copy anything
+	;; must copy in reverse direction
+	(sequence-dispatch sequence-1
+	  (vector
+	   (let ((l (length sequence-1)))
+	     (setf end1 (or end1 l)
+		   end2 (or end2 l))
+	     (assert (<= 0 start2 end2 l)))
+	   (with-subvector-accessor (sequence-1-ref sequence-1 start1 end1)
+	     (do* ((length (min (- end1 start1) (- end2 start2)))
+		   (i (+ start1 length -1) (1- i))
+		   (j (+ start2 length -1) (1- j)))
+		 ((< i start1) sequence-1)
+	       (declare (index i j length))
+	       (setf (sequence-1-ref i)
+		 (sequence-1-ref j)))))
+	  (list
+	   (let* ((length (length sequence-1))
+		  (reverse-list (nreverse sequence-1))
+		  (size (min (- (or end1 length) start1) (- (or end2 length) start2))))
+	     (do ((p (nthcdr (- length start1 size) reverse-list) (cdr p))
+		  (q (nthcdr (- length start2 size) reverse-list) (cdr q))
+		  (i 0 (1+ i)))
+		 ((>= i size) (nreverse reverse-list))
+	       (delcare (index i))
+	       (setf (car p) (car q))))))))
+     ;; (not (eq sequence-1 sequence-2)) ..
+     (t (sequence-dispatch sequence-1
+	  (vector
+	   (setf end1 (or end1 (length sequence-1)))
+	   (sequence-dispatch sequence-2
+	     (vector
+	      (setf end2 (or end2 (length sequence-2)))
+	      (with-subvector-accessor (sequence-1-ref sequence-1 start1 end1)
+		(with-subvector-accessor (sequence-2-ref sequence-2 start2 end2)
+		  (cond
+		   ((< (- end1 start1) (- end2 start2))
+		    (do ((i start1 (1+ i))
 			 (j start2 (1+ j)))
-			((>= j end2) sequence-1)
-		      (setf (sequence-1-ref i) (sequence-2-ref j))))))))
-	   (list
-	    (with-subvector-accessor (sequence-1-ref sequence-1 start1 end1)
-	      (if (not end2)
+			((>= i end1) sequence-1)
+		      (decare (index i j))
+		      (setf (sequence-1-ref i) (sequence-2-ref j))))
+		   (t (do ((i start1 (1+ i))
+			   (j start2 (1+ j)))
+			  ((>= j end2) sequence-1)
+			(decare (index i j))
+			(setf (sequence-1-ref i) (sequence-2-ref j))))))))
+	     (list
+	      (with-subvector-accessor (sequence-1-ref sequence-1 start1 end1)
+		(if (not end2)
+		    (do ((i start1 (1+ i))
+			 (p (nthcdr start2 sequence-2) (cdr p)))
+			((or (null p) (>= i end1)) sequence-1)
+		      (declare (index i))
+		      (setf (sequence-1-ref i) (car p)))
 		  (do ((i start1 (1+ i))
+		       (j start2 (1+ j))
 		       (p (nthcdr start2 sequence-2) (cdr p)))
-		      ((or (null p) (>= i end1)) sequence-1)
-		    (setf (sequence-1-ref i) (car p)))
-		(do ((i start1 (1+ i))
-		     (j start2 (1+ j))
-		     (p (nthcdr start2 sequence-2) (cdr p)))
-		    ((or (>= i end1) (endp p) (>= j end2)) sequence-1)
-		  (setf (sequence-1-ref i) (car p))))))))
-	(list
-	 (sequence-dispatch sequence-2
-	   (vector
-	    (setf end2 (or end2 (length sequence-2)))
-	    (with-subvector-accessor (sequence-2-ref sequence-2 start2 end2)
-	      (do ((p (nthcdr start1 sequence-1) (cdr p))
-		   (i start1 (1+ i))
-		   (j start2 (1+ j)))
-		  ((or (endp p) (>= j end2) (and end1 (>= i end1)))
+		      ((or (>= i end1) (endp p) (>= j end2)) sequence-1)
+		    (declare (index i j))
+		    (setf (sequence-1-ref i) (car p))))))))
+	  (list
+	   (sequence-dispatch sequence-2
+	     (vector
+	      (setf end2 (or end2 (length sequence-2)))
+	      (with-subvector-accessor (sequence-2-ref sequence-2 start2 end2)
+		(do ((p (nthcdr start1 sequence-1) (cdr p))
+		     (i start1 (1+ i))
+		     (j start2 (1+ j)))
+		    ((or (endp p) (>= j end2) (and end1 (>= i end1)))
+		     sequence-1)
+		  (declare (index i j))
+		  (setf (car p) (sequence-2-ref j)))))
+	     (list
+	      (do ((i start1 (1+ i))
+		   (j start2 (1+ j))
+		   (p (nthcdr start1 sequence-1) (cdr p))
+		   (q (nthcdr start2 sequence-2) (cdr q)))
+		  ((or (endp p) (endp q)
+		       (and end1 (>= i end1))
+		       (and end2 (>= j end2)))
 		   sequence-1)
-		(setf (car p) (sequence-2-ref j)))))
-	   (list
-	    (do ((i start1 (1+ i))
-		 (j start2 (1+ j))
-		 (p (nthcdr start1 sequence-1) (cdr p))
-		 (q (nthcdr start2 sequence-2) (cdr q)))
-		((or (endp p) (endp q)
-		     (and end1 (>= i end1))
-		     (and end2 (>= j end2)))
-		 sequence-1)
-	      (setf (car p) (car q)))))))
-      sequence-1)))
+		(declare (index i j))
+		(setf (car p) (car q)))))))
+	sequence-1))))
 
 (defun find (item sequence &key from-end (test 'eql) (start 0) end (key 'identity))
   (numargs-case
@@ -852,37 +873,41 @@
 	   (when (eql item x)
 	     (return x))))))
    (t (item sequence &key from-end (test 'eql) (start 0) end (key 'identity))
-      (with-funcallable (test)
-	(with-funcallable (key)
-	  (sequence-dispatch sequence
-	    (vector
-	     (setf end (or end (length sequence)))
-	     (with-subvector-accessor (sequence-ref sequence start end)
-	       (if (not from-end)
-		   (do ((i start (1+ i)))
-		       ((>= i end) nil)
-		     (when (test item (key (aref sequence i)))
-		       (return (sequence-ref i))))
-		 (do ((i (1- end) (1- i)))
-		     ((< i start) nil)
-		   (when (test item (key (sequence-ref i)))
-		     (return (sequence-ref i)))))))
-	    (list
-	     (if end
-		 (do ((p (nthcdr start sequence) (cdr p))
-		      (i start (1+ i)))
-		     ((or (>= i end) (endp p)) nil)
+      (let ((start (check-the index start)))
+	(with-funcallable (test)
+	  (with-funcallable (key)
+	    (sequence-dispatch sequence
+	      (vector
+	       (setf end (or end (length sequence)))
+	       (with-subvector-accessor (sequence-ref sequence start end)
+		 (if (not from-end)
+		     (do ((i start (1+ i)))
+			 ((>= i end) nil)
+		       (declare (index i))
+		       (when (test item (key (aref sequence i)))
+			 (return (sequence-ref i))))
+		   (do ((i (1- end) (1- i)))
+		       ((< i start) nil)
+		     (declare (index i))
+		     (when (test item (key (sequence-ref i)))
+		       (return (sequence-ref i)))))))
+	      (list
+	       (if end
+		   (do ((p (nthcdr start sequence) (cdr p))
+			(i start (1+ i)))
+		       ((or (>= i end) (endp p)) nil)
+		     (declare (index i))
+		     (when (test item (key (car p)))
+		       (return (or (and from-end
+					(find item (cdr p)
+					      :from-end t :test test
+					      :key key :end (- end i 1)))
+				   (car p)))))
+		 (do ((p (nthcdr start sequence) (cdr p)))
+		     ((endp p) nil)
 		   (when (test item (key (car p)))
-		     (return (or (and from-end
-				      (find item (cdr p)
-					    :from-end t :test test
-					    :key key :end (- end i 1)))
-				 (car p)))))
-	       (do ((p (nthcdr start sequence) (cdr p)))
-		   ((endp p) nil)
-		 (when (test item (key (car p)))
-		   (return (or (and from-end (find item (cdr p) :from-end t :test test :key key))
-			       (car p)))))))))))))
+		     (return (or (and from-end (find item (cdr p) :from-end t :test test :key key))
+				 (car p))))))))))))))
   
 
 (defun find-if (predicate sequence &key from-end (start 0) end (key 'identity))
@@ -895,6 +920,7 @@
 	     (with-subvector-accessor (sequence-ref sequence 0 end)
 	       (do ((i 0 (1+ i)))
 		   ((>= i end))
+		 (declare (index i))
 		 (let ((x (sequence-ref i)))
 		   (when (predicate x) (return x)))))))
 	  (list
@@ -903,38 +929,42 @@
 	     (let ((x (car p)))
 	       (when (predicate x) (return x))))))))
    (t (predicate sequence &key from-end (start 0) end (key 'identity))
-      (with-funcallable (predicate)
-	(with-funcallable (key)
-	  (sequence-dispatch sequence
-	    (vector
-	     (setf end (or end (length sequence)))
-	     (with-subvector-accessor (sequence-ref sequence start end)
-	       (cond
-		((not from-end)
-		 (do ((i start (1+ i)))
-		     ((>= i end))
-		   (when (predicate (key (sequence-ref i)))
-		     (return (sequence-ref i)))))
-		(t (do ((i (1- end) (1- i)))
-		       ((< i start))
+      (let ((start (check-the index start)))
+	(with-funcallable (predicate)
+	  (with-funcallable (key)
+	    (sequence-dispatch sequence
+	      (vector
+	       (setf end (or end (length sequence)))
+	       (with-subvector-accessor (sequence-ref sequence start end)
+		 (cond
+		  ((not from-end)
+		   (do ((i start (1+ i)))
+		       ((>= i end))
+		     (declare (index i))
 		     (when (predicate (key (sequence-ref i)))
-		       (return (sequence-ref i))))))))
-	    (list
-	     (cond
-	      (end
-	       (do ((p (nthcdr start sequence) (cdr p))
-		    (i start (1+ i)))
-		   ((or (>= i end) (endp p)) nil)
-		 (when (predicate (key (car p)))
-		   (return (or (and from-end
-				    (find-if predicate (cdr p) :end (- end i 1) :key key :from-end t))
-			       (car p))))))
-	      (t (do ((p (nthcdr start sequence) (cdr p)))
-		     ((endp p) nil)
+		       (return (sequence-ref i)))))
+		  (t (do ((i (1- end) (1- i)))
+			 ((< i start))
+		       (declare (index i))
+		       (when (predicate (key (sequence-ref i)))
+			 (return (sequence-ref i))))))))
+	      (list
+	       (cond
+		(end
+		 (do ((p (nthcdr start sequence) (cdr p))
+		      (i start (1+ i)))
+		     ((or (>= i end) (endp p)) nil)
+		   (declare (index i))
 		   (when (predicate (key (car p)))
 		     (return (or (and from-end
-				      (find-if predicate (cdr p) :key key :from-end t))
-				 (car p))))))))))))))
+				      (find-if predicate (cdr p) :end (- end i 1) :key key :from-end t))
+				 (car p))))))
+		(t (do ((p (nthcdr start sequence) (cdr p)))
+		       ((endp p) nil)
+		     (when (predicate (key (car p)))
+		       (return (or (and from-end
+					(find-if predicate (cdr p) :key key :from-end t))
+				   (car p)))))))))))))))
 
 (defun find-if-not (predicate sequence &rest key-args)
   (declare (dynamic-extent key-args))
@@ -942,38 +972,43 @@
   
 (defun count (item sequence &key (start 0) end (test 'eql) (key 'identity) test-not from-end)
   (declare (ignore test-not))
-  (with-funcallable (test)
-    (with-funcallable (key)
-      (sequence-dispatch sequence
-	(vector
-	 (setf end (or end (length sequence)))
-	 (with-subvector-accessor (sequence-ref sequence start end)
+  (let ((start (check-the index start)))
+    (with-funcallable (test)
+      (with-funcallable (key)
+	(sequence-dispatch sequence
+	  (vector
+	   (let ((end (check-the index (or end (length sequence)))))
+	     (with-subvector-accessor (sequence-ref sequence start end)
+	       (cond
+		((not from-end)
+		 (do ((i start (1+ i))
+		      (n 0))
+		     ((>= i end) n)
+		   (declare (index i n))
+		   (when (test item (key (sequence-ref i)))
+		     (incf n))))
+		(t (do ((i (1- end) (1- i))
+			(n 0))
+		       ((< i start) n)
+		     (declare (index i n))
+		     (when (test item (key (sequence-ref i)))
+		       (incf n))))))))
+	  (list
 	   (cond
-	    ((not from-end)
-	     (do ((i start (1+ i))
+	    ((not end)
+	     (do ((p (nthcdr start sequence) (cdr p))
 		  (n 0))
-		 ((>= i end) n)
-	       (when (test item (key (sequence-ref i)))
-		 (incf n))))
-	    (t (do ((i (1- end) (1- i))
-		    (n 0))
-		   ((< i start) n)
-		 (when (test item (key (sequence-ref i)))
-		   (incf n)))))))
-	(list
-	 (cond
-	  ((not end)
-	   (do ((p (nthcdr start sequence) (cdr p))
-		(n 0))
-	       ((endp p) n)
-	     (when (test item (key (car p)))
-	       (incf n))))
-	  (t (do ((p (nthcdr start sequence) (cdr p))
-		  (i start (1+ i))
-		  (n 0))
-		 ((or (endp p) (>= i end)) n)
+		 ((endp p) n)
+	       (declare (index n))
 	       (when (test item (key (car p)))
-		 (incf n))))))))))
+		 (incf n))))
+	    (t (do ((p (nthcdr start sequence) (cdr p))
+		    (i start (1+ i))
+		    (n 0))
+		   ((or (endp p) (>= i end)) n)
+		 (declare (index i n))
+		 (when (test item (key (car p)))
+		   (incf n)))))))))))
 
 (defun count-if (predicate sequence &key (start 0) end (key 'identity) #+ignore from-end)
   (numargs-case
@@ -982,6 +1017,7 @@
 	(sequence-dispatch sequence
 	  (list
 	   (let ((count 0))
+	     (declare (index count))
 	     (dolist (x sequence)
 	       (when (predicate x)
 		 (incf count)))
@@ -989,29 +1025,34 @@
 	  (vector
 	   (with-subvector-accessor (sequence-ref sequence)
 	     (let ((count 0))
+	       (declare (index count))
 	       (dotimes (i (length sequence))
 		 (when (predicate (sequence-ref i))
 		   (incf count)))
 	       count))))))
    (t (predicate sequence &key (start 0) end (key 'identity) #+ignore from-end)
-      (with-funcallable (predicate)
-	(with-funcallable (key)
-	  (sequence-dispatch sequence
-	    (list
-	     (if (not end)
-		 (do ((n 0)
-		      (p (nthcdr start sequence) (cdr p)))
-		     ((endp p) n)
-		   (when (predicate (key (car p)))
-		     (incf n)))
-	       (do ((n 0)
-		    (i start (1+ i))
-		    (p (nthcdr start sequence) (cdr p)))
-		   ((or (endp p) (>= i end)) n)
-		 (when (predicate (key (car p)))
-		   (incf n)))))
-	    (vector
-	     (error "vector count-if not implemented."))))))))
+      (let ((start (check-the index start)))
+	(with-funcallable (predicate)
+	  (with-funcallable (key)
+	    (sequence-dispatch sequence
+	      (list
+	       (if (not end)
+		   (do ((n 0)
+			(p (nthcdr start sequence) (cdr p)))
+		       ((endp p) n)
+		     (declare (index n))
+		     (when (predicate (key (car p)))
+		       (incf n)))
+		 (let ((end (check-the index end)))
+		   (do ((n 0)
+			(i start (1+ i))
+			(p (nthcdr start sequence) (cdr p)))
+		       ((or (endp p) (>= i end)) n)
+		     (declare (index i n))
+		     (when (predicate (key (car p)))
+		       (incf n))))))
+	      (vector
+	       (error "vector count-if not implemented.")))))))))
 
 
 (macrolet ((every-some-body ()
@@ -1028,6 +1069,7 @@
 		     (do* ((l (length first-sequence))
 			   (i 0 (1+ i)))
 			 ((= l i) (default-value))
+		       (declare (index i l))
 		       (test-return (predicate (aref first-sequence i)))))))
 		 ((null (cdr more-sequences)) ; 2 sequences case
 		  (let ((second-sequence (first more-sequences)))
@@ -1041,6 +1083,7 @@
 		       (do ((end (min (length first-sequence) (length second-sequence)))
 			    (i 0 (1+ i)))
 			   ((>= i end) (default-value))
+			 (declare (index i))
 			 (test-return (predicate (aref first-sequence i)
 						 (aref second-sequence i)))))
 		      ((list vector)
@@ -1048,12 +1091,14 @@
 			    (i 0 (1+ i))
 			    (p first-sequence (cdr p)))
 			   ((or (endp p) (>= i end)) (default-value))
+			 (declare (index i))
 			 (test-return (predicate (car p) (aref second-sequence i)))))
 		      ((vector list)
 		       (do ((end (length first-sequence))
 			    (i 0 (1+ i))
 			    (p second-sequence (cdr p)))
 			   ((or (endp p) (>= i end)) (default-value))
+			 (declare (index i))
 			 (test-return (predicate (aref first-sequence i) (car p))))))))
 		 (t (flet ((next (p)
 			     (sequence-dispatch p
@@ -1080,6 +1125,7 @@
 				 (when (seqend p i)
 				   (return t))))
 			   (default-value))
+			(declare (index i))
 			(do ((x arg3+ (cdr x))
 			     (y p3+ (cdr y)))
 			    ((null x))
@@ -1120,6 +1166,7 @@
 		 (p0 list (cdr p0))
 		 (p1 (cdr list) (cdr p1)))
 		((or (endp p1) (and end (>= i end))) list)
+	      (declare (index i))
 	      (when (test item (key (car p1)))
 		(return
 		  ;; reiterate from <list> to <p1>, consing up a copy, with
@@ -1147,6 +1194,7 @@
 	   (p0 list (cdr p0))
 	   (p1 (cdr list) (cdr p1)))
 	  ((endp p1) list)
+	(declare (index i))
 	(when (eql item (car p1))
 	  (return
 	    ;; reiterate from <list> to <p1>, consing up a copy, with
@@ -1199,6 +1247,7 @@
 		 (p0 list (cdr p0))
 		 (p1 (cdr list) (cdr p1)))
 		((or (endp p1) (and end (>= i end))) list)
+	      (declare (index i))
 	      (when (test (key (car p1)))
 		(return
 		  ;; reiterate from <list> to <p1>, consing up a copy, with
@@ -1246,6 +1295,7 @@
 	(with-funcallable (key)
 	  (let ((i 0)			; for end checking
 		(c 0))			; for count checking
+	    (declare (index i c))
 	    (cond
 	     ((= 0 start)
 	      ;; delete from head..
@@ -1286,6 +1336,7 @@
 	(with-funcallable (key)
 	  (let ((i 0)			; for end checking
 		(c 0))			; for count checking
+	    (declare (index i c))
 	    (cond
 	     ((= 0 start)
 	      ;; delete from head..
@@ -1398,112 +1449,121 @@
 		  (complement test-not)
 		test)))
     (declare (dynamic-extent test))
-    (sequence-dispatch sequence-2
-      (vector
-       (unless end1
-	 (setf end1 (length sequence-1)))
-       (unless end2
-	 (setf end2 (length sequence-2)))
-       (do ((stop (- end2 (- end1 start1 1)))
-	    (i start2 (1+ i)))
-	   ((>= i stop) nil)
-	 (let ((mismatch-position (mismatch sequence-1 sequence-2
-					    :start1 start1 :end1 end1
-					    :start2 i :end2 end2
-					    :key key :test test)))
-	   (when (or (not mismatch-position)
-		     (= mismatch-position end1))
-	     (return (or (and from-end
-			      (search sequence-1 sequence-2
-				      :from-end t :test test :key key
-				      :start1 start1 :end1 end1
-				      :start2 (1+ i) :end2 end2))
-			 i))))))
-      (list
-       (unless end1
-	 (setf end1 (length sequence-1)))
-       (do ((stop (and end2 (- end2 start2 (- end1 start1 1))))
-	    (p (nthcdr start2 sequence-2) (cdr p))
-	    (i 0 (1+ i)))
-	   ((or (endp p) (and stop (>= i stop))) nil)
-	 (let ((mismatch-position (mismatch sequence-1 p
-					    :start1 start1 :end1 end1
-					    :key key :test test)))
-	   (when (or (not mismatch-position)
-		     (= mismatch-position end1))
-	     (return (+ start2 i
-			(or (and from-end
-				 (search sequence-1 p
-					 :start2 1 :end2 (and end2 (- end2 i start2))
-					 :from-end t :test test :key key
-					 :start1 start1 :end1 end1))
-			    0))))))))))
-
+    (let ((start1 (check-the index start1))
+	  (start2 (check-the index start2)))
+      (sequence-dispatch sequence-2
+	(vector
+	 (let ((end1 (check-the index (or end1 (length sequence-1))))
+	       (end2 (check-the index (or end2 (length sequence-2)))))
+	   (do ((stop (- end2 (- end1 start1 1)))
+		(i start2 (1+ i)))
+	       ((>= i stop) nil)
+	     (declare (index i))
+	     (let ((mismatch-position (mismatch sequence-1 sequence-2
+						:start1 start1 :end1 end1
+						:start2 i :end2 end2
+						:key key :test test)))
+	       (when (or (not mismatch-position)
+			 (= mismatch-position end1))
+		 (return (or (and from-end
+				  (search sequence-1 sequence-2
+					  :from-end t :test test :key key
+					  :start1 start1 :end1 end1
+					  :start2 (1+ i) :end2 end2))
+			     i)))))))
+	(list
+	 (let ((end1 (check-the index (or end1 (length sequence-1)))))
+	   (do ((stop (and end2 (- end2 start2 (- end1 start1 1))))
+		(p (nthcdr start2 sequence-2) (cdr p))
+		(i 0 (1+ i)))
+	       ((or (endp p) (and stop (>= i stop))) nil)
+	     (declare (index i))
+	     (let ((mismatch-position (mismatch sequence-1 p
+						:start1 start1 :end1 end1
+						:key key :test test)))
+	       (when (or (not mismatch-position)
+			 (= mismatch-position end1))
+		 (return (+ start2 i
+			    (or (and from-end
+				     (search sequence-1 p
+					     :start2 1 :end2 (and end2 (- end2 i start2))
+					     :from-end t :test test :key key
+					     :start1 start1 :end1 end1))
+				0))))))))))))
 
 (defun insertion-sort (vector predicate key start end)
   "Insertion-sort is used for stable-sort, and as a finalizer for
 quick-sort with cut-off greater than 1."
-  (with-funcallable (predicate)
-    (with-subvector-accessor (vector-ref vector start end)
-      (if (not key)
-	  (do ((i (1+ start) (1+ i)))
-	      ((>= i end))
-	    ;; insert vector[i] into [start...i-1]
-	    (let ((v (vector-ref i))
-		  (j (1- i)))
-	      (when (predicate v (vector-ref j))
-		(setf (vector-ref i) (vector-ref j))
-		(do* ((j+1 j (1- j+1))
-		      (j (1- j) (1- j)))
-		    ((or (< j start)
-			 (not (predicate v (vector-ref j))))
-		     (setf (vector-ref j+1) v))
-		  (setf (vector-ref j+1) (vector-ref j))))))
-	(with-funcallable (key)
-	  (do ((i (1+ start) (1+ i)))	; the same, only with a key-function..
-	      ((>= i end))
-	    ;; insert vector[i] into [start...i-1]
-	    (do* ((v (vector-ref i))
-		  (vk (key v))
-		  (j (1- i) (1- j))
-		  (j+1 i (1- j+1)))
-		((or (<= j+1 start)
-		     (not (predicate vk (key (vector-ref j)))))
-		 (setf (vector-ref j+1) v))
-	      (setf (vector-ref j+1) (vector-ref j))))))))
+  (let ((start (check-the index start))
+	(end (check-the index end)))
+    (with-funcallable (predicate)
+      (with-subvector-accessor (vector-ref vector start end)
+	(if (not key)
+	    (do ((i (1+ start) (1+ i)))
+		((>= i end))
+	      (declare (index i))
+	      ;; insert vector[i] into [start...i-1]
+	      (let ((v (vector-ref i))
+		    (j (1- i)))
+		(when (predicate v (vector-ref j))
+		  (setf (vector-ref i) (vector-ref j))
+		  (do* ((j+1 j (1- j+1))
+			(j (1- j) (1- j)))
+		      ((or (< j start)
+			   (not (predicate v (vector-ref j))))
+		       (setf (vector-ref j+1) v))
+		    (declare (index j j+1))
+		    (setf (vector-ref j+1) (vector-ref j))))))
+	  (with-funcallable (key)
+	    (do ((i (1+ start) (1+ i)))	; the same, only with a key-function..
+		((>= i end))
+	      (declare (index i))
+	      ;; insert vector[i] into [start...i-1]
+	      (do* ((v (vector-ref i))
+		    (vk (key v))
+		    (j (1- i) (1- j))
+		    (j+1 i (1- j+1)))
+		  ((or (<= j+1 start)
+		       (not (predicate vk (key (vector-ref j)))))
+		   (setf (vector-ref j+1) v))
+		(declare (index j j+1))
+		(setf (vector-ref j+1) (vector-ref j)))))))))
   vector)
 
 (defun quick-sort (vector predicate key start end cut-off)
-  (macrolet ((do-while (p &body body)
-	       `(do () ((not ,p)) ,@body)))
-    (when (> (- end start) cut-off)
-      (with-subvector-accessor (vector-ref vector start end)
-	(with-funcallable (predicate)
-	  (with-funcallable (key)
-	    (prog* ((pivot (vector-ref start)) ; should do median-of-three here..
-		    (keyed-pivot (key pivot))
-		    (left (1+ start))
-		    (right (1- end))
-		    left-item right-item)
-	     partitioning-loop
-	      (do-while (not (predicate keyed-pivot (key (setf left-item (vector-ref left)))))
-		(incf left)
-		(when (>= left end)
-		  (setf right-item (vector-ref right))
-		  (go partitioning-complete)))
-	      (do-while (predicate keyed-pivot (key (setf right-item (vector-ref right))))
-		(decf right))
-	      (when (< left right)
-		(setf (vector-ref left) right-item
-		      (vector-ref right) left-item)
-		(incf left)
-		(decf right)
-		(go partitioning-loop))
-	     partitioning-complete
-	      (setf (vector-ref start) right-item ; (aref vector right)
-		    (vector-ref right) pivot)
-	      (quick-sort vector predicate key start right cut-off)
-	      (quick-sort vector predicate key (1+ right) end cut-off)))))))
+  (let ((start (check-the index start))
+	(end (check-the index end)))
+    (macrolet ((do-while (p &body body)
+		 `(do () ((not ,p)) ,@body)))
+      (when (> (- end start) cut-off)
+	(with-subvector-accessor (vector-ref vector start end)
+	  (with-funcallable (predicate)
+	    (with-funcallable (key)
+	      (prog* ((pivot (vector-ref start)) ; should do median-of-three here..
+		      (keyed-pivot (key pivot))
+		      (left (1+ start))
+		      (right (1- end))
+		      left-item right-item)
+		(declare (index left right))
+	       partitioning-loop
+		(do-while (not (predicate keyed-pivot (key (setf left-item (vector-ref left)))))
+		  (incf left)
+		  (when (>= left end)
+		    (setf right-item (vector-ref right))
+		    (go partitioning-complete)))
+		(do-while (predicate keyed-pivot (key (setf right-item (vector-ref right))))
+		  (decf right))
+		(when (< left right)
+		  (setf (vector-ref left) right-item
+			(vector-ref right) left-item)
+		  (incf left)
+		  (decf right)
+		  (go partitioning-loop))
+	       partitioning-complete
+		(setf (vector-ref start) right-item ; (aref vector right)
+		      (vector-ref right) pivot)
+		(quick-sort vector predicate key start right cut-off)
+		(quick-sort vector predicate key (1+ right) end cut-off))))))))
   vector)
 
 (defun sort (sequence predicate &key (key 'identity))
@@ -1603,14 +1663,13 @@ quick-sort with cut-off greater than 1."
 	list-1			    ; list-1 is one length n list to be merged
 	last			    ; last points to the last visited cell
 	(merge-lists-header (list :header)))
-    (declare (fixnum n))
+    (declare (index n))
     (do () (nil)
       ;; start collecting runs of n at the first element
       (setf unsorted (cdr head))
       ;; tack on the first merge of two n-runs to the head holder
       (setf last head)
       (let ((n-1 (1- n)))
-	(declare (fixnum n-1))
 	(do () (nil)
 	  (setf list-1 unsorted)
 	  (let ((temp (nthcdr n-1 list-1))
@@ -1634,7 +1693,7 @@ quick-sort with cut-off greater than 1."
 		  ;; if there is only one run, then tack it on to the end
 		  (t (setf (cdr last) list-1)
 		     (return)))))
-	(setf n (ash n 1))		; (+ n n)
+	(setf n (+ n n))
 	;; If the inner loop only executed once, then there were only enough
 	;; elements for two runs given n, so all the elements have been merged
 	;; into one list.  This may waste one outer iteration to realize.
@@ -1670,6 +1729,7 @@ quick-sort with cut-off greater than 1."
 			       (dolist (s sequences length)
 				 (incf length (length s))))))
 	   (i 0))
+      (declare (index i))
       (dolist (s sequences)
 	(replace r s :start1 i)
 	(incf i (length s)))
