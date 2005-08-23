@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.25 2005/08/23 16:09:02 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.26 2005/08/23 17:58:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -797,7 +797,7 @@
 		  (q (nthcdr (- length start2 size) reverse-list) (cdr q))
 		  (i 0 (1+ i)))
 		 ((>= i size) (nreverse reverse-list))
-	       (delcare (index i))
+	       (declare (index i))
 	       (setf (car p) (car q))))))))
      ;; (not (eq sequence-1 sequence-2)) ..
      (t (sequence-dispatch sequence-1
