@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.12 2005/04/20 06:53:20 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.13 2005/08/24 07:28:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -140,7 +140,7 @@
 	   (clumps (and start-mem (- (malloc-cons-pointer) start-mem)))
 	   (delta-time (+ (ash (- end-time-hi start-time-hi) 29)
 			  (- end-time-lo start-time-lo skew))))
-      (format t "~&;; CPU cycles: ~D.~%~@[;; Space used: ~D clumps = ~/muerte:pprint-clumps/.~]~%"
+      (format t "~&;; CPU cycles: ~:D.~%~@[;; Space used: ~D clumps = ~/muerte:pprint-clumps/.~]~%"
 	      delta-time clumps clumps))))
 
 (defmacro time (form)
