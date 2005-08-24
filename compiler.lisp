@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.156 2005/08/23 21:42:07 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.157 2005/08/24 07:30:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -7023,26 +7023,75 @@ and a list of any intervening unwind-protect environment-slots."
 				 (binding-lended-p (binding-target term1)))))
 	       (t (warn "Unknown fixnum add: ~S" instruction)
 		  (make-default-add))))
-	     #+ignore
 	     ((and (movitz-subtypep result-type '(unsigned-byte 32))
 		   (movitz-subtypep type0 'fixnum)
 		   (movitz-subtypep type1 'fixnum))
-	      (cond
-	       ((and (not (binding-lended-p (binding-target term0)))
-		     (not (binding-lended-p (binding-target term1)))
-		     (not (and (bindingp destination)
-			       (binding-lended-p (binding-target destination)))))
+	      (flet ((mkadd (src srcloc destreg)
+		       (if (integerp srcloc)
+			   `((:addl (:ebp ,(stack-frame-offset srcloc))
+				    ,destreg))
+			 (ecase (operator srcloc)
+			   ((:eax :ebx :ecx :edx)
+			    `((:addl ,srcloc ,destreg)))
+			   ((:argument-stack)
+			    `((:addl (:ebx ,(argument-stack-offset src))
+				     ,destreg)))
+			   ))))
 		(cond
 		 ((and (not constant0)
 		       (not constant1)
-		       (member destination-location '(:eax :ebx :edx)))
-		  (print-code instruction
-			      (append (make-load-lexical term0 :untagged-fixnum-ecx funobj nil frame-map)
-				      `((,*compiler-local-segment-prefix*
-					 :movl :ecx (:edi ,(global-constant-offset 'raw-scratch0))))
-				      )))
-		 (t (make-default-add))))
-	       (t (make-default-add))))
+		       (not (binding-lended-p (binding-target term0)))
+		       (not (binding-lended-p (binding-target term1)))
+		       (not (and (bindingp destination)
+				 (binding-lended-p (binding-target destination)))))
+		  (cond
+;;;		   ((and (not (eq loc0 :untagged-fixnum-ecx))
+;;;			 (not (eq loc1 :untagged-fixnum-ecx))
+;;;			 (not (eq destination-location :untagged-fixnum-ecx)))
+;;;		    (let ((tmpreg (cond
+;;;				   ((member destination-location '(:eax :ebx :ecx :edx))
+;;;				    destination-location)
+;;;				   ((some (lambda (x) (and (not (eq x loc0)) (not (eq x loc1))))
+;;;					  '(:ecx :edx :eax :ebx)))
+;;;				   (t :ecx)))
+;;;			  (no-overflow (gensym "no-overflow-")))
+;;;		      (append (make-load-lexical term0 :eax funobj nil frame-map)
+;;;			      (mkadd term1 loc1 :eax)
+;;;			      `((:jnc ',no-overflow)
+;;;				(:movl :eax :ecx)
+;;;				(:rcrl 1 :ecx)
+;;;				(:shrl 1 :ecx)
+;;;				(,*compiler-local-segment-prefix*
+;;;				 :call (:edi ,(global-constant-offset 'box-u32-ecx)))
+;;;				,no-overflow))
+		   (t (make-default-add)
+		      #+ignore
+		      (append (make-load-lexical term0 :untagged-fixnum-ecx funobj nil frame-map)
+			      `((,*compiler-local-segment-prefix*
+				 :movl :ecx (:edi ,(global-constant-offset 'raw-scratch0))))
+			      (make-load-lexical term1 :untagged-fixnum-ecx funobj nil frame-map)
+			      `((,*compiler-local-segment-prefix*
+				 :addl (:edi ,(global-constant-offset 'raw-scratch0)) :ecx))
+			      (if (integerp destination-location)
+				  `((,*compiler-local-segment-prefix*
+				     :call (:edi ,(global-constant-offset 'box-u32-ecx)))
+				    (:movl :eax (:ebp ,(stack-frame-offset destination-location))))
+				(ecase (operator destination-location)
+				  ((:untagged-fixnum-ecx)
+				   nil)
+				  ((:eax)
+				   `((,*compiler-local-segment-prefix*
+				      :call (:edi ,(global-constant-offset 'box-u32-ecx)))))
+				  ((:ebx :ecx :edx)
+				   `((,*compiler-local-segment-prefix*
+				      :call (:edi ,(global-constant-offset 'box-u32-ecx)))
+				     (:movl :eax ,destination-location)))
+				  ((:argument-stack)
+				   `((,*compiler-local-segment-prefix*
+				      :call (:edi ,(global-constant-offset 'box-u32-ecx)))
+				     (:movl :eax (:ebp ,(argument-stack-offset
+							 (binding-target destination))))))))))))
+		 (t (make-default-add)))))
 	     (t (make-default-add)))))))))
 
 ;;;;;;;
