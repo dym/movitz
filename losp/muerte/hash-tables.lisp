@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb 19 19:09:05 2001
 ;;;;                
-;;;; $Id: hash-tables.lisp,v 1.9 2005/08/21 17:56:40 ffjeld Exp $
+;;;; $Id: hash-tables.lisp,v 1.10 2005/08/24 07:19:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -51,17 +51,19 @@
 
 (defun hash-table-iterator (bucket index)
   (when index
-    (do ((length (array-dimension bucket 0)))
-	((>= index length) nil)
-      (unless (eq (svref%unsafe bucket index) '--no-hash-key--)
-	(return (+ index 2)))
-      (incf index 2))))
+    (let ((index (check-the (index 2) index)))
+      (do ((length (array-dimension bucket 0)))
+	  ((>= index length) nil)
+	(unless (eq (svref%unsafe bucket index) '--no-hash-key--)
+	  (return (+ index 2)))
+	(incf index 2)))))
 
 (defmacro with-hash-table-iterator ((name hash-table) &body declarations-and-body)
   (let ((bucket-var (gensym "bucket-var-"))
 	(bucket-index-var (gensym "bucket-index-var-")))
     `(let* ((,bucket-var (hash-table-bucket ,hash-table))
 	    (,bucket-index-var 0))
+       (declare (type (index 2) ,bucket-index-var))
        (macrolet ((,name ()
 		    `(when (setq ,',bucket-index-var
 			     (hash-table-iterator ,',bucket-var ,',bucket-index-var))
@@ -138,6 +140,7 @@ look up key0 as if it was in a singleton list (key0)."
 	 (bucket-length (array-dimension bucket 0))
 	 (start-i2 (rem (ash (sxhash-eq key0) 1) bucket-length))
 	 (i2 start-i2))
+    (declare ((index 2) i2))
     (do () (nil)
       (let ((k (svref%unsafe bucket i2)))
 	(cond
@@ -156,6 +159,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 	 (start-i2 (rem (ash (logxor (sxhash-eq key0) (sxhash-eq key1)) 1)
 			bucket-length))
 	 (i2 start-i2))
+    (declare ((index 2) i2))
     (do () (nil)
       (let ((k (svref%unsafe bucket i2)))
 	(cond
@@ -174,6 +178,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 	(bucket-length (length bucket))
 	(index2 (rem (ash (funcall (hash-table-sxhash hash-table) key) 1) bucket-length)))
       (nil)
+    (declare ((index 2) index2))
     (let ((k (svref%unsafe bucket index2)))
       (cond
        ((eq k '--no-hash-key--)
