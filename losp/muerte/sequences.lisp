@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.26 2005/08/23 17:58:19 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.27 2005/08/24 07:28:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -813,12 +813,12 @@
 		    (do ((i start1 (1+ i))
 			 (j start2 (1+ j)))
 			((>= i end1) sequence-1)
-		      (decare (index i j))
+		      (declare (index i j))
 		      (setf (sequence-1-ref i) (sequence-2-ref j))))
 		   (t (do ((i start1 (1+ i))
 			   (j start2 (1+ j)))
 			  ((>= j end2) sequence-1)
-			(decare (index i j))
+			(declare (index i j))
 			(setf (sequence-1-ref i) (sequence-2-ref j))))))))
 	     (list
 	      (with-subvector-accessor (sequence-1-ref sequence-1 start1 end1)
