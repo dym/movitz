@@ -10,10 +10,11 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.47 2005/05/24 06:33:35 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.48 2005/08/24 07:30:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
+(require :muerte/typep)
 (provide :muerte/memref)
 
 (in-package muerte)
