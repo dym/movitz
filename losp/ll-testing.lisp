@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 14 08:18:43 2005
 ;;;;                
-;;;; $Id: ll-testing.lisp,v 1.11 2005/08/11 21:33:01 ffjeld Exp $
+;;;; $Id: ll-testing.lisp,v 1.12 2005/08/24 07:32:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -237,4 +237,6 @@ EIP is loaded from ESI's code-vector."
       (:locally (:pushl (:edi (:edi-offset raw-scratch0)))) ; reset eflags
       (:popfl)
       (:jmp (:esi (:offset movitz-funobj code-vector))))))
+
+
 

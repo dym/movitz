@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 18 12:21:36 2002
 ;;;;                
-;;;; $Id: dp8390.lisp,v 1.7 2004/05/05 08:24:29 ffjeld Exp $
+;;;; $Id: dp8390.lisp,v 1.8 2005/08/24 07:33:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -129,6 +129,14 @@
 	address))
     (setf (io-register8x2 dp8390 ($page0-write rbcr1) ($page0-write rbcr0)) size
 	  (dp8390 ($page0-write cr)) command))
+  nil)
+
+(defun foo (io-base command size address)
+  (let ((io-base (the (unsigned-byte #x10)
+		   (let ((check-the-io-base io-base))
+		     (check-type check-the-io-base (unsigned-byte #x10))
+		     check-the-io-base))))
+    (setf (io-port (+ io-base 0) :unsigned-byte8) #o40))
   nil)
 
 (defmacro with-dp8390-dma ((dp8390-var rdma-command size &optional address) &body body)

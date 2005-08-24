@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Dec 14 22:33:42 2003
 ;;;;                
-;;;; $Id: pci.lisp,v 1.11 2005/08/14 12:15:04 ffjeld Exp $
+;;;; $Id: pci.lisp,v 1.12 2005/08/24 07:33:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -294,16 +294,19 @@ in a somewhat feeble attempt to avoid trouble."
 	   (error "Unknown pci-config register: ~S" register))))
 
 (defun pci-device-address-maps (bus device function)
-  (loop for i upfrom (pci-config :base-addr) by 4 repeat 6
+  (loop with io-keys = '(:io :io-2 :io-3 :io-4 :io-5 :io-6)
+      with mem-keys = '(:mem :mem-2 :mem-3 :mem-4 :mem-5 :mem-6)
+      with mem64-keys = '(:mem64 :mem64-2 :mem64-3 :mem64-4 :mem64-5 :mem64-6)
+      for i upfrom (pci-config :base-addr) by 4 repeat 6
       as base = (pci-bios-config-space-dword bus device function i)
-      unless (= 0 base) collect
+      unless (= 0 base) nconc
 	(cond
 	 ((logbitp 0 base)
-	  (cons :io (logand base -4)))
+	  (list (pop io-keys) (logand base -4)))
 	 ((= 1 (ldb (byte 2 1) base))
-	  (cons :mem64 (logand base -16)))
+	  (list (pop mem64-keys) (logand base -16)))
 	 (t
-	  (cons :mem32 (logand base -16))))))
+	  (list (pop mem-keys) (logand base -16))))))
 	    
 (defun scan-pci-bus (bus)
   (loop for device from 0 to 31
@@ -321,7 +324,58 @@ in a somewhat feeble attempt to avoid trouble."
 		       (ldb (byte 24 8) class-rev)
 		       (ldb (byte 8 0) class-rev)
 		       status)
-	       (format *query-io* "    Class:~{ ~@[~A~]~}"
+	       (format *query-io* "    Class:~{~@[ ~A~]~}."
 		       (multiple-value-list (pci-class (ldb (byte 24 8) class-rev))))
-	       (format *query-io* "~S" (pci-device-address-maps bus device 0))))))
+	       (format *query-io* "~@[~{ ~A: #x~X~^,~}.~]"
+		       (pci-device-address-maps bus device 0))))))
   (values))
+
+(defmacro $pci-config (reg)
+  "PCI config header registers for all devices."
+  (or (case reg
+	(:pcir-devvendor #x00)
+	(:pcir-vendor #x00)
+	(:pcir-device #x02)
+	(:pcir-command #x04)
+	(:pcim-cmd-porten #x0001)
+	(:pcim-cmd-memen #x0002)
+	(:pcim-cmd-busmasteren #x0004)
+	(:pcim-cmd-mwricen #x0010)
+	(:pcim-cmd-perrespen #x0040)
+	(:pcim-cmd-serrespen #x0100)
+	(:pcir-status #x06)
+	(:pcim-status-cappresent #x0010)
+	(:pcim-status-66capable #x0020)
+	(:pcim-status-backtoback #x0080)
+	(:pcim-status-perrreport #x0100)
+	(:pcim-status-sel-fast #x0000)
+	(:pcim-status-sel-medimum #x0200)
+	(:pcim-status-sel-slow #x0400)
+	(:pcim-status-sel-mask #x0600)
+	(:pcim-status-stabort #x0800)
+	(:pcim-status-rtabort #x1000)
+	(:pcim-status-rmabort #x2000)
+	(:pcim-status-serr #x4000)
+	(:pcim-status-perr #x8000)
+	(:pcir-revid #x08)
+	(:pcir-progif #x09)
+	(:pcir-subclass #x0a)
+	(:pcir-class #x0b)
+	(:pcir-cachelnsz #x0c)
+	(:pcir-lattimer #x0d)
+	(:pcir-headertype #x0e)
+	(:pcim-mfdev #x80)
+	(:pcir-bist #x0f)
+
+	(:pcir-maps #x10)
+	(:pcir-cardbuscis #x28)
+	(:pcir-subvend-0 #x2c)
+	(:pcir-subdev-0 #x2e)
+	(:pcir-bios #x30)
+	(:pcim-bios-enable #x01)
+	(:pcir-cap-ptr #x34)
+	(:pcir-intline #x3c)
+	(:pcir-intpin #x3d)
+	(:pcir-mingnt #x3e)
+	(:pcir-maxlat #x3f))
+      (error "Unknown $pci-config register ~S." reg)))

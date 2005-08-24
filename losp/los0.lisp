@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.47 2005/08/11 21:33:08 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.48 2005/08/24 07:32:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1351,7 +1351,7 @@ Can be used to measure the overhead of primitive function."
       (setf (global-segment-descriptor-table)
 	(muerte::dump-global-segment-table :entries 16)))
 
-    (install-los0-consing :kb-size 500)
+    (install-los0-consing :kb-size (* 10 1024))
     #+ignore
     (install-los0-consing :kb-size (max 50 (truncate (- extended-memsize 2048) 2))))
 

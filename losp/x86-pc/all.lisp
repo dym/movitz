@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001-2004, 
+;;;;    Copyright (C) 2001-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Sep 27 21:14:56 2001
 ;;;;                
-;;;; $Id: all.lisp,v 1.4 2004/04/23 15:04:12 ffjeld Exp $
+;;;; $Id: all.lisp,v 1.5 2005/08/24 07:33:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -23,7 +23,7 @@
 (require :x86-pc/pit8253)
 (require :x86-pc/interrupt)
 (require :x86-pc/cmos)
-(require :x86-pc/pci)
+(require :x86-pc/pci-device)
 ;; (require :x86-pc/serial)
 (require :x86-pc/textmode-console)
 (require :x86-pc/debugger)
