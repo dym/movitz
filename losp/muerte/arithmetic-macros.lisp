@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.10 2005/08/20 20:23:34 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.11 2005/08/24 07:31:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,6 +19,8 @@
 (provide :muerte/arithmetic-macros)
 
 (in-package muerte)
+
+;;;
 
 (defmacro number-double-dispatch ((x y) &rest clauses)
   `(let ((x ,x) (y ,y))
@@ -499,3 +501,115 @@
 (define-compiler-macro %ratio-denominator (x)
   `(memref ,x (movitz-type-slot-offset 'movitz-ratio 'denominator)))
 
+;;;
+
+(defmacro define-number-relational (name 2op-name condition &key (defun-p t) 3op-name)
+  `(progn
+     ,(when condition
+	`(define-compiler-macro ,2op-name (n1 n2 &environment env)
+	   (cond
+	    ((and (movitz:movitz-constantp n1 env)
+		  (movitz:movitz-constantp n2 env))
+	     (list ',2op-name (movitz:movitz-eval n1 env) (movitz:movitz-eval n2 env)))
+	    ((movitz:movitz-constantp n1 env)
+	     (let ((n1 (movitz::movitz-eval n1 env)))
+	       (check-type n1 number)
+	       (if (typep n1 '(signed-byte 30))
+		   `(with-inline-assembly (:returns ,,condition :side-effects nil)
+		      (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+		      (:call-global-pf fast-compare-fixnum-real))
+		 `(with-inline-assembly (:returns ,,condition :side-effects nil)
+		    (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+		    (:call-global-pf fast-compare-two-reals)))))
+	    ((movitz:movitz-constantp n2 env)
+	     (let ((n2 (movitz:movitz-eval n2 env)))
+	       (check-type n2 number)
+	       (if (typep n2 '(signed-byte 30))
+		   `(with-inline-assembly (:returns ,,condition :side-effects nil)
+		      (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+		      (:call-global-pf fast-compare-real-fixnum))
+		 `(with-inline-assembly (:returns ,,condition :side-effects nil)
+		    (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+		    (:call-global-pf fast-compare-two-reals)))))
+	    (t `(with-inline-assembly (:returns ,,condition :side-effects nil)
+		  (:compile-two-forms (:eax :ebx) ,n1 ,n2)
+		  (:call-global-pf fast-compare-two-reals))))))
+
+     (defun ,2op-name (n1 n2)
+       (,2op-name n1 n2))
+
+     (define-compiler-macro ,name (&whole form number &rest more-numbers)
+       (case (length more-numbers)
+	 (0 `(progn ,number t))
+	 (1 `(,',2op-name ,number ,(first more-numbers)))
+	 ,@(when 3op-name
+	     `((2 `(,',3op-name ,number ,(first more-numbers) ,(second more-numbers)))))
+	 (t #+ignore (when (= 2 (length more-numbers))
+		       (warn "3op: ~S" form))
+	  `(and (,',2op-name ,number ,(first more-numbers))
+		  (,',name ,@more-numbers)))))
+
+     ,(when defun-p
+	`(defun ,name (number &rest more-numbers)
+	   (declare (dynamic-extent more-numbers))
+	   (cond
+	    ((null more-numbers)
+	     (check-type number fixnum)
+	     t)
+	    ((not (cdr more-numbers))
+	     (,2op-name number (first more-numbers)))
+	    (t (and (,2op-name number (first more-numbers))
+		    (do ((p more-numbers (cdr p)))
+			((not (cdr p)) t)
+		      (unless (,2op-name (car p) (cadr p))
+			(return nil))))))))))
+
+(define-number-relational >= >=%2op :boolean-greater-equal)
+(define-number-relational > >%2op :boolean-greater)
+(define-number-relational < <%2op :boolean-less)
+(define-number-relational <= <=%2op :boolean-less-equal :3op-name <=%3op)
+
+;;; Types
+
+(define-typep integer (x &optional (min '*) (max '*))
+  (and (typep x 'integer)
+       (or (eq min '*) (<= min x))
+       (or (eq max '*) (<= x max))))
+
+(deftype unsigned-byte (&optional (size '*))
+  (cond
+   ((eq size '*)
+    '(integer 0))
+   ((typep size '(integer 1 *))
+    ;; The funcall is a hack not to invoke compiler machinery
+    ;; that depends on the unsigned-byte type being defined.
+    (list 'integer 0 (funcall '- (ash 1 size) 1)))
+   (t (error "Illegal size for unsigned-byte."))))
+
+(deftype signed-byte (&optional (size '*))
+  (cond
+   ((eq size '*)
+    'integer)
+   ((typep size '(integer 1 *))
+    (list 'integer
+	  (- (ash 1 (1- size)))
+	  (1- (ash 1 (1- size)))))
+   (t (error "Illegal size for signed-byte."))))
+
+(define-typep rational (x &optional (lower-limit '*) (upper-limit '*))
+  (and (typep x 'rational)
+       (or (eq lower-limit '*)
+	   (<= lower-limit x))
+       (or (eq upper-limit '*)
+	   (<= x upper-limit))))
+
+(deftype real (&optional (lower-limit '*) (upper-limit '*))
+  `(or (integer ,lower-limit ,upper-limit)
+       (rational ,lower-limit ,upper-limit)))
+  
+
+(define-simple-typep (bit bitp) (x)
+  (or (eq x 0) (eq x 1)))
+
+(deftype index (&optional (step 1))
+  `(integer 0 ,(- #x1fffffff step)))
