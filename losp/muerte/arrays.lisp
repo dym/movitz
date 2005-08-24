@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.55 2005/08/20 20:24:11 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.56 2005/08/24 07:27:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1010,7 +1010,7 @@ and return basic-vector and accessors for that subsequence."
 (defun vector-push (new-element vector)
   (check-type vector vector)
   (let ((p (fill-pointer vector)))
-    (declare (type (unsigned-byte 16) p))
+    (declare (index p))
     (when (< p (array-dimension vector 0))
       (setf (aref vector p) new-element
 	    (fill-pointer vector) (1+ p))
