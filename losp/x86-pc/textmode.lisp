@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2000-2004,
+;;;;    Copyright (C) 2000-2005,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      textmode.lisp
@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  9 15:38:56 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: textmode.lisp,v 1.14 2004/11/24 16:24:36 ffjeld Exp $
+;;;; $Id: textmode.lisp,v 1.15 2005/08/26 21:42:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -100,6 +100,7 @@
 	 (move-vga-cursor (setf *cursor-x* (1+ x)) y))))
   nil)
 
+#+ignore
 (defun textmode-copy-line (destination source count)
   (check-type count (and (integer 0 511) (satisfies evenp)))
   (check-type source (unsigned-byte 20))
@@ -125,12 +126,36 @@
 (defun textmode-scroll-down ()
   (declare (special muerte.lib::*scroll-offset*))
   (incf muerte.lib::*scroll-offset*)
-  (loop with stride = (* 2 *screen-stride*)
-      for y below (1- *screen-height*)
-      as src from (+ *screen* stride) by stride
-      as dst from *screen* by stride
-      do (textmode-copy-line dst src *screen-width*)
-      finally (textmode-clear-line 0 (1- *screen-height*)))
+  (macrolet ((copy-line (destination source count)
+	       `(let ((destination ,destination)
+		      (source ,source)
+		      (count ,count))
+		  (with-inline-assembly (:returns :nothing)
+		    (:compile-form (:result-mode :edx) destination)
+		    (:compile-form (:result-mode :eax) source)
+		    (:compile-form (:result-mode :ebx) count)
+		    (:std)		; Only EBX is now (potential) GC root
+		    (:andl #x-8 :ebx)	; ..so make sure EBX is a fixnum
+		    (:shrl 2 :eax)
+		    (:shrl 2 :edx)
+		    (:shrl 1 :ebx)
+		    (:jz 'end-copy-loop)
+		   copy-loop
+		    (#.movitz:*compiler-physical-segment-prefix* :movl (:eax :ebx -4) :ecx)
+		    (#.movitz:*compiler-physical-segment-prefix* :movl :ecx (:edx :ebx -4))
+		    (:subl 4 :ebx)
+		    (:ja 'copy-loop)
+		   end-copy-loop
+		    (:cld)))))
+    (loop with screen = (check-the fixnum *screen*)
+	with stride = (* 2 *screen-stride*)
+	with width = (check-the fixnum *screen-width*)
+	with height = (1- (check-the fixnum *screen-height*))
+	repeat height
+	as src of-type fixnum from (+ screen stride) by stride
+	as dst of-type fixnum from screen by stride
+	do (copy-line dst src width)
+	finally (textmode-clear-line 0 height)))
   (signal 'newline))
 
 (defun textmode-clear-line (from-column line)
