@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.157 2005/08/24 07:30:45 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.158 2005/08/26 19:41:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2870,6 +2870,7 @@ the sub-program options (&optional label) as secondary value."
   "Try to locate binding in a register. Return a register, or
    nil and :not-now, or :never.
    This function is factored out from assign-bindings."
+  (assert (not (typep binding 'forwarding-binding)))
   (let* ((count-init-pc (gethash binding var-counts))
 	 (count (car count-init-pc))
 	 (init-pc (second count-init-pc)))
@@ -2898,9 +2899,12 @@ the sub-program options (&optional label) as secondary value."
 			 (when pos
 			   (return (values i (nth pos read-destinations) distance)))))))
 	  (declare (ignore load-instruction))
-	  ;; (warn "load: ~S, dist: ~S, dest: ~S" load-instruction distance binding-destination)
 	  (multiple-value-bind (free-registers more-later-p)
 	      (and distance (compute-free-registers (cdr init-pc) distance funobj frame-map))
+	    #+ignore
+	    (when (string= 'num-jumpers (binding-name binding))
+	      (warn "load: ~S, dist: ~S, dest: ~S" load-instruction distance binding-destination)
+	      (warn "free: ~S, more: ~S" free-registers more-later-p))
 	    (let ((free-registers-no-ecx (remove :ecx free-registers)))
 	      (cond
 	       ((member binding-destination free-registers-no-ecx)
@@ -6804,7 +6808,7 @@ and a list of any intervening unwind-protect environment-slots."
 	    (loc1 (new-binding-location (binding-target term1) frame-map :default nil)))
 	#+ignore
 	(warn "add: ~A for ~A" instruction result-type)
-	#+ignore
+
 	(warn "add for: ~S is ~A, from ~A/~A and ~A/~A."
 	      destination result-type
 	      term0 loc0
@@ -6817,7 +6821,14 @@ and a list of any intervening unwind-protect environment-slots."
 		term1 loc1 (binding-extent-env (binding-target term1)))
 	  (print-code 'load-term1 (make-load-lexical term1 :eax funobj nil frame-map))
 	  (print-code 'load-dest (make-load-lexical destination :eax funobj nil frame-map)))
-	(flet ((make-default-add ()
+	(flet ((make-store (source destination)
+		 (cond
+		  ((eq source destination)
+		   nil)
+		  ((member destination '(:eax :ebx :ecx :edx))
+		   `((:movl ,source ,destination)))
+		  (t (make-store-lexical destination source nil funobj frame-map))))
+	       (make-default-add ()
 		 (when (movitz-subtypep result-type '(unsigned-byte 32))
 		   (warn "Defaulting u32 ADD: ~A/~S = ~A/~S + ~A/~S"
 			 destination-location
@@ -6852,9 +6863,11 @@ and a list of any intervening unwind-protect environment-slots."
 			   (binding
 			    (make-store-lexical destination :eax nil funobj frame-map))))))
 	  (let ((constant0 (let ((x (type-specifier-singleton type0)))
-			     (when x (movitz-immediate-value (car x)))))
+			     (when (and x (typep (car x) 'movitz-fixnum))
+			       (movitz-immediate-value (car x)))))
 		(constant1 (let ((x (type-specifier-singleton type1)))
-			     (when x (movitz-immediate-value (car x))))))
+			     (when (and x (typep (car x) 'movitz-fixnum))
+			       (movitz-immediate-value (car x))))))
 	    (cond
 	     ((type-specifier-singleton result-type)
 	      ;; (break "constant add: ~S" instruction)
@@ -7023,20 +7036,27 @@ and a list of any intervening unwind-protect environment-slots."
 				 (binding-lended-p (binding-target term1)))))
 	       (t (warn "Unknown fixnum add: ~S" instruction)
 		  (make-default-add))))
-	     ((and (movitz-subtypep result-type '(unsigned-byte 32))
-		   (movitz-subtypep type0 'fixnum)
+	     ((and (movitz-subtypep type0 'fixnum)
 		   (movitz-subtypep type1 'fixnum))
-	      (flet ((mkadd (src srcloc destreg)
-		       (if (integerp srcloc)
-			   `((:addl (:ebp ,(stack-frame-offset srcloc))
-				    ,destreg))
-			 (ecase (operator srcloc)
-			   ((:eax :ebx :ecx :edx)
-			    `((:addl ,srcloc ,destreg)))
-			   ((:argument-stack)
-			    `((:addl (:ebx ,(argument-stack-offset src))
-				     ,destreg)))
-			   ))))
+	      (flet ((mkadd-into (src destreg)
+		       (assert (eq destreg :eax) (destreg)
+			 "Movitz' INTO protocol says the overflowed value must be in EAX, ~
+but it's requested to be in ~S."
+			 destreg)
+		       (let ((srcloc (new-binding-location (binding-target src) frame-map)))
+			 (if (integerp srcloc)
+			     `((:addl (:ebp ,(stack-frame-offset srcloc))
+				      ,destreg)
+			       (:into))
+			   (ecase (operator srcloc)
+			     ((:eax :ebx :ecx :edx)
+			      `((:addl ,srcloc ,destreg)
+				(:into)))
+			     ((:argument-stack)
+			      `((:addl (:ebx ,(argument-stack-offset src))
+				       ,destreg)
+				(:into)))
+			     )))))
 		(cond
 		 ((and (not constant0)
 		       (not constant1)
@@ -7045,26 +7065,22 @@ and a list of any intervening unwind-protect environment-slots."
 		       (not (and (bindingp destination)
 				 (binding-lended-p (binding-target destination)))))
 		  (cond
-;;;		   ((and (not (eq loc0 :untagged-fixnum-ecx))
-;;;			 (not (eq loc1 :untagged-fixnum-ecx))
-;;;			 (not (eq destination-location :untagged-fixnum-ecx)))
-;;;		    (let ((tmpreg (cond
-;;;				   ((member destination-location '(:eax :ebx :ecx :edx))
-;;;				    destination-location)
-;;;				   ((some (lambda (x) (and (not (eq x loc0)) (not (eq x loc1))))
-;;;					  '(:ecx :edx :eax :ebx)))
-;;;				   (t :ecx)))
-;;;			  (no-overflow (gensym "no-overflow-")))
-;;;		      (append (make-load-lexical term0 :eax funobj nil frame-map)
-;;;			      (mkadd term1 loc1 :eax)
-;;;			      `((:jnc ',no-overflow)
-;;;				(:movl :eax :ecx)
-;;;				(:rcrl 1 :ecx)
-;;;				(:shrl 1 :ecx)
-;;;				(,*compiler-local-segment-prefix*
-;;;				 :call (:edi ,(global-constant-offset 'box-u32-ecx)))
-;;;				,no-overflow))
-		   (t (make-default-add)
+		   ((and (not (eq loc0 :untagged-fixnum-ecx))
+			 (not (eq loc1 :untagged-fixnum-ecx))
+			 (not (eq destination-location :untagged-fixnum-ecx)))
+		    (append (cond
+			     ((and (eq loc0 :eax) (eq loc1 :eax))
+			      `((:addl :eax :eax)
+				(:into)))
+			     ((eq loc0 :eax)
+			      (mkadd-into term1 :eax))
+			     ((eq loc1 :eax)
+			      (mkadd-into term0 :eax))
+			     (t (append (make-load-lexical term0 :eax funobj nil frame-map
+							   :protect-registers (list loc1))
+					(mkadd-into term1 :eax))))
+			    (make-store :eax destination)))
+		  (t (make-default-add)
 		      #+ignore
 		      (append (make-load-lexical term0 :untagged-fixnum-ecx funobj nil frame-map)
 			      `((,*compiler-local-segment-prefix*
