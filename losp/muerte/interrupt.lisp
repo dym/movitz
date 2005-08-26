@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.47 2005/08/12 20:28:30 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.48 2005/08/26 19:40:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -276,9 +276,9 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 
 (defun interrupt-default-handler (vector dit-frame)
   (declare (without-check-stack-limit))
-  (macrolet ((dereference (fixnum-address &optional (type :lisp))
+  (macrolet ((dereference (location &optional (type :lisp))
 	       "Dereference the fixnum-address."
-	       `(memref ,fixnum-address 0 :type ,type)))
+	       `(memref ,location 0 :type ,type)))
     (let (($eip (+ dit-frame (dit-frame-index :eip)))
 	  ($eax (+ dit-frame (dit-frame-index :eax)))
 	  ($ebx (+ dit-frame (dit-frame-index :ebx)))
@@ -290,14 +290,24 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	(case vector
 	  (0 (error 'division-by-zero))
 	  (3 (break "Break instruction at ~@Z." $eip))
-	  (4 (if (not (eq (load-global-constant new-unbound-value)
-			  (dereference $eax)))
-		 (error "Primitive overflow assertion failed.")
+	  (4 (cond
+	      ((eq (load-global-constant new-unbound-value)
+		   (dereference $eax))
 	       (let ((name (dereference $ebx)))
 		 (with-simple-restart (new-value "Set the value of ~S." name)
 		   (error 'unbound-variable :name name))
 		 (format *query-io* "~&Enter a value for ~S: " name)
-		 (setf (dereference $eax) (read *query-io*)))))
+		 (setf (dereference $eax) (read *query-io*))))
+	      ((typep (dereference $eax) 'fixnum)
+	       (let ((eax (dereference $eax)))
+		 (setf (dereference $eax)
+		   (if (plusp eax)
+		       (- most-negative-fixnum
+			  1 (- most-positive-fixnum eax))
+		     (+ most-positive-fixnum
+			1 (- eax most-negative-fixnum))))
+		 (warn "Overflow: ~S -> ~S" eax (dereference $eax))))
+	      (t (error "Primitive overflow assertion failed."))))
 	  (6 (error "Illegal instruction at ~@Z." $eip))
 	  (13  (error "General protection error. EIP=~@Z, error-code: #x~X, EAX: ~@Z, EBX: ~@Z, ECX: ~@Z"
 		     $eip
