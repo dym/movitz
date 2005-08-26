@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.53 2005/08/26 21:40:28 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.54 2005/08/26 22:50:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1099,6 +1099,7 @@
 	   #:fixnump
 	   #:newline
 	   #:check-the
+	   #:index
 	   
 	   #:*print-safely*
 	   
