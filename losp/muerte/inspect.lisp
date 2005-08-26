@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.55 2005/06/11 00:02:04 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.56 2005/08/26 22:38:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -262,6 +262,9 @@ Otherwise, stack-frame is an absolute location."
      (copy-funobj old))
     (structure-object
      (copy-structure old))
+    (ratio
+     (make-ratio (%ratio-numerator old)
+		 (%ratio-denominator old)))
     (run-time-context
      (%shallow-copy-object old (movitz-type-word-size 'movitz-run-time-context)))))
 
