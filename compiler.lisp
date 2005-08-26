@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.158 2005/08/26 19:41:32 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.159 2005/08/26 19:43:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -6808,7 +6808,7 @@ and a list of any intervening unwind-protect environment-slots."
 	    (loc1 (new-binding-location (binding-target term1) frame-map :default nil)))
 	#+ignore
 	(warn "add: ~A for ~A" instruction result-type)
-
+	#+ignore
 	(warn "add for: ~S is ~A, from ~A/~A and ~A/~A."
 	      destination result-type
 	      term0 loc0
