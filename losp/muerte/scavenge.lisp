@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.51 2005/06/10 23:06:39 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.52 2005/08/26 19:38:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -55,6 +55,7 @@ start-location and end-location."
 	 (*scan-last* nil)		; Last scanned object, for debugging.
 	 (scan start-location (1+ scan)))
 	((>= scan end-location))
+      (declare (fixnum scan))
       (with-simple-restart (continue-map-header-vals
 			    "Continue map-header-vals at location ~S." (1+ scan))
 	(let ((x (memref scan 0 :type :unsigned-byte16))

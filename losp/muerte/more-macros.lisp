@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.28 2005/05/24 06:33:40 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.29 2005/08/26 19:39:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -117,8 +117,8 @@
 	   ,@declarations-and-body
 	   ,result-form))
        (t `(do ((,var 0 (1+ ,var)))
-	       ((>= ,var ,count-form) ,result-form)
-	     (declare (type (integer 0 ,count-form) ,var))
+	       ((>= ,var ,count) ,result-form)
+	     (declare (type (integer 0 ,count) ,var))
 	     ,@declarations-and-body))))))
 
 (defmacro dotimes ((var count-form &optional result-form) &body declarations-and-body)

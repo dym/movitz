@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.20 2005/08/14 12:13:51 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.21 2005/08/26 19:38:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -95,6 +95,7 @@
 	(do ((i (+ pos 1 (if sign-char 1 0) (if comma-interval (truncate pos comma-interval) 0))
 		(1+ i)))
 	    ((>= i mincol))
+	  (declare (index i))
 	  (write-char padchar stream)))
       (when sign-char
 	(write-char sign-char stream)))
@@ -159,6 +160,7 @@
   (with-subvector-accessor (string-ref string start end)
     (do ((i start (1+ i)))
 	((>= i end))
+      (declare (index i))
       (write-char (string-ref i) stream)))
   #+ignore (stream-write-string (output-stream-designator stream) string start end))
 

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct 17 21:50:42 2001
 ;;;;                
-;;;; $Id: read.lisp,v 1.12 2005/06/10 18:35:01 ffjeld Exp $
+;;;; $Id: read.lisp,v 1.13 2005/08/26 19:38:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -84,7 +84,9 @@ of string delimited by start and end."
       (return i))))
 
 (defun simple-read-token (string &key (start 0) (end (length string)))
-  (let ((colon-position (and (char= #\: (schar string start)) start))
+  (let ((start (check-the index start))
+	(end (check-the index end))
+	(colon-position (and (char= #\: (schar string start)) start))
 	(almost-integer nil))
     (multiple-value-bind (token-end token-integer token-denominator)
 	(do ((integer (or (digit-char-p (schar string start) *read-base*)
@@ -104,6 +106,7 @@ of string delimited by start and end."
 			 integer))
 		     (when (and integer denominator (plusp denominator))
 		       denominator)))
+	  (declare (index i))
 	  (let ((c (schar string i)))
 	    (when (char= #\: c)
 	      (setf colon-position i))
@@ -130,6 +133,7 @@ of string delimited by start and end."
 		 (and (< *read-base* 10)
 		      (do ((i start (1+ i)))
 			  ((>= i (1- token-end)) t)
+			(declare (index i))
 			(unless (digit-char-p (schar string i) 10)
 			  (return nil))))))
 	(let ((x (if (= *read-base* 10)
@@ -181,48 +185,51 @@ of string delimited by start and end."
 
 (defun simple-read-delimited-list (delimiter string start end &key (tail-delimiter #\.) list)
   "=> list, new-position, new-string, new-end."
-  (multiple-value-bind (next-string next-start next-end)
-      (catch 'next-line
-	(restart-bind
-	    ((next-line (lambda (next-string &optional (next-start 0)
-						       (next-end (length next-string)))
-			  (throw 'next-line
-			    (values next-string next-start next-end)))))
-	  (do ((i start (1+ i)))
-	      ((>= i end)
-	       (error 'missing-delimiter
-		      :delimiter delimiter
-		      :start-position start))
-	    (let ((char (schar string i)))
-	      (cond
-	       ((char= delimiter char)
-		(return-from simple-read-delimited-list
-		  (values (nreverse list) (1+ i) string end)))
-	       ((eq tail-delimiter char)
-		(unless list
-		  (error "Nothing before ~C in list." tail-delimiter))
-		(multiple-value-bind (cdr-list cdr-end cdr-string cdr-string-end)
-		    (simple-read-delimited-list #\) string (1+ i) end
-						:tail-delimiter tail-delimiter)
-		  (unless (endp (cdr cdr-list))
-		    (error "Too many objects after ~C in list: ~S"
-			   tail-delimiter (cdr cdr-list)))
-		  (setf list (nreverse list)
-			(cdr (last list)) (car cdr-list))
+  (let ((start (check-the index start))
+	(end (check-the index end)))
+    (multiple-value-bind (next-string next-start next-end)
+	(catch 'next-line
+	  (restart-bind
+	      ((next-line (lambda (next-string &optional (next-start 0)
+							 (next-end (length next-string)))
+			    (throw 'next-line
+			      (values next-string next-start next-end)))))
+	    (do ((i start (1+ i)))
+		((>= i end)
+		 (error 'missing-delimiter
+			:delimiter delimiter
+			:start-position start))
+	      (declare (index i))
+	      (let ((char (schar string i)))
+		(cond
+		 ((char= delimiter char)
 		  (return-from simple-read-delimited-list
-		    (values list cdr-end cdr-string cdr-string-end))))
-	       ((char-whitespace-p char))
-	       (t (multiple-value-bind (element element-end next-string next-string-end)
-		      (simple-read-from-string string t t :start i :end end)
-		    (when next-string
-		      (assert next-string-end)
-		      (setf string next-string
-			    end next-string-end))
-		    (setf i (1- element-end))
-		    (push element list))))))))
-    (simple-read-delimited-list delimiter next-string next-start next-end
-				:tail-delimiter tail-delimiter
-				:list list)))
+		    (values (nreverse list) (1+ i) string end)))
+		 ((eq tail-delimiter char)
+		  (unless list
+		    (error "Nothing before ~C in list." tail-delimiter))
+		  (multiple-value-bind (cdr-list cdr-end cdr-string cdr-string-end)
+		      (simple-read-delimited-list #\) string (1+ i) end
+						  :tail-delimiter tail-delimiter)
+		    (unless (endp (cdr cdr-list))
+		      (error "Too many objects after ~C in list: ~S"
+			     tail-delimiter (cdr cdr-list)))
+		    (setf list (nreverse list)
+			  (cdr (last list)) (car cdr-list))
+		    (return-from simple-read-delimited-list
+		      (values list cdr-end cdr-string cdr-string-end))))
+		 ((char-whitespace-p char))
+		 (t (multiple-value-bind (element element-end next-string next-string-end)
+			(simple-read-from-string string t t :start i :end end)
+		      (when next-string
+			(assert next-string-end)
+			(setf string next-string
+			      end next-string-end))
+		      (setf i (1- element-end))
+		      (push element list))))))))
+      (simple-read-delimited-list delimiter next-string next-start next-end
+				  :tail-delimiter tail-delimiter
+				  :list list))))
 
 (defun position-with-escape (char string start end &optional (errorp t))
   (with-subvector-accessor (string-ref string start end)
@@ -231,6 +238,7 @@ of string delimited by start and end."
 	((>= i end)
 	 (when errorp
 	   (error "Missing terminating character ~C." char)))
+      (declare (index i))
       (let ((c (string-ref i)))
 	(cond
 	 ((char= char c)
@@ -240,108 +248,114 @@ of string delimited by start and end."
 	  (incf i)))))))
 
 (defun escaped-string-copy (string start end num-escapes)
-  (do* ((length (- end start num-escapes))
-	(new-string (make-string length))
-	(p 0 (1+ p))
-	(q start (1+ q)))
-      ((>= p length) new-string)
-    (when (char= (char string q) #\\)
-      (incf q))
-    (setf (char new-string p) (char string q))))
+  (let ((start (check-the index start))
+	(end (check-the index end)))
+    (do* ((length (- end start num-escapes))
+	  (new-string (make-string length))
+	  (p 0 (1+ p))
+	  (q start (1+ q)))
+	((>= p length) new-string)
+      (declare (index p q))
+      (when (char= (char string q) #\\)
+	(incf q))
+      (setf (char new-string p) (char string q)))))
   
 
 (defun simple-read-from-string (string &optional eof-error-p eof-value &key (start 0) (end (length string)))
   "=> object, new-position, new-string, new-end."
-  (do ((i start (1+ i)))
-      ((>= i end) (if eof-error-p
-		      (error "EOF")
-		    (values eof-value i)))
-    (case (schar string i)
-      ((#\space #\tab #\newline))
-      (#\( (return-from simple-read-from-string
-	     (simple-read-delimited-list #\) string (1+ i) end :tail-delimiter #\.)))
-      (#\) (warn "Ignoring extra ~C." (schar string i))
-	   (incf i))
-      (#\' (multiple-value-bind (quoted-form form-end)
-	       (simple-read-from-string string eof-error-p eof-value :start (1+ i) :end end)
-	     (return-from simple-read-from-string
-	       (values (list 'quote quoted-form) form-end string end))))
-      (#\" (incf i)
-	   (multiple-value-bind (string-end num-escapes)
-	       (position-with-escape #\" string i end)
-	     (return-from simple-read-from-string
-	       (values (escaped-string-copy string i string-end num-escapes)
-		       (1+ string-end)
-		       string end))))
-      (#\| (incf i)
-	   (multiple-value-bind (symbol-end num-escapes)
-	       (position-with-escape #\| string i end)
-	     (return-from simple-read-from-string
-	       (values (if (= 0 num-escapes)
-			   (intern-string string *package* :start i :end symbol-end)
-			 (intern (escaped-string-copy string i symbol-end num-escapes)))
-		       (1+ symbol-end)
-		       string end))))
-      (#\# (assert (< (incf i) end) (string)
-	     "End of string after #: ~S." (substring string start end))
-	  (multiple-value-bind (parameter parameter-end)
-	      (parse-integer string :start i :end end :radix 10 :junk-allowed t)
-	    (setf i parameter-end)
-	    (return-from simple-read-from-string
-	      (ecase (char-downcase (char string i))
-		(#\b (simple-read-integer string (1+ i) end 2))
-		(#\o (simple-read-integer string (1+ i) end 8))
-		(#\x (simple-read-integer string (1+ i) end 16))
-		(#\r (check-type parameter (integer 2 36))
-		     (simple-read-integer string (1+ i) end parameter))
-		(#\' (multiple-value-bind (quoted-form form-end)
-			 (simple-read-from-string string eof-error-p eof-value :start (1+ i) :end end)
-		       (values (list 'function quoted-form) form-end string end)))
-		(#\( (multiple-value-bind (contents-list form-end)
-			 (simple-read-delimited-list #\) string (1+ i) end)
-		       (values (replace (make-array (or parameter (length contents-list))
-						    :initial-element (car (last contents-list)))
-					contents-list)
-			       form-end
-			       string end)))
-		(#\* (let* ((token-end (find-token-end string :start (incf i) :end end))
-			    (bit-vector (make-array (or parameter (- token-end i))
-						    :element-type 'bit)))
-		       (do ((p i (1+ p))
-			    (q 0 (1+ q))
-			    (bit nil))
-			   ((>= q (length bit-vector)))
-			 (when (< p token-end)
-			   (setf bit (schar string p)))
-			 (case bit
-			   (#\0 (setf (aref bit-vector q) 0))
-			   (#\1 (setf (aref bit-vector q) 1))
-			   (t (error "Illegal bit-vector element: ~S" bit))))
-		       (values bit-vector
-			       token-end
-			       string end)))
-		(#\s (multiple-value-bind (struct-form form-end)
-			 (simple-read-from-string string eof-error-p eof-value :start (1+ i) :end end)
-		       (check-type struct-form list)
-		       (let* ((struct-name (car struct-form))
-			      (struct-args (cdr struct-form)))
-			 (check-type struct-name symbol "A structure name.")
-			 (values (apply #'make-structure struct-name struct-args)
-				 form-end string end))))
-		(#\: (let* ((token-end (find-token-end string :start (incf i) :end end))
-			    (symbol-name (string-upcase string :start i :end token-end)))
-		       (values (make-symbol symbol-name)
-			       token-end string end)))
-		(#\\ (let* ((token-end (find-token-end string :start (incf i) :end end))
-			    (char (name-char string i token-end)))
-		       (cond
-			(char (values char token-end))
-			((>= 1 (- token-end i))
-			 (values (char string i) (1+ i) string end))
-			(t (error "Don't know this character: ~S"
-				  (substring string i token-end))))))))))
-      (t (return-from simple-read-from-string
-	   (simple-read-token string :start i :end end))))))
+  (let ((start (check-the index start))
+	(end (check-the index end)))
+    (do ((i start (1+ i)))
+	((>= i end) (if eof-error-p
+			(error "EOF")
+		      (values eof-value i)))
+      (declare (index i))
+      (case (schar string i)
+	((#\space #\tab #\newline))
+	(#\( (return-from simple-read-from-string
+	       (simple-read-delimited-list #\) string (1+ i) end :tail-delimiter #\.)))
+	(#\) (warn "Ignoring extra ~C." (schar string i))
+	     (incf i))
+	(#\' (multiple-value-bind (quoted-form form-end)
+		 (simple-read-from-string string eof-error-p eof-value :start (1+ i) :end end)
+	       (return-from simple-read-from-string
+		 (values (list 'quote quoted-form) form-end string end))))
+	(#\" (incf i)
+	     (multiple-value-bind (string-end num-escapes)
+		 (position-with-escape #\" string i end)
+	       (return-from simple-read-from-string
+		 (values (escaped-string-copy string i string-end num-escapes)
+			 (1+ string-end)
+			 string end))))
+	(#\| (incf i)
+	     (multiple-value-bind (symbol-end num-escapes)
+		 (position-with-escape #\| string i end)
+	       (return-from simple-read-from-string
+		 (values (if (= 0 num-escapes)
+			     (intern-string string *package* :start i :end symbol-end)
+			   (intern (escaped-string-copy string i symbol-end num-escapes)))
+			 (1+ symbol-end)
+			 string end))))
+	(#\# (assert (< (incf i) end) (string)
+	       "End of string after #: ~S." (substring string start end))
+	    (multiple-value-bind (parameter parameter-end)
+		(parse-integer string :start i :end end :radix 10 :junk-allowed t)
+	      (setf i parameter-end)
+	      (return-from simple-read-from-string
+		(ecase (char-downcase (char string i))
+		  (#\b (simple-read-integer string (1+ i) end 2))
+		  (#\o (simple-read-integer string (1+ i) end 8))
+		  (#\x (simple-read-integer string (1+ i) end 16))
+		  (#\r (check-type parameter (integer 2 36))
+		       (simple-read-integer string (1+ i) end parameter))
+		  (#\' (multiple-value-bind (quoted-form form-end)
+			   (simple-read-from-string string eof-error-p eof-value :start (1+ i) :end end)
+			 (values (list 'function quoted-form) form-end string end)))
+		  (#\( (multiple-value-bind (contents-list form-end)
+			   (simple-read-delimited-list #\) string (1+ i) end)
+			 (values (replace (make-array (or parameter (length contents-list))
+						      :initial-element (car (last contents-list)))
+					  contents-list)
+				 form-end
+				 string end)))
+		  (#\* (let* ((token-end (find-token-end string :start (incf i) :end end))
+			      (bit-vector (make-array (or parameter (- token-end i))
+						      :element-type 'bit)))
+			 (do ((p i (1+ p))
+			      (q 0 (1+ q))
+			      (bit nil))
+			     ((>= q (length bit-vector)))
+			   (when (< p token-end)
+			     (setf bit (schar string p)))
+			   (case bit
+			     (#\0 (setf (aref bit-vector q) 0))
+			     (#\1 (setf (aref bit-vector q) 1))
+			     (t (error "Illegal bit-vector element: ~S" bit))))
+			 (values bit-vector
+				 token-end
+				 string end)))
+		  (#\s (multiple-value-bind (struct-form form-end)
+			   (simple-read-from-string string eof-error-p eof-value :start (1+ i) :end end)
+			 (check-type struct-form list)
+			 (let* ((struct-name (car struct-form))
+				(struct-args (cdr struct-form)))
+			   (check-type struct-name symbol "A structure name.")
+			   (values (apply #'make-structure struct-name struct-args)
+				   form-end string end))))
+		  (#\: (let* ((token-end (find-token-end string :start (incf i) :end end))
+			      (symbol-name (string-upcase string :start i :end token-end)))
+			 (values (make-symbol symbol-name)
+				 token-end string end)))
+		  (#\\ (let* ((token-end (find-token-end string :start (incf i) :end end))
+			      (char (name-char string i token-end)))
+			 (cond
+			  (char (values char token-end))
+			  ((>= 1 (- token-end i))
+			   (values (char string i) (1+ i) string end))
+			  (t (error "Don't know this character: ~S"
+				    (substring string i token-end))))))))))
+	(t (return-from simple-read-from-string
+	     (simple-read-token string :start i :end end)))))))
 
 (defun read-from-string (&rest args)
   (declare (dynamic-extent args))

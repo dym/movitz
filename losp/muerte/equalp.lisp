@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 2001, 2003-2004, 
+;;;;    Copyright (C) 2001, 2003-2005, 
 ;;;;    Department of Computer Science, University of Tromso, Norway.
 ;;;; 
 ;;;;    For distribution policy, see the accompanying file COPYING.
@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 13 17:09:08 2001
 ;;;;                
-;;;; $Id: equalp.lisp,v 1.6 2004/07/22 01:07:38 ffjeld Exp $
+;;;; $Id: equalp.lisp,v 1.7 2005/08/26 19:38:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -55,6 +55,7 @@
 	    (and (= length (length y))
 		 (do ((i 0 (1+ i)))
 		     ((= i length) t)
+		   (declare (index i))
 		   (unless (equalp (aref x i) (aref y i))
 		     (return nil)))))))
     (structure-object

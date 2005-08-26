@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.108 2005/08/24 07:31:40 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.109 2005/08/26 19:39:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -803,6 +803,7 @@
 		   (let ((result (%make-bignum (1+ (ceiling result-length 32)))))
 		     (let ((src-max-bigit (* 2 (%bignum-bigits integer))))
 		       (dotimes (i (* 2 (%bignum-bigits result)))
+			 (declare (index i))
 			 (let ((src (+ i long)))
 			   (setf (memref result -2 :index i :type :unsigned-byte16)
 			     (if (< src src-max-bigit)

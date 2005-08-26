@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.19 2005/05/24 06:33:19 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.20 2005/08/26 19:39:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -389,42 +389,46 @@ interpreted as a lispval, and consequently a fixnum."
   (ecase type
     (:unsigned-byte8
      (let ((vector (make-array length :element-type '(unsigned-byte 8))))
-       (let ((i index))
-	 (dotimes (j length)
+       (let ((i (check-the index index)))
+	 (declare (index i))
+	 (dotimes (j (check-the index length))
+	   (declare (index j))
 	   (setf (aref vector j)
 	     (memref object offset :index i :type :unsigned-byte8))
 	   (incf i)))
        vector))))
 
 (defun (setf memrange) (value object offset index length type)
-  (ecase type
-    (:unsigned-byte8
-     (etypecase value
-       ((unsigned-byte 8)
-	(do ((end (+ index length))
-	     (i index (1+ i)))
-	    ((>= i end))
-	  (setf (memref object offset :index i :type :unsigned-byte8) value)))
-       (vector
-	(do ((end (+ index length))
-	     (i index (1+ i))
-	     (j 0 (1+ j)))
-	    ((or (>= i end) (>= j (length value))))
-	  (setf (memref object offset :index i :type :unsigned-byte8)
-	    (aref value j))))))
-    (:character
-     (etypecase value
-       (character
-	(do ((end (+ index length))
-	     (i index (1+ i)))
-	    ((>= i end))
-	  (setf (memref object offset :index i :type :character) value)))
-       (string
-	(do ((end (+ index length))
-	     (i index (1+ i))
-	     (j 0 (1+ j)))
-	    ((or (>= i end) (>= j (length value))))
-	  (setf (memref object offset :index i :type :character)
-	    (char value j)))))))
+  (let* ((index (check-the index index))
+	 (end (check-the index (+ index length))))	
+    (ecase type
+      (:unsigned-byte8
+       (etypecase value
+	 ((unsigned-byte 8)
+	  (do ((i index (1+ i)))
+	      ((>= i end))
+	    (declare (index i))
+	    (setf (memref object offset :index i :type :unsigned-byte8) value)))
+	 (vector
+	  (do ((i index (1+ i))
+	       (j 0 (1+ j)))
+	      ((or (>= i end) (>= j (length value))))
+	    (declare (index i j))
+	    (setf (memref object offset :index i :type :unsigned-byte8)
+	      (aref value j))))))
+      (:character
+       (etypecase value
+	 (character
+	  (do ((i index (1+ i)))
+	      ((>= i end))
+	    (declare (index i))
+	    (setf (memref object offset :index i :type :character) value)))
+	 (string
+	  (do ((i index (1+ i))
+	       (j 0 (1+ j)))
+	      ((or (>= i end) (>= j (length value))))
+	    (declare (index i j))
+	    (setf (memref object offset :index i :type :character)
+	      (char value j))))))))
   value)
      

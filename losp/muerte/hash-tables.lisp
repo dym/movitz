@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb 19 19:09:05 2001
 ;;;;                
-;;;; $Id: hash-tables.lisp,v 1.10 2005/08/24 07:19:37 ffjeld Exp $
+;;;; $Id: hash-tables.lisp,v 1.11 2005/08/26 19:38:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -191,6 +191,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 		  (hash-table-count hash-table) 0)
 	    (do ((i 0 (+ i 2)))
 		((>= i bucket-length))
+	      (declare ((index 2) i))
 	      (let ((old-key (svref%unsafe bucket i)))
 		(unless (eq old-key '--no-hash-key--)
 		  (setf (gethash old-key hash-table)
@@ -206,7 +207,9 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 	(setf index2 0))))))
 
 (defun gethash-string (key-string start end hash-table &optional default (key 'identity))
-  (let ((bucket (hash-table-bucket hash-table)))
+  (let ((start (check-the index start))
+	(end (check-the index end))
+	(bucket (hash-table-bucket hash-table)))
     (with-subvector-accessor (key-string-ref key-string start end)
       (do* ((bucket-length (length bucket))
 	    (index2 (rem (* 2 (sxhash-subvector key-string start end 8))
@@ -222,6 +225,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 		   (do ((bs-index 0 (1+ bs-index))
 			(key-index start (1+ key-index)))
 		       ((>= key-index end) t)
+		     (declare (index bs-index key-index))
 		     (unless (and (< bs-index bs-length)
 				  (char= (funcall key (key-string-ref key-index))
 					 (schar bs bs-index)))
@@ -235,6 +239,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 		(rem (+ 2 index2) bucket-length))
 	(i 0 (+ i 2)))
       ((>= i bucket-length) nil)
+    (declare ((index 2) i index2))
     (let ((x (svref bucket index2)))
       (when (or (eq x '--no-hash-key--)
 		(funcall (hash-table-test hash-table) x key))
@@ -245,6 +250,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 	(do ((i (rem (+ index2 2) bucket-length)
 		(rem (+ i 2) bucket-length)))
 	    ((= i index2))
+	  (declare ((index 2) i))
 	  (let ((k (svref bucket i)))
 	    (when (eq x '--no-hash-key--)
 	      (return))
@@ -259,6 +265,7 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 	(bucket-length (length bucket))
 	(i 0 (+ i 2)))
       ((>= i bucket-length))
+    (declare ((index 2) i))
     (setf (svref bucket i) '--no-hash-key--))
   hash-table)
 
