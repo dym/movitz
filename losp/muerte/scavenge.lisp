@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.52 2005/08/26 19:38:19 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.53 2005/08/26 22:42:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -50,7 +50,9 @@ start-location and end-location."
 	       (let ((code (dpb secondary
 				(byte 8 8)
 				(movitz:tag primary))))
-		 `(= ,code ,x))))
+		 `(= ,code ,x)))
+	     (record-scan (x)
+	       #+ignore `(setf *scan-last* ,x)))
     (do ((verbose *map-header-vals-verbose*)
 	 (*scan-last* nil)		; Last scanned object, for debugging.
 	 (scan start-location (1+ scan)))
@@ -79,12 +81,12 @@ start-location and end-location."
 	    ;; Just skip the bigits
 	    (let* ((bigits (memref scan 0 :index 1 :type :unsigned-byte14))
 		   (delta (logior bigits 1)))
-	      (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
+	      (record-scan (%word-offset scan #.(movitz:tag :other)))
 	      (incf scan delta)))
 	   ((scavenge-typep x :defstruct)
 	    (assert (evenp scan) ()
 	      "Scanned struct-header ~S at odd location #x~X." x scan)
-	    (setf *scan-last* (%word-offset scan #.(movitz:tag :other))))
+	    (record-scan (%word-offset scan #.(movitz:tag :other))))
 	   ((scavenge-typep x :run-time-context)
 	    (assert (evenp scan) ()
 	      "Scanned run-time-context-header ~S at odd location #x~X." 
@@ -102,7 +104,7 @@ start-location and end-location."
 	    (assert (evenp scan) ()
 	      "Scanned funobj-header ~S at odd location #x~X." 
 	      (memref scan 0 :type :unsigned-byte32) scan)
-	    (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
+	    (record-scan (%word-offset scan #.(movitz:tag :other)))
 	    ;; Process code-vector pointers specially..
 	    (let* ((old-code-vector (memref (incf scan) 0 :type :code-vector))
 		   (new-code-vector (map-instruction-pointer function scan old-code-vector)))
@@ -163,14 +165,14 @@ start-location and end-location."
 	      "Scanned u8-vector-header ~S at odd location #x~X." x scan)
 	    (let ((len (memref scan 0 :index 1 :type :lisp)))
 	      (check-type len positive-fixnum)
-	      (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
+	      (record-scan (%word-offset scan #.(movitz:tag :other)))
 	      (incf scan (1+ (* 2 (truncate (+ 7 len) 8))))))
 	   ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u16))
 	    (assert (evenp scan) ()
 	      "Scanned u16-vector-header ~S at odd location #x~X." x scan)
 	    (let ((len (memref scan 0 :index 1)))
 	      (check-type len positive-fixnum)
-	      (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
+	      (record-scan (%word-offset scan #.(movitz:tag :other)))
 	      (incf scan (1+ (* 2 (truncate (+ 3 len) 4))))))
 	   ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u32))
 	    (assert (evenp scan) ()
@@ -178,7 +180,7 @@ start-location and end-location."
 	    (let ((len (memref scan 4)))
 	      (assert (typep len 'positive-fixnum) ()
 		"Scanned basic-vector at ~S with illegal length ~S." scan len)
-	      (setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
+	      (record-scan (%word-offset scan #.(movitz:tag :other)))
 	      (incf scan (1+ (logand (1+ len) -2)))))
 	   ((scavenge-typep x :basic-vector)
 	    (if (or (scavenge-wide-typep x :basic-vector
@@ -187,10 +189,10 @@ start-location and end-location."
 		    (scavenge-wide-typep x :basic-vector
 					 #.(bt:enum-value 'movitz:movitz-vector-element-type
 							  :indirects)))
-		(setf *scan-last* (%word-offset scan #.(movitz:tag :other)))
+		(record-scan (%word-offset scan #.(movitz:tag :other)))
 	      (error "Scanned unknown basic-vector-header ~S at location #x~X." x scan)))
 	   ((and (eq x 3) (eq x2 0))
-	    (setf *scan-last* scan)
+	    (record-scan scan)
 	    (incf scan)
 	    (let ((delta (memref scan 0)))
 	      (check-type delta positive-fixnum)
