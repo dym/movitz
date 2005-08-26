@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.159 2005/08/26 19:43:32 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.160 2005/08/26 21:42:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -567,6 +567,13 @@ Side-effects each binding's binding-store-type."
 		       (when (and (not (null (type-analysis-thunks analysis)))
 				  (not (apply #'encoded-allp
 					      (type-analysis-declared-encoded-type analysis))))
+			 #+ignore
+			 (warn "Trusting ~S, was ~S, because ~S [~S]"
+			       binding
+			       (type-analysis-encoded-type analysis)
+			       (type-analysis-thunks analysis)
+			       (loop for (thunk . thunk-args) in (type-analysis-thunks analysis)
+				   collect (mapcar #'binding-resolved-p thunk-args)))
 			 (setf (type-analysis-encoded-type analysis)
 			   (type-analysis-declared-encoded-type analysis))
 			 (setf (type-analysis-thunks analysis) nil))) ; Ignore remaining thunks.
@@ -1742,6 +1749,8 @@ There is (propably) a bug in the peephole optimizer." recursive-count))
 	   (stack-frame-operand (twop-dst c op)))
 	 (read-stack-frame-p (c)
 	   (or (load-stack-frame-p c :movl)
+	       (load-stack-frame-p c :addl)
+	       (load-stack-frame-p c :subl)
 	       (load-stack-frame-p c :cmpl)
 	       (store-stack-frame-p c :cmpl)
 	       (and (consp c)
@@ -7044,6 +7053,7 @@ and a list of any intervening unwind-protect environment-slots."
 but it's requested to be in ~S."
 			 destreg)
 		       (let ((srcloc (new-binding-location (binding-target src) frame-map)))
+			 (unless (eql srcloc loc1) (break))
 			 (if (integerp srcloc)
 			     `((:addl (:ebp ,(stack-frame-offset srcloc))
 				      ,destreg)
