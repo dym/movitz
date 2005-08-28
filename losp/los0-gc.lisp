@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.57 2005/06/12 20:32:44 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.58 2005/08/28 21:10:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -396,8 +396,8 @@ duo-space where each space is KB-SIZE kilobytes."
 				(and (object-in-space-p newspace forwarded-x)
 				     forwarded-x)))
 			 (let ((forward-x (shallow-copy x)))
-			   (when (and (typep x 'muerte::pointer)
-				      *gc-consistency-check*)
+			   (when (and *gc-consistency-check*
+				      (typep x 'muerte::pointer))
 			     (let ((a *x*))
 			       (vector-push (%object-lispval x) a)
 			       (vector-push (memref (object-location x) 0 :type :unsigned-byte32) a)
@@ -411,21 +411,21 @@ duo-space where each space is KB-SIZE kilobytes."
 	(dolist (range muerte::%memory-map-roots%)
 	  (map-header-vals evacuator (car range) (cdr range))))
       ;; Scan newspace, Cheney style.
-      (loop with newspace-location = (+ 2 (object-location newspace))
-	  with scan-pointer = 2
-	  as fresh-pointer = (space-fresh-pointer newspace)
+      (loop with newspace-location of-type index = (+ 2 (object-location newspace))
+	  with scan-pointer of-type index = 2
+	  as fresh-pointer of-type index = (space-fresh-pointer newspace)
 	  while (< scan-pointer fresh-pointer)
 	  do (map-header-vals evacuator
 			      (+ newspace-location scan-pointer)
 			      (+ newspace-location (space-fresh-pointer newspace)))
 	     (setf scan-pointer fresh-pointer))
-      ;; Consistency check..
-      (map-stack-vector (lambda (x foo)
-			  (declare (ignore foo))
-			  x)
-			nil
-			(current-stack-frame))
       (when *gc-consistency-check*
+	;; Consistency check..
+	(map-stack-vector (lambda (x foo)
+			    (declare (ignore foo))
+			    x)
+			  nil
+			  (current-stack-frame))
 	(with-simple-restart (continue "Ignore failed GC consistency check.")
 	  (without-interrupts
 	    (let ((a *x*))
@@ -495,11 +495,12 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
       (dolist (hook *gc-hooks*)
 	(funcall hook))
       (initialize-space oldspace)
-      (fill oldspace #x13 :start 2)
-      ;; (setf *gc-stack2* *gc-stack*)
-      (setf *gc-stack* (muerte::copy-current-control-stack))
-      #+ignore (setf (fill-pointer *xx*) (fill-pointer *x*))
-      #+ignore (replace *xx* *x*)))
+      (when *gc-consistency-check*
+	(fill oldspace #x13 :start 2)
+	;; (setf *gc-stack2* *gc-stack*)
+	(setf *gc-stack* (muerte::copy-current-control-stack))
+	#+ignore (setf (fill-pointer *xx*) (fill-pointer *x*))
+	#+ignore (replace *xx* *x*))))
   (values))
 
 (defun simple-stop-and-copy (newspace oldspace)
