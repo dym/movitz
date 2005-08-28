@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.64 2005/08/21 13:47:20 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.65 2005/08/28 20:53:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1083,10 +1083,11 @@ busy-waiting loop on P4."
 
 (defmacro word-nibble (word-form nibble)
   (check-type nibble (integer 0 7))
-  `(with-inline-assembly (:returns :untagged-fixnum-eax)
+  `(with-inline-assembly (:returns :untagged-fixnum-ecx)
      (:compile-form (:result-mode :eax) ,word-form)
-     (:shrl ,(* 4 nibble) :eax)
-     (:andl #xf :eax)))
+     (:movl :eax :ecx)
+     (:shrl ,(* 4 nibble) :ecx)
+     (:andl #xf :ecx)))
 
 (define-compiler-macro boundp (symbol)
   `(with-inline-assembly-case ()
