@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.48 2005/08/24 07:32:54 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.49 2005/08/28 21:13:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -343,8 +343,6 @@
     (setf (sequence-1-ref i)
       'foo)))
 
-(defun plus (a b)
-  (+ b a))
 
 #+ignore
 (defun test-values ()
@@ -1104,8 +1102,8 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
 			 (find-package "COMMON-LISP")
 			 (error "Unable to find any package!")))
 	  (*repl-prompt-context* #\d)
-	  (*repl-readline-context* (or *repl-readline-context*
-				       (make-readline-context :history-size 16))))
+	  #+ignore (*repl-readline-context* (or *repl-readline-context*
+						(make-readline-context :history-size 16))))
       (let ((*print-safely* t))
 	(invoke-toplevel-command :error))
       (loop
@@ -1334,6 +1332,10 @@ Can be used to measure the overhead of primitive function."
   (loop for addr upfrom start repeat length
       collect (memref-int addr :type :unsigned-byte8)))
 
+(defun plus (a b)
+  (+ (muerte::check-the fixnum a)
+     (muerte::check-the fixnum b)))
+
 (defun genesis ()
   ;; (install-shallow-binding)
   (setf *debugger-function* #'los0-debugger)
@@ -1355,7 +1357,8 @@ Can be used to measure the overhead of primitive function."
     #+ignore
     (install-los0-consing :kb-size (max 50 (truncate (- extended-memsize 2048) 2))))
 
-  (clos-bootstrap)
+  (let ((muerte::*error-no-condition-for-debugger* t))
+    (clos-bootstrap))
   (setf *package* (find-package "INIT"))
   ;; (install-shallow-binding)
   (let ((*repl-readline-context* (make-readline-context :history-size 16))
@@ -1416,7 +1419,9 @@ Can be used to measure the overhead of primitive function."
 
 (defun read (&optional input-stream eof-error-p eof-value recursive-p)
   (declare (ignore input-stream recursive-p))
-  (let ((string (muerte.readline:contextual-readline *repl-readline-context*)))
+  (let ((string (if *repl-readline-context*
+		    (muerte.readline:contextual-readline *repl-readline-context*)
+		  (muerte.readline:readline (make-string 256) *terminal-io*))))
     (simple-read-from-string string eof-error-p eof-value)))
 
 
