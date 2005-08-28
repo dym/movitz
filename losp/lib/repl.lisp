@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 19 14:58:12 2003
 ;;;;                
-;;;; $Id: repl.lisp,v 1.15 2005/03/09 07:16:48 ffjeld Exp $
+;;;; $Id: repl.lisp,v 1.16 2005/08/28 21:12:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -52,7 +52,10 @@
       (funcall *repl-prompter*)))
   (handler-case
       (let ((previous-package *package*)
-	    (buffer-string (muerte.readline:contextual-readline *repl-readline-context*)))
+	    (buffer-string
+	     (if *repl-readline-context*
+		 (muerte.readline:contextual-readline *repl-readline-context*)
+	       (muerte.readline:readline (make-string 256) *terminal-io*))))
 	(when (plusp (length buffer-string))
 	  (terpri)
 	  (multiple-value-bind (form buffer-pointer)
