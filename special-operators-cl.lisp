@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.47 2005/08/20 20:31:15 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.48 2005/08/28 21:03:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -85,11 +85,11 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				      :modify-accumulate let-modifies
 				      :result-mode :push)
 				    `((:pushl :edi)) ; scratch
-				    (compiler-call #'compile-self-evaluating ; binding name
+				    (compiler-call #'compile-form ; binding name
 				      :with-stack-used (incf stack-used 2)
 				      :env init-env
 				      :defaults all
-				      :form var
+				      :form `(muerte.cl:quote ,var)
 				      :result-mode :push)
 				    (prog1 nil (incf stack-used)))
 			    nil t)
@@ -103,20 +103,26 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 			   (compiler-values-bind (&code init-code &functional-p functional-p
 						  &type type &returns init-register
 						  &final-form final-form)
-			       (compiler-call #'compile-form-to-register
+			       
+			       (compiler-call #'compile-form-unprotected
+				 :result-mode binding
+				 :env init-env
+				 :extent local-env
+				 :defaults all
+				 :form init-form)
+			     #+ignore
+			     (compiler-call #'compile-form-to-register
 				 :env init-env
 				 :extent local-env
 				 :defaults all
 				 :form init-form
 				 :modify-accumulate let-modifies)
+			     (when (eq binding init-register)
+			       (setf init-register nil))
 ;;;			     (warn "var ~S, type: ~S" var type)
 ;;;			     (warn "var ~S init: ~S.." var init-form)
-;;;			     (print-code 'init
-;;;					 (compiler-call #'compile-form
-;;;					   :env init-env
-;;;					   :defaults all
-;;;					   :form init-form
-;;;					   :result-mode binding))
+;;;			     (warn "bind: ~S reg: ~S" binding init-register)
+;;;			     (print-code 'init init-code)
 			     (list var
 				   init-form
 				   init-code
@@ -127,6 +133,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				     init-type)
 				   (case init-register
 				     (:non-local-exit :edi)
+				     (:multiple-values :eax)
 				     (t init-register))
 				   final-form))))))
 	  (setf (stack-used local-env)
@@ -221,6 +228,9 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 						    ;; This is the best we can do now to determine
 						    ;; if target-binding is ever used again.
 						    (and (eq result-mode :function)
+							 (not (and (bindingp body-returns)
+								   (binding-eql target-binding
+										body-returns)))
 							 (not (code-uses-binding-p body-code
 										   target-binding
 										   :load t
@@ -261,10 +271,11 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 								   :load nil :store t)))
 				    ;; replace read-only lexical binding with
 				    ;; side-effect-free form
-				    #+ignore (warn "Constant binding: ~S => ~S => ~S"
-						   (binding-name binding)
-						   init-form
-						   (car (type-specifier-singleton type)))
+				    #+ignore
+				    (warn "Constant binding: ~S => ~S => ~S"
+					  (binding-name binding)
+					  init-form
+					  (car (type-specifier-singleton type)))
 				    (change-class binding 'constant-object-binding
 						  :object (car (type-specifier-singleton type)))
 				    (if functional-p
@@ -1404,7 +1415,9 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		:returns :eax))))
 	 (t (compiler-call #'compile-form-unprotected
 	      :forward all
-	      :form `(muerte::compiled-cond (,test-form ,then-form) (t ,else-form)))))))))
+	      :form `(muerte::compiled-cond
+		      (,test-form ,then-form)
+		      (muerte.cl::t ,else-form)))))))))
 
 (define-special-operator the (&all all &form form)
   (destructuring-bind (value-type sub-form)
