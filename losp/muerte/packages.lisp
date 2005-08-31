@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 30 15:19:43 2001
 ;;;;                
-;;;; $Id: packages.lisp,v 1.11 2005/08/24 07:29:40 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.12 2005/08/31 22:32:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -55,6 +55,7 @@
 (defun list-all-packages ()
   (let (pkgs)
     (maphash (lambda (k v)
+	       (declare (ignore k))
                (pushnew v pkgs))
              *packages*)
     pkgs))
