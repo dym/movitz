@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.13 2005/08/24 07:28:19 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.14 2005/08/31 22:31:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -164,3 +164,6 @@
 	    (funobj-name object)
 	    arglist)))
 
+(defun sleep (seconds)
+  (declare (ignore seconds))
+  (error "There is no default implementation of sleep."))
