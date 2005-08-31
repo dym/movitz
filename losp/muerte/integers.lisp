@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.109 2005/08/26 19:39:14 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.110 2005/08/31 22:34:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -327,6 +327,9 @@
 
 (deftype negative-fixnum ()
   `(integer #.movitz:+movitz-most-negative-fixnum+ -1))
+
+(deftype negative-bignum ()
+  `(integer * #.(cl:1- movitz::+movitz-most-negative-fixnum+)))
 
 (defun fixnump (x)
   (typep x 'fixnum))
@@ -1482,6 +1485,36 @@
 			     (:eax :edx (:offset movitz-bignum bigit0)))
 		      (:subl 4 :edx)
 		      (:jnc 'pb-pb-and-loop)))))
+		((negative-bignum fixnum)
+		 (with-inline-assembly (:returns :eax)
+		   (:load-lexical (:lexical-binding x) :untagged-fixnum-ecx)
+		   (:load-lexical (:lexical-binding y) :eax)
+		   (:leal ((:ecx 4) -4) :ecx)
+		   (:notl :ecx)
+		   (:andl :ecx :eax)))
+		((negative-bignum positive-bignum)
+		 (cond
+		  ((<= (%bignum-bigits y) (%bignum-bigits x))
+		   (let ((r (copy-bignum y)))
+		     (with-inline-assembly (:returns :eax)
+		       (:load-lexical (:lexical-binding r) :eax)
+		       (:load-lexical (:lexical-binding x) :ebx)
+		       (:xorl :edx :edx)
+		       (:movl #xffffffff :ecx)
+		      loop
+		       (:addl (:ebx :edx (:offset movitz-bignum bigit0))
+			      :ecx)
+		       (:notl :ecx)
+		       (:andl :ecx (:eax :edx (:offset movitz-bignum bigit0)))
+		       (:notl :ecx)
+		       (:cmpl -1 :ecx)
+		       (:je 'carry)
+		       (:xorl :ecx :ecx)
+		      carry
+		       (:addl 4 :edx)
+		       (:cmpw :dx (:eax (:offset movitz-bignum length)))
+		       (:ja 'loop))))
+		  (t (error "Logand not implemented."))))
 		)))
 	(do-it)))
    (t (&rest integers)
@@ -1639,10 +1672,7 @@
 	(reduce #'logxor integers)))))
 
 (defun lognot (integer)
-  (check-type integer fixnum)
-  (with-inline-assembly (:returns :eax)
-    (:compile-form (:result-mode :eax) integer)
-    (:xorl #.(cl:- #xffffffff movitz::+movitz-fixnum-zmask+) :eax)))
+  (- -1 integer))
 
 (defun ldb%byte (size position integer)
   "This is LDB with explicit byte-size and position parameters."
