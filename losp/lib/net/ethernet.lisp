@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:25:31 2002
 ;;;;                
-;;;; $Id: ethernet.lisp,v 1.10 2005/08/14 18:52:39 ffjeld Exp $
+;;;; $Id: ethernet.lisp,v 1.11 2005/08/31 22:35:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -85,7 +85,8 @@
 	 (start-var (gensym "ether-packet-start-")))
     `(let* ((,start-var ,start)
 	    (,packet-var (ensure-data-vector ,packet ,start-var 14))
-	    (,offset-var (+ ,start-var (movitz-type-slot-offset 'movitz-basic-vector 'data))))       
+	    (,offset-var (+ ,start-var (movitz-type-slot-offset 'movitz-basic-vector 'data))))
+       (declare (ignorable ,start-var ,packet-var ,offset-var))
        (macrolet ((,ether (slot)
 		    (ecase slot
 		      (:source

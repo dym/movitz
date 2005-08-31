@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.58 2005/08/28 21:10:46 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.59 2005/08/31 22:35:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -358,7 +358,7 @@ duo-space where each space is KB-SIZE kilobytes."
 	   (or evacuator
 	       (lambda (x location)
 		 "If x is in oldspace, migrate it to newspace."
-		 ;; (declare (ignore location))
+		 (declare (ignore location))
 		 (cond
 		  ((null x)
 		   nil)

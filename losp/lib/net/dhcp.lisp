@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri May 13 23:24:01 2005
 ;;;;                
-;;;; $Id: dhcp.lisp,v 1.3 2005/05/24 07:15:54 ffjeld Exp $
+;;;; $Id: dhcp.lisp,v 1.4 2005/08/31 22:35:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -207,7 +207,8 @@
 			       (fill-pointer packet)
 			       (incf (fill-pointer packet) length)))))))))
 
-(defun format-dhcp-request (nic &rest dhcp-options &key (xid 0) (message-type :dhcpdiscover))
+(defun format-dhcp-request (nic &rest dhcp-options &key (xid 0)
+							#+ignore (message-type :dhcpdiscover))
   (let ((packet (make-ethernet-packet)))
     (with-ether-header (ether packet)
       (setf (ether :source) (mac-address nic)

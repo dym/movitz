@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.40 2005/05/05 20:52:45 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.41 2005/08/31 22:34:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -636,6 +636,7 @@ be provided for those cases."
 	  (do () (nil)
 	    (multiple-value-bind (morep setf-name symbol)
 		(hashis)
+	      (declare (ignore setf-name))
 	      (cond
 	       ((not morep)
 		(return nil))
