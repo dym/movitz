@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.162 2005/08/31 22:30:55 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.163 2005/09/01 22:52:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3833,11 +3833,37 @@ loading borrowed bindings."
 		      (t `((:movl ,source :eax)
 			   (,*compiler-global-segment-prefix*
 			    :call (:edi ,(global-constant-offset 'unbox-u32))))))))))
+	       ((eq source :boolean-cf=1)
+		(let ((tmp (chose-free-register protect-registers)))
+		  `((:sbbl :ecx :ecx)
+		    (,*compiler-local-segment-prefix*
+		     :movl (:edi (:ecx 4) ,(global-constant-offset 'not-not-nil)) ,tmp)
+		    ,@(make-store-lexical binding tmp shared-reference-p funobj frame-map
+					  :protect-registers protect-registers))))
+	       ((eq source :boolean-cf=0)
+		(let ((tmp (chose-free-register protect-registers)))
+		  `((:sbbl :ecx :ecx)
+		    (,*compiler-local-segment-prefix*
+		     :movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-zero)) ,tmp)
+		    ,@(make-store-lexical binding tmp shared-reference-p funobj frame-map
+					  :protect-registers protect-registers))))
+	       ((and *compiler-use-cmov-p*
+		     (member source +boolean-modes+))
+		(let ((tmp (chose-free-register protect-registers)))
+		  (append `((:movl :edi ,tmp))
+			  (list (cons *compiler-local-segment-prefix*
+				      (make-cmov-on-boolean source
+							    `(:edi ,(global-constant-offset 't-symbol))
+							    tmp)))
+			  (make-store-lexical binding tmp shared-reference-p funobj frame-map
+					      :protect-registers protect-registers))))
 	       ((member source +boolean-modes+)
 		(let ((tmp (chose-free-register protect-registers))
 		      (label (gensym "store-lexical-bool-")))
 		  (append `((:movl :edi ,tmp))
-			  (list (make-branch-on-boolean source label))
+			  (list (make-branch-on-boolean source label :invert t))
+			  `((,*compiler-local-segment-prefix*
+			     :movl (:edi ,(global-constant-offset 't-symbol)) ,tmp))
 			  (list label)
 			  (make-store-lexical binding tmp shared-reference-p funobj frame-map
 					      :protect-registers protect-registers))))
