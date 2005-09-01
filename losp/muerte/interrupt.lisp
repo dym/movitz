@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.48 2005/08/26 19:40:32 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.49 2005/09/01 22:53:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -348,7 +348,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 				(princ "Halting CPU due to stack exhaustion.")
 				(halt-cpu))
 			       ((<= stack-left 1024)
-				(backtrace :print-frames t)
+				#+ignore (backtrace :print-frames t)
 				(halt-cpu)
 				#+ignore
 				(format *debug-io*
@@ -363,6 +363,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 		   (format *debug-io* "~&Stack-warning: Bumped stack-bottom by ~D to #x~X. Reset ES.~%"
 			   (- old-bottom new-bottom)
 			   new-bottom)
+		   (backtrace :length 5 :spartan t)
 		   (break "Stack overload exception ~D at EIP=~@Z, ESP=~@Z, bottom=#x~X, ENV=#x~X."
 			  vector $eip
 			  (dit-frame-esp nil dit-frame)
