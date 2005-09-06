@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.163 2005/09/01 22:52:58 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.164 2005/09/06 22:00:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3546,7 +3546,7 @@ loading borrowed bindings."
 			  (type-specifier-singleton decoded-type))
 		     #+ignore (warn "Immloadlex: ~S"
 				    (type-specifier-singleton decoded-type))
-		     (make-immediate-move (movitz-immediate-value
+		     (make-immediate-move (movitz-fixnum-value
 					   (car (type-specifier-singleton decoded-type)))
 					  :ecx))
 		    ((and binding-type
