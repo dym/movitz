@@ -1,6 +1,6 @@
 ;;;;------------------------------------------------------------------
 ;;;; 
-;;;;    Copyright (C) 20012000, 2002-2004,
+;;;;    Copyright (C) 2000-2005,
 ;;;;    Department of Computer Science, University of Tromso, Norway
 ;;;; 
 ;;;; Filename:      eval.lisp
@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  2 17:45:05 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: eval.lisp,v 1.9 2004/12/09 13:27:28 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.10 2005/09/16 22:49:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -149,7 +149,7 @@
 		     (cdr form))))
      ((member operator '(muerte.cl:coerce))
       (apply #'coerce
-	     (mapcar (lambda (arg) (movitz-eval arg env nil))
+	     (mapcar (lambda (arg) (translate-program (movitz-eval arg env nil) :muerte.cl :cl))
 		     (cdr form))))
      ((and compiler-macro-function
 	   (not (movitz-env-get (car form) 'notinline nil env))
