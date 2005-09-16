@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 21 22:14:08 2001
 ;;;;                
-;;;; $Id: io-port.lisp,v 1.18 2005/08/20 20:27:19 ffjeld Exp $
+;;;; $Id: io-port.lisp,v 1.19 2005/09/16 22:48:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -79,6 +79,15 @@
 	  (:movl :edi :eax)
 	  (:movl :edi :edx)
 	  (:cld)))
+      (:location
+       `(with-inline-assembly (:returns :eax :type fixnum)
+	  (:compile-form (:result-mode :edx) ,port)
+	  (:std)
+	  (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+	  (:inl :dx :eax)
+	  (:andl -8 :eax)
+	  (:movl :edi :edx)
+	  (:cld)))
       (:character
        `(with-inline-assembly (:returns :eax)
 	  (:compile-form (:result-mode :edx) ,port)
@@ -99,6 +108,8 @@
      (io-port port :unsigned-byte16))
     (:unsigned-byte32
      (io-port port :unsigned-byte32))
+    (:location
+     (io-port port :location))
     (:character
      (io-port port :character))))
 
@@ -260,6 +271,20 @@
 	      (:movl :edi :edx)
 	      (:movl :edi :eax)
 	      (:cld))))
+	(:location
+	 `(let ((,value-var ,value)
+		(,port-var ,port))
+	    (with-inline-assembly (:returns :nothing)
+	      (:load-lexical (:lexical-binding ,port-var) :edx)
+	      (:load-lexical (:lexical-binding ,value-var) :eax)
+	      (:andl -8 :eax)
+	      (:std)
+	      (:shrl ,movitz::+movitz-fixnum-shift+ :edx)
+	      (:outl :eax :dx)
+	      (:movl :edi :edx)
+	      (:movl :edi :eax)
+	      (:cld))
+	    ,value-var))
 	(:character
 	 `(let ((,value-var ,value)
 		(,port-var ,port))
@@ -284,6 +309,8 @@
      (setf (io-port port :unsigned-byte16) value))
     (:unsigned-byte32
      (setf (io-port port :unsigned-byte32) value))
+    (:location
+     (setf (io-port port :location) value))
     (:character
      (setf (io-port port :character) value))))
 
@@ -309,7 +336,7 @@
 that reads from <io-base-form> plus some offset."
   (let ((io-var (gensym "io-base-")))
     `(let ((,io-var (check-the (unsigned-byte 16) ,io-base-form)))
-       (symbol-macrolet ((,name ,io-var))
+       (let ((,name ,io-var))
 	 (macrolet ((,name (offset &optional (type :unsigned-byte8))
 		      `(io-port (+ ,',io-var ,offset) ,type)))
 	   ,@body)))))
