@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.111 2005/09/16 22:05:46 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.112 2005/09/16 22:14:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1862,7 +1862,8 @@
 		     (:compile-form (:result-mode :ebx) integer)
 		     (:compile-form (:result-mode :ecx) position)
 		     (:shrl 5 :ecx) ; compute fixnum bigit-number in ecx
-		     (:cmpl #x4000 :ecx)
+		     (:cmpl ,(* #x4000 movitz:+movitz-fixnum-factor+)
+			    :ecx)
 		     (:jnc 'position-outside-integer)
 		     (:cmpw :cx (:ebx (:offset movitz-bignum length)))
 		     (:jbe '(:sub-program (position-outside-integer)
