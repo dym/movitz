@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.112 2005/09/16 22:14:59 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.113 2005/09/16 22:55:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -74,12 +74,14 @@
 	    ;; Both n1 and n2 are positive bignums.
 
 	    (:shrl 16 :ecx)
-	    (:cmpw :cx (:eax (:offset movitz-bignum length)))
+	    (:movzxw (:eax (:offset movitz-bignum length)) :edx)
+	    ;; (:cmpw :cx (:eax (:offset movitz-bignum length)))
+	    (:cmpl :ecx :edx)
 	    (:jne '(:sub-program (positive-different-sizes)
 		    (:ret)))
 
 	    ;; Both n1 and n2 are positive bignums of the same size, namely ECX.
-	    (:movl :ecx :edx)		; counter
+	    ;; (:movl :ecx :edx)		; counter
 	   positive-compare-loop
 	    (:subl ,movitz:+movitz-fixnum-factor+ :edx)
 	    (:jz 'positive-compare-lsb)
@@ -1053,10 +1055,6 @@
 			(i 0 (+ i 29)))
 		       ((>= i length) (bignum-canonicalize r))
 		     (bignum-set-zerof tmp)
-		     (when (get 'foo 'foo)
-		       (format t "~&i: ~D, y: #x~X ~S/~S~%" i (ldb (byte 29 i) y) 
-			       (integer-length x)
-			       (integer-length y)))
 		     (bignum-addf r (bignum-shift-leftf (bignum-mulf (bignum-addf tmp x)
 								     (ldb (byte 29 i) y))
 							i)))
