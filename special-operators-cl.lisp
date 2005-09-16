@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.48 2005/08/28 21:03:27 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.49 2005/09/16 22:50:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1319,7 +1319,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		     ,cleanup-entry
 		     ;; First, restore stack-frame in EBP
 		     (:movl (:esp) :ebp)
-		     ;; Now (?), modify unwind-protect dyn-env-entry to be normal continuation
+		     ;; Now, modify unwind-protect dyn-env-entry to be normal continuation
 		     (:locally (:movl (:edi (:edi-offset unbound-function)) :edx))
 		     (:movl :edx (:esp 4)) ; not unwind-protect-tag
 		     (:movl ',continue-label (:esp 8)) ; new jumper index
@@ -1341,25 +1341,10 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				(:store-lexical ,next-continuation-step-binding :eax :type t))
 			      ,@cleanup-forms))
 		   `((:locally (:popl (:edi (:edi-offset raw-scratch0)))) ; pop final continuation
-		   
-;;;		   ;; Now (?), modify unwind-protect dyn-env-entry to be normal continuation
-;;;		   (:locally (:movl (:edi (:edi-offset unbound-value)) :edx))
-;;;		   (:movl :edx (:esp 4)) ; not unwind-protect-tag
-;;;		   (:movl ',continue-label (:esp 8)) ; new jumper index
-
 		     (:load-lexical ,next-continuation-step-binding :edx)
 		     (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
 		     (:locally (:call (:edi (:edi-offset dynamic-jump-next))))
-		   
-;;;		   (:locally (:movl :esi (:edi (:edi-offset scratch1))))
-;;;		   (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
-;;;		   (:movl :edx :esp)	; enter non-local jump stack mode (possibly).
-;;;		   (:movl (:esp) :edx)	; target stack-frame EBP
-;;;		   (:movl (:edx -4) :esi) ; get target funobj into EDX
-;;;		   (:movl (:esp 8) :edx) ; target jumper number
-;;;		   (:jmp (:esi :edx ,(slot-offset 'movitz-funobj 'constant0)))
-		     )
-		   `(,continue
+		     ,continue
 		     (:movl (:esp) :ebp)
 		     (:movl (:esp 12) :edx)
 		     (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
