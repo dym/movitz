@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.110 2005/08/31 22:34:14 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.111 2005/09/16 22:05:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1053,6 +1053,10 @@
 			(i 0 (+ i 29)))
 		       ((>= i length) (bignum-canonicalize r))
 		     (bignum-set-zerof tmp)
+		     (when (get 'foo 'foo)
+		       (format t "~&i: ~D, y: #x~X ~S/~S~%" i (ldb (byte 29 i) y) 
+			       (integer-length x)
+			       (integer-length y)))
 		     (bignum-addf r (bignum-shift-leftf (bignum-mulf (bignum-addf tmp x)
 								     (ldb (byte 29 i) y))
 							i)))
@@ -1797,7 +1801,8 @@
 		 (:sarl 5 :ecx)
 		 (:andl -4 :ecx)
 		 (:addl 4 :ecx)
-		 (:cmpl #x4000 :ecx)
+		 (:cmpl ,(* #x4000 movitz:+movitz-fixnum-factor+)
+			:ecx)
 		 (:jae 'position-outside-integer)
 		 (:cmpw :cx (:ebx (:offset movitz-bignum length)))
 		 (:jc '(:sub-program (position-outside-integer)
@@ -2173,7 +2178,14 @@
 
 (defun expt (base-number power-number)
   "Take base-number to the power-number."
-  (do ((i 0 (1+ i))
-       (r 1 (* r base-number)))
-      ((>= i power-number) r)))
+  (etypecase power-number
+    (positive-fixnum
+     (do ((i 0 (1+ i))
+	  (r 1 (* r base-number)))
+	 ((>= i power-number) r)
+       (declare (index i))))
+    (positive-bignum
+     (do ((i 0 (1+ i))
+	  (r 1 (* r base-number)))
+	 ((>= i power-number) r)))))
   
