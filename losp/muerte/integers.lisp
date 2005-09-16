@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.113 2005/09/16 22:55:11 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.114 2005/09/16 23:02:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2186,5 +2186,7 @@
     (positive-bignum
      (do ((i 0 (1+ i))
 	  (r 1 (* r base-number)))
-	 ((>= i power-number) r)))))
-  
+	 ((>= i power-number) r)))
+    ((integer * -1)
+     (/ (expt base-number (- power-number))))))
+
