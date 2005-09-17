@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.114 2005/09/16 23:02:19 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.115 2005/09/17 01:44:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2175,6 +2175,26 @@
 	       r)))
 	(setf r next-r)))))
 
+(defun rootn (x root)
+  (check-type root (integer 2 *))
+  (let ((root-1 (1- root))
+	(r (/ x root)))
+    (dotimes (i 10 r)
+      (let ((m (min (integer-length (numerator r))
+		    (integer-length (denominator r)))))
+	(when (>= m 32)
+	  (setf r (/ (ash (numerator r) (- 24 m))
+		     (ash (denominator r) (- 24 m))))))
+      #+ignore (format t "~&~D: ~X~%~D: ~F [~D ~D]~%" i r i r
+		       (integer-length (numerator r))
+		       (integer-length (denominator r)))
+      (setf r (/ (+ (* root-1 r)
+		    (/ x (expt r root-1)))
+		 root)))))      
+
+(defun sqrt (x)
+  (rootn x 2))
+
 (defun expt (base-number power-number)
   "Take base-number to the power-number."
   (etypecase power-number
@@ -2187,6 +2207,10 @@
      (do ((i 0 (1+ i))
 	  (r 1 (* r base-number)))
 	 ((>= i power-number) r)))
-    ((integer * -1)
-     (/ (expt base-number (- power-number))))))
+    ((real * -1)
+     (/ (expt base-number (- power-number))))
+    (ratio
+     (expt (rootn base-number (denominator power-number))
+	   (numerator power-number)))))
+    
 
