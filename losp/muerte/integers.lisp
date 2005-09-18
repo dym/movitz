@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.116 2005/09/18 14:23:44 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.117 2005/09/18 14:42:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2137,6 +2137,18 @@
 		(gcd gcd (car rest)))
 	   (rest (cdr integers) (cdr rest)))
 	  ((null rest) gcd)))))
+
+(defun lcm (&rest numbers)
+  "Returns the least common multiple of one or more integers.  LCM of no
+  arguments is defined to be 1."
+  (numargs-case
+   (1 (n)
+      (abs n))
+   (2 (n m)
+      (abs (* (truncate (max n m) (gcd n m)) (min n m))))
+   (t (&rest numbers)
+      (declare (dynamic-extent numbers))
+      (reduce #'lcm numbers))))
 
 (defun floor (n &optional (divisor 1))
   "This is floor written in terms of truncate."
