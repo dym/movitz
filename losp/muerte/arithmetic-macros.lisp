@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.11 2005/08/24 07:31:34 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.12 2005/09/18 14:23:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -606,7 +606,9 @@
 (deftype real (&optional (lower-limit '*) (upper-limit '*))
   `(or (integer ,lower-limit ,upper-limit)
        (rational ,lower-limit ,upper-limit)))
-  
+
+(deftype number (&optional (lower-limit '*) (upper-limit '*))
+  `(real ,lower-limit ,upper-limit))
 
 (define-simple-typep (bit bitp) (x)
   (or (eq x 0) (eq x 1)))

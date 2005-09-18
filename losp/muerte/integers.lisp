@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.115 2005/09/17 01:44:29 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.116 2005/09/18 14:23:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2207,7 +2207,7 @@
      (do ((i 0 (1+ i))
 	  (r 1 (* r base-number)))
 	 ((>= i power-number) r)))
-    ((real * -1)
+    ((number * -1)
      (/ (expt base-number (- power-number))))
     (ratio
      (expt (rootn base-number (denominator power-number))
