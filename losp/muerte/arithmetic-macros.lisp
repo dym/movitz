@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.14 2005/09/18 15:58:05 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.15 2005/09/18 16:20:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -293,7 +293,18 @@
     (case (length constant-folded-integers)
       (0 0)
       (1 (first constant-folded-integers))
-      (2 `(no-macro-call logand ,(first constant-folded-integers) ,(second constant-folded-integers)))
+      (2 (cond
+	  ((typep (first constant-folded-integers)
+		  '(unsigned-byte 32))
+	   (let ((x (first constant-folded-integers)))
+	     `(with-inline-assembly (:returns :untagged-fixnum-ecx
+					      :type (unsigned-byte ,(integer-length x)))
+		(:compile-form (:result-mode :untagged-fixnum-ecx)
+			       ,(second constant-folded-integers))
+		(:andl ,x :ecx))))
+	  (t `(no-macro-call logand
+			     ,(first constant-folded-integers)
+			     ,(second constant-folded-integers)))))
       (t `(logand (logand ,(first constant-folded-integers) ,(second constant-folded-integers))
 		  ,@(cddr constant-folded-integers))))))
 
