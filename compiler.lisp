@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.164 2005/09/06 22:00:17 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.165 2005/09/18 16:20:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -7007,6 +7007,8 @@ and a list of any intervening unwind-protect environment-slots."
 		     ((eq :argument-stack (operator loc1))
 		      `((:addl ,constant0
 			       (:ebp ,(argument-stack-offset (binding-target term1))))))
+		     ((eq :untagged-fixnum-ecx (operator loc1))
+		      `((:addl ,(truncate constant0 +movitz-fixnum-factor+) :ecx)))
 		     (t (error "Don't know how to add this for loc1 ~S" loc1))))
 		   ((and constant0
 			 (integerp destination-location)
