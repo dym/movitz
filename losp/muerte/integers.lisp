@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.118 2005/09/18 15:09:22 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.119 2005/09/18 15:58:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1396,13 +1396,15 @@
 ;;; bytes
 
 (defun byte (size position)
-  (cons size position))
+  (check-type size positive-fixnum)
+  (let ((position (check-the (unsigned-byte 20) position)))
+    (+ position (ash size 20))))
 
 (defun byte-size (bytespec)
-  (car bytespec))
+  (ash bytespec -20))
 
 (defun byte-position (bytespec)
-  (cdr bytespec))
+  (ldb (byte 20 0) bytespec))
 
 (defun logbitp (index integer)
   (check-type index positive-fixnum)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.13 2005/09/18 15:09:15 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.14 2005/09/18 15:58:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -273,9 +273,11 @@
   (cond
    ((and (movitz:movitz-constantp size env)
 	 (movitz:movitz-constantp position env))
-    `(quote ,(cons (movitz:movitz-eval size env)
-		   (movitz:movitz-eval position env))))
-   (t `(cons ,size ,position))))
+    (let ((size (movitz:movitz-eval size env))
+	  (position (movitz:movitz-eval position env)))
+      (check-type position (unsigned-byte 20))
+      (+ position (ash size 20))))
+   (t form)))
 
 (define-compiler-macro logand (&whole form &rest integers &environment env)
   (let ((constant-folded-integers (loop for x in integers
