@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.12 2005/09/18 14:23:48 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.13 2005/09/18 15:09:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -268,14 +268,14 @@
 	  (t `(no-macro-call * ,factor1 ,factor2)))))
     (t `(* (* ,(first operands) ,(second operands)) ,@(cddr operands)))))
 
-(define-compiler-macro byte (&whole form size position)
+
+(define-compiler-macro byte (&whole form size position &environment env)
   (cond
-   ((and (integerp size)
-	 (integerp position))
-    (+ (* size #x400) position))
-   ((integerp size)
-    `(+ ,position ,(* size #x400)))
-   (t form)))
+   ((and (movitz:movitz-constantp size env)
+	 (movitz:movitz-constantp position env))
+    `(quote ,(cons (movitz:movitz-eval size env)
+		   (movitz:movitz-eval position env))))
+   (t `(cons ,size ,position))))
 
 (define-compiler-macro logand (&whole form &rest integers &environment env)
   (let ((constant-folded-integers (loop for x in integers
