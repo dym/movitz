@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.56 2005/08/26 22:38:07 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.57 2005/10/25 19:26:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -402,13 +402,13 @@ Obviously, this correspondence is not guaranteed to hold e.g. across GC."
 	   location
 	   (+ -1 object-location
 	      (movitz-type-word-size 'movitz-basic-vector)
-	      (* 2 (truncate (+ (array-dimension object 0) 1) 2)))))
+	      (* 4 (truncate (+ (array-dimension object 0) 3) 4)))))
       (structure-object
        (<= object-location
 	   location
 	   (+ -1 object-location
 	      (movitz-type-word-size :movitz-struct)
-	      (* 2 (truncate (+ (structure-object-length object) 1) 2))))))))
+	      (* 4 (truncate (+ (array-dimension object 0) 3) 4))))))))
 
 (defun location-in-code-vector-p%unsafe (code-vector location)
   (and (<= (object-location code-vector) location)
