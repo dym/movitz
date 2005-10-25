@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.51 2005/08/24 07:31:57 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.52 2005/10/25 19:27:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -329,6 +329,8 @@
 			   (make-other-typep :basic-vector))
 			  ((movitz:movitz-subtypep et '(unsigned-byte 8))
 			   (make-basic-vector-typep :u8))
+			  ((movitz:movitz-subtypep et '(unsigned-byte 16))
+			   (make-basic-vector-typep :u16))
 			  ((movitz:movitz-subtypep et '(unsigned-byte 32))
 			   (make-basic-vector-typep :u32))
 			  ((movitz:movitz-subtypep et 'character)
