@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.49 2005/08/28 21:13:30 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.50 2005/10/31 09:18:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -872,10 +872,9 @@ The following prints ``The inner catch returns :SECOND-THROW'' and then returns 
     (lambda (seconds)
       ;; A stupid busy-waiting sleeper.
       (check-type seconds (real 0 *))
-      (let ((start-time (get-internal-run-time)))
-	(loop with start-time = (get-internal-run-time)
-	    with end-time = (+ start-time (* seconds internal-time-units-per-second))
-	    while (< (get-internal-run-time) end-time)))))
+      (loop with start-time = (get-internal-run-time)
+	  with end-time = (+ start-time (* seconds internal-time-units-per-second))
+	  while (< (get-internal-run-time) end-time))))
   (values))
 
 
@@ -1207,7 +1206,7 @@ Can be used to measure the overhead of primitive function."
 	(assert (string= fasit x) ()
 	  "Failed tesT. Fasit: ~S, X: ~S" fasit x)))))
 
-(defun test-clc (&optional timeout no-timer)
+(defun test-clc (&optional (timeout #xfffe) no-timer)
   (unless no-timer
     (test-timer timeout))
   (loop
@@ -1230,7 +1229,6 @@ Can be used to measure the overhead of primitive function."
 ;;;		 (vector-push offset ts)
 ;;;		 (vector-push code-vector ts))))
 ;;;      (muerte::cli)
-      (pic8259-end-of-interrupt 0)
       (when (eql #\esc (muerte.x86-pc.keyboard:poll-char))
 	(break "Test-timer keyboard break."))
       (with-inline-assembly (:returns :nothing)
@@ -1260,6 +1258,7 @@ Can be used to measure the overhead of primitive function."
 	((:gs-override) :movb #x20 (:ecx 159)))
       #+ignore (setf *timer-prevstack* *timer-stack*
 		     *timer-stack* (muerte::copy-current-control-stack))
+      (pic8259-end-of-interrupt 0)
       (setf (pit8253-timer-mode 0) +pit8253-mode-single-timeout+
 	    (pit8253-timer-count 0) (or timeout (+ base (random variation))))
 ;;;      (muerte::sti)
@@ -1353,8 +1352,8 @@ Can be used to measure the overhead of primitive function."
       (setf (global-segment-descriptor-table)
 	(muerte::dump-global-segment-table :entries 16)))
 
-    (install-los0-consing :kb-size (* 10 1024))
     #+ignore
+    (install-los0-consing :kb-size (* 2 1024))
     (install-los0-consing :kb-size (max 50 (truncate (- extended-memsize 2048) 2))))
 
   (let ((muerte::*error-no-condition-for-debugger* t))
@@ -1419,11 +1418,8 @@ Can be used to measure the overhead of primitive function."
 
 (defun read (&optional input-stream eof-error-p eof-value recursive-p)
   (declare (ignore input-stream recursive-p))
-  (let ((string (if *repl-readline-context*
-		    (muerte.readline:contextual-readline *repl-readline-context*)
-		  (muerte.readline:readline (make-string 256) *terminal-io*))))
+  (let ((string (muerte.readline:contextual-readline *repl-readline-context*)))
     (simple-read-from-string string eof-error-p eof-value)))
-
 
 #+ignore
 (defun ztstring (physical-address)
