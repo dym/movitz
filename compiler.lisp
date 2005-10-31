@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.165 2005/09/18 16:20:35 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.166 2005/10/31 09:22:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5535,7 +5535,7 @@ That is, RESULT-MODE is taken to be a suggestion, not an imperative."
 
 (defun lambda-form-p (form)
   (and (listp form)
-       (eq 'cl:lambda (first form))))
+       (eq 'muerte.cl:lambda (first form))))
 
 (defun function-name-p (operator)
   (or (and (symbolp operator) operator)
@@ -6055,9 +6055,13 @@ fifth:  all compiler-values for form1, as a list."
 		      (:int 99)
 		      ,not-unbound)))))))))
 
-(define-compiler compile-lambda-form (&form form)
+(define-compiler compile-lambda-form (&form form &all all)
   "3.1.2.2.4 Lambda Forms"
-  (error "Don't know how to compile lambda form ~A" form))
+  (let ((lambda-expression (car form))
+	(lambda-args (cdr form)))
+    (compiler-call #'compile-form-unprotected
+      :forward all
+      :form `(muerte.cl:funcall ,lambda-expression ,@lambda-args))))
 
 (define-compiler compile-constant-compound (&all all &form form &env env &top-level-p top-level-p)
   (compiler-call #'compile-self-evaluating
