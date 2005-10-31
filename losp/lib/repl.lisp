@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 19 14:58:12 2003
 ;;;;                
-;;;; $Id: repl.lisp,v 1.16 2005/08/28 21:12:27 ffjeld Exp $
+;;;; $Id: repl.lisp,v 1.17 2005/10/31 09:19:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -53,9 +53,14 @@
   (handler-case
       (let ((previous-package *package*)
 	    (buffer-string
-	     (if *repl-readline-context*
-		 (muerte.readline:contextual-readline *repl-readline-context*)
-	       (muerte.readline:readline (make-string 256) *terminal-io*))))
+	     (handler-bind
+		 ((serious-condition
+		   (lambda (c)
+		     (backtrace :frame (muerte:current-stack-frame))
+		     (format *terminal-io* "~&Error during readline (~S): ~A" 
+			     *repl-readline-context* c)
+		     (muerte:halt-cpu))))
+	       (muerte.readline:contextual-readline *repl-readline-context*))))
 	(when (plusp (length buffer-string))
 	  (terpri)
 	  (multiple-value-bind (form buffer-pointer)
