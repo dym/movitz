@@ -1,3 +1,13 @@
+2005-12-02  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Uploaded a new los0.img.
+
+2005-11-02  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* Fixed some aspects of the REPL code so that it will run in the
+	default bare-bones environment that a new thread gets. This makes
+	it more convenient to fiddle with threading.
+
 2005-01-29  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
 
 	* There's been quite a bit of work on scavenge.lisp. The stack scavenging
