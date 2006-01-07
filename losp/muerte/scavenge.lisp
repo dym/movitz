@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.54 2005/08/28 21:13:07 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.55 2006/01/07 21:40:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -362,8 +362,7 @@ and whose return instruction-pointer is at location eip-index."
 	      (scavenge-find-code-vector function
 					 (stack-frame-ref nil eip-index 0 :location)
 					 0 interrupted-esi
-					 nil))
-	     (new-code-vector (map-instruction-pointer function eip-index old-code-vector)))
+					 nil)))
 	;; (when atomically (we should be more clever about the stack..))
 	(multiple-value-bind (x0-location x0-tag)
 	    (stack-frame-ref nil next-frame-bottom 0 :signed-byte30+2)
