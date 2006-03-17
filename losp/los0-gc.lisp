@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.59 2005/08/31 22:35:49 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.60 2006/03/17 20:49:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -388,7 +388,7 @@ duo-space where each space is KB-SIZE kilobytes."
 		  ((not (object-in-space-p oldspace x))
 		   x)
 		  ((when (typep x 'run-time-context)
-		     (warn "Scavengning ~S" x)))
+		     (warn "Scavenging ~S" x)))
 		  (t (or (and (eq (object-tag x)
 				  (ldb (byte 3 0)
 				       (memref (object-location x) 0 :type :unsigned-byte8)))
