@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.27 2005/08/24 07:28:59 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.28 2006/03/21 20:23:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1736,4 +1736,135 @@ quick-sort with cut-off greater than 1."
       r))
    (t (error "Can't concatenate ~S yet: ~:S" result-type sequences))))
      
-  
+(defun substitute (newitem olditem sequence &rest args 
+		   &key (test 'eql) test-not (start 0) end count (key 'identity) from-end)
+  (declare (dynamic-extent args))
+  "=> result-sequence"
+  (when test-not
+    (setf test (complement test-not)))
+  (with-funcallable (test)
+    (with-funcallable (key)
+      (sequence-dispatch sequence
+	(vector
+	 (apply #'nsubstitute newitem olditem (copy-seq sequence) args))
+	(list
+	 (if from-end
+	     (nreverse (nsubstitute newitem olditem (reverse sequence)
+				    :test test :test-not test-not
+				    :start start :end end
+				    :count count :key key))
+	   (let ((sequence (nthcdr start sequence)))
+	     (if (or (null sequence)
+		     (and end (<= end start)))
+		 nil
+	       (let ((new-list (list #0=(let ((x (pop sequence)))
+					  (if (test olditem (key x))
+					      newitem
+					    x)))))
+		 (cond
+		  ((and (not end) (not count))
+		   (do ((new-tail new-list (cdr new-tail)))
+		       ((endp sequence) new-list)
+		     (setf (cdr new-tail) (list #0#))))
+		  ((and end (not count))
+		   (do ((i (- end start) (1- i))
+			(new-tail new-list (cdr new-tail)))
+		       ((or (endp sequence) (<= i 0)) new-list)
+		     (setf (cdr new-tail) (list #0#))))
+		  ((and (not end) count)
+		   (do ((c 0)
+			(new-tail new-list (cdr new-tail)))
+		       ((or (endp sequence) (>= c count))
+			(setf (cdr new-tail)
+			  (copy-list sequence))
+			new-list)
+		     (setf (cdr new-tail) #1=(list (let ((x (pop sequence)))
+						     (if (test olditem (key x))
+							 (progn (incf c) newitem)
+						       x))))))
+		  ((and end count)
+		   (do ((i (- end start) (1- i))
+			(c 0)
+			(new-tail new-list (cdr new-tail)))
+		       ((or (endp sequence) (<= i 0) (>= c count))
+			(setf (cdr new-tail)
+			  (copy-list sequence))
+			new-list)
+		     (setf (cdr new-tail) #1#)))
+		  ((error 'program-error))))))))))))
+
+(defun nsubstitute (newitem olditem sequence &key (test 'eql) test-not (start 0) end count (key 'identity) from-end)
+  "=> sequence"
+  (when test-not
+    (setf test (complement test-not)))
+  (with-funcallable (test)
+    (with-funcallable (key)
+      (sequence-dispatch sequence
+	(vector
+	 (let ((end (or end (length sequence))))
+	   (with-subvector-accessor (ref sequence start end)
+	     (cond
+	      ((and (not count) (not from-end))
+	       (do ((i start (1+ i)))
+		   ((>= i end) sequence)
+		 (when (test olditem (key (ref i)))
+		   (setf (ref i) newitem))))
+	      ((and count (not from-end))
+	       (do ((c 0)
+		    (i start (1+ i)))
+		   ((>= i end) sequence)
+		 (when (test olditem (key (ref i)))
+		   (setf (ref i) newitem)
+		   (when (>= (incf c) count)
+		     (return sequence)))))
+	      ((and (not count) from-end)
+	       (do ((i (1- end) (1- i)))
+		   ((< i start) sequence)
+		 (when (test olditem (key (ref i)))
+		   (setf (ref i) newitem))))
+	      ((and count from-end)
+	       (do ((c 0)
+		    (i (1- end) (1- i)))
+		   ((< i start) sequence)
+		 (when (test olditem (key (ref i)))
+		   (setf (ref i) newitem)
+		   (when (>= (incf c) count)
+		     (return sequence)))))
+	      ((error 'program-error))))))
+	(list
+	 (if from-end
+	     (nreverse (nsubstitute newitem olditem (nreverse sequence)
+				    :test test :test-not test-not
+				    :start start :end end
+				    :count count :key key))
+	   (let ((p (nthcdr start sequence)))
+	     (cond
+	      ((and (not end) (not count))
+	       (do ((p p (cdr p)))
+		   ((endp p) sequence)
+		 (when (test olditem (key (car p)))
+		   (setf (car p) newitem))))
+	      ((and end (not count))
+	       (do ((i start (1+ i))
+		    (p p (cdr p)))
+		   ((or (endp p) (>= i end)) sequence)
+		 (when (test olditem (key (car p)))
+		   (setf (car p) newitem))))
+	      ((and (not end) count)
+	       (do ((c 0)		 
+		    (p p (cdr p)))
+		   ((endp p) sequence)
+		 (when (test olditem (key (car p)))
+		   (setf (car p) newitem)
+		   (when (>= (incf c) count)
+		     (return sequence)))))
+	      ((and end count)
+	       (do ((c 0)
+		    (i start (1+ i))
+		    (p p (cdr p)))
+		   ((or (endp p) (>= i end)) sequence)
+		 (when (test olditem (key (car p)))
+		   (setf (car p) newitem)
+		   (when (>= (incf c) count)
+		     (return sequence)))))
+	      ((error 'program-error))))))))))
