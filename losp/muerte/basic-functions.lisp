@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.20 2005/08/26 19:39:20 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.21 2006/03/21 20:20:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -229,7 +229,7 @@
 	  (:jz 'more-than-three-args)
 	 no-more-args
 	  ;; Calculate numargs from (esp-ebp)..
-	  (:leal (:ebp -8 8) :ecx)
+	  (:leal (:ebp -8 8) :ecx)	; debugger also "knows" this offset..
 	  (:subl :esp :ecx)
 	  (:shrl 2 :ecx)
 	  ;; Encode ECX
@@ -258,8 +258,9 @@
        ((null (cdr args))
 	(apply function (car args)))
        (t (let* ((second-last-cons (last args 2))
-		 (last-cons (cdr second-last-cons)))
-	    (setf (cdr second-last-cons) (car last-cons))
+		 (tail (cadr second-last-cons)))
+	    (check-type tail list)
+	    (setf (cdr second-last-cons) tail)
 	    (apply function args)))))))
 
 (defun values (&rest objects)
