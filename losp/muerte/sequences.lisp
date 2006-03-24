@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.29 2006/03/21 21:23:27 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.30 2006/03/24 22:22:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1775,45 +1775,55 @@ quick-sort with cut-off greater than 1."
 	     (nreverse (nsubstitute-if newitem predicate (reverse sequence)
 				       :start start :end end
 				       :count count :key key))
-	   (let ((sequence (nthcdr start sequence)))
-	     (if (or (null sequence)
-		     (and end (<= end start)))
-		 nil
-	       (let ((new-list (list #0=(let ((x (pop sequence)))
-					  (if (predicate (key x))
-					      newitem
-					    x)))))
-		 (cond
-		  ((and (not end) (not count))
-		   (do ((new-tail new-list (cdr new-tail)))
-		       ((endp sequence) new-list)
-		     (setf (cdr new-tail) (list #0#))))
-		  ((and end (not count))
-		   (do ((i (- end start) (1- i))
-			(new-tail new-list (cdr new-tail)))
-		       ((or (endp sequence) (<= i 0)) new-list)
-		     (setf (cdr new-tail) (list #0#))))
-		  ((and (not end) count)
-		   (do ((c 0)
-			(new-tail new-list (cdr new-tail)))
-		       ((or (endp sequence) (>= c count))
-			(setf (cdr new-tail)
-			  (copy-list sequence))
-			new-list)
+	   (if (or (null sequence)
+		   (and end (<= end start)))
+	       nil
+	     (multiple-value-bind (new-list new-tail)
+		 (if (= 0 start)
+		     (let ((new-list (list #0=(let ((x (pop sequence)))
+						(if (predicate (key x))
+						    newitem
+						  x)))))
+		       (values new-list new-list))
+		   (do* ((new-list (list (pop sequence)))
+			 (new-tail new-list (cdr new-tail))
+			 (i 1 (1+ i)))
+		       ((or (endp sequence) (>= i start))
+			(values new-list new-tail))
+		     (setf (cdr new-tail) (list (pop sequence)))))
+	       (cond
+		((and (not end) (not count))
+		 (do ()
+		     ((endp sequence) new-list)
+		   (setf new-tail
+		     (setf (cdr new-tail) (list #0#)))))
+		((and end (not count))
+		 (do ((i (- end start 1) (1- i)))
+		     ((or (endp sequence) (<= i 0))
+		      (setf (cdr new-tail) (copy-list sequence))
+		      new-list)
+		   (setf new-tail
+		     (setf (cdr new-tail) (list #0#)))))
+		((and (not end) count)
+		 (do ((c 0))
+		     ((or (endp sequence) (>= c count))
+		      (setf (cdr new-tail) (copy-list sequence))
+		      new-list)
+		   (setf new-tail
 		     (setf (cdr new-tail) #1=(list (let ((x (pop sequence)))
 						     (if (predicate (key x))
 							 (progn (incf c) newitem)
-						       x))))))
-		  ((and end count)
-		   (do ((i (- end start) (1- i))
-			(c 0)
-			(new-tail new-list (cdr new-tail)))
-		       ((or (endp sequence) (<= i 0) (>= c count))
-			(setf (cdr new-tail)
-			  (copy-list sequence))
-			new-list)
-		     (setf (cdr new-tail) #1#)))
-		  ((error 'program-error))))))))))))
+						       x)))))))
+		((and end count)
+		 (do ((i (- end start 1) (1- i))
+		      (c 0))
+		     ((or (endp sequence) (<= i 0) (>= c count))
+		      (setf (cdr new-tail)
+			(copy-list sequence))
+		      new-list)
+		   (setf new-tail
+		     (setf (cdr new-tail) #1#))))
+		((error 'program-error)))))))))))
 
 (defun nsubstitute-if (newitem predicate sequence &key (start 0) end count (key 'identity) from-end)
   "=> sequence"
