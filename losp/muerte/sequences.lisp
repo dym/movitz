@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.30 2006/03/24 22:22:50 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.31 2006/03/25 20:59:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1769,12 +1769,10 @@ quick-sort with cut-off greater than 1."
     (with-funcallable (key)
       (sequence-dispatch sequence
 	(vector
-	 (apply #'nsubstitute-if newitem predicate (copy-seq sequence) args))
+	 (apply 'nsubstitute-if newitem predicate (copy-seq sequence) args))
 	(list
 	 (if from-end
-	     (nreverse (nsubstitute-if newitem predicate (reverse sequence)
-				       :start start :end end
-				       :count count :key key))
+	     (apply 'nsubstitute-if newitem predicate (copy-list sequence) args)
 	   (if (or (null sequence)
 		   (and end (<= end start)))
 	       nil
@@ -1862,11 +1860,17 @@ quick-sort with cut-off greater than 1."
 		     (return sequence)))))
 	      ((error 'program-error))))))
 	(list
-	 (if from-end
-	     (nreverse (nsubstitute newitem predicate (nreverse sequence)
-				    :start start :end end
-				    :count count :key key))
-	   (let ((p (nthcdr start sequence)))
+	 (let ((p (nthcdr start sequence)))
+	   (if (and from-end count)
+	       (let* ((end (and end (- end start)))
+		      (existing-count (count-if predicate p :key key :end end)))
+		 (do ((i count))
+		     ((>= i existing-count)
+		      (nsubstitute-if newitem predicate p :end end :key key)
+		      sequence)
+		   (when (predicate (key (car p)))
+		     (incf i))
+		   (setf p (cdr p))))
 	     (cond
 	      ((and (not end) (not count))
 	       (do ((p p (cdr p)))
@@ -1897,3 +1901,7 @@ quick-sort with cut-off greater than 1."
 		   (when (>= (incf c) count)
 		     (return sequence)))))
 	      ((error 'program-error))))))))))
+
+(defun nsubstitute-if-not (newitem predicate sequence &rest keyargs)
+  (declare (dynamic-extent keyargs))
+  (apply #'nsubstitute-if newitem (complement predicate) sequence keyargs))
