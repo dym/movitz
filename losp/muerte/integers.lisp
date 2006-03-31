@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.119 2005/09/18 15:58:09 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.120 2006/03/31 20:57:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -382,7 +382,7 @@
 			  (:negl :ecx)
 			  (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 			  (:call-local-pf box-u32-ecx)
-			  (:movl ,(dpb 1 (byte 16 16)
+			  (:movl ,(dpb 4 (byte 16 16)
 				   (movitz:tag :bignum #xff))
 			   (:eax ,movitz:+other-type-offset+))
 			  (:jmp 'fix-fix-ok)
@@ -762,32 +762,54 @@
    ((= 0 count)
     integer)
    ((= 0 integer) 0)
-   ((plusp count)
-    (let ((result-length (+ (integer-length integer) count)))
+   ((typep count '(integer 0 *))
+    (let ((result-length (+ (integer-length (if (minusp integer) (1- integer) integer))
+			    count)))
       (cond
        ((<= result-length 29)
 	(with-inline-assembly (:returns :eax)
 	  (:compile-two-forms (:eax :ecx) integer count)
 	  (:shrl #.movitz:+movitz-fixnum-shift+ :ecx)
 	  (:shll :cl :eax)))
-       (t (check-type integer (integer 0 *))
-	  (let ((result (%make-bignum (ceiling result-length 32))))
-	    (dotimes (i (* 2 (%bignum-bigits result)))
-	      (setf (memref result -2 :index i :type :unsigned-byte16)
-		(let ((pos (- (* i 16) count)))
-		  (cond
-		   ((minusp (+ pos 16)) 0)
-		   ((<= 0 pos)
-		    (ldb (byte 16 pos) integer))
-		   (t (ash (ldb (byte (+ pos 16) 0) integer)
-			   (- pos)))))))
-	    (assert (or (plusp (memref result -2
-				       :index (+ -1 (* 2 (%bignum-bigits result)))
-				       :type :unsigned-byte16))
-			(plusp (memref result -2
-				       :index (+ -2 (* 2 (%bignum-bigits result)))
-				       :type :unsigned-byte16))))
-	    (bignum-canonicalize result))))))
+       ((typep integer 'positive-fixnum)
+	(let ((result (%make-bignum (ceiling result-length 32) 0)))
+	  (setf (memref result (movitz-type-slot-offset 'movitz-bignum 'bigit0)
+			:type :unsigned-byte32)
+	    integer)
+	  (bignum-shift-leftf result count)))
+       ((typep integer 'positive-bignum)
+	(let ((result (%make-bignum (ceiling result-length 32))))
+	  (dotimes (i (* 2 (%bignum-bigits result)))
+	    (setf (memref result -2 :index i :type :unsigned-byte16)
+	      (let ((pos (- (* i 16) count)))
+		(cond
+		 ((minusp (+ pos 16)) 0)
+		 ((<= 0 pos)
+		  (ldb (byte 16 pos) integer))
+		 (t (ash (ldb (byte (+ pos 16) 0) integer)
+			 (- pos)))))))
+	  (assert (or (plusp (memref result -2
+				     :index (+ -1 (* 2 (%bignum-bigits result)))
+				     :type :unsigned-byte16))
+		      (plusp (memref result -2
+				     :index (+ -2 (* 2 (%bignum-bigits result)))
+				     :type :unsigned-byte16))))
+	  (bignum-canonicalize result)))
+       ((typep integer 'negative-fixnum)
+	(let ((result (%make-bignum (ceiling result-length 32) 0)))
+	  (setf (memref result (movitz-type-slot-offset 'movitz-bignum 'bigit0)
+			:type :unsigned-byte32)
+	    (- integer))
+	  (%bignum-negate (bignum-shift-leftf result count))))
+       ((typep integer 'negative-bignum)
+	(let ((result (%make-bignum (ceiling result-length 32) 0)))
+	  (dotimes (i (%bignum-bigits integer))
+	    (setf (memref result (movitz-type-slot-offset 'movitz-bignum 'bigit0)
+			  :index i :type :unsigned-byte32)
+	      (memref integer (movitz-type-slot-offset 'movitz-bignum 'bigit0)
+		      :index i :type :unsigned-byte32)))
+	  (%bignum-negate (bignum-shift-leftf result count))))
+       (t (error 'program-error)))))
    (t (let ((count (- count)))
 	(etypecase integer
 	  (fixnum
@@ -2225,4 +2247,6 @@
      (expt (rootn base-number (denominator power-number))
 	   (numerator power-number)))))
     
-
+(defun floatp (x)
+  (declare (ignore x))
+  nil)
