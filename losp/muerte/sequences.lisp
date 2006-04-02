@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.31 2006/03/25 20:59:16 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.32 2006/04/02 20:48:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -126,8 +126,6 @@
    (t (function sequence &key (key 'identity) from-end
 		(start 0) (end (length sequence))
 		(initial-value nil initial-value-p))
-      (when from-end
-	(error "REDUCE from-end is not implemented."))
       (let ((start (check-the index start)))
 	(with-funcallable (funcall-function function)
 	  (with-funcallable (key)
@@ -140,18 +138,34 @@
 		   (key (elt sequence start))))
 	      (t (sequence-dispatch sequence
 		   (list
-		    (do* ((counter (1+ start) (1+ counter))
-			  (list (nthcdr start sequence))
-			  (result (funcall-function (if initial-value-p
-							initial-value
+		    (cond
+		     ((not from-end)
+		      (do* ((counter (1+ start) (1+ counter))
+			    (list (nthcdr start sequence))
+			    (result (funcall-function (if initial-value-p
+							  initial-value
+							(key (pop list)))
 						      (key (pop list)))
-						    (key (pop list)))
-				  (funcall-function result (key (pop list)))))
-			((or (null list)
-			     (= end counter))
-			 result)
-		      (declare (index counter))))
+				    (funcall-function result (key (pop list)))))
+			  ((or (null list)
+			       (= end counter))
+			   result)
+			(declare (index counter))))
+		     (from-end
+		      (do* ((counter (1+ start) (1+ counter))
+			    (list (nreverse (subseq sequence start end)))
+			    (result (funcall-function (key (pop list))
+						      (if initial-value-p
+							  initial-value
+							(key (pop list))))
+				    (funcall-function (key (pop list)) result)))
+			  ((or (null list)
+			       (= end counter))
+			   result)
+			(declare (index counter))))))
 		   (vector
+		    (when from-end
+		      (error "REDUCE from-end on vectors is not implemented."))
 		    (with-subvector-accessor (sequence-ref sequence start end)
 		      (do* ((index start)
 			    (result (funcall-function (if initial-value-p
@@ -731,7 +745,7 @@
     (apply 'map-for-nil function first-sequence more-sequences))
    ((eq 'list result-type)
     (apply 'map-for-list function first-sequence more-sequences))
-   ((eq 'string result-type)
+   ((member result-type '(string simple-string))
     (apply 'map-for-string function first-sequence more-sequences))
    (t (error "MAP not implemented."))))
 
@@ -1390,21 +1404,17 @@
     (setf test (complement test-not)))
   (sequence-dispatch sequence
     (list
-     (setf sequence (nthcdr start sequence))
-     (when end (decf end start))
-     (cond
-      ((endp sequence)
-       nil)
-      ((not from-end)
-       (let* ((new-end (when end (1- end)))
-	      (tail (remove-duplicates (cdr sequence) :test test :key key :end new-end)))
-	 (cond
-	  ((find (car sequence) (cdr sequence) :test test :key key :end new-end)
-	   tail)
-	  ((eq tail (cdr sequence))
-	   sequence)
-	  (t (cons (car sequence) tail)))))		   
-      (t (error "from-end not implemented."))))
+     (let ((list (nthcdr start sequence)))
+       (cond
+	((endp list)
+	 nil)
+	((and (not end) (not from-end))
+	 (do ((r nil))
+	     ((endp list) (nreverse r))
+	   (let ((x (pop list)))
+	     (unless (member x list :key key :test test)
+	       (push x r)))))
+	(t (error "remove-duplicates not implemented.")))))
     (vector
      (error "vector remove-duplicates not implemented."))))
 
