@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.16 2004/10/21 20:34:02 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.17 2006/04/03 21:22:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -199,7 +199,9 @@ Parameters: struct-name."
 	  (default (:constructor)
 	      (intern (concatenate 'string (string 'make-) (string struct-name))))
 	  (default (:predicate 1)
-	      (intern (concatenate 'string (string struct-name) (string '-p)))))
+	      (intern (concatenate 'string (string struct-name) (string '-p))))
+	  (default (:copier)
+	      (intern (concatenate 'string (string 'copy-) (string struct-name)))))
 	(let* ((struct-type (first (getf options :type)))
 	       (superclass (first (getf options :superclass)))
 	       (struct-named (first (getf options :named)))
@@ -243,6 +245,11 @@ Parameters: struct-name."
 								     :type type
 								     :readonly read-only
 								     :location location))))
+		,@(loop for copier in (getf options :copier)
+		      if (and copier (symbolp copier))
+		      collect
+			`(defun ,copier (x)
+			   (copy-structure x)))
 		,@(loop for constructor in (getf options :constructor)
 		      if (and constructor (symbolp constructor))
 		      collect
