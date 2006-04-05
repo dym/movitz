@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Mar 23 01:18:36 2002
 ;;;;                
-;;;; $Id: format.lisp,v 1.12 2005/08/26 19:39:06 ffjeld Exp $
+;;;; $Id: format.lisp,v 1.13 2006/04/05 23:02:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -142,6 +142,24 @@ clause."
 	   proceed
 	    (incf i)
 	    (case (char-upcase (schar control-string i))
+	      (#\Newline
+	       (when at-sign-p
+		 (write-char #\Newline))
+	       (unless colon-p
+		 (do ((stop (1- (length control-string))))
+		     ((or (>= i stop)
+			  (not (member (schar control-string (1+ i))
+				       '(#\space #\newline #\tab)))))
+		   (incf i))))
+	      (#\P (let ((arg (if (not colon-p)
+				  (pop args)
+				(car (nthcdr (1- (do ((i 0 (1+ i)) (p args-head (cdr p)))
+						     ((eq p args) i) ; find arg's position in arg-head.
+						   (assert p)))
+					     args-head)))))
+		     (write-string (if at-sign-p
+				       (if (eql arg 1) "y" "ies")
+				     (if (eql arg 1) "" "s")))))
 	      (#\Z (if at-sign-p
 		       (print-word-indirect (pop args) nil)
 		     (print-word (pop args) nil)))
