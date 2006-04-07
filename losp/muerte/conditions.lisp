@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.17 2005/08/11 21:34:26 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.18 2006/04/07 21:51:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -63,6 +63,7 @@
 (define-condition serious-condition () ())
 (define-condition error (serious-condition) ())
 (define-condition warning () ())
+(define-condition style-warning () ())
 (define-condition simple-error (simple-condition error) ())
 (define-condition simple-warning (simple-condition warning) ())
 
@@ -282,7 +283,10 @@ Return the condition object, if there was one."
    ((not *debugger-function*)
     (let ((*never-use-print-object* t))
       (backtrace :spartan t))
-    (format t "~&No debugger in *debugger-function*. Trying to continue or abort.")
+    (format t "~&No debugger in *debugger-function*...")
+    (dotimes (i 100000)
+      (write-string ""))
+    (format t "Trying to continue or abort.")
     (invoke-restart (or (find-restart 'continue)
 			(find-restart 'abort)
 			(format t "~%Condition for debugger: ~Z" condition)
