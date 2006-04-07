@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.21 2005/08/26 19:38:41 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.22 2006/04/07 21:54:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -200,6 +200,12 @@
 	  (serious-condition (c)
 	    (print-unreadable-object (c *standard-output* :type t :identity t)
 	      (format t "(while printing ~Z)" object))))))))
+
+(defun write-to-string (object &rest args)
+  (declare (dynamic-extent args))
+  (apply 'write object
+	 :stream (make-array 24 :element-type 'character :fill-pointer 0 :adjustable t)
+	 args))
 
 (defun internal-write (object)
   (let ((stream *standard-output*))
