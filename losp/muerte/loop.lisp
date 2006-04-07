@@ -70,6 +70,12 @@
 ;;;This is the "current" loop context in use when we are expanding a
 ;;;loop.  It gets bound on each invocation of LOOP.
 
+#+movitz
+(defmacro loop-copylist* (l)
+  #+Genera `(lisp:copy-list ,l nil t)		; arglist = (list &optional area force-dotted)
+  ;;@@@@Explorer??
+  #-Genera `(copy-list ,l))
+
 (eval-when (:compile-toplevel)
   (defvar *loop-real-data-type* 'real)
   (defvar *loop-universe*)
