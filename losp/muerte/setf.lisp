@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Feb  8 20:43:20 2001
 ;;;;                
-;;;; $Id: setf.lisp,v 1.3 2004/02/18 14:38:14 ffjeld Exp $
+;;;; $Id: setf.lisp,v 1.4 2006/04/07 21:49:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -86,45 +86,54 @@
 ;;;	      `(subseq ,tmp-sequence ,tmp-start ,tmp-end)))))
 
 (defmacro defsetf (access-fn &rest more-args)
-  ;; long form
-  (destructuring-bind (lambda-list store-variables &body body)
-      more-args
-    (let ((movitz-lambda (movitz::translate-program lambda-list :cl :muerte.cl)))
-      (multiple-value-bind (wholevars envvars reqvars optionalvars restvar keys auxes)
-	  (movitz::decode-macro-lambda-list movitz-lambda)
-	(assert (null restvar))
-	(assert (null envvars))
-	(assert (null wholevars))
-	(assert (null auxes))
-	(assert (null keys))
-	(let* ((req-tmps (mapcar (lambda (x) (list x (gensym)))
-				 reqvars))
-	       (opt-vars (mapcar #'movitz::decode-optional-formal
-				 optionalvars))
-	       (opt-tmps (mapcar (lambda (x) (list x (gensym)))
-				 opt-vars))
-	       (tmp-lets (append (mapcar (lambda (rt)
-					   (list (second rt) '(gensym)))
-					 req-tmps)
-				 (mapcar (lambda (rt)
-					   (list (second rt) '(gensym)))
-					 opt-tmps)
-				 `((init-form (list ,@reqvars ,@opt-vars)))
-				 (mapcar (lambda (rt)
-					   (list rt '(gensym)))
-					 store-variables)))
-	       (lambda-lets (append req-tmps opt-tmps)))
-	  `(define-setf-expander ,access-fn ,movitz-lambda
-	     (let ,tmp-lets
-	       (let ,lambda-lets
-		 (values (list ,@(mapcar #'second req-tmps)
-			       ,@(mapcar #'second opt-tmps))
-			 init-form
-			 (list ,@store-variables)
-			 (progn ,@body)
-			 (list ',access-fn
-			       ,@(mapcar #'first req-tmps)
-			       ,@(mapcar #'first opt-tmps)))))))))))
+  (cond
+   ((symbolp (first more-args))
+    ;; short form XXX not really good.
+    `(defun (setf ,access-fn) (fu foo)
+       (,(first more-args) fu foo)))
+   (t ;; long form
+    (destructuring-bind (lambda-list store-variables &body body-decl-docstring)
+	more-args
+      (multiple-value-bind (body declarations docstring)
+	  (movitz::parse-docstring-declarations-and-body body-decl-docstring 'cl:declare)
+	(let ((movitz-lambda (movitz::translate-program lambda-list :cl :muerte.cl)))
+	  (multiple-value-bind (wholevars envvars reqvars optionalvars restvar keys auxes)
+	      (movitz::decode-macro-lambda-list movitz-lambda)
+	    (assert (null restvar))
+	    (assert (null envvars))
+	    (assert (null wholevars))
+	    (assert (null auxes))
+	    (assert (null keys))
+	    (let* ((req-tmps (mapcar (lambda (x) (list x (gensym)))
+				     reqvars))
+		   (opt-vars (mapcar #'movitz::decode-optional-formal
+				     optionalvars))
+		   (opt-tmps (mapcar (lambda (x) (list x (gensym)))
+				     opt-vars))
+		   (tmp-lets (append (mapcar (lambda (rt)
+					       (list (second rt) '(gensym)))
+					     req-tmps)
+				     (mapcar (lambda (rt)
+					       (list (second rt) '(gensym)))
+					     opt-tmps)
+				     `((init-form (list ,@reqvars ,@opt-vars)))
+				     (mapcar (lambda (rt)
+					       (list rt '(gensym)))
+					     store-variables)))
+		   (lambda-lets (append req-tmps opt-tmps)))
+	      `(define-setf-expander ,access-fn ,movitz-lambda
+		 (declare ,@declarations)
+		 ,@(when docstring (list docstring))
+		 (let ,tmp-lets
+		   (let ,lambda-lets
+		     (values (list ,@(mapcar #'second req-tmps)
+				   ,@(mapcar #'second opt-tmps))
+			     init-form
+			     (list ,@store-variables)
+			     (progn ,@body)
+			     (list ',access-fn
+				   ,@(mapcar #'first req-tmps)
+				   ,@(mapcar #'first opt-tmps))))))))))))))
 
 
 (defmacro define-modify-macro (name lambda-list function &optional documentation)
