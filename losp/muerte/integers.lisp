@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.120 2006/03/31 20:57:48 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.121 2006/04/07 21:35:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2250,3 +2250,13 @@
 (defun floatp (x)
   (declare (ignore x))
   nil)
+
+(defun realpart (number)
+  number)
+
+(defun imagpart (number)
+  (declare (ignore number))
+  0)
+
+(defun rational (number)
+  number)
