@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct 17 21:50:42 2001
 ;;;;                
-;;;; $Id: read.lisp,v 1.13 2005/08/26 19:38:35 ffjeld Exp $
+;;;; $Id: read.lisp,v 1.14 2006/04/07 21:50:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,7 +20,11 @@
 (in-package muerte)
 
 (defvar *read-suppress*)
-(defvar *readtable*)
+(defvar *readtable* nil)
+
+(defun copy-readtable (&optional from-readtable to-readtable)
+  (declare (ignore from-readtable to-readtable))
+  nil)
 
 (defun substring (string start end)
   (if (and (zerop start) (= end (length string)))
