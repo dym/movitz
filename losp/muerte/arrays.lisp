@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.56 2005/08/24 07:27:47 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.57 2006/04/07 21:47:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -105,17 +105,19 @@
        (let* ((q (cdr type-specifier))
 	      (min (if q (pop q) '*))
 	      (max (if q (pop q) '*)))
-	 (cond
-	  ((or (eq min '*) (eq max '*))
-	   t)
-	  ((<= 0 min max 1)
-	   'bit)
-	  ((<= 0 min max #xff)
-	   '(unsigned-byte 8))
-	  ((<= 0 min max #xffff)
-	   '(unsigned-byte 16))
-	  ((<= 0 min max #xffffffff)
-	   '(unsigned-byte 32)))))
+	 (let ((min (if (consp min) (1+ (car min)) min))
+	       (max (if (consp max) (1- (car max)) max)))
+	   (cond
+	    ((or (eq min '*) (eq max '*))
+	     t)
+	    ((<= 0 min max 1)
+	     'bit)
+	    ((<= 0 min max #xff)
+	     '(unsigned-byte 8))
+	    ((<= 0 min max #xffff)
+	     '(unsigned-byte 16))
+	    ((<= 0 min max #xffffffff)
+	     '(unsigned-byte 32))))))
       (t (let ((deriver (gethash (car type-specifier) *derived-typespecs*)))
 	   (if (not deriver)
 	       t
