@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb 19 19:09:05 2001
 ;;;;                
-;;;; $Id: hash-tables.lisp,v 1.11 2005/08/26 19:38:50 ffjeld Exp $
+;;;; $Id: hash-tables.lisp,v 1.12 2006/04/07 21:52:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -42,7 +42,8 @@
 	       test)
 	(eq (values #'eq #'sxhash-eq))
 	(eql (values #'eql #'sxhash-eql))
-	(equal (values #'equal #'sxhash)))
+	(equal (values #'equal #'sxhash))
+	(equalp (values #'equalp #'sxhash)))
     (make-hash-table-object
      :test test
      :bucket (make-array (* 2 size) :initial-element '--no-hash-key--)
