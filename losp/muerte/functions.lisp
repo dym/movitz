@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.29 2005/04/20 06:53:28 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.30 2006/04/07 21:52:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -60,22 +60,15 @@
   (declare (dynamic-extent args))
   (not (apply 'function args)))
 
-(define-compiler-macro complement (&whole form function-form)
+(define-compiler-macro complement (&whole form function-form &environment env)
   (cond
-   ((movitz:movitz-constantp function-form)
-    (let ((function (movitz:movitz-eval function-form)))
-      `(make-prototyped-function (complement ,function)
-				 complement-prototype
-				 (function ,function))))
    ((and (listp function-form)
 	 (eq 'function (first function-form))
-	 (symbolp (second function-form))
-	 (typep (movitz:movitz-eval (translate-program function-form :cl :muerte.cl))
+	 (typep (movitz:movitz-eval (translate-program function-form :cl :muerte.cl) env)
 		'movitz:movitz-funobj))
-    `(make-prototyped-function (complement ,function-form)
+    `(make-prototyped-function `(complement ,(second function-form))
 			       complement-prototype
-			       (function ,(movitz:movitz-eval (translate-program function-form
-									      :cl :muerte.cl)))))
+			       ,(movitz:movitz-eval (translate-program function-form :cl :muerte.cl))))
    (t form)))
 
 (defun complement (function)
