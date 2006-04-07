@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.14 2005/08/31 22:31:35 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.15 2006/04/07 21:53:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -167,3 +167,6 @@
 (defun sleep (seconds)
   (declare (ignore seconds))
   (error "There is no default implementation of sleep."))
+
+(defstruct random-state state)
+(defstruct pathname name)
