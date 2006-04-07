@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.11 2005/06/12 21:27:03 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.12 2006/04/07 21:33:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -271,3 +271,7 @@ Cons cell is in EBX, which is preserved."
 		 (and (te (car tree-1) (car tree-2) test)
 		      (te (cdr tree-1) (cdr tree-2) test))))))
     (te tree-1 tree-2 (or test (and test-not (complement test-not)) #'eql))))
+
+(defun acons (key datum alist)
+  "=> new-alist"
+  (cons (cons key datum) alist))
