@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.104 2005/08/21 13:47:16 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.105 2006/04/10 11:48:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1495,7 +1495,9 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 		   (mapcar #'(lambda (slot)
 			       (movitz-read (slot-value expr (if (consp slot) (car slot) slot))))
 			   slot-descriptions))
-		 movitz-object))))))))
+		 movitz-object)))
+	    (float			; XXX
+	     (movitz-read (rationalize expr))))))))
 
 ;;;
 
