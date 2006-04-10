@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.35 2005/08/21 17:55:54 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.36 2006/04/10 11:52:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -99,6 +99,10 @@
 (defmacro push-on-end (value location)
   `(setf ,location (nconc ,location (list ,value))))
 
+
+(defmacro define-method-combination (name &rest options)
+  (declare (ignore options))
+  (warn "Method-combinations not implemented: ~S" name))
 ;;;
 
 
@@ -210,7 +214,8 @@ funcallable-instance will run the new function."
 
 ;;;
 
-(defun find-class (symbol &optional (errorp t))
+(defun find-class (symbol &optional (errorp t) environment)
+  (declare (ignore environment))
   (let ((class (gethash symbol *class-table*)))
     (if (and (null class) errorp)
 	(error "No class named ~S." symbol)
@@ -951,7 +956,9 @@ next-emf as its target for call-next-method."
 (defclass symbol (t) () (:metaclass built-in-class))
 (defclass sequence (t) () (:metaclass built-in-class))
 (defclass array (t) () (:metaclass built-in-class))
-(defclass character (t) () (:metaclass built-in-class))
+(defclass character (t) ()
+	  (:metaclass built-in-class)
+	  (:plist (:subtypes (base-char extended-char))))
 (defclass list (sequence) () (:metaclass built-in-class))
 (defclass null (symbol list) () (:metaclass built-in-class))
 (defclass cons (list) () (:metaclass built-in-class))
