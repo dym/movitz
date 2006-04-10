@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.32 2006/04/02 20:48:34 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.33 2006/04/10 11:56:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -716,22 +716,21 @@
 	       (ignore function first-sequence more-sequences))
       (error "MAP not implemented."))))
 
-(defun map-for-string (function first-sequence &rest more-sequences)
+(defun map-for-vector (result function first-sequence &rest more-sequences)
   (numargs-case
-   (2 (function first-sequence)
+   (3 (result function first-sequence)
       (with-funcallable (mapf function)
-	(let ((result (make-string (length first-sequence))))
-	  (sequence-dispatch first-sequence
-	    (vector
-	     (do ((i 0 (1+ i)))
-		 ((>= i (length result)) result)
-	       (declare (index i))
-	       (setf (char result i) (mapf (aref first-sequence i)))))
-	    (list
-	     (do ((i 0 (1+ i)))
-		 ((>= i (length result)) result)
-	       (declare (index i))
-	       (setf (char result i) (mapf (pop first-sequence)))))))))
+	(sequence-dispatch first-sequence
+	  (vector
+	   (do ((i 0 (1+ i)))
+	       ((>= i (length result)) result)
+	     (declare (index i))
+	     (setf (aref result i) (mapf (aref first-sequence i)))))
+	  (list
+	   (do ((i 0 (1+ i)))
+	       ((>= i (length result)) result)
+	     (declare (index i))
+	     (setf (aref result i) (mapf (pop first-sequence))))))))
    (t (function first-sequence &rest more-sequences)
       (declare (ignore function first-sequence more-sequences))
       (error "MAP not implemented."))))
@@ -746,7 +745,13 @@
    ((eq 'list result-type)
     (apply 'map-for-list function first-sequence more-sequences))
    ((member result-type '(string simple-string))
-    (apply 'map-for-string function first-sequence more-sequences))
+    (apply 'map-for-vector
+	   (make-string (length first-sequence))
+	   function first-sequence more-sequences))
+   ((member result-type '(vector simple-vector))
+    (apply 'map-for-vector
+	   (make-array (length first-sequence))
+	   function first-sequence more-sequences))
    (t (error "MAP not implemented."))))
 
 (defun fill (sequence item &key (start 0) end)
@@ -1253,30 +1258,33 @@
     list)
    (t (with-funcallable (test)
 	(with-funcallable (key)
-	  (if (test (key (car list)))
-	      (list-remove-if test (cdr list) key
-			      (when end (1- end))
-			      (when count (1- count)))
-	    (do ((i 1 (1+ i))
-		 (p0 list (cdr p0))
-		 (p1 (cdr list) (cdr p1)))
-		((or (endp p1) (and end (>= i end))) list)
-	      (declare (index i))
-	      (when (test (key (car p1)))
-		(return
-		  ;; reiterate from <list> to <p1>, consing up a copy, with
-		  ;; the copy's tail being the recursive call to list-remove.
-		  (do* ((new-list (cons (car list) nil))
-			(x (cdr list) (cdr x))
-			(new-x new-list))
-		      ((eq x p1)
-		       (setf (cdr new-x) (list-remove-if test (cdr p1) key
-							 (when end (- end i 1))
-							 (when count (1- count))))
-		       new-list)
-		    (setf new-x
-		      (setf (cdr new-x)
-			(cons (car x) nil)))))))))))))
+	  (and (do () ((or (endp list)
+			   (and end (<= end 0))
+			   (not (test (key (car list))))
+			   (and count (<= (decf count) 0)))
+		       list)
+		 (when end (decf end))
+		 (setf list (cdr list)))
+	       (do ((i 1 (1+ i))
+		    (p0 list (cdr p0))
+		    (p1 (cdr list) (cdr p1)))
+		   ((or (endp p1) (and end (>= i end))) list)
+		 (declare (index i))
+		 (when (test (key (car p1)))
+		   (return
+		     ;; reiterate from <list> to <p1>, consing up a copy, with
+		     ;; the copy's tail being the recursive call to list-remove.
+		     (do* ((new-list (cons (car list) nil))
+			   (x (cdr list) (cdr x))
+			   (new-x new-list))
+			 ((eq x p1)
+			  (setf (cdr new-x) (list-remove-if test (cdr p1) key
+							    (when end (- end i 1))
+							    (when count (1- count))))
+			  new-list)
+		       (setf new-x
+			 (setf (cdr new-x)
+			   (cons (car x) nil)))))))))))))
 
 (defun remove-if (test sequence &key from-end (start 0) end count (key 'identity))
   (sequence-dispatch sequence
