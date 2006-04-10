@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.29 2005/08/26 19:39:26 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.30 2006/04/10 11:54:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -431,3 +431,12 @@ respect to multiple threads."
 (define-unimplemented-macro with-open-file)
 (define-unimplemented-macro restart-case)
 
+(define-compiler-macro load (filespec &key verbose print if-does-not-exist external-format)
+  "hm..."
+  (assert (movitz:movitz-constantp filespec) (filespec)
+    "Can't load a non-constant filename: ~S" filespec)
+  (warn "load-compile: ~S" filespec)
+  `(funcall ',(movitz:movitz-compile-file (format nil "losp/ansi-tests/~A" filespec))))
+
+(defmacro locally (&body body)
+  `(let () ,@body))
