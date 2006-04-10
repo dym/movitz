@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.15 2005/09/18 16:20:04 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.16 2006/04/10 11:50:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -216,7 +216,7 @@
 		 ,@(loop repeat count
 		       append `((:addl (:result-register) (:result-register))
 				(:into)))))
-	     ((< 0 count #.(cl:1- movitz::+movitz-fixnum-bits+))
+	     ((< 0 count #.(1- movitz::+movitz-fixnum-bits+))
 	      `(with-inline-assembly (:returns :register :side-effects nil :type integer)
 		 ,@load-integer
 		 (:cmpl ,(ash 1 (- (- 31 0) count))
