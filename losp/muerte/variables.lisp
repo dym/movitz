@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov  5 21:53:34 2003
 ;;;;                
-;;;; $Id: variables.lisp,v 1.9 2005/06/10 23:05:50 ffjeld Exp $
+;;;; $Id: variables.lisp,v 1.10 2006/04/10 11:58:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -44,5 +44,29 @@
 (defvar internal-time-units-per-second)
 
 (defvar *gc-hooks* nil)
+
+(defvar *load-pathname* nil)
+
+
+(defvar most-positive-short-float 1000000)
+(defvar most-positive-single-float 1000000)
+(defvar most-positive-double-float 1000000)
+(defvar most-positive-long-float 1000000)
+
+(defvar short-float-epsilon 1/1000)
+(defvar single-float-epsilon 1/1000)
+(defvar double-float-epsilon 1/1000)
+(defvar long-float-epsilon 1/1000)
+
+(defvar short-float-negative-epsilon -1/1000)
+(defvar single-float-negative-epsilon -1/1000)
+(defvar double-float-negative-epsilon -1/1000)
+(defvar long-float-negative-epsilon -1/1000)
+
+
+(defconstant call-arguments-limit #xffff0)
+(defconstant lambda-parameters-limit #x1000) ; ?
+
+(defvar *print-pprint-dispatch* nil)
 
 (declaim (special *build-number*))
