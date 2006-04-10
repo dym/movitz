@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:52:58 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: movitz.lisp,v 1.10 2004/11/15 14:42:15 ffjeld Exp $
+;;;; $Id: movitz.lisp,v 1.11 2006/04/10 11:45:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -56,6 +56,12 @@ make clear it's a Movitz object, with extra <..>"
 	 ,@body
 	 (write-char #\> ,stream-var)))))
 
+(defun movitz-syntax-sharp-dot (stream subchar arg)
+  (declare (ignore arg subchar))
+  (let ((form (read stream t nil t)))
+    (values (unless *read-suppress*
+	      (eval (muerte::translate-program form :muerte.cl :cl))))))
+
 (defmacro with-movitz-syntax (options &body body)
   (declare (ignore options))
   `(let ((*readtable* (copy-readtable)))
@@ -71,6 +77,11 @@ make clear it's a Movitz object, with extra <..>"
 				       (make-movitz-vector (length data)
 							   :element-type 'movitz-unboxed-integer-u8
 							   :initial-contents data))))
+     (set-dispatch-macro-character #\# #\. (lambda (stream subchar arg)
+					     (declare (ignore arg subchar))
+					     (let ((form (read stream t nil t)))
+					       (values (unless *read-suppress*
+							 (eval (muerte::translate-program form :muerte.cl :cl)))))))
      (set-macro-character #\` (lambda (stream char)
 				(declare (ignore char))
 				(let ((*bq-level* (1+ *bq-level*)))
