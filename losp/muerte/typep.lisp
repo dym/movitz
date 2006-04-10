@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.52 2005/10/25 19:27:46 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.53 2006/04/10 11:58:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -704,7 +704,7 @@
 	 (cond
 	  ((typep object result-type)
 	   object)
-	  ((member result-type '(list array vector))
+	  ((member result-type '(list array vector simple-vector string simple-string))
 	   (map result-type #'identity object))
 	  ((and (consp result-type)
 		(eq (car result-type) 'vector))
