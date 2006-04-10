@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.24 2005/05/03 20:11:43 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.25 2006/04/10 11:46:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -319,10 +319,11 @@
 	      (let ((x (eval form)))
 		(format t "~&~W" x)
 		x)
-	    (invoke-debugger "Established Bochs session [pid=~D]. ~S is ~S"
-			     (image-pid image)
-			     '*previous-image*
-			     *previous-image*)))))))
+	    (invoke-debugger
+	     (format nil "Established Bochs session [pid=~D]. ~S is ~S"
+		     (image-pid image)
+		     '*previous-image*
+		     *previous-image*))))))))
 
 #+allegro
 (top-level:alias ("unbochs" 3) (&optional form)
