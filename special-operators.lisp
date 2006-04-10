@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.54 2005/08/28 21:03:53 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.55 2006/04/10 11:47:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -598,7 +598,7 @@ The valid parameters are~{ ~S~}."
 
 (define-special-operator muerte::declaim-compile-time (&form form &top-level-p top-level-p)
   (unless top-level-p
-    (error "DECLAIM not at top-level."))
+    (warn "DECLAIM not at top-level."))
   (let ((declaration-specifiers (cdr form)))
     (movitz-env-load-declarations declaration-specifiers *movitz-global-environment* :declaim))
   (compiler-values ()))
