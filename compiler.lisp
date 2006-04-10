@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.166 2005/10/31 09:22:54 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.167 2006/04/10 11:49:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1400,8 +1400,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 		       (pathname-directory path))
 	    (path)
 	  "Refusing to delete file not in /tmp.")
-	(delete-file path))))
-  (values))
+	(delete-file path)))))
 
 (defun movitz-compile-file-internal (path
 				     &optional (*default-load-priority*
@@ -1440,9 +1439,9 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 			  (when *compiler-verbose-p*
 			    (format *query-io* "~&Movitz Compiling ~S..~%"
 				    (cond
-				      ((symbolp form) form)
-				      ((symbolp (car form))
-				       (xsubseq form 0 2)))))
+				     ((symbolp form) form)
+				     ((symbolp (car form))
+				      (xsubseq form 0 2)))))
 			  (compiler-call #'compile-form
 			    :form form
 			    :funobj funobj
@@ -1452,13 +1451,16 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	(cond
 	 ((null file-code)
 	  (setf (image-load-time-funobjs *image*)
-	    (delete funobj (image-load-time-funobjs *image*) :key #'first)))
+	    (delete funobj (image-load-time-funobjs *image*) :key #'first))
+	  'muerte::constantly-true)
 	 (t (setf (extended-code function-env) file-code
 		  (need-normalized-ecx-p function-env) nil
 		  (function-envs funobj) (list (cons 'muerte.cl::t function-env))
 		  (funobj-env funobj) funobj-env)
-	    (make-compiled-funobj-pass2 funobj)))
-	t))))
+	    (make-compiled-funobj-pass2 funobj)
+	    (let ((name (funobj-name funobj)))
+	      (setf (movitz-env-named-function name) funobj)
+	      name)))))))
 
 ;;;;
 
