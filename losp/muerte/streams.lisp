@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Jun 30 14:33:15 2003
 ;;;;                
-;;;; $Id: streams.lisp,v 1.4 2004/11/24 16:19:36 ffjeld Exp $
+;;;; $Id: streams.lisp,v 1.5 2006/04/10 11:57:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -125,6 +125,7 @@
 destination, and then returns."
   (let ((stream (output-stream-designator stream)))
     (etypecase stream
+      (function)			; NOP
       (simple-stream
        (%finish-output stream)))))
 
