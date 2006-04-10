@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.55 2005/07/21 18:48:33 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.56 2006/04/10 11:47:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1307,6 +1307,10 @@ integer (native lisp) value."
 
 (defmethod update-movitz-object ((object movitz-ratio) lisp-object)
   (assert (= (movitz-ratio-value object) lisp-object))
+  object)
+
+(defmethod update-movitz-object ((object movitz-ratio) (lisp-object float))
+  (assert (= (movitz-ratio-value object) (rationalize lisp-object)))
   object)
 
 (defmethod print-object ((x movitz-ratio) stream)
