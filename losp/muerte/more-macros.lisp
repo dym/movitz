@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.31 2006/04/28 21:18:48 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.32 2006/04/28 23:21:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -431,7 +431,7 @@ respect to multiple threads."
 (define-unimplemented-macro with-open-file)
 (define-unimplemented-macro restart-case)
 
-(define-compiler-macro load (filespec &key verbose print if-does-not-exist external-format)
+(defmacro load (filespec &key verbose print if-does-not-exist external-format)
   "hm..."
   (assert (movitz:movitz-constantp filespec) (filespec)
     "Can't load a non-constant filename: ~S" filespec)
