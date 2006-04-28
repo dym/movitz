@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.167 2006/04/10 11:49:41 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.168 2006/04/28 23:20:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5550,9 +5550,13 @@ That is, RESULT-MODE is taken to be a suggestion, not an imperative."
 	(compiler-call (movitz-special-operator-compiler operator) :forward all)
       (let* ((compiler-macro-function (movitz-compiler-macro-function operator env))
 	     (compiler-macro-expansion (and compiler-macro-function
-					    (funcall *movitz-macroexpand-hook*
-						     compiler-macro-function
-						     form env))))
+					    (handler-case
+						(funcall *movitz-macroexpand-hook*
+							 compiler-macro-function
+							 form env)
+					      (error (c)
+						(warn "Compiler-macro for ~S failed: ~A" operator c)
+						form)))))
 	(cond
 	 ((and compiler-macro-function
 	       (not (movitz-env-get operator 'notinline nil env))
@@ -6671,7 +6675,6 @@ and a list of any intervening unwind-protect environment-slots."
 (define-extended-code-expander :cons-get (instruction funobj frame-map)
   (destructuring-bind (op cell dst)
       (cdr instruction)
-    (check-type cell lexical-binding)
     (check-type dst (member :eax :ebx :ecx :edx))
     (multiple-value-bind (op-offset fast-op fast-op-ebx)
 	(ecase op
@@ -6684,8 +6687,7 @@ and a list of any intervening unwind-protect environment-slots."
       (let* ((binding (binding-target (ensure-local-binding (binding-target cell) funobj)))
 	     (location (new-binding-location (binding-target binding) frame-map))
 	     (binding-is-list-p (binding-store-subtypep binding 'list)))
-	#+ignore (warn "car of loc ~A bind ~A"
-		       location binding)
+	#+ignore (warn "~A of loc ~A bind ~A" op location binding)
 	(cond
 	 ((and binding-is-list-p
 	       (member location '(:eax :ebx :ecx :edx)))

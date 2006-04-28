@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  2 17:45:05 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: eval.lisp,v 1.10 2005/09/16 22:49:34 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.11 2006/04/28 23:20:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -66,9 +66,11 @@
     (cons
      (let* ((compiler-macro-function (movitz-compiler-macro-function (car form) env))
 	    (compiler-macro-expansion (and compiler-macro-function
-					   (funcall *movitz-macroexpand-hook*
-						    compiler-macro-function
-						    form env))))
+					   (handler-case
+					       (funcall *movitz-macroexpand-hook*
+							compiler-macro-function
+							form env)
+					     (error () form)))))
        (or (let ((form (translate-program form :cl :muerte.cl)))
 	     (case (car form)
 	       ((muerte.cl:quote) t)
