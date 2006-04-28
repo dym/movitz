@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.30 2006/04/10 11:54:52 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.31 2006/04/28 21:18:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -440,3 +440,27 @@ respect to multiple threads."
 
 (defmacro locally (&body body)
   `(let () ,@body))
+
+(defmacro with-standard-io-syntax (&body body)
+  `(let ((*package* (find-package :init))
+	 (*print-array* t)
+	 (*print-base* 10)
+	 (*print-case* :upcase)
+	 (*print-circle* nil)
+	 (*print-escape* t)
+	 (*print-gensym* t)
+	 (*print-length* nil)
+	 (*print-level* nil)
+	 (*print-lines* nil)
+	 #+ignore (*print-miser-width* nil)
+	 #+ignore (*print-pprint-dispatch* nil)
+	 (*print-pretty* nil)
+	 (*print-radix* nil)
+	 (*print-readably* t)
+	 #+ignore (*print-right-margin* nil)
+	 (*read-base* 10)
+	 (*read-default-float-format* 'ratio)
+	 (*read-eval* t)
+	 (*read-suppress* nil)
+	 #+ignore (*readtable* nil))
+     ,@body))
