@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.18 2006/04/07 21:51:53 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.19 2006/04/28 23:21:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -59,7 +59,11 @@
 		      (condition-format-control condition)
 		      (condition-format-arguments condition))))))
 
-(define-condition simple-condition (condition) ())
+(define-condition simple-condition (condition)
+  ((format-control
+    :reader simple-condition-format-control)
+   (format-arguments
+    :reader simple-condition-format-arguments)))
 (define-condition serious-condition () ())
 (define-condition error (serious-condition) ())
 (define-condition warning () ())
