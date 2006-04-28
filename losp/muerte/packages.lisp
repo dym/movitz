@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 30 15:19:43 2001
 ;;;;                
-;;;; $Id: packages.lisp,v 1.12 2005/08/31 22:32:08 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.13 2006/04/28 21:19:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,12 +28,16 @@
   external-symbols
   internal-symbols
   shadowing-symbols-list
-  use-list)
+  use-list
+  nicknames)
 
 (defvar *packages*)			; Set by dump-image.
 
 (defun package-name (object)
   (package-object-name (find-package object)))
+
+(defun package-nicknames (package-designator)
+  (package-object-nicknames (find-package package-designator)))
 
 (defun package-use-list (package-name)
   (package-object-use-list (find-package package-name)))
