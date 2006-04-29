@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.13 2006/04/29 11:30:35 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.14 2006/04/29 11:41:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -25,10 +25,10 @@
 (defun rest (x)
   (cdr x))
 
-(defun (setf first) (x y)
+(defun (setf first) (y x)
   (setf (car x) y))
 
-(defun (setf rest) (x y)
+(defun (setf rest) (y x)
   (setf (cdr x) y))
 
 ;; Compiler-macros for first and rest in basic-macros.lisp.
@@ -431,8 +431,6 @@
 		     :test (if test-not
 			       (complement test-not)
 			     test)))
-
-  
   
 (defun subsetp (list-1 list-2 &key (key 'identity) (test 'eql) test-not)
   "=> generalized-boolean"
