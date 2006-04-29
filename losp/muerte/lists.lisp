@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.12 2005/08/21 19:00:16 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.13 2006/04/29 11:30:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -24,6 +24,12 @@
 
 (defun rest (x)
   (cdr x))
+
+(defun (setf first) (x y)
+  (setf (car x) y))
+
+(defun (setf rest) (x y)
+  (setf (cdr x) y))
 
 ;; Compiler-macros for first and rest in basic-macros.lisp.
 
