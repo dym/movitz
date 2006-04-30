@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.12 2006/04/07 21:33:54 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.13 2006/04/30 21:38:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -275,3 +275,42 @@ Cons cell is in EBX, which is preserved."
 (defun acons (key datum alist)
   "=> new-alist"
   (cons (cons key datum) alist))
+
+(defun sublis (alist tree &key key (test 'eql) test-not)
+  "Substitutes from alist into tree nondestructively."
+  (declare (inline assoc))
+  (let ((key (or key 'identity))
+	(test (if test-not (complement test-not) test)))
+    (labels ((s (subtree)
+	       (let* ((key-val (funcall key subtree))
+		      (assoc (assoc key-val alist :test test)))
+		 (cond (assoc (cdr assoc))
+		       ((atom subtree) subtree)
+		       (t (let ((car (s (car subtree)))
+				(cdr (s (cdr subtree))))
+			    (if (and (eq car (car subtreE))
+				     (eq cdr (cdr subtree)))
+				subtree
+			      (cons car cdr))))))))
+      (s tree))))
+
+(defun nsublis (alist tree &key key (test #'eql) (test-not nil notp))
+  "Substitutes new for subtrees matching old."
+  (declare (inline assoc))
+  (let ((key (or key 'identity))
+	(test (if test-not (complement test-not) test))
+	(temp))
+    (labels ((s (subtree)
+	       (cond ((Setq temp (nsublis-macro))
+		      (cdr temp))
+		     ((atom subtree) subtree)
+		     (t (do* ((last nil subtree)
+			      (subtree subtree (Cdr subtree)))
+			    ((atom subtree)
+			     (if (setq temp (assoc (funcall key subtree) alist :test test))
+				 (setf (cdr last) (cdr temp))))
+			  (if (setq temp (assoc (funcall key subtree) alist :test test))
+			      (return (setf (Cdr last) (Cdr temp)))
+			    (setf (car subtree) (s (car subtree)))))
+			subtree))))
+      (s tree))))
