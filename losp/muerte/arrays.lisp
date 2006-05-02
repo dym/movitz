@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.57 2006/04/07 21:47:44 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.58 2006/05/02 20:00:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -619,6 +619,153 @@
 
 (defun (setf char%unsafe) (value string index)
   (setf (char%unsafe string index) value))
+
+;;; bit accessors
+
+(defun bit (array &rest subscripts)
+  (numargs-case
+   (2 (array index)
+      (etypecase array
+	(indirect-vector
+	 (with-indirect-vector (indirect array :check-type nil)
+	   (aref (indirect displaced-to) (+ index (indirect displaced-offset)))))
+	(simple-bit-vector
+	 (macrolet
+	     ((do-it ()
+		`(with-inline-assembly (:returns :eax)
+		   (:compile-two-forms (:eax :ebx) array index)
+		   (:testb ,movitz:+movitz-fixnum-zmask+ :bl)
+		   (:jnz '(:sub-program (illegal-index)
+			   (:compile-form (:result-mode :ignore)
+			    (error "Illegal index: ~S." index))))
+		   (:cmpl :ebx
+			  (:eax ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)))
+		   (:jbe '(:sub-program (out-of-bounds)
+			   (:compile-form (:result-mode :ignore)
+			    (error "Index ~D is beyond vector length ~D."
+			     index
+			     (memref array
+			      (movitz-type-slot-offset 'movitz-basic-vector 'num-elements))))))
+		  :bit
+		   (:movl :ebx :ecx)
+		   (:movl :eax :ebx)
+		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   (:xorl :eax :eax)
+		   (:btl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+		   (:jnc 'return)
+		   (:addl ,movitz:+movitz-fixnum-factor+ :eax)
+		  return)))
+	   (do-it)))))
+   (t (vector &rest subscripts)
+      (declare (ignore vector subscripts))
+      (error "Multi-dimensional arrays not implemented."))))
+
+(defun sbit (array &rest subscripts)
+  (numargs-case
+   (2 (array index)
+      (check-type array simple-bit-vector)
+      (macrolet
+	  ((do-it ()
+	     `(with-inline-assembly (:returns :eax)
+		(:compile-two-forms (:eax :ebx) array index)
+		(:testb ,movitz:+movitz-fixnum-zmask+ :bl)
+		(:jnz '(:sub-program (illegal-index)
+			(:compile-form (:result-mode :ignore)
+			 (error "Illegal index: ~S." index))))
+		(:cmpl :ebx
+		       (:eax ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)))
+		(:jbe '(:sub-program (out-of-bounds)
+			(:compile-form (:result-mode :ignore)
+			 (error "Index ~D is beyond vector length ~D."
+			  index
+			  (memref array
+			   (movitz-type-slot-offset 'movitz-basic-vector 'num-elements))))))
+	       :bit
+		(:movl :ebx :ecx)
+		(:movl :eax :ebx)
+		(:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		(:xorl :eax :eax)
+		(:btl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+		(:jnc 'return)
+		(:addl ,movitz:+movitz-fixnum-factor+ :eax)
+	       return)))
+	(do-it)))
+   (t (vector &rest subscripts)
+      (declare (ignore vector subscripts))
+      (error "Multi-dimensional arrays not implemented."))))
+
+
+(defun (setf bit) (value vector &rest subscripts)
+  (numargs-case
+   (3 (value vector index)
+      (check-type value bit)
+      (etypecase vector
+	(indirect-vector
+	 (with-indirect-vector (indirect vector :check-type nil)
+	   (setf (aref (indirect displaced-to) (+ index (indirect displaced-offset)))
+	     value)))
+	(simple-bit-vector
+	 (macrolet
+	     ((do-it ()
+		`(with-inline-assembly (:returns :eax)
+		   (:compile-two-forms (:eax :ebx) value vector)
+		   (:compile-form (:result-mode :edx) index)
+		   (:testb ,movitz:+movitz-fixnum-zmask+ :dl)
+		   (:jnz '(:sub-program (not-an-index)
+			   (:compile-form (:result-mode :ignore)
+			    (error "Not a vector index: ~S." index))))
+		   (:cmpl (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+			  :edx)
+		   (:jnc '(:sub-program (illegal-index)
+			   (:compile-form (:result-mode :ignore)
+			    (error "Index ~S out of range." index))))
+		   (:movl :edx :ecx)
+		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   
+		   (:testl :eax :eax)
+		   (:jnz 'set-one-bit)
+		   (:btrl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+		   (:jmp 'return)
+		  set-one-bit
+		   (:btsl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+		  return)))
+	   (do-it)))))
+   (t (value vector &rest subscripts)
+      (declare (ignore value vector subscripts))
+      (error "Multi-dimensional arrays not implemented."))))
+
+(defun (setf sbit) (value vector &rest subscripts)
+  (numargs-case
+   (3 (value vector index)
+      (check-type value bit)
+      (macrolet
+	  ((do-it ()
+	     `(with-inline-assembly (:returns :eax)
+		(:compile-two-forms (:eax :ebx) value vector)
+		(:compile-form (:result-mode :edx) index)
+		(:testb ,movitz:+movitz-fixnum-zmask+ :dl)
+		(:jnz '(:sub-program (not-an-index)
+			(:compile-form (:result-mode :ignore)
+			 (error "Not a vector index: ~S." index))))
+		(:cmpl (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
+		       :edx)
+		(:jnc '(:sub-program (illegal-index)
+			(:compile-form (:result-mode :ignore)
+			 (error "Index ~S out of range." index))))
+		(:movl :edx :ecx)
+		(:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   
+		(:testl :eax :eax)
+		(:jnz 'set-one-bit)
+		(:btrl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+		(:jmp 'return)
+	       set-one-bit
+		(:btsl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+	       return)))
+	(do-it)))
+   (t (value vector &rest subscripts)
+      (declare (ignore value vector subscripts))
+      (error "Multi-dimensional arrays not implemented."))))
 
 ;;; u8 accessors
 
