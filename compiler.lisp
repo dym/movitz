@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.168 2006/04/28 23:20:45 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.169 2006/05/02 19:59:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3889,10 +3889,21 @@ loading borrowed bindings."
 			 (ecase (operator location)
 			   ((:argument-stack)
 			    `((:movl ,immediate (:ebp ,(argument-stack-offset binding)))))
-			   ((:eax :ebx :edx)
+			   ((:eax :ebx :ecx :edx)
 			    (make-immediate-move immediate location))
 			   ((:untagged-fixnum-ecx)
 			    (make-immediate-move (movitz-fixnum-value value) :ecx))))))
+		    (movitz-character
+		     (let ((immediate (movitz-immediate-value value)))
+		       (if (integerp location)
+			   (let ((tmp (chose-free-register protect-registers)))
+			     (append (make-immediate-move immediate tmp)
+				     `((:movl ,tmp (:ebp ,(stack-frame-offset location))))))
+			 (ecase (operator location)
+			   ((:argument-stack)
+			    `((:movl ,immediate (:ebp ,(argument-stack-offset binding)))))
+			   ((:eax :ebx :ecx :edx)
+			    (make-immediate-move immediate location))))))
 		    (movitz-heap-object
 		     (etypecase location
 		       ((member :eax :ebx :edx)
@@ -6676,50 +6687,65 @@ and a list of any intervening unwind-protect environment-slots."
   (destructuring-bind (op cell dst)
       (cdr instruction)
     (check-type dst (member :eax :ebx :ecx :edx))
-    (multiple-value-bind (op-offset fast-op fast-op-ebx)
+    (multiple-value-bind (op-offset fast-op fast-op-ebx cl-op)
 	(ecase op
 	  (:car (values (bt:slot-offset 'movitz-cons 'car)
 			'fast-car
-			'fast-car-ebx))
+			'fast-car-ebx
+			'movitz-car))
 	  (:cdr (values (bt:slot-offset 'movitz-cons 'cdr)
 			'fast-cdr
-			'fast-cdr-ebx)))
-      (let* ((binding (binding-target (ensure-local-binding (binding-target cell) funobj)))
-	     (location (new-binding-location (binding-target binding) frame-map))
-	     (binding-is-list-p (binding-store-subtypep binding 'list)))
-	#+ignore (warn "~A of loc ~A bind ~A" op location binding)
-	(cond
-	 ((and binding-is-list-p
-	       (member location '(:eax :ebx :ecx :edx)))
-	  `((,*compiler-nonlocal-lispval-read-segment-prefix*
-	    :movl (,location ,op-offset) ,dst)))
-	 (binding-is-list-p
-	  `(,@(make-load-lexical binding dst funobj nil frame-map)
-	      (,*compiler-nonlocal-lispval-read-segment-prefix*
-	       :movl (,dst ,op-offset) ,dst)))
-	 ((not *compiler-use-cons-reader-segment-protocol-p*)
-	  (cond
-	   ((eq location :ebx)
-	    `((,*compiler-global-segment-prefix*
-	       :call (:edi ,(global-constant-offset fast-op-ebx)))
-	      ,@(when (not (eq dst :eax))
-		  `((:movl :eax ,dst)))))
-	   (t `(,@(make-load-lexical binding :eax funobj nil frame-map)
-		  (,*compiler-global-segment-prefix* 
-		   :call (:edi ,(global-constant-offset fast-op)))
-		  ,@(when (not (eq dst :eax))
-		      `((:movl :eax ,dst)))))))
-	 (t (cond
-	     ((member location '(:ebx :ecx :edx))
-	      `((,(or *compiler-cons-read-segment-prefix*
-		      *compiler-nonlocal-lispval-read-segment-prefix*)
-		 :movl (:eax ,op-offset) ,dst)))
-	     (t (append (make-load-lexical binding :eax funobj nil frame-map)
-			`((,(or *compiler-cons-read-segment-prefix*
-				*compiler-nonlocal-lispval-read-segment-prefix*)
-			   :movl (:eax ,op-offset) ,dst)))))))))))
-
-	     
+			'fast-cdr-ebx
+			'movitz-cdr)))
+      (let ((binding (binding-target (ensure-local-binding (binding-target cell) funobj))))
+	(etypecase binding
+	  (constant-object-binding
+	   (let ((x (constant-object binding)))
+	     (typecase x
+	       (movitz-null
+		(make-load-constant *movitz-nil* dst funobj frame-map))
+	       (movitz-cons
+		(append (make-load-constant x dst funobj frame-map)
+			`((:movl (,dst ,op-offset) ,dst))))
+	       (t `(,@(make-load-lexical binding :eax funobj nil frame-map)
+		      (,*compiler-global-segment-prefix* 
+		       :call (:edi ,(global-constant-offset fast-op)))
+		      ,@(when (not (eq dst :eax))
+			  `((:movl :eax ,dst))))))))
+	  (lexical-binding
+	   (let ((location (new-binding-location (binding-target binding) frame-map))
+		 (binding-is-list-p (binding-store-subtypep binding 'list)))
+	     #+ignore (warn "~A of loc ~A bind ~A" op location binding)
+	     (cond
+	      ((and binding-is-list-p
+		    (member location '(:eax :ebx :ecx :edx)))
+	       `((,*compiler-nonlocal-lispval-read-segment-prefix*
+		  :movl (,location ,op-offset) ,dst)))
+	      (binding-is-list-p
+	       `(,@(make-load-lexical binding dst funobj nil frame-map)
+		   (,*compiler-nonlocal-lispval-read-segment-prefix*
+		    :movl (,dst ,op-offset) ,dst)))
+	      ((not *compiler-use-cons-reader-segment-protocol-p*)
+	       (cond
+		((eq location :ebx)
+		 `((,*compiler-global-segment-prefix*
+		    :call (:edi ,(global-constant-offset fast-op-ebx)))
+		   ,@(when (not (eq dst :eax))
+		       `((:movl :eax ,dst)))))
+		(t `(,@(make-load-lexical binding :eax funobj nil frame-map)
+		       (,*compiler-global-segment-prefix* 
+			:call (:edi ,(global-constant-offset fast-op)))
+		       ,@(when (not (eq dst :eax))
+			   `((:movl :eax ,dst)))))))
+	      (t (cond
+		  ((member location '(:ebx :ecx :edx))
+		   `((,(or *compiler-cons-read-segment-prefix*
+			   *compiler-nonlocal-lispval-read-segment-prefix*)
+		      :movl (:eax ,op-offset) ,dst)))
+		  (t (append (make-load-lexical binding :eax funobj nil frame-map)
+			     `((,(or *compiler-cons-read-segment-prefix*
+				     *compiler-nonlocal-lispval-read-segment-prefix*)
+				:movl (:eax ,op-offset) ,dst))))))))))))))
 
 
 ;;;;;;;;;;;;;;;;;; endp
@@ -6732,39 +6758,49 @@ and a list of any intervening unwind-protect environment-slots."
 (define-extended-code-expander :endp (instruction funobj frame-map)
   (destructuring-bind (cell result-mode)
       (cdr instruction)
-    (let* ((binding (binding-target (ensure-local-binding (binding-target cell) funobj)))
-	   (location (new-binding-location (binding-target binding) frame-map))
-	   (binding-is-list-p (binding-store-subtypep binding 'list))
-	   (tmp-register (case location
-			   ((:eax :ebx :ecx :edx)
-			    location))))
-      ;; (warn "endp of loc ~A bind ~A" location binding)
-      (cond
-       ((and binding-is-list-p
-	     (member location '(:eax :ebx :ecx :edx)))
-	(make-result-and-returns-glue result-mode :boolean-zf=1
-				      `((:cmpl :edi ,location))))
-       ((eq :boolean-branch-on-true (result-mode-type result-mode))
-	(let ((tmp-register (or tmp-register :ecx)))
-	  (append (make-load-lexical binding
-				     (cons :boolean-branch-on-false
-					   (cdr result-mode))
-				     funobj nil frame-map)
-		  (unless binding-is-list-p
-		    (append (make-load-lexical binding tmp-register funobj nil frame-map)
-			    `((:leal (,tmp-register -1) :ecx)
-			      (:testb 3 :cl)
-			      (:jnz '(:sub-program (,(gensym "endp-not-cons-"))
-				      (:int 66)))))))))
-       (t (let ((tmp-register (or tmp-register :eax)))
-	    (append (make-load-lexical binding tmp-register funobj nil frame-map)
-		    (unless binding-is-list-p
-		      `((:leal (,tmp-register -1) :ecx)
-			(:testb 3 :cl)
-			(:jnz '(:sub-program (,(gensym "endp-not-cons-"))
-				(:int 66)))))
-		    `((:cmpl :edi ,tmp-register))
-		    (make-result-and-returns-glue result-mode :boolean-zf=1))))))))
+    (let ((binding (binding-target (ensure-local-binding (binding-target cell) funobj))))
+      (etypecase binding
+	(constant-object-binding
+	 (let ((x (constant-object binding)))
+	   (typecase x
+	     (movitz-cons
+	      (make-load-constant *movitz-nil* result-mode funobj frame-map))
+	     (movitz-null
+	      (make-load-constant (image-t-symbol *image*) result-mode funobj frame-map))
+	     (t '((:int 61))))))
+	(lexical-binding
+	 (let* ((location (new-binding-location (binding-target binding) frame-map))
+		(binding-is-list-p (binding-store-subtypep binding 'list))
+		(tmp-register (case location
+				((:eax :ebx :ecx :edx)
+				 location))))
+	   ;; (warn "endp of loc ~A bind ~A" location binding)
+	   (cond
+	    ((and binding-is-list-p
+		  (member location '(:eax :ebx :ecx :edx)))
+	     (make-result-and-returns-glue result-mode :boolean-zf=1
+					   `((:cmpl :edi ,location))))
+	    ((eq :boolean-branch-on-true (result-mode-type result-mode))
+	     (let ((tmp-register (or tmp-register :ecx)))
+	       (append (make-load-lexical binding
+					  (cons :boolean-branch-on-false
+						(cdr result-mode))
+					  funobj nil frame-map)
+		       (unless binding-is-list-p
+			 (append (make-load-lexical binding tmp-register funobj nil frame-map)
+				 `((:leal (,tmp-register -1) :ecx)
+				   (:testb 3 :cl)
+				   (:jnz '(:sub-program (,(gensym "endp-not-cons-"))
+					   (:int 66)))))))))
+	    (t (let ((tmp-register (or tmp-register :eax)))
+		 (append (make-load-lexical binding tmp-register funobj nil frame-map)
+			 (unless binding-is-list-p
+			   `((:leal (,tmp-register -1) :ecx)
+			     (:testb 3 :cl)
+			     (:jnz '(:sub-program (,(gensym "endp-not-cons-"))
+				     (:int 66)))))
+			 `((:cmpl :edi ,tmp-register))
+			 (make-result-and-returns-glue result-mode :boolean-zf=1)))))))))))
 	  
 
 ;;;;;;;;;;;;;;;;;; incf-lexvar
@@ -6867,11 +6903,23 @@ and a list of any intervening unwind-protect environment-slots."
 	 (type1 (and (binding-store-type term1)
 		     (apply #'encoded-type-decode (binding-store-type term1))))
 	 (singleton0 (and type0 (type-specifier-singleton type0)))
-	 (singleton1 (and type1 (type-specifier-singleton type1))))
-    (append (unless (and singleton0 (typep (car singleton0) 'movitz-fixnum))
-	      (list term0))
-	    (unless (and singleton1 (typep (car singleton1) 'movitz-fixnum))
-	      (list term1)))))
+	 (singleton1 (and type1 (type-specifier-singleton type1)))
+	 (singleton-sum (and singleton0 singleton1
+			     (type-specifier-singleton
+			      (apply #'encoded-integer-types-add
+				     (append (binding-store-type term0)
+					     (binding-store-type term1)))))))
+    (cond
+     (singleton-sum
+      (let ((b (make-instance 'constant-object-binding
+		 :name (gensym "constant-sum")
+		 :object (car singleton-sum))))
+	(movitz-env-add-binding (binding-env term0) b)
+	(list b)))
+     (t (append (unless (and singleton0 (typep (car singleton0) 'movitz-fixnum))
+		  (list term0))
+		(unless (and singleton1 (typep (car singleton1) 'movitz-fixnum))
+		  (list term1)))))))
 
 (define-extended-code-expander :add (instruction funobj frame-map)
   (destructuring-bind (term0 term1 destination)
