@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.13 2006/04/30 21:38:40 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.14 2006/05/02 17:12:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -294,18 +294,18 @@ Cons cell is in EBX, which is preserved."
 			      (cons car cdr))))))))
       (s tree))))
 
-(defun nsublis (alist tree &key key (test #'eql) (test-not nil notp))
+(defun nsublis (alist tree &key key (test #'eql) test-not)
   "Substitutes new for subtrees matching old."
   (declare (inline assoc))
   (let ((key (or key 'identity))
 	(test (if test-not (complement test-not) test))
 	(temp))
     (labels ((s (subtree)
-	       (cond ((Setq temp (nsublis-macro))
+	       (cond ((setq temp (assoc (funcall key subtree) alist :test test))
 		      (cdr temp))
 		     ((atom subtree) subtree)
 		     (t (do* ((last nil subtree)
-			      (subtree subtree (Cdr subtree)))
+			      (subtree subtree (cdr subtree)))
 			    ((atom subtree)
 			     (if (setq temp (assoc (funcall key subtree) alist :test test))
 				 (setf (cdr last) (cdr temp))))
