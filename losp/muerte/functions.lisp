@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 12 22:58:54 2002
 ;;;;                
-;;;; $Id: functions.lisp,v 1.30 2006/04/07 21:52:17 ffjeld Exp $
+;;;; $Id: functions.lisp,v 1.31 2006/05/02 20:01:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -44,17 +44,11 @@
       (case (translate-program value :muerte.cl :cl)
 	((t) `(function constantly-true))
 	((nil) `(function constantly-false))
-	(t `(make-prototyped-function (constantly ,value)
-				      constantly-prototype
-				      (value ,value))))))
-   (t (let ((value-var (gensym "constantly-value-")))
-	`(let ((,value-var ,value-form))
-	   (lambda (&rest ignore)
-	     (declare (ignore ignore))
-	     ,value-var))))))
+	(t form))))
+   (t form)))
 
 (defun constantly (x)
-  (compiler-macro-call constantly x))
+  (lambda () x))
 
 (defun complement-prototype (&rest args)
   (declare (dynamic-extent args))
