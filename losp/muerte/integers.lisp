@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.121 2006/04/07 21:35:32 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.122 2006/05/02 20:02:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2260,3 +2260,6 @@
 
 (defun rational (number)
   number)
+
+(defun realp (x)
+  (typep x 'real))
