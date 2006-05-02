@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.14 2006/05/02 17:12:20 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.15 2006/05/02 20:01:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -288,7 +288,7 @@ Cons cell is in EBX, which is preserved."
 		       ((atom subtree) subtree)
 		       (t (let ((car (s (car subtree)))
 				(cdr (s (cdr subtree))))
-			    (if (and (eq car (car subtreE))
+			    (if (and (eq car (car subtree))
 				     (eq cdr (cdr subtree)))
 				subtree
 			      (cons car cdr))))))))
@@ -310,7 +310,68 @@ Cons cell is in EBX, which is preserved."
 			     (if (setq temp (assoc (funcall key subtree) alist :test test))
 				 (setf (cdr last) (cdr temp))))
 			  (if (setq temp (assoc (funcall key subtree) alist :test test))
-			      (return (setf (Cdr last) (Cdr temp)))
+			      (return (setf (Cdr last) (cdr temp)))
 			    (setf (car subtree) (s (car subtree)))))
 			subtree))))
       (s tree))))
+
+(defun subst (new old tree &key key (test 'eql) test-not)
+  "=> new-tree"
+  (let ((test (if test-not (complement test-not) test))
+	(key (or key 'identity)))
+    (labels ((do-subst (subtree)
+	       (cond
+		((funcall test old (funcall key subtree))
+		 new)
+		((atom subtree)
+		 subtree)
+		(t (cons (do-subst (car subtree))
+			 (do-subst (cdr subtree)))))))
+      (do-subst tree))))
+
+(defun subst-if (new predicate tree &key key)
+  "=> new-tree"
+  (let ((key (or key 'identity)))
+    (labels ((do-subst (subtree)
+	       (cond
+		((funcall predicate (funcall key subtree))
+		 new)
+		((atom subtree)
+		 subtree)
+		(t (cons (do-subst (car subtree))
+			 (do-subst (cdr subtree)))))))
+      (do-subst tree))))
+
+(defun subst-if-not (new predicate tree &key key)
+  (subst-if new (complement predicate) tree :key key))
+
+(defun nsubst (new old tree &key key (test 'eql) test-not)
+  (let ((test (if test-not (complement test-not) test))
+	(key (or key 'identity)))
+    (labels ((do-subst (subtree)
+	       (cond
+		((funcall test old (funcall key subtree))
+		 new)
+		((atom subtree)
+		 subtree)
+		(t (setf (car subtree) (do-subst (car subtree))
+			 (cdr subtree) (do-subst (cdr subtree)))
+		   subtree))))
+      (do-subst tree))))
+
+(defun nsubst-if (new predicate tree &key key)
+  "=> new-tree"
+  (let ((key (or key 'identity)))
+    (labels ((do-subst (subtree)
+	       (cond
+		((funcall predicate (funcall key subtree))
+		 new)
+		((atom subtree)
+		 subtree)
+		(t (setf (car subtree) (do-subst (car subtree))
+			 (cdr subtree) (do-subst (cdr subtree)))
+		   subtree))))
+      (do-subst tree))))
+
+(defun nsubst-if-not (new predicate tree &key key)
+  (nsubst-if new (complement predicate) tree :key key))
