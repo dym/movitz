@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.14 2006/04/29 11:41:34 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.15 2006/05/03 22:20:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -112,20 +112,21 @@
     ;;  That fact justifies this implementation.)
     (when (and (eq fast slow) (> n 0)) (return nil))))
 
-(defun member (item list &key (key 'identity) (test 'eql))
+(defun member (item list &key key (test 'eql))
   (numargs-case
    (2 (item list)
       (do ((p list (cdr p)))
 	  ((endp p) nil)
 	(when (eql item (car p))
 	  (return p))))
-   (t (item list &key (key 'identity) (test 'eql))
-      (with-funcallable (key)
-	(with-funcallable (test)
-	  (do ((p list (cdr p)))
-	      ((endp p) nil)
-	    (when (test item (key (car p)))
-	      (return p))))))))
+   (t (item list &key key (test 'eql))
+      (let ((key (or key 'identity)))
+	(with-funcallable (key)
+	  (with-funcallable (test)
+	    (do ((p list (cdr p)))
+		((endp p) nil)
+	      (when (test item (key (car p)))
+		(return p)))))))))
 
 (defun last (list &optional (n 1))
   ;; from the hyperspec..
@@ -198,10 +199,10 @@
 (defun copy-list (list)
   (if (null list)
       nil
-    (let ((new-list (cons (pop list) nil)))
+    (let ((new-list (cons (pop list) list)))
       (do ((new-tail new-list (cdr new-tail)))
-	  ((null list) new-list)
-	(setf (cdr new-tail) (cons (pop list) nil))))))
+	  ((atom list) new-list)
+	(setf (cdr new-tail) (cons (pop list) list))))))
 
 (defun list (&rest objects)
   (numargs-case
