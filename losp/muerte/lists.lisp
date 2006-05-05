@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.15 2006/05/03 22:20:02 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.16 2006/05/05 21:39:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -112,17 +112,17 @@
     ;;  That fact justifies this implementation.)
     (when (and (eq fast slow) (> n 0)) (return nil))))
 
-(defun member (item list &key key (test 'eql))
+(defun member (item list &key key (test 'eql) test-not)
   (numargs-case
    (2 (item list)
       (do ((p list (cdr p)))
 	  ((endp p) nil)
 	(when (eql item (car p))
 	  (return p))))
-   (t (item list &key key (test 'eql))
+   (t (item list &key key (test 'eql) test-not)
       (let ((key (or key 'identity)))
 	(with-funcallable (key)
-	  (with-funcallable (test)
+	  (with-funcallable (test (or (and test-not (complement test-not)) test))
 	    (do ((p list (cdr p)))
 		((endp p) nil)
 	      (when (test item (key (car p)))
