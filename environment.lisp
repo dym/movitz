@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.15 2005/10/31 20:30:32 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.16 2006/05/05 18:37:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -186,6 +186,9 @@ lexical environment that a closure funobj captures."))
    (max-args
     :initform nil
     :accessor max-args)
+   (oddeven-args
+    :initform nil
+    :accessor oddeven-args)
    (allow-other-keys-p
     :accessor allow-other-keys-p)
    (edx-var

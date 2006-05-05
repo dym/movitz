@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.169 2006/05/02 19:59:55 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.170 2006/05/05 18:37:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -4257,11 +4257,12 @@ loading borrowed bindings."
 (defun add-bindings-from-lambda-list (lambda-list env)
   "From a (normal) <lambda-list>, add bindings to <env>."
   (let ((arg-pos 0))
-    (multiple-value-bind (required-vars optional-vars rest-var key-vars auxes allow-p min-args max-args edx-var)
+    (multiple-value-bind (required-vars optional-vars rest-var key-vars auxes allow-p min-args max-args edx-var oddeven)
 	(decode-normal-lambda-list lambda-list)
       (declare (ignore auxes))
       (setf (min-args env) min-args
 	    (max-args env) max-args
+	    (oddeven-args env) oddeven
 	    (allow-other-keys-p env) allow-p)
       (flet ((shadow-when-special (formal env)
 	       "Iff <formal> is special, return a fresh variable-name that takes <formal>'s place
@@ -4590,22 +4591,37 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 	    eax-ebx-code
 	    (make-stack-setup-code stack-setup-size)
 	    (when need-normalized-ecx-p
-	      (cond
-	       ;; normalize arg-count in ecx..
-	       ((and max-args (= min-args max-args))
-		(error "huh?"))
-	       ((and max-args (<= 0 min-args max-args #x7f))
-		`((:andl #x7f :ecx)))
-	       ((>= min-args #x80)
-		`((:shrl 8 :ecx)))
-	       (t (let ((normalize (make-symbol "normalize-ecx"))
-			(normalize-done (make-symbol "normalize-ecx-done")))
-		    `((:testb :cl :cl)
-		      (:js '(:sub-program (,normalize)
-			     (:shrl 8 :ecx)
-			     (:jmp ',normalize-done)))
-		      (:andl #x7f :ecx)
-		      ,normalize-done)))))
+	      (let ((oddeven-ok (gensym "oddeven-ok-")))
+		(append (cond
+			 ;; normalize arg-count in ecx..
+			 ((and max-args (= min-args max-args))
+			  (error "huh?"))
+			 ((and max-args (<= 0 min-args max-args #x7f))
+			  `((:andl #x7f :ecx)))
+			 ((>= min-args #x80)
+			  `((:shrl 8 :ecx)))
+			 (t (let ((normalize (make-symbol "normalize-ecx"))
+				  (normalize-done (make-symbol "normalize-ecx-done")))
+			      `((:testb :cl :cl)
+				(:js '(:sub-program (,normalize)
+				       (:shrl 8 :ecx)
+				       (:jmp ',normalize-done)))
+				(:andl #x7f :ecx)
+				,normalize-done))))
+			(when (and (oddeven-args env)
+				   (optional-vars env))
+			  `((:cmpl ,(length (optional-vars env)) :ecx)
+			    (:jbe ',oddeven-ok)))
+			(case (oddeven-args env)
+			  (:even
+			   `((:testb 1 :cl)
+			     (:jnz '(:sub-program () (:int 102)))))
+			  (:odd
+			   `((:testb 1 :cl)
+			     (:jz '(:sub-program () (:int 102))))))
+			(when (and (oddeven-args env)
+				   (optional-vars env))
+			  (list oddeven-ok)))))
 	    (when edx-needs-saving-p
 	      `((:movl :edx (:ebp ,(stack-frame-offset (new-binding-location (edx-var env) frame-map))))))
 	    eax-ebx-code-post-stackframe
@@ -6790,15 +6806,15 @@ and a list of any intervening unwind-protect environment-slots."
 			 (append (make-load-lexical binding tmp-register funobj nil frame-map)
 				 `((:leal (,tmp-register -1) :ecx)
 				   (:testb 3 :cl)
-				   (:jnz '(:sub-program (,(gensym "endp-not-cons-"))
-					   (:int 66)))))))))
+				   (:jnz '(:sub-program (,(gensym "endp-not-list-"))
+					   (:int 61)))))))))
 	    (t (let ((tmp-register (or tmp-register :eax)))
 		 (append (make-load-lexical binding tmp-register funobj nil frame-map)
 			 (unless binding-is-list-p
 			   `((:leal (,tmp-register -1) :ecx)
 			     (:testb 3 :cl)
-			     (:jnz '(:sub-program (,(gensym "endp-not-cons-"))
-				     (:int 66)))))
+			     (:jnz '(:sub-program (,(gensym "endp-not-list-"))
+				     (:int 61)))))
 			 `((:cmpl :edi ,tmp-register))
 			 (make-result-and-returns-glue result-mode :boolean-zf=1)))))))))))
 	  

@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:49:17 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: parse.lisp,v 1.5 2004/12/09 14:09:58 ffjeld Exp $
+;;;; $Id: parse.lisp,v 1.6 2006/05/05 18:37:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -145,8 +145,8 @@ the minimum and maximum number of arguments (or nil if max is infinite)."
 	       (key () '(fourth program))
 	       (aux () '(fifth program))
 	       (allow-other-keys () '(if host-symbols-p
-					 '&allow-other-keys
-				       'muerte.cl::&allow-other-keys)))
+				      '&allow-other-keys
+				      'muerte.cl::&allow-other-keys)))
       (loop for formal in lambda-list
 	  with program = (if host-symbols-p
 			     '(requireds &optional &rest &key &aux)
@@ -177,19 +177,29 @@ the minimum and maximum number of arguments (or nil if max is infinite)."
 		  (auxes     (nreverse (getf results (aux)))))
 	      (when (> (length rests) 1)
 		(error "There can only be one &REST formal parameter."))
-	      (return (values requireds
-			      optionals
-			      (first rests)
-			      keys
-			      auxes
-			      allow-other-keys-p
-			      (length requireds) ; minimum num. of arguments
-			      (and (null rests) ; max num. of arguments, or nil.
+	      (let ((maxargs (and (null rests) ; max num. of arguments, or nil.
+				   (null keys)
 				   (not allow-other-keys-p)
 				   (+ (length requireds)
-				      (length optionals)
-				      (* 2 (length keys))))
-			      edx-var)))))))
+				      (length optionals))))
+		    (minargs (length requireds)))
+		(return (values requireds
+				optionals
+				(first rests)
+				keys
+				auxes
+				allow-other-keys-p
+				minargs
+				maxargs
+				edx-var
+				(cond
+				 ((or (eql maxargs minargs)
+				      (eq :no-key (getf results (key) :no-key)))
+				  nil)
+				 ((assert (not maxargs)))
+				 ((evenp (+ (length requireds) (length optionals)))
+				  :even)
+				 (t :odd))))))))))
 
 (defun decode-optional-formal (formal)
   "3.4.1.2 Specifiers for optional parameters.
