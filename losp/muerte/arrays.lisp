@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.58 2006/05/02 20:00:20 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.59 2006/05/05 18:14:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -694,6 +694,26 @@
       (declare (ignore vector subscripts))
       (error "Multi-dimensional arrays not implemented."))))
 
+(defun bitref%unsafe (array index)
+  (macrolet
+      ((do-it ()
+	 `(with-inline-assembly (:returns :eax)
+	    (:compile-two-forms (:eax :ebx) array index)
+	    (:testb ,movitz:+movitz-fixnum-zmask+ :bl)
+	    (:jnz '(:sub-program (illegal-index)
+		    (:compile-form (:result-mode :ignore)
+		     (error "Illegal index: ~S." index))))
+	   :bit
+	    (:movl :ebx :ecx)
+	    (:movl :eax :ebx)
+	    (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+	    (:xorl :eax :eax)
+	    (:btl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+	    (:jnc 'return)
+	    (:addl ,movitz:+movitz-fixnum-factor+ :eax)
+	   return)))
+    (do-it)))
+
 
 (defun (setf bit) (value vector &rest subscripts)
   (numargs-case
@@ -767,6 +787,30 @@
       (declare (ignore value vector subscripts))
       (error "Multi-dimensional arrays not implemented."))))
 
+(defun (setf bitref%unsafe) (value vector index)
+  (macrolet
+      ((do-it ()
+	 `(progn
+	    (check-type value bit)
+	    (with-inline-assembly (:returns :eax)
+	      (:compile-two-forms (:eax :ebx) value vector)
+	      (:compile-form (:result-mode :edx) index)
+	      (:testb ,movitz:+movitz-fixnum-zmask+ :dl)
+	      (:jnz '(:sub-program (not-an-index)
+		      (:compile-form (:result-mode :ignore)
+		       (error "Not a vector index: ~S." index))))
+	      (:movl :edx :ecx)
+	      (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
+		   
+	      (:testl :eax :eax)
+	      (:jnz 'set-one-bit)
+	      (:btrl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+	      (:jmp 'return)
+	     set-one-bit
+	      (:btsl :ecx (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
+	     return))))
+    (do-it)))
+
 ;;; u8 accessors
 
 (define-compiler-macro u8ref%unsafe (vector index)
@@ -830,7 +874,9 @@ and return basic-vector and accessors for that subsequence."
        (#.(bt:enum-value 'movitz::movitz-vector-element-type :u32)
 	  (values vector #'u32ref%unsafe #'(setf u32ref%unsafe)))
        (#.(bt:enum-value 'movitz::movitz-vector-element-type :code)
-	  (values vector #'u8ref%unsafe #'(setf u8ref%unsafe)))
+	(values vector #'u8ref%unsafe #'(setf u8ref%unsafe)))
+       (#.(bt:enum-value 'movitz::movitz-vector-element-type :bit)
+	  (values vector #'bitref%unsafe #'(setf bitref%unsafe)))
        (t (warn "don't know about vector's element-type: ~S" vector)
 	  (values vector #'aref #'(setf aref)))))))
 
