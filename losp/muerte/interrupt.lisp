@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.50 2006/05/02 20:03:15 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.51 2006/05/05 18:39:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -395,6 +395,10 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	   (error 'program-error
 		  :format-control "Illegal keyword argument [eax: ~S]"
 		  :format-arguments (list (dereference $eax))))
+	  (102
+	   (error 'program-error
+		  :format-control "Missing keyword argument for ~S."
+		  :format-arguments (list (dereference (+ dit-frame (dit-frame-index :esi))))))
 	  (108
 	   (error 'throw-error :tag (dereference $eax)))
 	  (110
