@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.34 2006/05/05 18:33:08 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.35 2006/05/05 20:42:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -162,7 +162,7 @@
       `(do ((item ,item)
 	    (p ,list (cdr p)))
 	   ((endp p) nil)
-	 (when (,test (,key item) (car p))
+	 (when (,test (,key item) (,key (car p)))
 	   (return p))))
      (t form))))
 
