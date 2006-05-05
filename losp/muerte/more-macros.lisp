@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.33 2006/05/02 20:03:47 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.34 2006/05/05 18:33:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -155,14 +155,14 @@
       `(do ((item ,item)
 	    (p ,list (cdr p)))
 	   ((endp p) nil)
-	 (when (,test (car p) item)
+	 (when (,test item (car p))
 	   (return p))))
      ((and test (symbolp test)
 	   key (symbolp key))
       `(do ((item ,item)
 	    (p ,list (cdr p)))
 	   ((endp p) nil)
-	 (when (,test (car p) (,key item))
+	 (when (,test (,key item) (car p))
 	   (return p))))
      (t form))))
 
