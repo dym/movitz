@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.16 2006/05/05 21:39:02 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.17 2006/05/06 19:36:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -125,7 +125,7 @@
 	  (with-funcallable (test (or (and test-not (complement test-not)) test))
 	    (do ((p list (cdr p)))
 		((endp p) nil)
-	      (when (test item (key (car p)))
+	      (when (test (key item) (key (car p)))
 		(return p)))))))))
 
 (defun last (list &optional (n 1))
