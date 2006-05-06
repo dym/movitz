@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.15 2006/05/02 20:01:01 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.16 2006/05/06 20:30:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -375,3 +375,12 @@ Cons cell is in EBX, which is preserved."
 
 (defun nsubst-if-not (new predicate tree &key key)
   (nsubst-if new (complement predicate) tree :key key))
+
+
+(defun adjoin (item list &key key (test 'eql) test-not)
+  "=> new-list
+  Tests whether item is the same as an existing element of list. If the item is not an existing element, adjoin adds it to
+list (as if by cons) and returns the resulting list; otherwise, nothing is added and the original list is returned."
+  (if (member item list :key key :test test :test-not test-not)
+      list
+    (cons item list)))
