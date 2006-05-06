@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.66 2006/04/10 11:51:03 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.67 2006/05/06 21:15:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -630,7 +630,8 @@
        (:testb 7 :cl)
        (:jnz '(:sub-program ()
 	       (:movl :ebx :eax)
-	       (:int 61)))
+	       (:xorl :ecx :ecx)
+	       (:int 69)))
        (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
 	:movl :eax (:ebx -1)))))
 
@@ -650,7 +651,8 @@
        (:testb 7 :cl)
        (:jnz '(:sub-program ()
 	       (:movl :ebx :eax)
-	       (:int 61)))
+	       (:xorl :ecx :ecx)
+	       (:int 69)))
        (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
 	:movl :eax (:ebx 3)))))
 
@@ -659,7 +661,9 @@
      (:compile-two-forms (:eax :ebx) ,cons ,object)
      (:leal (:eax -1) :ecx)
      (:testb 7 :cl)
-     (:jnz '(:sub-program () (:int 61)))
+     (:jnz '(:sub-program ()
+	     (:xorl :ecx :ecx)
+	     (:int 69)))
      (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
       :movl :ebx (:eax -1))))
 
@@ -668,7 +672,9 @@
      (:compile-two-forms (:eax :ebx) ,cons ,object)
      (:leal (:eax -1) :ecx)
      (:testb 7 :cl)
-     (:jnz '(:sub-program () (:int 61)))
+     (:jnz '(:sub-program ()
+	     (:xorl :ecx :ecx)
+	     (:int 69)))
      (#.movitz:*compiler-nonlocal-lispval-write-segment-prefix*
       :movl :ebx (:eax 3))))
 
