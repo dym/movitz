@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.19 2006/04/28 23:21:59 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.20 2006/05/06 20:29:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -114,6 +114,18 @@
 		     (type-error-datum c)
 		     (type-error-datum c)
 		     (type-error-expected-type c)))))
+
+(define-condition etypecase-error (type-error)
+  ()
+  (:report (lambda (c s)
+	     (format s "The object '~S' fell through an etypecase where the legal types were ~S."
+		     (type-error-datum c)
+		     (type-error-expected-type c)))))
+
+(defun etypecase-error (datum expecteds)
+  (error 'etypecase-error
+	 :datum datum
+	 :expected-type (cons 'or expecteds)))
 
 (define-condition control-error (error) ())
 

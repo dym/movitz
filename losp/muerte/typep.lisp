@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.53 2006/04/10 11:58:15 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.54 2006/05/06 20:29:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -38,11 +38,10 @@
 		     else collect `((typep ,key-var ',type) ,@forms)))))))
 
 (defmacro etypecase (keyform &rest clauses)
-  `(typecase ,keyform ,@clauses
-	     (t (error "~S fell through an etypecase where the legal types were ~S."
-		       ,keyform
-		       ',(loop for c in clauses
-			     collect (car c))))))
+  (let ((key-var (make-symbol "etypecase-key-var-")))
+    `(let ((,key-var ,keyform))
+       (typecase ,key-var ,@clauses
+		 (t (etypecase-error ,key-var ',(loop for c in clauses collect (car c))))))))
 
 (define-compile-time-variable *simple-typespecs*
     ;; map symbol typespecs to typep-functions.
