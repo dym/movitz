@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.35 2006/05/05 20:42:04 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.36 2006/05/06 20:31:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -62,29 +62,19 @@
 	   (not (typep (movitz::movitz-binding place env) 'movitz::symbol-macro-binding)))
       `(setq ,place (cons ,item ,place))
     form))
-  
-(defmacro pushnew (&environment env item place &key (key nil keyp) (test nil testp) (test-not nil test-notp))
-  (let ((testing
-	 (cond
-	  (testp (list :test test))
-	  (test-notp (list :test-not test-not))))
-	(keying
-	 (cond
-	  (keyp (list :key key)))))
-    (multiple-value-bind (tmp-vars tmp-var-init-forms store-vars setter-form getter-form)
-	(get-setf-expansion place env)
-      (assert (= 1 (length store-vars)) ()
-	"Can't pushnew a place with ~D cells." (length store-vars))
-      (let ((store-var (first store-vars))
-	    (item-var (gensym "push-item-")))
-	`(let ((,item-var ,item)
-	       ,@(mapcar #'list tmp-vars tmp-var-init-forms))
-	   (let ((old-value ,getter-form))
-	     (if (not (member ,item-var old-value ,@keying ,@testing))
-		 (let ((,store-var (cons ,item-var old-value)))
-		   ,setter-form)
-	       old-value)))))))
-  
+
+(defmacro pushnew (&environment env item place &rest key-test-args)
+  (multiple-value-bind (tmp-vars tmp-var-init-forms store-vars setter-form getter-form)
+      (get-setf-expansion place env)
+    (assert (= 1 (length store-vars)) ()
+      "Can't pushnew a place with ~D cells." (length store-vars))
+    (let ((store-var (first store-vars))
+	  (item-var (gensym "push-item-")))
+      `(let ((,item-var ,item)
+	     ,@(mapcar #'list tmp-vars tmp-var-init-forms))
+	 (let ((,store-var (adjoin ,item-var ,getter-form ,@key-test-args)))
+	   ,setter-form)))))
+
 (defmacro remf (&environment env place indicator)
   (multiple-value-bind (tmp-vars tmp-var-init-forms store-vars setter-form getter-form)
       (get-setf-expansion place env)
