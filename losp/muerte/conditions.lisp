@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.20 2006/05/06 20:29:08 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.21 2006/05/07 18:47:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -242,17 +242,18 @@ Return the condition object, if there was one."
 	 (cpl (class-precedence-list class))
 	 (condition nil)
 	 (bos-type *break-on-signals*))
-    (when (typecase bos-type
-	    (null nil)
-	    (symbol
-	     (let ((bos-class (find-class bos-type nil)))
-	       (if (not bos-class)
-		   (typep (class-prototype-value class) bos-type)
-		 (member bos-class cpl))))
-	    (list
-	     (typep (class-prototype-value class) bos-type))
-	    (t (member bos-type cpl)))
-      (break "Signalling ~S" datum))
+    (let ((*break-on-signals* nil)) ; avoid recursive error if *b-o-s* is faulty.
+      (when (typecase bos-type
+	      (null nil)
+	      (symbol
+	       (let ((bos-class (find-class bos-type nil)))
+		 (if (not bos-class)
+		     (typep (class-prototype-value class) bos-type)
+		   (member bos-class cpl))))
+	      (list
+	       (typep (class-prototype-value class) bos-type))
+	      (t (member bos-type cpl)))
+	(break "Signalling ~S" datum)))
     (macrolet ((invoke-handler (handler)
 		 `(funcall ,handler
 			   (or condition
