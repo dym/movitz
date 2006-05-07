@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.16 2006/05/05 18:37:34 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.17 2006/05/07 18:34:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -359,6 +359,8 @@ the function sets up itself. Its parent env. must be a funobj-env."))
 (defun movitz-env-load-declarations (declarations environment context)
   (loop for (declaration-identifier . data) in declarations
       do (case declaration-identifier
+	   ((muerte.cl::ftype muerte.cl::optimize)
+	    nil)			; ignore for now
 	   (muerte.cl::ignore
 	    (dolist (var data)
 	      (check-type var symbol)
