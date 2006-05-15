@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 24 11:39:37 2001
 ;;;;                
-;;;; $Id: procfs-image.lisp,v 1.25 2006/04/10 11:46:25 ffjeld Exp $
+;;;; $Id: procfs-image.lisp,v 1.26 2006/05/15 19:49:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -237,11 +237,6 @@
 		  (write (movitz-print movitz-name)))))
 	do (format t "~& => ")))
   (values))
-
-(defun funobj-name (x)
-  (typecase x
-    (movitz-funobj
-     (movitz-funobj-name x))))
 
 (defun stack-frame (image)
   (do-stack-frame (image-register32 image :ebp) 0))

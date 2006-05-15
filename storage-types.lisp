@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.56 2006/04/10 11:47:41 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.57 2006/05/15 19:49:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -819,6 +819,11 @@ integer (native lisp) value."
   (make-instance 'movitz-funobj
     :lambda-list lambda-list
     :name name))
+
+(defun funobj-name (x)
+  (typecase x
+    (movitz-funobj
+     (movitz-funobj-name x))))
 
 ;;;
 
