@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.170 2006/05/05 18:37:32 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.171 2006/05/26 18:39:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -768,13 +768,18 @@ of all function-bindings seen."
 
 (defun finalize-funobj (funobj)
   "Calculate funobj's constants, jumpers."
-  (loop with all-constants-plist = () and all-jumper-sets = ()
+  (loop with all-key-args-constants = nil
+      with all-constants-plist = () and all-jumper-sets = ()
       for (nil . function-env) in (function-envs funobj)
-			  ;; (borrowed-bindings body-code) in code-specs
+				  ;; (borrowed-bindings body-code) in code-specs
       as body-code = (extended-code function-env)
-      as (const-plist jumper-sets) =
+      as (const-plist jumper-sets key-args-constants) =
 	(multiple-value-list (find-code-constants-and-jumpers body-code))
-      do (loop for (constant usage) on const-plist by #'cddr
+      do (when key-args-constants
+	   (assert (not all-key-args-constants) ()
+	     "only one &key parsing allowed per funobj.")
+	   (setf all-key-args-constants key-args-constants))
+	 (loop for (constant usage) on const-plist by #'cddr
 	     do (incf (getf all-constants-plist constant 0) usage))
 	 (loop for (name set) on jumper-sets by #'cddr
 	     do (assert (not (getf all-jumper-sets name)) ()
@@ -783,6 +788,7 @@ of all function-bindings seen."
       finally
 	(multiple-value-bind (const-list num-jumpers jumpers-map)
 	    (layout-funobj-vector all-constants-plist
+				  all-key-args-constants
 				  all-jumper-sets
 				  (length (borrowed-bindings funobj)))
 	  (setf (movitz-funobj-num-jumpers funobj) num-jumpers
@@ -2704,7 +2710,7 @@ the sub-program options (&optional label) as secondary value."
 
 (defun find-code-constants-and-jumpers (code &key include-programs)
   "Return code's constants (a plist of constants and their usage-counts) and jumper-sets."
-  (let (jumper-sets constants)
+  (let (jumper-sets constants key-args-set)
     (labels ((process-binding (binding)
 	       "Some bindings are really references to constants."
 	       (typecase binding
@@ -2743,6 +2749,8 @@ the sub-program options (&optional label) as secondary value."
 			   (assert (not (getf jumper-sets name)) ()
 			     "Duplicate jumper declaration for ~S." name)
 			   (setf (getf jumper-sets name) set)))
+			(:declare-key-arg-set
+			 (setf key-args-set (cdr instruction)))
 			(t (when (listp instruction)
 			     (dolist (binding (find-read-bindings instruction))
 			       (process-binding binding)))))
@@ -2750,9 +2758,21 @@ the sub-program options (&optional label) as secondary value."
 			(when sub (process sub))))))
       (process code)
       (map nil #'process include-programs))
-    (values constants jumper-sets)))
+    (if (not key-args-set)
+	(values constants jumper-sets nil)
+      (loop with key-args-constants = nil
+	  for (object count) on constants by #'cddr
+	  if (not (member object key-args-set))
+	  append (list object count) into non-key-constants
+	  else
+	  do (setf key-args-constants
+	       (merge 'list key-args-constants (list (cons object count)) #'<
+		      :key (lambda (x)
+			     (position (car x) key-args-set))))
+	  finally
+	    (return (values non-key-constants jumper-sets key-args-constants))))))
 
-(defun layout-funobj-vector (constants jumper-sets num-borrowing-slots)
+(defun layout-funobj-vector (constants key-args-constants jumper-sets num-borrowing-slots)
   (let* ((jumpers (loop with x
 		      for set in (cdr jumper-sets) by #'cddr
 		      unless (search set x)
@@ -2762,11 +2782,12 @@ the sub-program options (&optional label) as secondary value."
     (values (append jumpers
 		    (make-list num-borrowing-slots :initial-element *movitz-nil*)
 		    (mapcar (lambda (x) (movitz-read (car x)))
-			    (sort (loop for (constant count) on constants by #'cddr
-				      unless (or (eq constant *movitz-nil*)
-						 (eq constant (image-t-symbol *image*)))
-				      collect (cons constant count))
-				  #'< :key #'cdr)))
+			    (append (sort (loop for (constant count) on constants by #'cddr
+					      unless (or (eq constant *movitz-nil*)
+							 (eq constant (image-t-symbol *image*)))
+					      collect (cons constant count))
+					  #'< :key #'cdr)
+				    key-args-constants)))
 	    num-jumpers
 	    (loop for (name set) on jumper-sets by #'cddr
 		collect (cons name set)))))
@@ -2808,6 +2829,8 @@ the sub-program options (&optional label) as secondary value."
 	 (t (case (instruction-is i)
 	      ((nil)
 	       (return nil))		; a label, most likely
+	      ((:declare-key-arg-set :declare-label-set)
+	       nil)
 	      ((:lexical-control-transfer :load-lambda)
 	       (return nil))		; not sure about these.
 	      ((:call)
@@ -4014,7 +4037,9 @@ loading borrowed bindings."
 			      (list* (append pf (car sub-instr))
 				     (cdr sub-instr)))
 			     (t (list* pf sub-instr))))))))
-		(:declare-label-set nil)
+		((:declare-label-set
+		  :declare-key-arg-set)
+		 nil)
 		(:local-function-init
 		 (destructuring-bind (function-binding)
 		     (operands instruction)
@@ -4956,63 +4981,72 @@ Return arg-init-code, need-normalized-ecx-p."
 	      (t #+ignore
 		 (pushnew (movitz-print (movitz-funobj-name funobj))
 			  (aref *xx* (length key-vars)))
-		 (loop with rest-binding = (movitz-binding rest-var env)
-		     for key-var in key-vars
-		     as key-var-name = (decode-keyword-formal key-var)
-		     as binding = (movitz-binding key-var-name env)
-		     as supplied-p-var = (optional-function-argument-supplied-p-var binding)
-		     as supplied-p-binding = (movitz-binding supplied-p-var env)
-		     and keyword-ok-label = (make-symbol (format nil "keyword-~A-ok" key-var-name))
-		     and keyword-not-supplied-label = (gensym)
-		     do (assert binding)
-		     if (not (movitz-constantp (optional-function-argument-init-form binding)))
-		     append
-		       `((:init-lexvar ,binding)
-			 (:load-constant ,(movitz-read (keyword-function-argument-keyword-name binding)) :ecx)
-			 (:load-lexical ,rest-binding :ebx)
-			 (:call (:edi ,(global-constant-offset 'keyword-search)))
-			 (:jz ',keyword-not-supplied-label)
-			 (:store-lexical ,binding :eax :type t)
-			 ,@(when supplied-p-var
-			     `((:movl (:edi ,(global-constant-offset 't-symbol)) :eax)
-			       (:init-lexvar ,supplied-p-binding
-					     :init-with-register :eax
-					     :init-with-type (eql ,(image-t-symbol *image*)))))
-			 (:jmp ',keyword-ok-label)
-			 ,keyword-not-supplied-label
-			 ,@(when supplied-p-var
-			     `((:store-lexical ,supplied-p-binding :edi :type null)))
-			 ,@(compiler-call #'compile-form
-			     :form (optional-function-argument-init-form binding)
-			     :env env
-			     :funobj funobj
-			     :result-mode binding)
-			 ,keyword-ok-label)
-		     else append
-			  (append (when supplied-p-var
-				    `((:init-lexvar ,supplied-p-binding
-						    :init-with-register :edi
-						    :init-with-type null)))
-				  (compiler-call #'compile-form
-				    :form (list 'muerte.cl:quote
-						(eval-form (optional-function-argument-init-form binding)
-							   env))
-				    :env env
-				    :funobj funobj
-				    :result-mode :eax)
-				  `((:load-constant
-				     ,(movitz-read (keyword-function-argument-keyword-name binding)) :ecx)
-				    (:load-lexical ,rest-binding :ebx)
-				    (:call (:edi ,(global-constant-offset 'keyword-search))))
-				  (when supplied-p-var
-				    `((:jz ',keyword-not-supplied-label)
-				      (:movl (:edi ,(global-constant-offset 't-symbol)) :ebx)
-				      (:store-lexical ,supplied-p-binding :ebx
-						      :type (eql ,(image-t-symbol *image*)))
-				      ,keyword-not-supplied-label))
-				  `((:init-lexvar ,binding
-						  :init-with-register :eax
-						  :init-with-type t)))))))
+		 #+ignore
+		 (when key-vars
+		   (warn "KEY-FUN: ~D" (length key-vars)))
+		 (append
+		  `((:declare-key-arg-set ,@(mapcar (lambda (k)
+						      (movitz-read
+						       (keyword-function-argument-keyword-name
+							(movitz-binding (decode-keyword-formal k) env))))
+						    key-vars)))
+		  (loop with rest-binding = (movitz-binding rest-var env)
+		      for key-var in key-vars
+		      as key-var-name = (decode-keyword-formal key-var)
+		      as binding = (movitz-binding key-var-name env)
+		      as supplied-p-var = (optional-function-argument-supplied-p-var binding)
+		      as supplied-p-binding = (movitz-binding supplied-p-var env)
+		      and keyword-ok-label = (make-symbol (format nil "keyword-~A-ok" key-var-name))
+		      and keyword-not-supplied-label = (gensym)
+		      do (assert binding)
+		      if (not (movitz-constantp (optional-function-argument-init-form binding)))
+		      append
+			`((:init-lexvar ,binding)
+			  (:load-constant ,(movitz-read (keyword-function-argument-keyword-name binding)) :ecx)
+			  (:load-lexical ,rest-binding :ebx)
+			  (:call (:edi ,(global-constant-offset 'keyword-search)))
+			  (:jz ',keyword-not-supplied-label)
+			  (:store-lexical ,binding :eax :type t)
+			  ,@(when supplied-p-var
+			      `((:movl (:edi ,(global-constant-offset 't-symbol)) :eax)
+				(:init-lexvar ,supplied-p-binding
+					      :init-with-register :eax
+					      :init-with-type (eql ,(image-t-symbol *image*)))))
+			  (:jmp ',keyword-ok-label)
+			  ,keyword-not-supplied-label
+			  ,@(when supplied-p-var
+			      `((:store-lexical ,supplied-p-binding :edi :type null)))
+			  ,@(compiler-call #'compile-form
+			      :form (optional-function-argument-init-form binding)
+			      :env env
+			      :funobj funobj
+			      :result-mode binding)
+			  ,keyword-ok-label)
+		      else append
+			   (append (when supplied-p-var
+				     `((:init-lexvar ,supplied-p-binding
+						     :init-with-register :edi
+						     :init-with-type null)))
+				   (compiler-call #'compile-form
+				     :form (list 'muerte.cl:quote
+						 (eval-form (optional-function-argument-init-form binding)
+							    env))
+				     :env env
+				     :funobj funobj
+				     :result-mode :eax)
+				   `((:load-constant
+				      ,(movitz-read (keyword-function-argument-keyword-name binding)) :ecx)
+				     (:load-lexical ,rest-binding :ebx)
+				     (:call (:edi ,(global-constant-offset 'keyword-search))))
+				   (when supplied-p-var
+				     `((:jz ',keyword-not-supplied-label)
+				       (:movl (:edi ,(global-constant-offset 't-symbol)) :ebx)
+				       (:store-lexical ,supplied-p-binding :ebx
+						       :type (eql ,(image-t-symbol *image*)))
+				       ,keyword-not-supplied-label))
+				   `((:init-lexvar ,binding
+						   :init-with-register :eax
+						   :init-with-type t))))))))
 	    need-normalized-ecx-p)))
 
 (defun make-special-funarg-shadowing (env function-body)
