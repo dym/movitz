@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.57 2006/05/15 19:49:25 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.58 2006/10/27 06:53:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1026,6 +1026,15 @@ integer (native lisp) value."
 
 (defvar *hash-table-size-factor* 5/4)
 
+(defun find-movitz-hash-table-test (lisp-hash)
+  (ecase (hash-table-test lisp-hash)
+    ((eq #+clisp ext:fasthash-eq)
+     (values 'muerte.cl:eq 'muerte::sxhash-eq))
+    ((eql #+clisp ext:fasthash-eql)
+     (values 'muerte.cl:eql 'muerte.cl::sxhash))
+    ((equal #+clisp ext:fasthash-equal)
+     (values 'muerte.cl:equal 'muerte.cl::sxhash))))
+
 (defun make-movitz-hash-table (lisp-hash)
   (let* ((undef (movitz-read +undefined-hash-key+))
 	 (hash-count (hash-table-count lisp-hash))
@@ -1033,10 +1042,7 @@ integer (native lisp) value."
 					    *hash-table-size-factor*))))
 	 (bucket-data (make-array hash-size :initial-element undef)))
     (multiple-value-bind (hash-test hash-sxhash)
-	(ecase (hash-table-test lisp-hash)
-	  (eq (values 'muerte.cl:eq 'muerte::sxhash-eq))
-	  (eql (values 'muerte.cl:eql 'muerte.cl::sxhash))
-	  (equal (values 'muerte.cl:equal 'muerte.cl::sxhash)))
+	(find-movitz-hash-table-test lisp-hash)
       (loop for key being the hash-keys of lisp-hash using (hash-value value)
 	  for movitz-key = (movitz-read key)
 	  for movitz-value = (movitz-read value)
@@ -1074,10 +1080,7 @@ integer (native lisp) value."
 			       (fill (movitz-vector-symbolic-data old-bucket) undef))
 			  (make-array hash-size :initial-element undef))))
     (multiple-value-bind (hash-test hash-sxhash)
-	(ecase (hash-table-test lisp-hash)
-	  (eq (values 'muerte.cl:eq 'muerte::sxhash-eq))
-	  (eql (values 'muerte.cl:eql 'muerte.cl::sxhash))
-	  (equal (values 'muerte.cl:equal 'muerte.cl::sxhash)))
+	(find-movitz-hash-table-test lisp-hash)
       (loop for key being the hash-keys of lisp-hash using (hash-value value)
 	  for movitz-key = (movitz-read key)
 	  for movitz-value = (movitz-read value)
