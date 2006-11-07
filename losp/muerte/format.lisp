@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Mar 23 01:18:36 2002
 ;;;;                
-;;;; $Id: format.lisp,v 1.13 2006/04/05 23:02:22 ffjeld Exp $
+;;;; $Id: format.lisp,v 1.14 2006/11/07 12:16:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -82,7 +82,7 @@
 	  (declare (index i))
 	  (multiple-value-bind (next-digit next-remainder)
 	      (if (= i last-i)
-		  (round (* 10 remainder))
+		  (floor (+ 1/2 (* 10 remainder)))
 		(truncate (* 10 remainder)))
 	    (setf remainder next-remainder)
 	    (write-digit next-digit *standard-output*)))))))
