@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Sep  1 00:49:11 2001
 ;;;;                
-;;;; $Id: error.lisp,v 1.4 2005/04/26 23:44:36 ffjeld Exp $
+;;;; $Id: error.lisp,v 1.5 2007/02/06 20:02:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -44,6 +44,8 @@
      ((not *ignore-errors*)
       (let (#+ignore (*ignore-errors* t))
 	(let ((condition (signal-simple 'simple-error datum args)))
+	  (when *backtrace-on-error*
+	    (backtrace))
 	  (if condition
 	      (invoke-debugger condition)
 	    (apply 'invoke-debugger-on-designator 'simple-error datum args)))))
