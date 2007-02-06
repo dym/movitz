@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.58 2006/10/27 06:53:27 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.59 2007/02/06 20:03:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1008,8 +1008,10 @@ integer (native lisp) value."
     (movitz-symbol
      (movitz-symbol-hash-key object))
     (movitz-string
-     (let ((object (movitz-print object))
-	   (result 0))
+     (let* ((object (movitz-print object))
+	    (result (if (not (> (length object) 8))
+			0
+		      (char-code (char-upcase (aref object (- (length object) 3)))))))
        (dotimes (i (min 8 (length object)))
 	 (incf result result)
 	 (incf result

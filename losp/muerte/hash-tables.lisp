@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb 19 19:09:05 2001
 ;;;;                
-;;;; $Id: hash-tables.lisp,v 1.12 2006/04/07 21:52:36 ffjeld Exp $
+;;;; $Id: hash-tables.lisp,v 1.13 2007/02/06 20:03:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -74,8 +74,12 @@
 	 ,@declarations-and-body))))
 
 (defun sxhash-subvector (vector start end &optional (limit 8))
-  (let ((result 0))
-    (dotimes (i (min limit (- end start)))
+  (let* ((length (- end start))
+	 (result (if (not (> length 8))
+		     0
+		   (sxhash-limited (aref vector (- end 3))
+				   1))))
+    (dotimes (i (min limit length))
       (incf result result)
       (incf result
 	    (let* ((element (aref vector (+ start i)))
@@ -84,7 +88,7 @@
 		  element-hash
 		(* 7 element-hash)))))
     (ldb (byte 16 0)
-	 (+ (* #x10ad (- end start))
+	 (+ (* #x10ad length)
 	    result))))
 
 (defun sxhash-limited (object limit)
