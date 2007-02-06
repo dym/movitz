@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.106 2006/04/28 21:19:06 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.107 2007/02/06 20:02:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -385,6 +385,13 @@
    (nursery-space
     :binary-type word
     :initform nil
+    :map-binary-write 'movitz-read-and-intern
+    :map-binary-read-delayed (lambda (x type)
+			       (declare (ignore x type))
+			       (movitz-read nil)))
+   (allow-other-keys-symbol
+    :binary-type word
+    :initform :allow-other-keys
     :map-binary-write 'movitz-read-and-intern
     :map-binary-read-delayed (lambda (x type)
 			       (declare (ignore x type))
