@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Mar 23 01:18:36 2002
 ;;;;                
-;;;; $Id: format.lisp,v 1.14 2006/11/07 12:16:59 ffjeld Exp $
+;;;; $Id: format.lisp,v 1.15 2007/02/11 21:57:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -284,17 +284,19 @@ clause."
 			     (setf args loop-args))
 			  skip-iteration))
 			(at-sign-p
-			 (if (or (zerop loop-limit)
-				 (null args))
-			     (setf i (skip-iteration control-string (1+ i)))
-			   (multiple-value-setq (i args)
-			     (format-by-string control-string (1+ i) (1- loop-limit) args))))
+			 (unless (or (zerop loop-limit)
+				     (null args))
+			   (setf args (nth-value 1 (format-by-string control-string (1+ i)
+								     (1- loop-limit) args))))
+			 (setf i (skip-iteration control-string (1+ i))))
 			(t (let ((loop-args (pop args)))
 			     (unless (or (zerop loop-limit) (null loop-args))
 			       (format-by-string control-string (1+ i)
 						 (1- loop-limit) loop-args))
 			     (setf i (skip-iteration control-string (1+ i)))))))))
-	      (#\} (if (and args (or (not loop-limit) (not (zerop loop-limit))))
+	      (#\} (if (and args
+			    (or (not loop-limit)
+				(not (zerop loop-limit))))
 		       (setf loop-limit (and loop-limit (1- loop-limit))
 			     i (1- start))
 		     (go end-loop)))
