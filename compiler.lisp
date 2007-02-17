@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.173 2007/02/16 20:17:23 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.174 2007/02/17 19:24:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2850,22 +2850,24 @@ the sub-program options (&optional label) as secondary value."
 		      unless (search set x)
 		      do (setf x (nconc x (copy-list set)))
 		      finally (return x)))
-	 (num-jumpers (length jumpers)))
+	 (num-jumpers (length jumpers))
+	 (stuff (append key-args-constants
+			(sort (loop for (constant count) on constants by #'cddr
+				  unless (or (eq constant *movitz-nil*)
+					     (eq constant (image-t-symbol *image*)))
+				  collect (cons constant count))
+			      #'< :key #'cdr))))
     (values (append jumpers
+		    (mapcar (lambda (x)
+			      (movitz-read (car x)))
+			    stuff)
 		    (make-list (length borrowing-bindings)
-			       :initial-element *movitz-nil*)
-		    (mapcar (lambda (x) (movitz-read (car x)))
-			    (append (sort (loop for (constant count) on constants by #'cddr
-					      unless (or (eq constant *movitz-nil*)
-							 (eq constant (image-t-symbol *image*)))
-					      collect (cons constant count))
-					  #'< :key #'cdr)
-				    key-args-constants)))
+			       :initial-element *movitz-nil*))
 	    num-jumpers
 	    (loop for (name set) on jumper-sets by #'cddr
 		collect (cons name set))
 	    (loop for borrowing-binding in borrowing-bindings
-		as pos upfrom num-jumpers
+		as pos upfrom (+ num-jumpers (length stuff))
 		collect (cons borrowing-binding pos)))))
 
 (defun movitz-funobj-intern-constant (funobj obj)
@@ -4783,8 +4785,7 @@ Return arg-init-code, need-normalized-ecx-p."
 	 (movitz-binding (decode-keyword-formal (first key-vars)) env))))
     (values
      (append
-      (loop ;;  with eax-optional-destructive-p = nil
-	  for optional in optional-vars
+      (loop for optional in optional-vars
 	  as optional-var = (decode-optional-formal optional)
 	  as binding = (movitz-binding optional-var env)
 	  as last-optional-p = (and (null key-vars)
@@ -4966,22 +4967,12 @@ Return arg-init-code, need-normalized-ecx-p."
 			    :result-mode :ebx)
 			  `((:jmp 'default-done)))))
 		,@(case position
-		    (0 `((:load-constant ,(movitz-read (keyword-function-argument-keyword-name binding)) :eax :op :cmpl))
-		       #+ignore `((:cmpl (:esi ,(movitz-funobj-intern-constant
-						 funobj
-						 (movitz-read (keyword-function-argument-keyword-name binding))))
-					 :eax)))
-		    (1 `((:load-constant ,(movitz-read (keyword-function-argument-keyword-name binding)) :ebx :op :cmpl))
-		       #+ignore `((:cmpl (:esi ,(movitz-funobj-intern-constant
-						 funobj
-						 (movitz-read (keyword-function-argument-keyword-name binding))))
-					 :ebx)))
-		    (t `((:load-constant ,(movitz-read (keyword-function-argument-keyword-name binding)) :eax :op :cmpl))
-		       #+ignore `((:movl (:ebp (:ecx 4) ,(* -4 (1- position))) :eax)
-				  (:cmpl (:esi ,(movitz-funobj-intern-constant
-						 funobj
-						 (movitz-read (keyword-function-argument-keyword-name binding))))
-					 :eax))))
+		    (0 `((:load-constant ,(movitz-read (keyword-function-argument-keyword-name binding))
+					 :eax :op :cmpl)))
+		    (1 `((:load-constant ,(movitz-read (keyword-function-argument-keyword-name binding))
+					 :ebx :op :cmpl)))
+		    (t `((:load-constant ,(movitz-read (keyword-function-argument-keyword-name binding))
+					 :eax :op :cmpl))))
 		,@(if allow-other-keys-p
 		      `((:jne 'default))
 		    `((:jne '(:sub-program (unknown-key) (:int 101)))))
