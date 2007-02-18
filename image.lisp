@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.107 2007/02/06 20:02:41 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.108 2007/02/18 14:53:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -112,6 +112,22 @@
     :map-binary-write 'movitz-intern-code-vector
     :map-binary-read-delayed 'movitz-word-code-vector
     :binary-tag :primitive-function)
+
+   (keyword-search
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function
+    :binary-type code-vector-word)
+   (decode-keyargs-default
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function
+    :binary-type code-vector-word)
+   (decode-keyargs-foo
+    :map-binary-write 'movitz-intern-code-vector
+    :map-binary-read-delayed 'movitz-word-code-vector
+    :binary-tag :primitive-function
+    :binary-type code-vector-word)
    
    (fast-car
     :binary-type code-vector-word
@@ -194,11 +210,6 @@
     :map-binary-write 'movitz-intern-code-vector
     :binary-tag :primitive-function
     :map-binary-read-delayed 'movitz-word-code-vector
-    :binary-type code-vector-word)
-   (keyword-search
-    :map-binary-write 'movitz-intern-code-vector
-    :map-binary-read-delayed 'movitz-word-code-vector
-    :binary-tag :primitive-function
     :binary-type code-vector-word)
    (box-u32-ecx
     :binary-type code-vector-word
@@ -804,6 +815,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 
 (defun create-image (&rest init-args
 		     &key (init-file *default-image-init-file*)
+			  (gc t)
 			  ;; (start-address #x100000)
 			  &allow-other-keys)
   (psetq *image* (let ((*image* (apply #'make-movitz-image
@@ -813,6 +825,10 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		     (movitz-compile-file init-file))
 		   *image*)
 	 *i* (when (boundp '*image*) *image*))
+  (when gc
+    #+allegro (setf (sys:gsgc-parameter :generation-spread) 8)
+    #+allegro (excl:gc :tenure)
+    #+allegro (excl:gc t))		; We just thrashed a lot of tenured objects.
   *image*)
 
 (defun set-file-position (stream position &optional who)
