@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.66 2007/02/18 14:52:24 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.67 2007/02/18 16:31:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -737,33 +737,34 @@ Final target is in raw-scratch0. Doesn't modify current-values."
 
 
 (define-primitive-function decode-keyargs-default ()
-  "Decode keyword arguments."
+  "Decode keyword arguments. Results are placed in stack-frame,
+starting at (:ebp -16)."
   (with-inline-assembly (:returns :multiple-values)
-    ;; EAX: arg0 (if needed)
-    ;; EBX: arg1 (if needed)
     ;; ECX: numargs (fixnum)
     ;; EDX: arg-position of first keyword (fixnum)
+    ;; (:ebp  -8) arg0 (if needed)
+    ;; (:ebp -12) arg1 (if needed)
 
     (:subl :edx :ecx)			; find stop-pos
     (:jbe '(:sub-program (no-key-args)
 	    (:ret)))
 
-    (:locally (:movl #xffffffff (:edi (:edi-offset scratch1)))) ; unbond-value
-    (:locally (:movl #xffffffff (:edi (:edi-offset scratch2)))) ; unbond-value
+    (:locally (:movl :edx (:edi (:edi-offset scratch1)))) ; first-key-position
+    ;; Error flags (0 = "not occurred", 1 = "occurred"):
+    ;;   #x04: Unknown keyword.
+    ;;   #x08: Keyword not a symbol.
+    ;;   #x10: Odd number of keyword-args.
+    ;;   #x20: :allow-other-keys (0 = nil, 1 = t).
+    (:locally (:movl #x0 (:edi (:edi-offset scratch2)))) ; initial error flags
     (:cmpl 4 :edx)			; keys start at 0 or 1?
     (:jbe '(:sub-program (save-eax-ebx)
-	    (:je 'save-ebx-only)
-	    (:locally (:movl :eax (:edi (:edi-offset scratch1))))
-	    save-ebx-only
-	    (:locally (:movl :ebx (:edi (:edi-offset scratch2))))
 	    (:subl 8 :ecx)
 	    (:jmp 'continue-save-eax-ebx)))
    continue-save-eax-ebx
     (:testl 4 :ecx)
     (:jnz '(:sub-program (odd-keywords)
-	    (:orl 32 (:ebp -16))
-	    (:andl -8 :ecx)
-	    (:jmp 'continue-from-odd-keywords)))
+	    (:locally (:orl #x10 (:edi (:edi-offset scratch2))))
+	    (:ret)))
    continue-from-odd-keywords
     (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0)))) ; save stop-pos
     (:xorl :edx :edx)			; EDX scans the args, last-to-first.
@@ -780,16 +781,15 @@ Final target is in raw-scratch0. Doesn't modify current-values."
     ;; EAX: (presumed) keyword, EBX corresponding value.
     (:globally (:cmpl :eax (:edi (:edi-offset allow-other-keys-symbol))))
     (:je '(:sub-program (found-allow-other-keys)
-	   ;; store boolean EBX in bit 2 of (ebx -16).
-	   (:andl -8 (:ebp -16))
+	   (:locally (:andl #x-21 (:edi (:edi-offset scratch2)))) ; Signal :allow-other-keys nil
 	   (:cmpl :edi :ebx)
 	   (:je 'finished-keyword-search)
-	   (:orl 4 (:ebp -16))		; Signal :allow-other-keys t
+	   (:locally (:orl #x20 (:edi (:edi-offset scratch2)))) ; Signal :allow-other-keys t
 	   (:jmp 'finished-keyword-search)))
     (:leal (:eax -5) :ecx)
     (:testb 5 :cl)
     (:jnz '(:sub-program (keyword-not-symbol)
-	    (:orl 16 (:ebp -16))	; Signal keyword-not-symbol
+	    (:locally (:orl #x8 (:edi (:edi-offset scratch2)))) ; Signal keyword-not-symbol
 	    (:jmp 'finished-keyword-search)))
     (:movl (:esi (:offset movitz-funobj num-jumpers))
 	   :ecx)
@@ -800,7 +800,7 @@ Final target is in raw-scratch0. Doesn't modify current-values."
     (:je 'found-keyword)
     (:testb 1 (:esi :ecx (:offset movitz-funobj constant0)))
     (:jz '(:sub-program (keyword-not-fund)
-	   (:orl 8 (:ebp -16))		; signal unknown-keyword
+	   (:locally (:orl 4 (:edi (:edi-offset scratch2)))) ; signal unknown-keyword
 	   (:jmp 'finished-keyword-search)))
     (:addl 4 :ecx)
     (:jmp 'position-search-loop)
@@ -808,9 +808,9 @@ Final target is in raw-scratch0. Doesn't modify current-values."
    found-keyword
     (:subw (:esi (:offset movitz-funobj num-jumpers)) :cx)
     (:negl :ecx)
-    (:movl :ebx (:ebp -20 (:ecx 2)))
+    (:movl :ebx (:ebp -16 (:ecx 2)))
     (:globally (:movl (:edi (:edi-offset t-symbol)) :ebx))
-    (:movl :ebx (:ebp -20 (:ecx 2) -4))
+    (:movl :ebx (:ebp -16 (:ecx 2) -4))
     
    finished-keyword-search
     (:addl 8 :edx)
@@ -818,21 +818,18 @@ Final target is in raw-scratch0. Doesn't modify current-values."
     (:ja 'scan-args-loop)
 
    check-arg0-arg1
-    (:locally (:cmpl -1 (:edi (:edi-offset scratch1))))
-    (:jne '(:sub-program (search-eax-ebx)
-	    ;; Search one more keyword, in arg0 and arg1
-	    (:locally (:movl (:edi (:edi-offset scratch1)) :eax))
-	    (:locally (:movl (:edi (:edi-offset scratch2)) :ebx))
-	    (:locally (:movl #xffffffff (:edi (:edi-offset scratch1))))
-	    (:locally (:movl #xffffffff (:edi (:edi-offset scratch2))))
-	    (:jmp 'start-keyword-search)))
-    (:locally (:cmpl -1 (:edi (:edi-offset scratch2))))
-    (:jne '(:sub-program (search-ebx)
-	    ;; Search one more keyword, in arg1 and last on-stack.
-	    (:locally (:movl (:edi (:edi-offset scratch2)) :eax))
-	    (:movl (:ebp :edx 8) :ebx)	    
-	    (:locally (:movl #xffffffff (:edi (:edi-offset scratch2))))
-	    (:jmp 'start-keyword-search)))
+    (:locally (:subl 4 (:edi (:edi-offset scratch1))))
+    (:jc '(:sub-program (search-eax-ebx)
+	   ;; Search one more keyword, in arg0 and arg1
+	   (:movl (:ebp -8) :eax)
+	   (:movl (:ebp -12) :ebx)
+	   (:jmp 'start-keyword-search)))
+    (:locally (:subl 4 (:edi (:edi-offset scratch1))))
+    (:jc '(:sub-program (search-ebx)
+	   ;; Search one more keyword, in arg1 and last on-stack.
+	   (:movl (:ebp -12) :eax)
+	   (:movl (:ebp :edx 8) :ebx)	    
+	   (:jmp 'start-keyword-search)))
     (:ret)))
 
 (define-primitive-function decode-keyargs-foo ()
