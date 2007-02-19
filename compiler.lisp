@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.175 2007/02/19 20:24:38 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.176 2007/02/19 21:57:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -4704,37 +4704,22 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 	    eax-ebx-code
 	    (make-stack-setup-code stack-setup-size)
 	    (when need-normalized-ecx-p
-	      (let ((oddeven-ok (gensym "oddeven-ok-")))
-		(append (cond
-			 ;; normalize arg-count in ecx..
-			 ((and max-args (= min-args max-args))
-			  (error "huh?"))
-			 ((and max-args (<= 0 min-args max-args #x7f))
-			  `((:andl #x7f :ecx)))
-			 ((>= min-args #x80)
-			  `((:shrl 8 :ecx)))
-			 (t (let ((normalize (make-symbol "normalize-ecx"))
-				  (normalize-done (make-symbol "normalize-ecx-done")))
-			      `((:testb :cl :cl)
-				(:js '(:sub-program (,normalize)
-				       (:shrl 8 :ecx)
-				       (:jmp ',normalize-done)))
-				(:andl #x7f :ecx)
-				,normalize-done))))
-			(when (and (oddeven-args env)
-				   (optional-vars env))
-			  `((:cmpl ,(length (optional-vars env)) :ecx)
-			    (:jbe ',oddeven-ok)))
-			(case (oddeven-args env)
-			  (:even
-			   `((:testb 1 :cl)
-			     (:jnz '(:sub-program () (:int 102)))))
-			  (:odd
-			   `((:testb 1 :cl)
-			     (:jz '(:sub-program () (:int 102))))))
-			(when (and (oddeven-args env)
-				   (optional-vars env))
-			  (list oddeven-ok)))))
+	      (append (cond
+		       ;; normalize arg-count in ecx..
+		       ((and max-args (= min-args max-args))
+			(error "huh?"))
+		       ((and max-args (<= 0 min-args max-args #x7f))
+			`((:andl #x7f :ecx)))
+		       ((>= min-args #x80)
+			`((:shrl 8 :ecx)))
+		       (t (let ((normalize (make-symbol "normalize-ecx"))
+				(normalize-done (make-symbol "normalize-ecx-done")))
+			    `((:testb :cl :cl)
+			      (:js '(:sub-program (,normalize)
+				     (:shrl 8 :ecx)
+				     (:jmp ',normalize-done)))
+			      (:andl #x7f :ecx)
+			      ,normalize-done))))))
 	    (when edx-needs-saving-p
 	      `((:movl :edx (:ebp ,(stack-frame-offset (new-binding-location (edx-var env) frame-map))))))
 	    eax-ebx-code-post-stackframe
