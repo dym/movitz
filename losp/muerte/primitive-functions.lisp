@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.68 2007/02/19 20:24:59 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.69 2007/02/19 21:58:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -765,7 +765,8 @@ starting at (:ebp -16)."
    continue-save-eax-ebx
     (:testl 4 :ecx)
     (:jnz '(:sub-program (odd-keywords)
-	    (:locally (:orl #x10 (:edi (:edi-offset scratch2))))
+	    ;; (:locally (:orl #x10 (:edi (:edi-offset scratch2))))
+	    (:movl #x10 :eax)
 	    (:int 72)))
    continue-from-odd-keywords
     (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0)))) ; save stop-pos
@@ -791,7 +792,8 @@ starting at (:ebp -16)."
     (:leal (:eax -5) :ecx)
     (:testb 5 :cl)
     (:jnz '(:sub-program (keyword-not-symbol)
-	    (:locally (:orl #x8 (:edi (:edi-offset scratch2)))) ; Signal keyword-not-symbol
+	    ;; (:locally (:orl #x8 (:edi (:edi-offset scratch2)))) ; Signal keyword-not-symbol
+	    (:movl #x8 :eax)
 	    (:int 72)))
    start-keyword-search-symbol
     (:movl (:esi (:offset movitz-funobj num-jumpers))
