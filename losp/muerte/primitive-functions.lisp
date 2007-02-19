@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.67 2007/02/18 16:31:42 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.68 2007/02/19 20:24:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -740,13 +740,15 @@ Final target is in raw-scratch0. Doesn't modify current-values."
   "Decode keyword arguments. Results are placed in stack-frame,
 starting at (:ebp -16)."
   (with-inline-assembly (:returns :multiple-values)
-    ;; ECX: numargs (fixnum)
+    ;; ECX: numargs (u32)
     ;; EDX: arg-position of first keyword (fixnum)
     ;; (:ebp  -8) arg0 (if needed)
     ;; (:ebp -12) arg1 (if needed)
 
+    (:shll 2 :ecx)
     (:subl :edx :ecx)			; find stop-pos
     (:jbe '(:sub-program (no-key-args)
+	    (:xorl :eax :eax)		; No errors
 	    (:ret)))
 
     (:locally (:movl :edx (:edi (:edi-offset scratch1)))) ; first-key-position
@@ -764,7 +766,7 @@ starting at (:ebp -16)."
     (:testl 4 :ecx)
     (:jnz '(:sub-program (odd-keywords)
 	    (:locally (:orl #x10 (:edi (:edi-offset scratch2))))
-	    (:ret)))
+	    (:int 72)))
    continue-from-odd-keywords
     (:locally (:movl :ecx (:edi (:edi-offset raw-scratch0)))) ; save stop-pos
     (:xorl :edx :edx)			; EDX scans the args, last-to-first.
@@ -785,12 +787,13 @@ starting at (:ebp -16)."
 	   (:cmpl :edi :ebx)
 	   (:je 'finished-keyword-search)
 	   (:locally (:orl #x20 (:edi (:edi-offset scratch2)))) ; Signal :allow-other-keys t
-	   (:jmp 'finished-keyword-search)))
+	   (:jmp 'start-keyword-search-symbol)))
     (:leal (:eax -5) :ecx)
     (:testb 5 :cl)
     (:jnz '(:sub-program (keyword-not-symbol)
 	    (:locally (:orl #x8 (:edi (:edi-offset scratch2)))) ; Signal keyword-not-symbol
-	    (:jmp 'finished-keyword-search)))
+	    (:int 72)))
+   start-keyword-search-symbol
     (:movl (:esi (:offset movitz-funobj num-jumpers))
 	   :ecx)
     (:andl #xfffc :ecx)
@@ -830,6 +833,13 @@ starting at (:ebp -16)."
 	   (:movl (:ebp -12) :eax)
 	   (:movl (:ebp :edx 8) :ebx)	    
 	   (:jmp 'start-keyword-search)))
+    ;; if there was :allow-other-keys t, clear the unknown-keyword error flag.
+    (:locally (:movl (:edi (:edi-offset scratch2)) :eax))
+    (:movl :eax :ecx)
+    (:andl #x20 :ecx)
+    (:shrl 3 :ecx)
+    (:xorl 4 :ecx)
+    (:andl :ecx :eax)
     (:ret)))
 
 (define-primitive-function decode-keyargs-foo ()

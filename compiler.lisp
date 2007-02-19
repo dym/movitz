@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.174 2007/02/17 19:24:28 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.175 2007/02/19 20:24:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -789,6 +789,9 @@ of all function-bindings seen."
 	(multiple-value-bind (const-list num-jumpers jumpers-map borrower-map)
 	    (layout-funobj-vector all-constants-plist
 				  all-key-args-constants
+				  #+ignore (mapcar (lambda (x)
+						     (cons (movitz-read x) 1))
+						   '(:a :b :c :d))
 				  all-jumper-sets
 				  (borrowed-bindings funobj))
 	  (setf (movitz-funobj-num-jumpers funobj) num-jumpers
@@ -2655,7 +2658,7 @@ of argument <argnum>."
 (defun make-binding-map () nil)
 
 (defun new-binding-located-p (binding map)
-  (check-type binding (or binding (cons keyword binding)))
+  (check-type binding (or null binding (cons keyword binding)))
   (and (assoc binding map) t))
 
 (defun frame-map-size (map)
@@ -2830,19 +2833,9 @@ the sub-program options (&optional label) as secondary value."
 			(when sub (process sub))))))
       (process code)
       (map nil #'process include-programs))
-    (if (not key-args-set)
-	(values constants jumper-sets nil)
-      (loop with key-args-constants = nil
-	  for (object count) on constants by #'cddr
-	  if (not (member object key-args-set))
-	  append (list object count) into non-key-constants
-	  else
-	  do (setf key-args-constants
-	       (merge 'list key-args-constants (list (cons object count)) #'<
-		      :key (lambda (x)
-			     (position (car x) key-args-set))))
-	  finally
-	    (return (values non-key-constants jumper-sets key-args-constants))))))
+    (loop for key-arg in key-args-set
+	do (remf constants key-arg))
+    (values constants jumper-sets key-args-set)))
 
 (defun layout-funobj-vector (constants key-args-constants jumper-sets borrowing-bindings)
   (let* ((jumpers (loop with x
@@ -2851,7 +2844,12 @@ the sub-program options (&optional label) as secondary value."
 		      do (setf x (nconc x (copy-list set)))
 		      finally (return x)))
 	 (num-jumpers (length jumpers))
-	 (stuff (append key-args-constants
+	 (stuff (append (mapcar (lambda (c)
+				  (cons c 1))
+				key-args-constants)
+			(when key-args-constants
+			  (list (cons (movitz-read 0)
+				      1)))
 			(sort (loop for (constant count) on constants by #'cddr
 				  unless (or (eq constant *movitz-nil*)
 					     (eq constant (image-t-symbol *image*)))
@@ -3136,9 +3134,11 @@ the sub-program options (&optional label) as secondary value."
 			       (funobj-binding))))
 			  (:init-lexvar
 			   (destructuring-bind (binding &key init-with-register init-with-type
-							     protect-registers protect-carry)
+							     protect-registers protect-carry
+							     shared-reference-p)
 			       (cdr instruction)
-			     (declare (ignore protect-registers protect-carry init-with-type))
+			     (declare (ignore protect-registers protect-carry init-with-type
+					      shared-reference-p))
 			     (cond
 			      ((not init-with-register)
 			       (take-note-of-init binding pc))
@@ -3320,6 +3320,9 @@ the sub-program options (&optional label) as secondary value."
 		 (when (and (binding-lended-p binding)
 			    (not (typep binding 'borrowed-binding))
 			    (not (getf (binding-lending binding) :stack-cons-location)))
+		   #+ignore
+		   (assert (not (typep binding 'keyword-function-argument)) ()
+		     "Can't lend keyword binding ~S." binding)
 		   ;; (warn "assigning lending-cons for ~W at ~D" binding stack-frame-position)
 		   (let ((cons-pos (frame-map-next-free-location frame-map function-env 2)))
 		     (setf (new-binding-location (cons :lended-cons binding) frame-map)
@@ -3346,6 +3349,40 @@ the sub-program options (&optional label) as secondary value."
 			(plusp (car (gethash binding var-counts '(0)))))
 	       (setf (new-binding-location binding frame-map)
 		 (forwarding-binding-target binding))))	     
+      ;; Keyword bindings
+      (flet ((set-exclusive-location (binding location)
+	       (assert (not (rassoc location frame-map))
+		   () "Fixed location ~S for ~S is taken by ~S."
+		   location binding (rassoc location frame-map))
+	       (setf (new-binding-location binding frame-map) location)))
+	(when (key-vars-p function-env)
+	  (when (= 0 (rest-args-position function-env))
+	    (set-exclusive-location (loop for var in (required-vars function-env)
+					as binding = (movitz-binding var function-env nil)
+					thereis (when (= 0 (function-argument-argnum binding))
+						  binding))
+				    1))
+	  (when (>= 1 (rest-args-position function-env))
+	    (set-exclusive-location (loop for var in (required-vars function-env)
+					as binding = (movitz-binding var function-env nil)
+					thereis (when (= 1 (function-argument-argnum binding))
+						  binding))
+				    2)))
+	(loop for key-var in (key-vars function-env)
+	    as key-binding =
+	      (or (movitz-binding key-var function-env nil)
+		  (error "No binding for key-var ~S." key-var))
+	    as supplied-p-binding =
+	      (when (optional-function-argument-supplied-p-var key-binding)
+		(or (movitz-binding (optional-function-argument-supplied-p-var key-binding)
+				    function-env nil)
+		    (error "No binding for supplied-p-var ~S."
+			   (optional-function-argument-supplied-p-var key-binding))))
+	    as location upfrom 3 by 2
+	    do (set-exclusive-location key-binding location)
+	       (assert supplied-p-binding)
+	       (set-exclusive-location supplied-p-binding (1+ location))))
+      ;; Now, use assing-env-bindings on the remaining bindings.
       (loop for env in
 	    (loop with z = nil
 		for b being the hash-keys of var-counts using (hash-value c)
@@ -4293,7 +4330,7 @@ loading borrowed bindings."
   "From a (normal) <lambda-list>, add bindings to <env>."
   (let ((arg-pos 0))
     (multiple-value-bind (required-vars optional-vars rest-var key-vars auxes allow-p
-			  min-args max-args edx-var oddeven key-p)
+			  min-args max-args edx-var oddeven key-vars-p)
 	(decode-normal-lambda-list lambda-list)
       (declare (ignore auxes))
       (setf (min-args env) min-args
@@ -4356,6 +4393,8 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 		    (movitz-env-add-binding env (make-instance 'supplied-p-function-argument
 					       :name supplied-p-parameter)))
 		  formal)))
+	(when (or rest-var key-vars-p)
+	  (setf (rest-args-position env) arg-pos))
 	(when rest-var
 	  (check-type rest-var symbol)
 	  (let ((formal (shadow-when-special rest-var env)))
@@ -4363,11 +4402,30 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 	    (movitz-env-add-binding env (make-instance 'rest-function-argument
 				       :name formal
 				       :argnum (post-incf arg-pos)))))
-	(when key-p
-	  ;; We need to check at run-time whether keyword checking is supressed or not.
-	  (setf (allow-other-keys-var env)
-	    (movitz-env-add-binding env (make-instance 'located-binding
-					  :name (gensym "allow-other-keys-var-")))))
+;;;	(when key-vars-p
+;;;	  ;; We need to check at run-time whether keyword checking is supressed or not.
+;;;	  (setf (allow-other-keys-var env)
+;;;	    (movitz-env-add-binding env (make-instance 'located-binding
+;;;					  :name (gensym "allow-other-keys-var-")))))
+	(when key-vars-p
+	  (setf (key-vars-p env) t)
+	  (when (>= 1 (rest-args-position env))
+	    (let ((name (gensym "save-ebx-for-keyscan")))
+	      (setf (required-vars env)
+		(append (required-vars env)
+			(list name)))
+	      (movitz-env-add-binding env (make-instance 'register-required-function-argument
+					    :name name
+					    :argnum 1
+					    :declarations '(muerte.cl:ignore)))
+	      (setf (movitz-env-get name 'ignore nil env) t)))
+	  (when (= 0 (rest-args-position env))
+	    (let ((name (gensym "save-eax-for-keyscan")))
+	      (push name (required-vars env))
+	      (movitz-env-add-binding env (make-instance 'register-required-function-argument
+					    :name name
+					    :argnum 0))
+	      (setf (movitz-env-get name 'ignore nil env) t))))
 	(setf (key-vars env)
 	  (loop for spec in key-vars
 	      with rest-var-name =
@@ -4379,21 +4437,23 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 							 :argnum (post-incf arg-pos)))
 			   name)))
 	      collect
-		(multiple-value-bind (formal keyword-name init-form supplied-p-parameter)
+		(multiple-value-bind (formal keyword-name init-form supplied-p)
 		    (decode-keyword-formal spec)
-		  (setf formal (shadow-when-special formal env))
-		  (movitz-env-add-binding env (make-instance 'keyword-function-argument
-					     :name formal
-					     'init-form init-form
-					     'supplied-p-var supplied-p-parameter
-					     :keyword-name keyword-name
-					     :rest-var-name rest-var-name))
-		  (when supplied-p-parameter
-		    (setf supplied-p-parameter
-		      (shadow-when-special supplied-p-parameter env))
+		  (let ((formal
+			 (shadow-when-special formal env))
+			(supplied-p-parameter
+			 (or supplied-p
+			     (gensym "supplied-p-"))))
+		    (movitz-env-add-binding env (make-instance 'keyword-function-argument
+						  :name formal
+						  'init-form init-form
+						  'supplied-p-var supplied-p-parameter
+						  :keyword-name keyword-name
+						  :rest-var-name rest-var-name))
 		    (movitz-env-add-binding env (make-instance 'supplied-p-function-argument
-					       :name supplied-p-parameter)))
-		  formal)))
+						  :name (shadow-when-special supplied-p-parameter env)))
+		    formal))))
+	#+ignore
 	(multiple-value-bind (key-decode-map key-decode-shift)
 	    (best-key-encode (key-vars env))  
 	  (setf (key-decode-map env) key-decode-map
@@ -4508,7 +4568,7 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 		 (edx-location
 		  (and (edx-var env)
 		       (new-binding-location (edx-var env) frame-map :default nil))))
-	    ;; (warn "l0: ~S, l1: ~S" location-0 location-1)
+	    #+ignore (warn "l0: ~S, l1: ~S" location-0 location-1)
 	    (assert (not (and location-0
 			      (eql location-0 location-1))) ()
 	      "Compiler bug: two bindings in same location.")
@@ -4775,8 +4835,7 @@ Return arg-init-code, need-normalized-ecx-p."
 	(required-vars (required-vars env))
 	(optional-vars (optional-vars env))
 	(rest-var (rest-var env))
-	(key-vars (key-vars env))
-	(allow-other-keys-p (allow-other-keys-p env)))
+	(key-vars (key-vars env)))
     (when (and (not rest-var)
 	       key-vars
 	       (not (= 1 (length key-vars))))
@@ -4912,148 +4971,81 @@ Return arg-init-code, need-normalized-ecx-p."
 			  :init-with-type list))))
       (when key-vars
 	(play-with-keys key-vars))
-      (cond
+      (when (key-vars-p env)
        ;; &key processing..
-       ((and (not rest-var)
-	     (= 1 (length key-vars)))
-	(let* ((key-var-name (decode-keyword-formal (first key-vars)))
-	       (binding (movitz-binding key-var-name env))
-	       (position (function-argument-argnum
-			  (movitz-binding (keyword-function-argument-rest-var-name binding) env)))
-	       (supplied-p-var (optional-function-argument-supplied-p-var binding))
-	       (supplied-p-binding (movitz-binding supplied-p-var env)))
-	  (setq need-normalized-ecx-p t)
-	  (cond
-	   ((and (movitz-constantp (optional-function-argument-init-form binding))
-		 (< 1 position))
-	    `((:init-lexvar ,binding)
-	      ,@(when supplied-p-var
-		  `((:init-lexvar ,supplied-p-binding)))
-	      ,@(compiler-call #'compile-form
-		  :form (list 'muerte.cl:quote
-			      (eval-form (optional-function-argument-init-form binding) env nil))
-		  :funobj funobj
-		  :env env
-		  :result-mode :ebx)
-	      ,@(when supplied-p-var
-		  `((:store-lexical ,supplied-p-binding :edi :type null)))
-	      (:arg-cmp ,(+ 2 position))
-	      (:jb 'default-done)
-	      (:movl (:ebp (:ecx 4) ,(* -4 (1- position))) :eax)
-	      (:load-constant ,(movitz-read (keyword-function-argument-keyword-name binding)) :eax :op :cmpl)
-	      ,@(if allow-other-keys-p
-		    `((:jne 'default-done))
-		  `((:jne '(:sub-program (unknown-key) (:int 101)))))
-	      ,@(when supplied-p-var
-		  `((:movl (:edi ,(global-constant-offset 't-symbol)) :eax)
-		    (:store-lexical ,supplied-p-binding :eax
-				    :type (eql ,(image-t-symbol *image*)))))
-	      (:movl (:ebp (:ecx 4) ,(* -4 (1- (1+ position)))) :ebx)
-	      default-done
-	      (:store-lexical ,binding :ebx :type t)))
-	   (t `((:init-lexvar ,binding)
-		,@(when supplied-p-var
-		    `((:init-lexvar ,supplied-p-binding)))
-		(:arg-cmp ,(+ 2 position))
-		(:jb '(:sub-program (default)
-		       ,@(append
-			  (when supplied-p-var
-			    `((:store-lexical ,supplied-p-binding :edi
-					      :type null)))
-			  (compiler-call #'compile-form
-			    :form (optional-function-argument-init-form binding)
-			    :funobj funobj
-			    :env env
-			    :result-mode :ebx)
-			  `((:jmp 'default-done)))))
-		,@(case position
-		    (0 `((:load-constant ,(movitz-read (keyword-function-argument-keyword-name binding))
-					 :eax :op :cmpl)))
-		    (1 `((:load-constant ,(movitz-read (keyword-function-argument-keyword-name binding))
-					 :ebx :op :cmpl)))
-		    (t `((:load-constant ,(movitz-read (keyword-function-argument-keyword-name binding))
-					 :eax :op :cmpl))))
-		,@(if allow-other-keys-p
-		      `((:jne 'default))
-		    `((:jne '(:sub-program (unknown-key) (:int 101)))))
-		,@(when supplied-p-var
-		    `((:movl (:edi ,(global-constant-offset 't-symbol)) :eax)
-		      (:store-lexical ,supplied-p-binding :eax
-				      :type (eql ,(image-t-symbol *image*)))))
-		,@(case position
-		    (0 nil)		; it's already in ebx
-		    (t `((:movl (:ebp (:ecx 4) ,(* -4 (1- (1+ position)))) :ebx))))
-		default-done
-		(:store-lexical ,binding :ebx :type t))))))
-       (t #+ignore
-	  (pushnew (movitz-print (movitz-funobj-name funobj))
-		   (aref *xx* (length key-vars)))
-	  #+ignore
-	  (when key-vars
-	    (warn "KEY-FUN: ~D" (length key-vars)))
-	  (append
-	   `((:declare-key-arg-set ,@(mapcar (lambda (k)
-					       (movitz-read
-						(keyword-function-argument-keyword-name
-						 (movitz-binding (decode-keyword-formal k) env))))
-					     key-vars)))
-	   (loop with rest-binding = (movitz-binding rest-var env)
-	       for key-var in key-vars
-	       as key-var-name = (decode-keyword-formal key-var)
-	       as binding = (movitz-binding key-var-name env)
-	       as supplied-p-var = (optional-function-argument-supplied-p-var binding)
-	       as supplied-p-binding = (movitz-binding supplied-p-var env)
-	       and keyword-ok-label = (make-symbol (format nil "keyword-~A-ok" key-var-name))
-	       and keyword-not-supplied-label = (gensym)
-	       do (assert binding)
-	       if (not (movitz-constantp (optional-function-argument-init-form binding)))
-	       append
-		 `((:init-lexvar ,binding)
-		   (:load-constant ,(movitz-read (keyword-function-argument-keyword-name binding)) :ecx)
-		   (:load-lexical ,rest-binding :ebx)
-		   (:call (:edi ,(global-constant-offset 'keyword-search)))
-		   (:jz ',keyword-not-supplied-label)
-		   (:store-lexical ,binding :eax :type t)
-		   ,@(when supplied-p-var
-		       `((:movl (:edi ,(global-constant-offset 't-symbol)) :eax)
-			 (:init-lexvar ,supplied-p-binding
-				       :init-with-register :eax
-				       :init-with-type (eql ,(image-t-symbol *image*)))))
-		   (:jmp ',keyword-ok-label)
-		   ,keyword-not-supplied-label
-		   ,@(when supplied-p-var
-		       `((:store-lexical ,supplied-p-binding :edi :type null)))
+	(setq need-normalized-ecx-p t)
+	(append
+	 `((:declare-key-arg-set ,@(mapcar (lambda (k)
+					     (movitz-read
+					      (keyword-function-argument-keyword-name
+					       (movitz-binding (decode-keyword-formal k) env))))
+					   key-vars)))
+	 (make-immediate-move (* +movitz-fixnum-factor+
+				 (rest-args-position env))
+			      :edx)
+	 `((:call (:edi ,(global-constant-offset 'decode-keyargs-default))))
+	 (unless (allow-other-keys-p env)
+	   `((:testl :eax :eax)
+	     (:jnz '(:sub-program (unknown-keyword)
+		     (:int 72)))))
+	 (loop for key-var in key-vars
+	     as key-location upfrom 3 by 2
+	     as key-var-name =
+	       (decode-keyword-formal key-var)
+	     as binding =
+	       (movitz-binding key-var-name env)
+	     as supplied-p-binding =
+	       (movitz-binding (optional-function-argument-supplied-p-var binding)
+			       env)
+	     as keyword-ok-label = (make-symbol (format nil "keyword-~A-ok" key-var-name))
+	     do (assert binding)
+	     ;;  (not (movitz-constantp (optional-function-argument-init-form binding)))
+	     append
+	       `((:init-lexvar ,binding
+			       :init-with-register ,binding
+			       :init-with-type t
+			       :shared-reference-p t)
+		 (:init-lexvar ,supplied-p-binding
+			       :init-with-register ,supplied-p-binding
+			       :init-with-type t
+			       :shared-reference-p t))
+	     append
+	       (when (optional-function-argument-init-form binding)
+		 `((:cmpl :edi (:ebp ,(stack-frame-offset (1+ key-location))))
+		   (:jne ',keyword-ok-label)
 		   ,@(compiler-call #'compile-form
 		       :form (optional-function-argument-init-form binding)
 		       :env env
 		       :funobj funobj
 		       :result-mode binding)
-		   ,keyword-ok-label)
-	       else append
-		    (append (when supplied-p-var
-			      `((:init-lexvar ,supplied-p-binding
-					      :init-with-register :edi
-					      :init-with-type null)))
-			    (compiler-call #'compile-form
-			      :form (list 'muerte.cl:quote
-					  (eval-form (optional-function-argument-init-form binding)
-						     env))
-			      :env env
-			      :funobj funobj
-			      :result-mode :eax)
-			    `((:load-constant
-			       ,(movitz-read (keyword-function-argument-keyword-name binding)) :ecx)
-			      (:load-lexical ,rest-binding :ebx)
-			      (:call (:edi ,(global-constant-offset 'keyword-search))))
-			    (when supplied-p-var
-			      `((:jz ',keyword-not-supplied-label)
-				(:movl (:edi ,(global-constant-offset 't-symbol)) :ebx)
-				(:store-lexical ,supplied-p-binding :ebx
-						:type (eql ,(image-t-symbol *image*)))
-				,keyword-not-supplied-label))
-			    `((:init-lexvar ,binding
-					    :init-with-register :eax
-					    :init-with-type t))))))))
+		   ,keyword-ok-label))
+;;;	     else append
+;;;		  nil
+		  #+ignore
+		  (append (when supplied-p-var
+			    `((:init-lexvar ,supplied-p-binding
+					    :init-with-register :edi
+					    :init-with-type null)))
+			  (compiler-call #'compile-form
+			    :form (list 'muerte.cl:quote
+					(eval-form (optional-function-argument-init-form binding)
+						   env))
+			    :env env
+			    :funobj funobj
+			    :result-mode :eax)
+			  `((:load-constant
+			     ,(movitz-read (keyword-function-argument-keyword-name binding)) :ecx)
+			    (:load-lexical ,rest-binding :ebx)
+			    (:call (:edi ,(global-constant-offset 'keyword-search))))
+			  (when supplied-p-var
+			    `((:jz ',keyword-not-supplied-label)
+			      (:movl (:edi ,(global-constant-offset 't-symbol)) :ebx)
+			      (:store-lexical ,supplied-p-binding :ebx
+					      :type (eql ,(image-t-symbol *image*)))
+			      ,keyword-not-supplied-label))
+			  `((:init-lexvar ,binding
+					  :init-with-register :eax
+					  :init-with-type t)))))))
      need-normalized-ecx-p)))
 
 (defun old-key-encode (vars &key (size (ash 1 (integer-length (1- (length vars)))))
@@ -6710,9 +6702,10 @@ and a list of any intervening unwind-protect environment-slots."
 
 (define-find-write-binding-and-type :init-lexvar (instruction)
   (destructuring-bind (binding &key init-with-register init-with-type
-				    protect-registers protect-carry)
+				    protect-registers protect-carry
+				    shared-reference-p)
       (cdr instruction)
-    (declare (ignore protect-registers protect-carry))
+    (declare (ignore protect-registers protect-carry shared-reference-p))
     (cond
      (init-with-register
       (cond
@@ -6738,7 +6731,8 @@ and a list of any intervening unwind-protect environment-slots."
 
 (define-extended-code-expander :init-lexvar (instruction funobj frame-map)
   (destructuring-bind (binding &key protect-registers protect-carry
-				    init-with-register init-with-type)
+				    init-with-register init-with-type
+				    shared-reference-p)
       (cdr instruction)
     (declare (ignore protect-carry))	; nothing modifies carry anyway.
     ;; (assert (eq binding (ensure-local-binding binding funobj)))
@@ -6775,47 +6769,55 @@ and a list of any intervening unwind-protect environment-slots."
 	   (let ((restify-alloca-loop (gensym "alloca-loop-"))
 		 (restify-done (gensym "restify-done-"))
 		 (restify-at-one (gensym "restify-at-one-"))
-		 (restify-loop (gensym "restify-loop-")))
-	   (append
-	    ;; (make-immediate-move (function-argument-argnum binding) :edx)
-	    ;; `((:call (:edi ,(global-constant-offset 'restify-dynamic-extent))))
-	    ;; Make space for (1+ (* 2 (- ECX rest-pos))) words on the stack.
-	    ;; Factor two is for one cons-cell per word, 1 is for 8-byte alignment.
-	    `((:movl :edi :edx)
-	      (:subl ,(function-argument-argnum binding) :ecx)
-	      (:jbe ',restify-done)
-	      (:leal ((:ecx 8) 4) :edx)	; EDX is fixnum counter
-	      ,restify-alloca-loop
-	      (:pushl :edi)
-	      (:subl 4 :edx)
-	      (:jnz ',restify-alloca-loop)
-	      ,@(when *compiler-auto-stack-checks-p*
-		  `((,*compiler-local-segment-prefix*
-		     :bound (:edi ,(global-constant-offset 'stack-bottom)) :esp)))
-	      (:leal (:esp 5) :edx)
-	      (:andl -7 :edx))		; Make EDX a proper consp into the alloca area.
-	    (cond
-	     ((= 0 (function-argument-argnum binding))
-	      `((:movl :eax (:edx -1))
-		(:movl :edx :eax)
+		 (restify-loop (gensym "restify-loop-"))
+		 (save-ecx-p (key-vars-p (find-function-env (binding-env binding)
+							    funobj))))
+	     (append
+	      ;; (make-immediate-move (function-argument-argnum binding) :edx)
+	      ;; `((:call (:edi ,(global-constant-offset 'restify-dynamic-extent))))
+	      ;; Make space for (1+ (* 2 (- ECX rest-pos))) words on the stack.
+	      ;; Factor two is for one cons-cell per word, 1 is for 8-byte alignment.
+	      (when save-ecx-p
+		`((,*compiler-local-segment-prefix*
+		   :movl :ecx (:edi ,(global-constant-offset 'raw-scratch0)))))
+	      `((:movl :edi :edx)
+		(:subl ,(function-argument-argnum binding) :ecx)
+		(:jbe ',restify-done)
+		(:leal ((:ecx 8) 4) :edx) ; EDX is fixnum counter
+		,restify-alloca-loop
+		(:pushl :edi)
+		(:subl 4 :edx)
+		(:jnz ',restify-alloca-loop)
+		,@(when *compiler-auto-stack-checks-p*
+		    `((,*compiler-local-segment-prefix*
+		       :bound (:edi ,(global-constant-offset 'stack-bottom)) :esp)))
+		(:leal (:esp 5) :edx)
+		(:andl -7 :edx))	; Make EDX a proper consp into the alloca area.
+	      (cond
+	       ((= 0 (function-argument-argnum binding))
+		`((:movl :eax (:edx -1))
+		  (:movl :edx :eax)
+		  (:subl 1 :ecx)
+		  (:jz ',restify-done)
+		  (:addl 8 :eax)
+		  (:movl :eax (:eax -5))))
+	       (t `((:movl :edx :eax))))
+	      (when (>= 1 (function-argument-argnum binding))
+		`((:jmp ',restify-at-one)))
+	      `(,restify-loop
+		(:movl (:ebp (:ecx 4) 4) :ebx)
+		,restify-at-one
+		(:movl :ebx (:eax -1))
 		(:subl 1 :ecx)
 		(:jz ',restify-done)
 		(:addl 8 :eax)
-		(:movl :eax (:eax -5))))
-	     (t `((:movl :edx :eax))))
-	    (when (>= 1 (function-argument-argnum binding))
-	      `((:jmp ',restify-at-one)))
-	    `(,restify-loop
-	      (:movl (:ebp (:ecx 4) 4) :ebx)
-	      ,restify-at-one
-	      (:movl :ebx (:eax -1))
-	      (:subl 1 :ecx)
-	      (:jz ',restify-done)
-	      (:addl 8 :eax)
-	      (:movl :eax (:eax -5))
-	      (:jmp ',restify-loop)
-	      ,restify-done)
-	    ))))
+		(:movl :eax (:eax -5))
+		(:jmp ',restify-loop)
+		,restify-done)
+	      (when save-ecx-p
+		`((,*compiler-local-segment-prefix*
+		   :movl (:edi ,(global-constant-offset 'raw-scratch0)) :ecx)))
+	      ))))
 	 (cond
 	  ((binding-lended-p binding)
 	   (let* ((cons-position (getf (binding-lending binding)
@@ -6837,7 +6839,8 @@ and a list of any intervening unwind-protect environment-slots."
 	     (assert tmp-register ()	; solve this with push eax .. pop eax if ever needed.
 	       "Unable to find a tmp-register for ~S." instruction)
 	     (append (when (typep init-with-register 'binding)
-		       (make-load-lexical init-with-register init-register funobj nil frame-map
+		       (make-load-lexical init-with-register init-register funobj
+					  shared-reference-p frame-map
 					  :protect-registers protect-registers))
 		     `((:leal (:ebp ,(1+ (stack-frame-offset (1+ cons-position))))
 			      ,tmp-register)

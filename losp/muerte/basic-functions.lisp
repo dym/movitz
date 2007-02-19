@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.21 2006/03/21 20:20:20 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.22 2007/02/19 20:24:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -432,4 +432,36 @@ interpreted as a lispval, and consequently a fixnum."
 	    (setf (memref object offset :index i :type :character)
 	      (char value j))))))))
   value)
-     
+
+
+
+(define-primitive-function blah ()
+  "foo"
+  (with-inline-assembly (:returns :multiple-values)
+    ;; EAX: (presumed) keyword
+    (:globally (:cmpl :eax (:edi (:edi-offset allow-other-keys-symbol))))
+    (:je '(:sub-program (found-allow-other-keys)
+	   				; XXX
+	   (:ret)))
+    (:leal (:ebx -7) :ecx)
+    (:testb 7 :cl)
+    (:jnz '(:sub-program ()
+	    (:xorl :ecx :ecx)		; hash of nil is 0
+	    (:cmpl :edi :ebx)
+	    (:je 'proceed-with-nil-key)
+	    (:movl :ebx :eax)
+	    (:movb 0 :cl)
+	    (:int 72)))
+    (:xorl :ecx :ecx)
+    (:movw (:eax (:offset movitz-symbol hash-key)) :cx)
+   proceed-with-nil-key
+    ;; We now have symbol's basic sxhash in CX.
+    (:xorl :edx :edx)
+    (:leal ((:ecx 4) :edx) :edx)
+    (:andl (:esi (:offset movitz-funobj constant0))
+	   :edx)
+    
+    (:ret)
+    
+    ))
+
