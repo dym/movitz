@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.108 2007/02/18 14:53:07 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.109 2007/02/19 21:57:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -779,7 +779,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 			:start-address start-address
 			:movitz-features '(:movitz)
 			:function-code-sizes
-			(if (boundp '*image*)
+			(if (and (boundp '*image*) *image*)
 			    (copy-hash-table (function-code-sizes *image*))
 			  (make-hash-table :test #'equal))
 			init-args)))
