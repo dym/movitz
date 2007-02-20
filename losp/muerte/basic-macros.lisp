@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.67 2006/05/06 21:15:44 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.68 2007/02/20 23:11:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -583,13 +583,13 @@
 
 (define-compiler-macro car (x)
   `(let ((cell ,x))
-     (with-inline-assembly-case (:side-effects nil)
+     (with-inline-assembly-case (:side-effects t)
        (do-case (t :register)
 	 (:cons-get :car (:lexical-binding cell) (:result-register))))))
 
 (define-compiler-macro cdr (x)
   `(let ((cell ,x))
-     (with-inline-assembly-case (:side-effects nil)
+     (with-inline-assembly-case (:side-effects t)
        (do-case (t :register)
 	 (:cons-get :cdr (:lexical-binding cell) (:result-register))))))
 
