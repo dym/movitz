@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.49 2005/09/16 22:50:08 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.50 2007/02/20 20:33:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -155,7 +155,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		       :env local-env))))
 	    (compiler-values-bind (&all body-values &code body-code &returns body-returns)
 		(compile-body)
-;;;	      (print-code 'body body-code)
+	      ;; (print-code 'body body)
+	      ;; (print-code 'body-code body-code)
 	      (let ((first-binding (movitz-binding (caar binding-var-codes) local-env nil)))
 		(cond
 		 ;; Is this (let ((#:foo <form>)) (setq bar #:foo)) ?
@@ -368,6 +369,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		      (compiler-values (body-values)
 			:returns body-returns
 			:producer (default-compiler-values-producer)
+			:functional-p (and (body-values :functional-p)
+					   (every #'fourth binding-var-codes))
 			:modifies let-modifies
 			:code code))))))))))))
 
