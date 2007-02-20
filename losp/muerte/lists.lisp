@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.18 2006/05/06 20:30:54 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.19 2007/02/20 23:11:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -232,6 +232,7 @@
 	  (setf (cdr new-tail) (cons (pop more-objects) nil)))))))
 
 (defun make-list (size &key initial-element)
+  (check-type size positive-fixnum)
   (do ((list nil (cons initial-element list))
        (c size (1- c)))
       ((<= c 0) list)))
