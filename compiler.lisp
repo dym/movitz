@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.176 2007/02/19 21:57:33 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.177 2007/02/20 21:57:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1473,7 +1473,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 ;;;;
 
 (defun print-code (x code)
-  (let ((*print-level* 3))
+  (let ((*print-level* 4))
     (format t "~&~A code:~{~&  ~A~}" x code))
   code)
 
@@ -2691,9 +2691,12 @@ of argument <argnum>."
 		      (find-if (lambda (b-loc)
 				 (destructuring-bind (binding . binding-location)
 				     b-loc
-				   (or (and (not (bindingp binding))
+				   (or (and (eq binding nil) ; nil means "back off!"
 					    (eql sub-location binding-location))
-				       (and (eql sub-location (stack-location binding))
+				       (and (not (bindingp binding))
+					    (eql sub-location binding-location))
+				       (and (bindingp binding)
+					    (eql sub-location (stack-location binding))
 					    (labels
 						((z (b)
 						   (when b
@@ -2715,7 +2718,8 @@ of argument <argnum>."
 	      (append values (list binding))
 	      (list new-value)
 	      `(let ((,(car stores) (progn
-				      (assert (not (new-binding-located-p ,binding-var ,getter)))
+				      (assert (or (null binding)
+						  (not (new-binding-located-p ,binding-var ,getter))))
 				      (check-type ,new-value (or keyword
 								 binding
 								 (integer 0 *)
@@ -3145,7 +3149,8 @@ the sub-program options (&optional label) as secondary value."
 			      (init-with-register
 			       (take-note-of-binding binding t pc)
 			       (when (and (typep init-with-register 'binding)
-					  (not (typep binding 'forwarding-binding))) ; XXX
+					  (not (typep binding 'forwarding-binding))
+					  (not (typep binding 'keyword-function-argument))) ; XXX
 				 (take-note-of-binding init-with-register))))))
 			  (t (mapcar #'take-note-of-binding 
 				     (find-read-bindings instruction))
@@ -3369,19 +3374,22 @@ the sub-program options (&optional label) as secondary value."
 						  binding))
 				    2)))
 	(loop for key-var in (key-vars function-env)
-	    as key-binding =
-	      (or (movitz-binding key-var function-env nil)
-		  (error "No binding for key-var ~S." key-var))
-	    as supplied-p-binding =
+	    as key-binding = (or (movitz-binding key-var function-env nil)
+				 (error "No binding for key-var ~S." key-var))
+	    as used-key-binding =
+	      (when (plusp (car (gethash key-binding var-counts '(0))))
+		key-binding)
+	    as used-supplied-p-binding =
 	      (when (optional-function-argument-supplied-p-var key-binding)
-		(or (movitz-binding (optional-function-argument-supplied-p-var key-binding)
-				    function-env nil)
-		    (error "No binding for supplied-p-var ~S."
-			   (optional-function-argument-supplied-p-var key-binding))))
+		(let ((b (or (movitz-binding (optional-function-argument-supplied-p-var key-binding)
+					     function-env nil)
+			     (error "No binding for supplied-p-var ~S."
+				    (optional-function-argument-supplied-p-var key-binding)))))
+		  (when (plusp (car (gethash key-binding var-counts '(0))))
+		    b)))
 	    as location upfrom 3 by 2
-	    do (set-exclusive-location key-binding location)
-	       (assert supplied-p-binding)
-	       (set-exclusive-location supplied-p-binding (1+ location))))
+	    do (set-exclusive-location used-key-binding location)
+	       (set-exclusive-location used-supplied-p-binding (1+ location))))
       ;; Now, use assing-env-bindings on the remaining bindings.
       (loop for env in
 	    (loop with z = nil
@@ -3595,7 +3603,7 @@ loading borrowed bindings."
 				 'integer))
       (warn "ecx from ~S" binding)))
   (when (movitz-env-get (binding-name binding) 'ignore nil (binding-env binding))
-    (warn "The variable ~S is used even if it was declared ignored."
+    (break "The variable ~S is used even if it was declared ignored."
 	  (binding-name binding)))
   (let ((binding (ensure-local-binding binding funobj))
 	(protect-registers (cons :edx protect-registers)))
@@ -4443,15 +4451,16 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 			 (shadow-when-special formal env))
 			(supplied-p-parameter
 			 (or supplied-p
-			     (gensym "supplied-p-"))))
+			     #+ignore (gensym "supplied-p-"))))
 		    (movitz-env-add-binding env (make-instance 'keyword-function-argument
 						  :name formal
 						  'init-form init-form
 						  'supplied-p-var supplied-p-parameter
 						  :keyword-name keyword-name
 						  :rest-var-name rest-var-name))
-		    (movitz-env-add-binding env (make-instance 'supplied-p-function-argument
-						  :name (shadow-when-special supplied-p-parameter env)))
+		    (when supplied-p-parameter
+		      (movitz-env-add-binding env (make-instance 'supplied-p-function-argument
+						    :name (shadow-when-special supplied-p-parameter env))))
 		    formal))))
 	#+ignore
 	(multiple-value-bind (key-decode-map key-decode-shift)
@@ -4980,30 +4989,31 @@ Return arg-init-code, need-normalized-ecx-p."
 	     as binding =
 	       (movitz-binding key-var-name env)
 	     as supplied-p-binding =
-	       (movitz-binding (optional-function-argument-supplied-p-var binding)
-			       env)
+	       (when (optional-function-argument-supplied-p-var binding)
+		 (movitz-binding (optional-function-argument-supplied-p-var binding)
+				 env))
 	     as keyword-ok-label = (make-symbol (format nil "keyword-~A-ok" key-var-name))
 	     do (assert binding)
 	     ;;  (not (movitz-constantp (optional-function-argument-init-form binding)))
 	     append
-	       `((:init-lexvar ,binding
-			       :init-with-register ,binding
-			       :init-with-type t
-			       :shared-reference-p t)
-		 (:init-lexvar ,supplied-p-binding
-			       :init-with-register ,supplied-p-binding
-			       :init-with-type t
-			       :shared-reference-p t))
-	     append
-	       (when (optional-function-argument-init-form binding)
-		 `((:cmpl :edi (:ebp ,(stack-frame-offset (1+ key-location))))
-		   (:jne ',keyword-ok-label)
-		   ,@(compiler-call #'compile-form
-		       :form (optional-function-argument-init-form binding)
-		       :env env
-		       :funobj funobj
-		       :result-mode binding)
-		   ,keyword-ok-label))
+	       (append `((:init-lexvar ,binding
+				       :init-with-register ,binding
+				       :init-with-type t
+				       :shared-reference-p t))
+		       (when supplied-p-binding
+			 `((:init-lexvar ,supplied-p-binding
+					 :init-with-register ,supplied-p-binding
+					 :init-with-type t
+					 :shared-reference-p t)))
+		       (when (optional-function-argument-init-form binding)
+			 `((:cmpl :edi (:ebp ,(stack-frame-offset (1+ key-location))))
+			   (:jne ',keyword-ok-label)
+			   ,@(compiler-call #'compile-form
+			       :form (optional-function-argument-init-form binding)
+			       :env env
+			       :funobj funobj
+			       :result-mode binding)
+			   ,keyword-ok-label)))
 ;;;	     else append
 ;;;		  nil
 		  #+ignore
