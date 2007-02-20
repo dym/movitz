@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.33 2006/04/10 11:56:28 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.34 2007/02/20 21:55:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1755,10 +1755,9 @@ quick-sort with cut-off greater than 1."
    (t (error "Can't concatenate ~S yet: ~:S" result-type sequences))))
 
 
-(defun substitute (newitem olditem sequence &rest args 
+(defun substitute (newitem olditem sequence
 		   &key (test 'eql) test-not (start 0) end count (key 'identity) from-end)
   "=> result-sequence"
-  (declare (dynamic-extent args))
   (when test-not
     (setf test (complement test-not)))
   (with-funcallable (test (if test-not (complement test-not) test))
@@ -1767,10 +1766,9 @@ quick-sort with cut-off greater than 1."
 		   :count count :key key
 		   :from-end from-end)))
 
-(defun nsubstitute (newitem olditem sequence &rest args 
+(defun nsubstitute (newitem olditem sequence
 		    &key (test 'eql) test-not (start 0) end count (key 'identity) from-end)
   "=> result-sequence"
-  (declare (dynamic-extent args))
   (when test-not
     (setf test (complement test-not)))
   (with-funcallable (test (if test-not (complement test-not) test))
