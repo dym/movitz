@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.177 2007/02/20 21:57:13 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.178 2007/02/22 21:00:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1484,7 +1484,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
        (new-program nil))
       ((endp pc)
        (assert (not pending-subs) ()
-	 "pending subs: ~S" pending-subs)
+	 "pending sub-programs: ~S" pending-subs)
        (nreverse new-program))
     (let ((i (pop pc)))
       (multiple-value-bind (sub-prg sub-opts)
@@ -2605,15 +2605,11 @@ falling below the label."
 (defclass supplied-p-function-argument (function-argument) ())
 
 (defclass rest-function-argument (positional-function-argument) ())
-(defclass hidden-rest-function-argument (rest-function-argument) ())
 
 (defclass keyword-function-argument (non-required-function-argument)
   ((keyword-name
     :initarg :keyword-name
-    :reader keyword-function-argument-keyword-name)
-   (rest-var-name
-    :initarg :rest-var-name
-    :reader keyword-function-argument-rest-var-name)))
+    :reader keyword-function-argument-keyword-name)))
 
 (defclass dynamic-binding (variable-binding) ())
 
@@ -2745,24 +2741,25 @@ of argument <argnum>."
 ;;;
 
 
-(defun instruction-sub-program (instruction)
-  "When an instruction contains a sub-program, return that program, and 
-the sub-program options (&optional label) as secondary value."
-  (and (consp instruction)
-       (consp (second instruction))
-       (symbolp (car (second instruction)))
-       (string= 'quote (car (second instruction)))
-       (let ((x (second (second instruction))))
-	 (and (consp x)
-	      (eq :sub-program (car x))
-	      (values (cddr x)
-		      (second x))))))
-
 (defun ignore-instruction-prefixes (instruction)
   (if (and (consp instruction)
 	   (listp (car instruction)))
       (cdr instruction)
     instruction))
+
+(defun instruction-sub-program (instruction)
+  "When an instruction contains a sub-program, return that program, and 
+the sub-program options (&optional label) as secondary value."
+  (let ((instruction (ignore-instruction-prefixes instruction)))
+    (and (consp instruction)
+	 (consp (second instruction))
+	 (symbolp (car (second instruction)))
+	 (string= 'quote (car (second instruction)))
+	 (let ((x (second (second instruction))))
+	   (and (consp x)
+		(eq :sub-program (car x))
+		(values (cddr x)
+			(second x)))))))
 
 (defun instruction-is (instruction &optional operator)
   (and (listp instruction)
@@ -3205,7 +3202,6 @@ the sub-program options (&optional label) as secondary value."
 								     (binding-env binding) nil)
 						     (movitz-env-get variable 'ignorable nil
 								     (binding-env binding) nil)
-						     (typep binding 'hidden-rest-function-argument)
 						     (third (gethash binding var-counts)))
 					   (warn "Unused variable: ~S"
 						 (binding-name binding))))
@@ -4410,11 +4406,6 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 	    (movitz-env-add-binding env (make-instance 'rest-function-argument
 				       :name formal
 				       :argnum (post-incf arg-pos)))))
-;;;	(when key-vars-p
-;;;	  ;; We need to check at run-time whether keyword checking is supressed or not.
-;;;	  (setf (allow-other-keys-var env)
-;;;	    (movitz-env-add-binding env (make-instance 'located-binding
-;;;					  :name (gensym "allow-other-keys-var-")))))
 	(when key-vars-p
 	  (setf (key-vars-p env) t)
 	  (when (>= 1 (rest-args-position env))
@@ -4436,28 +4427,16 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 	      (setf (movitz-env-get name 'ignore nil env) t))))
 	(setf (key-vars env)
 	  (loop for spec in key-vars
-	      with rest-var-name =
-		(or rest-var
-		    (and key-vars
-			 (let ((name (gensym "hidden-rest-var-")))
-			   (movitz-env-add-binding env (make-instance 'hidden-rest-function-argument
-							 :name name
-							 :argnum (post-incf arg-pos)))
-			   name)))
 	      collect
 		(multiple-value-bind (formal keyword-name init-form supplied-p)
 		    (decode-keyword-formal spec)
-		  (let ((formal
-			 (shadow-when-special formal env))
-			(supplied-p-parameter
-			 (or supplied-p
-			     #+ignore (gensym "supplied-p-"))))
+		  (let ((formal (shadow-when-special formal env))
+			(supplied-p-parameter supplied-p))
 		    (movitz-env-add-binding env (make-instance 'keyword-function-argument
 						  :name formal
 						  'init-form init-form
 						  'supplied-p-var supplied-p-parameter
-						  :keyword-name keyword-name
-						  :rest-var-name rest-var-name))
+						  :keyword-name keyword-name))
 		    (when supplied-p-parameter
 		      (movitz-env-add-binding env (make-instance 'supplied-p-function-argument
 						    :name (shadow-when-special supplied-p-parameter env))))
@@ -4830,12 +4809,6 @@ Return arg-init-code, need-normalized-ecx-p."
 	(optional-vars (optional-vars env))
 	(rest-var (rest-var env))
 	(key-vars (key-vars env)))
-    (when (and (not rest-var)
-	       key-vars
-	       (not (= 1 (length key-vars))))
-      (setf rest-var
-	(keyword-function-argument-rest-var-name
-	 (movitz-binding (decode-keyword-formal (first key-vars)) env))))
     (values
      (append
       (loop for optional in optional-vars
@@ -6753,9 +6726,8 @@ and a list of any intervening unwind-protect environment-slots."
 	 (cond
 	  ((typep binding 'rest-function-argument)
 	   (assert (eq :edx init-with-register))
-	   (assert (or (typep binding 'hidden-rest-function-argument)
-		       (movitz-env-get (binding-name binding)
-				       'dynamic-extent nil (binding-env binding)))
+	   (assert (movitz-env-get (binding-name binding)
+				   'dynamic-extent nil (binding-env binding))
 	       ()
 	     "&REST variable ~S must be dynamic-extent." (binding-name binding))
 	   (setf (need-normalized-ecx-p (find-function-env (binding-env binding)
