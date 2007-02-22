@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.16 2006/05/06 20:30:53 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.17 2007/02/22 21:23:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -265,7 +265,7 @@ Cons cell is in EBX, which is preserved."
 (defun tree-equal (tree-1 tree-2 &key test test-not)
   (labels ((te (tree-1 tree-2 test)
 	     (if (not (consp tree-1))
-		 (funcall test tree-1 tree-2)
+		 (values (funcall test tree-1 tree-2))
 	       (if (not (consp tree-2))
 		   nil
 		 (and (te (car tree-1) (car tree-2) test)
