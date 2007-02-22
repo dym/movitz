@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.27 2004/11/25 16:46:01 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.28 2007/02/22 22:11:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -253,3 +253,6 @@
   (declare (ignore default))
   (setf (getf (symbol-plist symbol) indicator)
     value))
+
+(defun remprop (symbol indicator)
+  (remf (symbol-plist symbol) indicator))
