@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.59 2006/05/05 18:14:41 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.60 2007/02/22 21:02:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -348,7 +348,8 @@
 		   (:jmp (:esi (:ecx 4) 'basic-vector-dispatcher
 			       ,(bt:slot-offset 'movitz:movitz-funobj 'movitz::constant0)))
 		   
-		   (() () '(:sub-program (unknown) (:int 100)))
+		   (:jnever '(:sub-program (unknown)
+			      (:int 100)))
 		  :u32
 		   (:movl (:eax :ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))
 			  :ecx)
