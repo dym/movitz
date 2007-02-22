@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.20 2007/02/22 20:27:31 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.21 2007/02/22 20:28:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -242,9 +242,6 @@
       ((null p) default)
     (when (eq indicator (car p))
       (return (cadr p)))))
-
-;;;(defun (setf getf) (value plist indicator &optional default)
-;;;  (error "Must be implemented as a macro.."))
 
 (defsetf getf (plist indicator &optional default) (new-value)
   `(do ((p ,plist (cddr p)))
