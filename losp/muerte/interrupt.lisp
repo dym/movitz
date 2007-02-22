@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.53 2007/02/19 20:24:54 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.54 2007/02/22 21:03:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -316,14 +316,22 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	  ((60)
 	   ;; EAX failed type in EDX. May be restarted by returning with a new value in EAX.
 	   (with-simple-restart (continue "Retry with a different value.")
-	     (error 'type-error :datum (dereference $eax) :expected-type (dereference $edx)))
+	     (error 'type-error
+		    :datum (dereference $eax)
+		    :expected-type (dereference $edx)))
 	   (format *query-io* "Enter a new value: ")
 	   (setf (dereference $eax) (read *query-io*)))
-	  (61 (error 'type-error :datum (dereference $eax) :expected-type 'list))
+	  (61 (error 'type-error
+		     :datum (dereference $eax)
+		     :expected-type 'list))
 	  (62 (error "Trying to save too many values: ~@Z." $ecx))
 	  (63 (error "Primitive assertion error. EIP=~@Z, ESI=~@Z." $eip $esi))
-	  (64 (error 'type-error :datum (dereference $eax) :expected-type 'integer))
-	  (65 (error 'index-out-of-range :index (dereference $ebx) (dereference $ecx)))
+	  (64 (error 'type-error
+		     :datum (dereference $eax)
+		     :expected-type 'integer))
+	  (65 (error 'index-out-of-range
+		     :index (dereference $ebx)
+		     :range (dereference $ecx)))
 	  (66 (error "Unspecified type error at ~@Z in ~S with EAX=~@Z, ECX=~@Z."
 		     $eip (dereference (+ dit-frame (dit-frame-index :esi)))
 		     $eax $ecx))
