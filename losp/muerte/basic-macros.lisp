@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.68 2007/02/20 23:11:22 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.69 2007/02/22 21:03:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -558,14 +558,16 @@
    (t (if (member type '(standard-gf-instance function pointer atom
 			 integer fixnum positive-fixnum cons symbol character null list
 			 string vector simple-vector vector-u8 vector-u16))
-	  `(with-inline-assembly (:returns :nothing :labels (fail))
+	  `(with-inline-assembly (:returns :nothing :labels (check-type-failed retry-check-type))
+	    retry-check-type
 	     (:compile-form (:result-mode (:boolean-branch-on-false . check-type-failed))
 			    (typep ,place ',type))
-	     (() () '(:sub-program (check-type-failed) (:int 66))))
-	#+ignore
-	`(unless (typep ,place ',type)
-	   (with-inline-assembly (:returns :non-local-exit)
-	     (:int 66)))
+	     (:jnever '(:sub-program (check-type-failed)
+			(:compile-form (:result-mode :edx) (quote ,type))
+			(:compile-form (:result-mode :ignore)
+			 (setf ,place (with-inline-assembly (:returns :eax)
+					(:int 60))))
+			(:jmp 'retry-check-type))))
 	form))))
 
 (defmacro assert (test-form &optional places datum-form &rest argument-forms)
