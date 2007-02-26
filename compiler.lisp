@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.178 2007/02/22 21:00:21 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.179 2007/02/26 21:18:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1223,252 +1223,99 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	      1))
      (t (error "make-2req confused by loc0: ~W, loc1: ~W" location-0 location-1)))))
 
-;;;(defun make-compiled-function-body-1rest (form funobj env top-level-p)
-;;;  (when (and (null (required-vars env))
-;;;	     (null (optional-vars env))
-;;;	     (null (key-vars env))
-;;;	     (rest-var env))
-;;;    (multiple-value-bind (code stack-frame-size use-stack-frame-p frame-map)
-;;;	(make-compiled-body form funobj env top-level-p)
-;;;      (let* ((rest-binding (movitz-binding (rest-var env) env nil))
-;;;	     (edx-location (and (edx-var env)
-;;;				(new-binding-location (edx-var env) frame-map
-;;;						      :default nil)))
-;;;	     (edx-code (when edx-location
-;;;			 `((:movl :edx (:ebp ,(stack-frame-offset edx-location)))))))
-;;;	(cond
-;;;	 ((not (new-binding-located-p rest-binding frame-map))
-;;;	  (append '(entry%1op
-;;;		    entry%2op
-;;;		    entry%3op)
-;;;		  (when use-stack-frame-p
-;;;		    +enter-stack-frame-code+)
-;;;		  '(start-stack-frame-setup)
-;;;		  (make-compiled-stack-frame-init stack-frame-size)
-;;;		  edx-code
-;;;		  code
-;;;		  (make-compiled-function-postlude funobj env use-stack-frame-p)))
-;;;	 (t ;; (new-binding-located-p rest-binding frame-map)
-;;;	  (let ((rest-location (new-binding-location rest-binding frame-map)))
-;;;	    (values (append +enter-stack-frame-code+
-;;;			    '(start-stack-frame-setup)
-;;;			    (make-compiled-stack-frame-init stack-frame-size)
-;;;			    `((:movl :edi (:ebp ,(stack-frame-offset rest-location))))
-;;;			    edx-code
-;;;			    `((:testb :cl :cl)
-;;;			      (:jz 'end-stack-frame-setup)
-;;;			      (:js '(:sub-program (normalize-ecx)
-;;;				     (:shrl 8 :ecx)
-;;;				     (:jmp 'ecx-ok)))
-;;;			      (:andl #x7f :ecx)
-;;;			      ecx-ok
-;;;			      (:xorl :edx :edx)
-;;;			      (:call (:edi ,(global-constant-offset 'restify-dynamic-extent)))
-;;;			      (:movl :eax (:ebp ,(stack-frame-offset rest-location)))
-;;;			      (:jmp 'end-stack-frame-setup))
-;;;			    `(entry%1op
-;;;			      ,@+enter-stack-frame-code+
-;;;			      ,@(make-compiled-stack-frame-init stack-frame-size)
-;;;			      ,@edx-code
-;;;			      (:andl -8 :esp)
-;;;			      (:pushl :edi)
-;;;			      (:pushl :eax)
-;;;			      (:leal (:esp 1) :ecx)
-;;;			      (:movl :ecx (:ebp ,(stack-frame-offset rest-location)))
-;;;			      (:jmp 'end-stack-frame-setup))
-;;;			    `(entry%2op
-;;;			      ,@+enter-stack-frame-code+
-;;;			      ,@(make-compiled-stack-frame-init stack-frame-size)
-;;;			      ,@edx-code
-;;;			      (:andl -8 :esp)
-;;;			      (:pushl :edi)
-;;;			      (:pushl :ebx)
-;;;			      (:leal (:esp 1) :ecx)
-;;;			      (:pushl :ecx)
-;;;			      (:pushl :eax)
-;;;			      (:leal (:esp 1) :ecx)
-;;;			      (:movl :ecx (:ebp ,(stack-frame-offset rest-location)))
-;;;			      (:jmp 'end-stack-frame-setup))
-;;;			    '(end-stack-frame-setup)
-;;;			    code
-;;;			    (make-compiled-function-postlude funobj env t))
-;;;		    use-stack-frame-p))))))))
-		      
-;;;(defun make-compiled-function-body-1req-1opt (form funobj env top-level-p)
-;;;  (when (and (= 1 (length (required-vars env)))
-;;;	     (= 1 (length (optional-vars env)))
-;;;	     (= 0 (length (key-vars env)))
-;;;	     (null (rest-var env)))
-;;;    (let* ((opt-var (first (optional-vars env)))
-;;;	   (opt-binding (movitz-binding opt-var env nil))
-;;;	   (req-binding (movitz-binding (first (required-vars env)) env nil))
-;;;	   (default-form (optional-function-argument-init-form opt-binding)))
-;;;      (compiler-values-bind (&code opt-default-code &producer opt-default-producer)
-;;;	  (compiler-call #'compile-form
-;;;	    :form default-form
-;;;	    :result-mode :push
-;;;	    :env env
-;;;	    :funobj funobj)
-;;;	(cond
-;;;	 ((eq 'compile-self-evaluating opt-default-producer)
-;;;	  (multiple-value-bind (code stack-frame-size use-stack-frame-p frame-map)
-;;;	      (make-compiled-body form funobj env top-level-p nil (list opt-default-code))
-;;;	    (declare (ignore use-stack-frame-p))
-;;;	    (let ((use-stack-frame-p t))
-;;;	      (cond
-;;;	       ((and (new-binding-located-p req-binding frame-map)
-;;;		     (new-binding-located-p opt-binding frame-map))
-;;;		(multiple-value-bind (eax-ebx-code eax-ebx-stack-offset)
-;;;		    (ecase (new-binding-location req-binding frame-map)
-;;;		      ;; might well be more cases here, but let's wait till they show up..
-;;;		      (:eax (values nil 0))
-;;;		      (1 (values '((:pushl :eax)) 1)))
-;;;		  ;; (warn "defc: ~S" opt-default-code)
-;;;		  (let ((stack-init-size (- stack-frame-size eax-ebx-stack-offset))
-;;;			(installed-default-code (finalize-code opt-default-code funobj env frame-map)))
-;;;		    (values (append `((:call (:edi ,(global-constant-offset 'decode-args-1or2)))
-;;;				      entry%2op
-;;;				      (:pushl :ebp)
-;;;				      (:movl :esp :ebp)
-;;;				      (:pushl :esi)
-;;;				      start-stack-frame-setup
-;;;				      ,@eax-ebx-code
-;;;				      ,@(if (eql (1+ eax-ebx-stack-offset)
-;;;						 (new-binding-location opt-binding frame-map))
-;;;					    (append `((:pushl :ebx))
-;;;						    (make-compiled-stack-frame-init (1- stack-init-size)))
-;;;					  (append (make-compiled-stack-frame-init stack-init-size)
-;;;						  `((:movl :ebx (:ebp ,(stack-frame-offset
-;;;									(new-binding-location opt-binding
-;;;											      frame-map)))))))
-;;;				      (:jmp 'arg-init-done)
-;;;				      entry%1op
-;;;				      (:pushl :ebp)
-;;;				      (:movl :esp :ebp)
-;;;				      (:pushl :esi)
-;;;				      ,@eax-ebx-code
-;;;				      ,@(if (eql (1+ eax-ebx-stack-offset)
-;;;						 (new-binding-location opt-binding frame-map))
-;;;					    (append installed-default-code
-;;;						    (make-compiled-stack-frame-init (1- stack-init-size)))
-;;;					  (append (make-compiled-stack-frame-init stack-init-size)
-;;;						  installed-default-code
-;;;						  `((:popl (:ebp ,(stack-frame-offset
-;;;								   (new-binding-location opt-binding
-;;;											 frame-map)))))))
-;;;				      arg-init-done)
-;;;				    code
-;;;				    (make-compiled-function-postlude funobj env t))
-;;;			    use-stack-frame-p))))
-;;;	       ((and (new-binding-located-p req-binding frame-map)
-;;;		     (not (new-binding-located-p opt-binding frame-map)))
-;;;		(multiple-value-bind (eax-code eax-stack-offset)
-;;;		    (ecase (new-binding-location req-binding frame-map)
-;;;		      (:eax (values nil 0))
-;;;		      (1 (values '((:pushl :eax)) 1)))
-;;;		  (values (append `((:call (:edi ,(global-constant-offset 'decode-args-1or2)))
-;;;				    ;; (:jmp 'decode-numargs)
-;;;				    entry%1op
-;;;				    entry%2op
-;;;				    (:pushl :ebp)
-;;;				    (:movl :esp :ebp)
-;;;				    (:pushl :esi))
-;;;				  eax-code
-;;;				  (make-compiled-stack-frame-init (- stack-frame-size eax-stack-offset))
-;;;				  code
-;;;				  (make-compiled-function-postlude funobj env t))
-;;;			  use-stack-frame-p)))
-;;;	       (t (warn "1-req-1-opt failed"))))))
-;;;	 (t nil))))))
 
 (defun movitz-compile-file (path &key ((:image *image*) *image*)
-				   load-priority
-				   (delete-file-p nil))
+                            load-priority
+                            (delete-file-p nil))
   (handler-bind
-      (#+sbcl (sb-ext:defconstant-uneql #'continue)
-       #+lispworks-personal-edition
-       (conditions:stack-overflow (lambda (&optional c)
-				    (declare (ignore c))
-				    (warn "Stack overflow. Skipping function ~S.~%"
-					  *compiling-function-name*)
-				    (invoke-restart 'skip-toplevel-form)))
-       #+ignore ((or error warning) (lambda (c)
-			     (declare (ignore c))
-			     (format *error-output* "~&;; In file ~S:" path))))
+      (#+sbcl (sb-ext:defconstant-uneql #'continue))
     (unwind-protect
-	(let ((*movitz-host-features* *features*)
-	      (*features* (image-movitz-features *image*)))
-	  (multiple-value-prog1
-	      (movitz-compile-file-internal path load-priority)
-	    (unless (equalp *features* (image-movitz-features *image*))
-	      (warn "*features* changed from ~S to ~S." (image-movitz-features *image*) *features*)
-	      (setf (image-movitz-features *image*) *features*))))
+         (let ((*movitz-host-features* *features*)
+               (*features* (image-movitz-features *image*)))
+           (multiple-value-prog1
+               (movitz-compile-file-internal path load-priority)
+             (unless (equalp *features* (image-movitz-features *image*))
+               (warn "*features* changed from ~S to ~S." (image-movitz-features *image*) *features*)
+               (setf (image-movitz-features *image*) *features*))))
       (when delete-file-p
 	(assert (equal (pathname-directory "/tmp/")
 		       (pathname-directory path))
-	    (path)
-	  "Refusing to delete file not in /tmp.")
+                (path)
+                "Refusing to delete file not in /tmp.")
 	(delete-file path)))))
 
-(defun movitz-compile-file-internal (path
-				     &optional (*default-load-priority*
-						(and (boundp '*default-load-priority*)
-						     (symbol-value '*default-load-priority*)
-						     (1+ (symbol-value '*default-load-priority*)))))
+(defun movitz-compile-file-internal (path &optional (*default-load-priority*
+                                                     (and (boundp '*default-load-priority*)
+                                                          (symbol-value '*default-load-priority*)
+                                                          (1+ (symbol-value '*default-load-priority*)))))
   (declare (special *default-load-priority*))
   (with-simple-restart (continue "Skip Movitz compilation of ~S." path)
     (with-retries-until-true (retry "Restart Movitz compilation of ~S." path)
-      ;; (warn "Compiling ~A.." path)
-      (let* ((muerte.cl::*compile-file-pathname* path)
-	     (*package* (find-package :muerte))
-	     (funobj (make-instance 'movitz-funobj-pass1
-		       :name (intern (format nil "~A" path) :muerte)
-		       :lambda-list (movitz-read nil)))
-	     (funobj-env (make-local-movitz-environment nil funobj
-							:type 'funobj-env
-							:declaration-context :funobj))
-	     (function-env (make-local-movitz-environment funobj-env funobj
-							  :type 'function-env
-							  :declaration-context :funobj))
-	     (file-code
-	      (with-compilation-unit ()
-     		(add-bindings-from-lambda-list () function-env)
-		(with-open-file (stream path :direction :input)
-		  (setf (funobj-env funobj) funobj-env)
-		  (loop for form = (with-movitz-syntax ()
-				     (read stream nil '#0=#:eof))
-		      until (eq form '#0#)
-		      appending
-			(with-simple-restart (skip-toplevel-form
-					      "Skip the compilation of top-level form~@[ ~A~]."
-					      (cond
-					       ((symbolp form) form)
-					       ((symbolp (car form)) (car form))))
-			  (when *compiler-verbose-p*
-			    (format *query-io* "~&Movitz Compiling ~S..~%"
-				    (cond
-				     ((symbolp form) form)
-				     ((symbolp (car form))
-				      (xsubseq form 0 2)))))
-			  (compiler-call #'compile-form
-			    :form form
-			    :funobj funobj
-			    :env function-env
-			    :top-level-p t
-			    :result-mode :ignore)))))))
-	(cond
-	 ((null file-code)
-	  (setf (image-load-time-funobjs *image*)
-	    (delete funobj (image-load-time-funobjs *image*) :key #'first))
-	  'muerte::constantly-true)
-	 (t (setf (extended-code function-env) file-code
-		  (need-normalized-ecx-p function-env) nil
-		  (function-envs funobj) (list (cons 'muerte.cl::t function-env))
-		  (funobj-env funobj) funobj-env)
-	    (make-compiled-funobj-pass2 funobj)
-	    (let ((name (funobj-name funobj)))
-	      (setf (movitz-env-named-function name) funobj)
-	      name)))))))
+      (with-open-file (stream path :direction :input)
+        (movitz-compile-stream-internal stream :path path)))))
+
+(defun movitz-compile-stream (stream &key (path "unknown-toplevel.lisp"))
+  (handler-bind
+      (#+sbcl (sb-ext:defconstant-uneql #'continue))
+    (unwind-protect
+         (let ((*movitz-host-features* *features*)
+               (*features* (image-movitz-features *image*)))
+           (multiple-value-prog1
+               (movitz-compile-stream-internal stream :path path)
+             (unless (equalp *features* (image-movitz-features *image*))
+               (warn "*features* changed from ~S to ~S." (image-movitz-features *image*) *features*)
+               (setf (image-movitz-features *image*) *features*)))))))
+
+(defun movitz-compile-stream-internal (stream &key (path "unknown-toplevel.lisp"))
+  (let* ((muerte.cl::*compile-file-pathname* path)
+         (*package* (find-package :muerte))
+         (funobj (make-instance 'movitz-funobj-pass1
+                  :name (intern (format nil "~A" path) :muerte)
+                  :lambda-list (movitz-read nil)))
+         (funobj-env (make-local-movitz-environment nil funobj
+                      :type 'funobj-env
+                      :declaration-context :funobj))
+         (function-env (make-local-movitz-environment funobj-env funobj
+                        :type 'function-env
+                        :declaration-context :funobj))
+         (file-code
+          (with-compilation-unit ()
+            (add-bindings-from-lambda-list () function-env)
+            (setf (funobj-env funobj) funobj-env)
+            (loop for form = (with-movitz-syntax ()
+                               (read stream nil '#0=#:eof))
+               until (eq form '#0#)
+               appending
+               (with-simple-restart (skip-toplevel-form
+                                     "Skip the compilation of top-level form~@[ ~A~]."
+                                     (cond
+                                       ((symbolp form) form)
+                                       ((symbolp (car form)) (car form))))
+                 (when *compiler-verbose-p*
+                   (format *query-io* "~&Movitz Compiling ~S..~%"
+                           (cond
+                             ((symbolp form) form)
+                             ((symbolp (car form))
+                              (xsubseq form 0 2)))))
+                 (compiler-call #'compile-form
+                  :form form
+                  :funobj funobj
+                  :env function-env
+                  :top-level-p t
+                  :result-mode :ignore))))))
+    (cond
+      ((null file-code)
+       (setf (image-load-time-funobjs *image*)
+             (delete funobj (image-load-time-funobjs *image*) :key #'first))
+       'muerte::constantly-true)
+      (t (setf (extended-code function-env) file-code
+               (need-normalized-ecx-p function-env) nil
+               (function-envs funobj) (list (cons 'muerte.cl::t function-env))
+               (funobj-env funobj) funobj-env)
+         (make-compiled-funobj-pass2 funobj)
+         (let ((name (funobj-name funobj)))
+           (setf (movitz-env-named-function name) funobj)
+           name)))))
 
 ;;;;
 
