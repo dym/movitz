@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.17 2005/04/20 06:53:23 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.18 2007/02/26 18:22:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -444,3 +444,17 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
   ;; What do do?
   (warn "Unknown declaration: ~S" declaration)
   (values))
+
+
+(defun constantp (form &optional environment)
+  (typecase form
+    (boolean t)
+    (keyword t)
+    (symbol nil)
+    (cons (eq 'quote (car form)))
+    (t t)))
+
+(defun macro-function (symbol &optional environment)
+  "=> function"
+  (declare (ignore symbol environment))
+  nil)
