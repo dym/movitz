@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.55 2006/04/10 11:47:14 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.56 2007/02/26 18:25:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -328,7 +328,7 @@ The valid parameters are~{ ~S~}."
 	(multiple-value-bind (cl-body declarations doc-string)
 	    (parse-docstring-declarations-and-body cl-macro-body 'cl:declare)
 	  (declare (ignore doc-string))
-	  (setf (movitz-env-get access-fn :setf-expander nil)
+	  (setf (movitz-env-get access-fn 'muerte::setf-expander nil)
 	    (let* ((form-formal (or wholevar (gensym)))
 		   (env-formal (or envvar (gensym)))
 		   (expander (if (null cl-lambda-list)
