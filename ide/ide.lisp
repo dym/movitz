@@ -14,19 +14,14 @@
 
 (in-package #:movitz.ide)
 
-(defconstant temp-source-file "/tmp/movitz-scratch.lisp"
-  "Temporary file used to implement race conditions.")
-
 (defun compile-movitz-file (filename)
   "Compile FILENAME as Movitz source."
   (movitz:movitz-compile-file filename))
 
 (defun compile-defun (source)
   "Compile the string SOURCE as Movitz source."
-  (with-open-file (s temp-source-file :direction :output
-                     :if-exists :overwrite :if-does-not-exist :create)
-    (princ source s))
-  (compile-movitz-file temp-source-file))
+  (with-input-from-string (stream source)
+    (movitz:movitz-compile-stream stream :path "movitz-ide-toplevel")))
 
 (defun dump-image (filename)
   "Dump the current image into FILENAME."
@@ -41,7 +36,7 @@
 (defun disassemble-fdefinition (symbol)
   "Return the disassembly SYMBOL's fdefinition as a string."
   (with-output-to-string (*standard-output*)
-    (movitz::movitz-disassemble symbol)))
+    (movitz:movitz-disassemble symbol)))
 
 
 ;;;; Utilities.
