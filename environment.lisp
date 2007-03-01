@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.20 2007/03/01 17:48:11 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.21 2007/03/01 23:16:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -517,7 +517,7 @@ the function sets up itself. Its parent env. must be a funobj-env."))
   (assert (null env))
   (or #0=(gethash name (movitz-environment-setf-function-names *movitz-global-environment*))
       (let ((setf-symbol (make-symbol
-			  (symbol-name name)
+			  (symbol-name name))))
 	(setf (symbol-plist setf-symbol) (list :setf-placeholder name)
 	      #0# setf-symbol))))
   
@@ -591,8 +591,3 @@ the function sets up itself. Its parent env. must be a funobj-env."))
 (defun movitz-special-operator-compiler (symbol)
   (movitz-special-operator-compiler-function
    (gethash symbol (movitz-environment-function-cells *persistent-movitz-environment*))))
-
-
-;;;
-
-
