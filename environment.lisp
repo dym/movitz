@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.19 2007/02/19 20:24:42 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.20 2007/03/01 17:48:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -518,31 +518,17 @@ the function sets up itself. Its parent env. must be a funobj-env."))
   (or #0=(gethash name (movitz-environment-setf-function-names *movitz-global-environment*))
       (let ((setf-symbol (make-symbol
 			  (symbol-name name)
-			  #+ignore (with-standard-io-syntax
-				     (format nil "~A-~A" 'setf name)))))
 	(setf (symbol-plist setf-symbol) (list :setf-placeholder name)
 	      #0# setf-symbol))))
   
-;;;(defun (setf movitz-env-setf-function-name) (value name &optional env)
-;;;  (setf (gethash name (movitz-environment-setf-function-names (or env
-;;;							       *movitz-global-environment*)))
-;;;    value))
-
-
-
-;;;(defun movitz-env-setf-function-cons (name &optional env)
-;;;  (assert (setf-name name))
-;;;  (gethash (setf-name name)
-;;;	   (movitz-environment-setf-function-cells (or env *movitz-global-environment*))))
-
 (defun movitz-env-named-function (name &optional env)
   (cond
-   ((setf-name name)
-    (movitz-env-symbol-function (movitz-env-setf-operator-name
-			      (setf-name name) env)))
-   ((symbolp name)
-    (movitz-env-symbol-function name env))
-   (t (error "Not a function name: ~S" name))))
+    ((setf-name name)
+     (movitz-env-symbol-function (movitz-env-setf-operator-name
+                                  (setf-name name) env)))
+    ((symbolp name)
+     (movitz-env-symbol-function name env))
+    (t (error "Not a function name: ~S" name))))
 
 (defun (setf movitz-env-named-function) (value name &optional env)
   (check-type value movitz-funobj)
@@ -551,14 +537,11 @@ the function sets up itself. Its parent env. must be a funobj-env."))
      ((setf-name name)
       (let* ((sn (setf-name name))
 	     (function-name (movitz-env-setf-operator-name sn env)))
-	;; (setf (movitz-env-setf-function-name sn env) function-name)
 	(setf (movitz-env-named-function function-name env) value)))
      ((symbolp name)
       (setf (gethash name (movitz-environment-function-cells effective-env))
 	value))
      (t (error "Not a function name: ~S" name)))))
-
-;;; accessor: MACRO-FUNCTION
 
 (defun movitz-macro-function (symbol &optional environment)
   (or (let ((binding (movitz-operator-binding symbol (or environment *movitz-global-environment*))))
