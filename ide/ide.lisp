@@ -10,7 +10,7 @@
 (defpackage #:movitz.ide
   (:use #:cl)
   (:export #:compile-movitz-file #:compile-defun #:dump-image
-           #:disassemble-fdefinition #:movitz-disassemble))
+           #:movitz-disassemble #:movitz-disassemble-method))
 
 (in-package #:movitz.ide)
 
@@ -18,25 +18,29 @@
   "Compile FILENAME as Movitz source."
   (movitz:movitz-compile-file filename))
 
-(defun compile-defun (source)
+(defun compile-defun (source package-printname)
   "Compile the string SOURCE as Movitz source."
   (with-input-from-string (stream source)
-    (movitz:movitz-compile-stream stream :path "movitz-ide-toplevel")))
+    (movitz:movitz-compile-stream stream :path "movitz-ide-toplevel"
+                                         :package (get-package package-printname))))
 
 (defun dump-image (filename)
   "Dump the current image into FILENAME."
   (movitz:dump-image :path filename))
 
 ;;; slime-friendly entry point.
-(defun movitz-disassemble (symbol-printname package-printname)
+(defun movitz-disassemble (printname package-printname)
   "Return the disassembly of SYMBOL-NAME's function as a string."
-  (disassemble-fdefinition (get-symbol symbol-printname
-                                       (get-package package-printname))))
-
-(defun disassemble-fdefinition (symbol)
-  "Return the disassembly SYMBOL's fdefinition as a string."
   (with-output-to-string (*standard-output*)
-    (movitz:movitz-disassemble symbol)))
+    (movitz:movitz-disassemble (get-sexpr printname
+                                         (get-package package-printname)))))
+
+(defun movitz-disassemble-method (gf-name lambda-list qualifiers package-name)
+  (let ((package (get-package package-name)))
+    (with-output-to-string (*standard-output*)
+      (movitz:movitz-disassemble-method (get-sexpr gf-name package)
+                                        (get-sexpr lambda-list package)
+                                        (mapcar #'read-from-string qualifiers)))))
 
 
 ;;;; Utilities.
@@ -49,6 +53,10 @@
 Signal an error if there is no such symbol."
   (or (find-symbol (readname printname) package)
       (error "Can't find \"~A\" as a symbol in ~S" printname package)))
+
+(defun get-sexpr (printname &optional (package *package*))
+  (let ((*package* package))
+    (read-from-string printname)))
 
 (defun get-package (printname)
   "Return the package with PRINTNAME.

@@ -14,6 +14,7 @@
 ;;; core Movitz sources.
 
 (require 'slime)
+(require 'cl)
 
 ;;;; Minor-mode
 
@@ -46,7 +47,14 @@ This command can be called interactively to redefine the keys."
   (setq movitz-mode-commands-map (make-sparse-keymap))
   (dolist (spec movitz-command-keys)
     (define-key movitz-mode-commands-map (car spec) (cadr spec)))
-  (define-key movitz-mode-map movitz-command-prefix movitz-mode-commands-map))
+  (define-key movitz-mode-map movitz-command-prefix movitz-mode-commands-map)
+
+  (define-key movitz-mode-map "\C-c\C-d" 'movitz-dump-image)
+  (define-key movitz-mode-map "\C-c\C-v" 'movitz-disassemble-defun)
+  (define-key movitz-mode-map "\C-c\C-b" 'movitz-compile-file)
+  (define-key movitz-mode-map "\C-\M-x" 'movitz-compile-defun)
+  (define-key movitz-mode-map "\C-cm" 'movitz-macroexpand)
+  (define-key movitz-mode-map "\C-ca" 'movitz-arglist))
 
 (movitz-init-command-keymap)
 
@@ -79,9 +87,14 @@ then prompt for the file to compile."
 (defun movitz-compile-defun ()
   "Compile the defun at point as Movitz code."
   (interactive)
-  (message "Compiling..")
-  (slime-eval-async `(movitz.ide:compile-defun ,(slime-defun-at-point))
-                    (lambda (_) (message "Compilation finished."))))
+  (multiple-value-bind (defun-name defun-type)
+      (movitz-defun-name-and-type)
+    (lexical-let ((defun-name defun-name)
+                  (defun-type defun-type)
+                  (package-name (slime-current-package)))
+      (message "Compiling %s '%s'.." defun-type defun-name)
+      (slime-eval-async `(movitz.ide:compile-defun ,(slime-defun-at-point) ,package-name)
+                        (lambda (_) (message "Movitz compilation of %s '%s' finished." defun-type defun-name))))))
 
 (defun movitz-disassemble-fdefinition (symbol-name package-name)
   "Show disassembly of the (non-generic) function at point."
@@ -91,6 +104,40 @@ then prompt for the file to compile."
                     (lexical-let ((package package-name))
                       (lambda (result)
                         (slime-show-description result package)))))
+
+(defun movitz-disassemble-defun (not-recursive-p)
+  (interactive "P")
+  (multiple-value-bind (defun-name defun-type lambda-list options)
+      (movitz-defun-name-and-type)
+    (lexical-let ((defun-name defun-name)
+                  (defun-type defun-type)
+                  (package-name (slime-current-package))
+                  (lambda-list lambda-list)
+                  (options options))
+      (cond
+       ((string= "function" defun-type)
+        (message "Movitz disassembling %s %s..." defun-type defun-name)
+        (slime-eval-async `(movitz.ide:movitz-disassemble ,defun-name ,package-name)
+                          (lambda (result)
+                            (slime-show-description result package-name)
+                            (message "Movitz disassembling %s %s...done." defun-type defun-name))))
+       ((string= "method" defun-type)
+        (message "Movitz disassembling %s '%s %s'..." defun-type defun-name lambda-list)
+        (slime-eval-async `(movitz.ide:movitz-disassemble-method ,defun-name ,lambda-list ',options ,package-name)
+                          (lambda (result)
+                            (slime-show-description result package-name)
+                            (message "Movitz disassembling %s '%s %s'...done." defun-type defun-name lambda-list))))
+       ;; ((string= "primitive-function" defun-type)
+       ;;       (message "Movitz disassembling %s %s..." defun-type defun-name)
+       ;;       (fi:eval-in-lisp
+       ;;        "(cl:let ((defun-name (cl:let ((cl:*package* (cl:find-package :%s)))
+       ;;                                 (cl:read-from-string \"%s\")))
+       ;;                (cl:*print-base* 16))
+       ;;          (movitz::movitz-disassemble-primitive defun-name))"
+       ;;        fi:package defun-name)
+       ;;       (switch-to-buffer "*common-lisp*")
+       ;;       (message "Movitz disassembling %s %s...done." defun-type defun-name))
+       (t (message "Don't know how to Movitz disassemble %s '%s'." defun-type defun-name))))))
 
 (defvar movitz-default-image-file nil
   "The default filename to dump images to.
@@ -109,3 +156,61 @@ your init file.")
   (slime-eval-async `(movitz.ide:dump-image ,filename)
                     (lambda (_) (message "Finished."))))
 
+
+(defun movitz-dump-image-and-qemu ()
+  "Dump the current image to FILENAME."
+  (let ((filename (list (if (and (null current-prefix-arg)
+                                 movitz-default-image-file)
+                            movitz-default-image-file
+                          (let ((filename (read-file-name "Image file: ")))
+                            (setq movitz-default-image-file filename)
+                            filename)))
+  (message "Dumping..")
+  (slime-eval-async `(movitz.ide:dump-image ,filename)
+                    (lambda (_) (message "Finished."))))
+
+
+
+(defun movitz-defun-name-and-type ()
+  (interactive)
+  (save-excursion
+    (let ((definition-type
+	    (let ((x (buffer-substring-no-properties (progn (beginning-of-defun)
+							    (forward-char)
+							    (point))
+						     (progn (forward-symbol 1)
+							    (point)))))
+	      (cond
+	       ((string-equal "defun" x)
+		"function")
+	       ((string-match "^define-" x)
+		(substring x 7))
+	       ((string-match "^def" x)
+		(substring x 3))
+	       (t x))))
+	  (definition-name
+	    (buffer-substring-no-properties (progn (forward-char)
+						   (point))
+					    (progn (forward-sexp 1)
+						   (point))))
+	  (lambda-list
+	   (buffer-substring-no-properties (progn (forward-char)
+						  (point))
+					   (progn (forward-sexp 1)
+						  (point)))))
+      (if (and (equalp "method" definition-type)
+	       (char-equal 58 (string-to-char lambda-list)))
+	  (let ((qualifier lambda-list)
+		;; XXX we only deal with one (potential) qualifier..
+		(lambda-list (buffer-substring-no-properties (progn (forward-char)
+								    (point))
+							     (progn (forward-sexp 1)
+								    (point)))))
+	    (values definition-name
+		    definition-type
+		    lambda-list
+		    (list qualifier)))
+	(values definition-name
+		definition-type
+		lambda-list
+		nil)))))
