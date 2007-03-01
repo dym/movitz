@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.179 2007/02/26 21:18:37 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.180 2007/03/01 17:50:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1252,13 +1252,15 @@ a (lexical-extent) sub-function might care about its parent frame-map."
   (with-simple-restart (continue "Skip Movitz compilation of ~S." path)
     (with-retries-until-true (retry "Restart Movitz compilation of ~S." path)
       (with-open-file (stream path :direction :input)
-        (movitz-compile-stream-internal stream :path path)))))
+        (let ((*package* (find-package :muerte)))
+          (movitz-compile-stream-internal stream :path path))))))
 
-(defun movitz-compile-stream (stream &key (path "unknown-toplevel.lisp"))
+(defun movitz-compile-stream (stream &key (path "unknown-toplevel.lisp") (package :muerte))
   (handler-bind
       (#+sbcl (sb-ext:defconstant-uneql #'continue))
     (unwind-protect
-         (let ((*movitz-host-features* *features*)
+         (let ((*package* (find-package package))
+               (*movitz-host-features* *features*)
                (*features* (image-movitz-features *image*)))
            (multiple-value-prog1
                (movitz-compile-stream-internal stream :path path)
@@ -1268,7 +1270,6 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 
 (defun movitz-compile-stream-internal (stream &key (path "unknown-toplevel.lisp"))
   (let* ((muerte.cl::*compile-file-pathname* path)
-         (*package* (find-package :muerte))
          (funobj (make-instance 'movitz-funobj-pass1
                   :name (intern (format nil "~A" path) :muerte)
                   :lambda-list (movitz-read nil)))
@@ -1286,12 +1287,12 @@ a (lexical-extent) sub-function might care about its parent frame-map."
                                (read stream nil '#0=#:eof))
                until (eq form '#0#)
                appending
-               (with-simple-restart (skip-toplevel-form
+                 (with-simple-restart (skip-toplevel-form
                                      "Skip the compilation of top-level form~@[ ~A~]."
                                      (cond
                                        ((symbolp form) form)
                                        ((symbolp (car form)) (car form))))
-                 (when *compiler-verbose-p*
+                   (when *compiler-verbose-p*
                    (format *query-io* "~&Movitz Compiling ~S..~%"
                            (cond
                              ((symbolp form) form)
