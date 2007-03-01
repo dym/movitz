@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.109 2007/02/19 21:57:49 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.110 2007/03/01 17:49:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1312,7 +1312,8 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 					   +movitz-fixnum-factor+))))
 		  
 (defun movitz-disassemble (name  &rest args &key ((:image *image*) *image*) &allow-other-keys)
-  (let* ((funobj (movitz-env-named-function name)))
+  (let* ((funobj (or (movitz-env-named-function name)
+                     (error "~S has no function definition." name))))
     (declare (special *image*))
     (apply #'movitz-disassemble-funobj funobj :name name args)))
 
