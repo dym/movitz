@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.55 2007/02/26 21:19:55 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.56 2007/03/01 17:49:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1301,6 +1301,7 @@
 	   #:movitz-compile-file
            #:movitz-compile-stream
            #:movitz-disassemble
+           #:movitz-disassemble-method
 	   
 	   #:movitz-std-instance
 	   #:movitz-struct
