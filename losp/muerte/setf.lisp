@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Feb  8 20:43:20 2001
 ;;;;                
-;;;; $Id: setf.lisp,v 1.4 2006/04/07 21:49:47 ffjeld Exp $
+;;;; $Id: setf.lisp,v 1.5 2007/03/02 22:01:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -30,7 +30,7 @@
   (defun get-setf-expansion (place &optional environment)
     (let* ((name (and (consp place)
 		      (movitz::translate-program (car place) :cl :muerte.cl)))
-	   (expander (and name (movitz::movitz-env-get name :setf-expander nil environment))))
+	   (expander (and name (movitz::movitz-env-get name 'setf-expander nil environment))))
       (if expander
 	  (funcall expander place environment)
 	(multiple-value-bind (expansion expanded-p)
