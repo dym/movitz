@@ -9,8 +9,13 @@
 
 (defpackage #:movitz.ide
   (:use #:cl)
-  (:export #:compile-movitz-file #:compile-defun #:dump-image
-           #:movitz-disassemble #:movitz-disassemble-method))
+  (:export #:compile-movitz-file
+           #:compile-defun
+           #:dump-image
+           #:movitz-disassemble
+           #:movitz-disassemble-method
+           #:movitz-arglist
+           #:movitz-macroexpand))
 
 (in-package #:movitz.ide)
 
@@ -41,6 +46,21 @@
       (movitz:movitz-disassemble-method (get-sexpr gf-name package)
                                         (get-sexpr lambda-list package)
                                         (mapcar #'read-from-string qualifiers)))))
+
+(defun movitz-arglist (name package-name)
+  (let* ((package (get-package package-name))
+         (funobj (movitz::movitz-env-named-function (get-sexpr name package))))
+    (if (not funobj)
+        "not defined"
+        (let ((*package* package))
+          (princ-to-string (movitz::movitz-print (movitz::movitz-funobj-lambda-list funobj)))))))
+
+(defun movitz-macroexpand (string package-name)
+  (let* ((*package* (get-package package-name))
+         (form (get-sexpr string *package*))
+         (expansion (movitz::movitz-macroexpand-1 form)))
+    (princ-to-string (movitz::movitz-print expansion))))
+    
 
 
 ;;;; Utilities.
