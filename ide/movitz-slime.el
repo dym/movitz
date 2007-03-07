@@ -72,6 +72,8 @@ does."
               (when (string-match ".*/movitz/losp/.*\\.lisp$" (buffer-file-name))
                 (movitz-mode 1)))))
 
+(movitz-auto-mode-setup)
+
 
 ;;;; Commands
 
@@ -85,9 +87,11 @@ then prompt for the file to compile."
     (when (and buffer (buffer-modified-p buffer))
       (when (y-or-n-p (format "Save file %s? " filename))
         (with-current-buffer buffer (save-buffer)))))
-  (message "Compiling..")
-  (slime-eval-async `(movitz.ide:compile-movitz-file ,filename)
-                    (lambda (_) (message "Compilation finished."))))
+  (lexical-let ((filename filename))
+    (message "Movitz compiling '%s'.." filename)
+    (slime-eval-async `(movitz.ide:compile-movitz-file ,filename)
+                      (lambda (_)
+                        (message "Movitz compiling '%s'..done." filename)))))
 
 (defun movitz-compile-defun ()
   "Compile the defun at point as Movitz code."
@@ -205,6 +209,7 @@ your init file.")
                         (message "Dumping '%s'..done, starting quemu." filename)
                         (call-process "c:/progra~1/qemu/qemu"
                                       nil 0 nil
+                                      "-s"
                                       "-L" "c:/progra~1/qemu"
                                       "-fda" filename
                                       "-boot" "a")))))
