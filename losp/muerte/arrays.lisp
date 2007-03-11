@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.60 2007/02/22 21:02:09 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.61 2007/03/11 22:41:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -564,8 +564,7 @@
 	    (:jne 'not-basic-simple-vector)
 	    (:cmpl :edx (:ebx (:offset movitz-basic-vector num-elements)))
 	    (:jbe 'illegal-index)
-	    (:movl :eax
-		   (:ebx :edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))))))
+	    (:movl :eax (:ebx :edx (:offset movitz-basic-vector data))))))
     (do-it)))
 
 ;;; string accessors
