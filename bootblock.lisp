@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:47:19 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: bootblock.lisp,v 1.11 2005/02/02 07:48:21 ffjeld Exp $
+;;;; $Id: bootblock.lisp,v 1.12 2007/03/11 22:40:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -73,7 +73,8 @@
 
 (defconstant +linear-sector+ -4)
 (defconstant +destination+ -8)
-(defconstant +stack-frame-size+ 12)
+(defconstant +sectors-per-track+ -12)
+(defconstant +stack-frame-size+ 16)
 
 (defconstant +read-buffer+ #x10000)
 
@@ -114,6 +115,23 @@
        (:outb :al #x60)
        (:call 'empty-8042)
 
+       ;; Poll the floppy's sectors per track
+
+       (:movw 5 (:bp ,+sectors-per-track+))
+       check-geometry
+       (:incb (:bp ,+sectors-per-track+))
+       (:jz 'read-error)
+       (:movw (:bp ,+sectors-per-track+) :cx )
+       (:movw #x0201 :ax)
+       (:xorw :dx :dx)
+       (:movw ,read-buffer-segment :bx)
+       (:movw :bx :es)
+       (:xorw :bx :bx)
+       (:int #x13)			; Call BIOS routine
+       (:testb :ah :ah)
+       (:jz 'check-geometry)
+       (:decb (:bp ,+sectors-per-track+))
+       
        ;;
        ;; Read sectors into memory
        ;;
@@ -130,16 +148,16 @@
        (:call 'print)
        
        (:movw (:bp ,+linear-sector+) :ax)
-       (:movb 18 :cl)
+       (:movb (:bp ,+sectors-per-track+) :cl)
        (:divb :cl :ax)			; al=quotient, ah=remainder of :ax/:cl
-       
+
        (:movb :ah :cl)			; sector - 1
        (:movb :al :dh)
        (:andb 1 :dh)			; head
        (:movb :al :ch)
        (:shrb 1 :ch)			; track
        (:xorb :dl :dl)			; drive = 0
-       (:movw 18 :ax)
+       (:movw (:bp ,+sectors-per-track+) :ax)
        (:subb :cl :al)			; number of sectors (rest of track)
        (:incb :cl)
        (:addw :ax (:bp ,+linear-sector+)) ; update read pointer
@@ -154,14 +172,14 @@
        (:movw ,read-buffer-segment :bx)
        (:movw :bx :es)
        (:xorw :bx :bx)
-
        (:int #x13)			; Call BIOS routine
+
        (:jc 'read-error)
        (:movzxb :al :ecx)
 
        ;;
        ;; Install GS as 4GB segment
-       ;; http://www2.dgsys.com/~raymoon/faq/gen2.html#15
+       ;; http://www.faqs.org/faqs/assembly-language/x86/general/part2/
        ;;
        (:cli)
        (:lgdt ('gdt-addr))		; load gdt
@@ -178,10 +196,11 @@
        ;; Completed install GS as 4GB segment.
        
        ;; Copy data to destination
-       (:shll ,(+ 9 -2) :ecx)
+       (:shll ,(+ 9 -2) :ecx) ; 512/4 = sector-size/word-size
        (:movl ,+read-buffer+ :ebx)
        (:movl (:bp ,+destination+) :esi)
        (:leal (:esi (:ecx 4)) :edx)
+
        (:movl :edx (:bp ,+destination+))
 
        copy-loop
@@ -189,14 +208,14 @@
        ((:gs-override) :movl (:ebx (:ecx 4)) :edx)
        ((:gs-override) :movl :edx (:esi (:ecx 4)))
        (:jnz 'copy-loop)
-       
+
        (:movw 'track-end-msg :si)	; Print ')' to screen after each track
        (:call 'print)
        
        (:jmp 'read-loop)
        
        read-done
-
+       
        motor-loop			; Wait for floppy motor
        (:btw 8 (#x43e))
        (:jc 'motor-loop)
@@ -269,9 +288,8 @@
        (:ret)
 
        delay
-       (:movw 500 :cx)
+       (:xorw :cx :cx)
        delay-loop
-       (:nop)
        (:loop 'delay-loop)
        (:ret)
 
