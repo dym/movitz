@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  2 17:45:05 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: eval.lisp,v 1.11 2006/04/28 23:20:47 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.12 2007/03/11 21:18:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -149,9 +149,10 @@
 	     (mapcar (lambda (sub-form)
 		       (movitz-eval sub-form env nil))
 		     (cdr form))))
-     ((member operator '(muerte.cl:coerce))
-      (apply #'coerce
-	     (mapcar (lambda (arg) (translate-program (movitz-eval arg env nil) :muerte.cl :cl))
+     ((member operator '(muerte.cl:coerce muerte.cl:make-hash-table))
+      (apply (translate-program operator :muerte.cl :cl)
+	     (mapcar (lambda (arg)
+                       (translate-program (movitz-eval arg env nil) :muerte.cl :cl))
 		     (cdr form))))
      ((and compiler-macro-function
 	   (not (movitz-env-get (car form) 'notinline nil env))
