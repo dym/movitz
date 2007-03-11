@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.22 2006/05/09 19:56:02 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.23 2007/03/11 22:43:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,7 +28,7 @@
 
 (defmacro define-condition (name parent-types slot-specs &rest options)
   `(progn
-     (defclass ,name ,(or parent-types '(condition)) ,slot-specs)
+     (defclass ,name ,(or parent-types '(condition)) ,slot-specs (:metaclass read-only-class))
      ,@(let ((reporter (cadr (assoc :report options))))
 	 (when reporter
 	   `((defmethod print-object ((condition ,name) stream)
