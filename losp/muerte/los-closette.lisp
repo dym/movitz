@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.36 2006/04/10 11:52:21 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.37 2007/03/11 22:43:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -154,8 +154,7 @@
 
 (defun std-gf-instance-class (instance)
   (check-type instance standard-gf-instance)
-  (memref instance (movitz-type-slot-offset 'movitz-funobj-standard-gf 'standard-gf-class))
-  #+ignore (movitz-accessor instance movitz-funobj-standard-gf standard-gf-class))
+  (memref instance (movitz-type-slot-offset 'movitz-funobj-standard-gf 'standard-gf-class)))
 
 (defun std-gf-instance-slots (instance)
   (check-type instance standard-gf-instance)
@@ -198,8 +197,6 @@ funcallable-instance will run the new function."
   (setf (memref funcallable-instance (movitz-type-slot-offset 'movitz-funobj-standard-gf
 							      'standard-gf-function))
     function)
-;;;  (setf-movitz-accessor (funcallable-instance movitz-funobj-standard-gf standard-gf-function)
-;;;			function)
   (values))
 
 (defun funcallable-instance-function (funcallable-instance)
@@ -1679,7 +1676,10 @@ in an instance whose metaclass is standard-class."))
 
 (defmethod print-object ((object class) stream)
   (print-unreadable-object (object stream :identity nil :type t)
-    (write (class-name object) :stream stream))
+    (write (if (slot-boundp object 'name)
+               (class-name object)
+               "[unnamed]")
+     :stream stream))
   object)
 
 (defmethod print-object ((object standard-object) stream)
@@ -1799,32 +1799,40 @@ in an instance whose metaclass is standard-class."))
 	(real-gf-mc #'generic-function-method-combination)
 	(real-amsd #'accessor-method-slot-definition))
     (with-alternative-fdefinitions
-	((slow-method-lookup #'bootstrap-slow-method-lookup)
+	((slow-method-lookup
+          #'bootstrap-slow-method-lookup)
 	 (slot-definition-name
-	  (lambda (slot) (bootstrap-slot-definition-access slot 'name)))
+	  (lambda (slot)
+            (bootstrap-slot-definition-access slot 'name)))
 	 (slot-definition-location
-	  (lambda (slot) (bootstrap-slot-definition-access slot 'location)))
+	  (lambda (slot)
+            (bootstrap-slot-definition-access slot 'location)))
 	 (class-slots
-	  (lambda (class) (bootstrap-slot-definition-access class 'effective-slots)))
+	  (lambda (class)
+            (bootstrap-slot-definition-access class 'effective-slots)))
 	 (class-precedence-list
 	  (lambda (class)
 	    (std-slot-value class 'class-precedence-list)))
 	 (method-specializers
-	  (lambda (m) (std-slot-value m 'specializers)))
+	  (lambda (m)
+            (std-slot-value m 'specializers)))
 	 (method-qualifiers
-	  (lambda (m) (std-slot-value m 'qualifiers)))
+	  (lambda (m)
+            (std-slot-value m 'qualifiers)))
 	 (method-function
-	  (lambda (m) (std-slot-value m 'function)))
+	  (lambda (m)
+            (std-slot-value m 'function)))
 	 (generic-function-methods
-	  (lambda (gf) (std-gf-slot-value gf 'methods)))
+	  (lambda (gf)
+            (std-gf-slot-value gf 'methods)))
 	 (generic-function-method-combination
-	  (lambda (gf) (declare (ignore gf)) nil))
+	  (lambda (gf)
+            (declare (ignore gf)) nil))
 	 (accessor-method-slot-definition
 	  (lambda (method)
 	    (std-slot-value method 'slot-definition)))
 	 (compute-applicable-methods-using-classes
 	  (lambda (gf classes)
-	    ;; (warn "camuc of: ~S" (funobj-name gf))
 	    (with-alternative-fdefinitions
 		((method-function
 		  (lambda (method)
@@ -1898,4 +1906,28 @@ in an instance whose metaclass is standard-class."))
       (setf (get 'clos-bootstrap 'have-bootstrapped) t)
       (values))))
 
+;;;
+
+(defclass read-only-class (standard-class)
+  ((instances
+    :initform (make-hash-table :test 'equal)
+    :reader read-only-class-instances
+    )))
+
+(defmethod (setf slot-value-using-class) (new-value (class read-only-class) object slot)
+  (when (slot-boundp-using-class  class object slot)
+    (cerror "Set the slot ~S of read-only object ~S to ~S anyway."
+            "Trying to set the slot ~S of read-only object ~S to ~S."
+            (slot-definition-name slot) object new-value))
+  (call-next-method))
+
+(defmethod make-instance ((class read-only-class) &rest initargs)
+  (declare (dynamic-extent initargs))
+  (let ((defaulted-initargs (compute-defaulted-initargs class initargs)))
+    (or (gethash defaulted-initargs (read-only-class-instances class))
+        (setf (gethash (copy-list defaulted-initargs)
+                       (read-only-class-instances class))
+              (apply 'initialize-instance
+                     (apply 'allocate-instance class defaulted-initargs)
+                     defaulted-initargs)))))
 
