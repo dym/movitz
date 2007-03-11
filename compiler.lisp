@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.181 2007/03/01 21:27:39 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.182 2007/03/11 22:40:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1288,22 +1288,25 @@ a (lexical-extent) sub-function might care about its parent frame-map."
                until (eq form '#0#)
                appending
                  (with-simple-restart (skip-toplevel-form
-                                     "Skip the compilation of top-level form~@[ ~A~]."
-                                     (cond
-                                       ((symbolp form) form)
-                                       ((symbolp (car form)) (car form))))
+                                       "Skip the compilation of top-level form~{ ~A~}."
+                                       (cond
+                                         ((symbolp form)
+                                          (list form))
+                                         ((symbolp (car form))
+                                          (list (car form)
+                                                (cadr form)))))
                    (when *compiler-verbose-p*
-                   (format *query-io* "~&Movitz Compiling ~S..~%"
-                           (cond
-                             ((symbolp form) form)
-                             ((symbolp (car form))
-                              (xsubseq form 0 2)))))
-                 (compiler-call #'compile-form
-                  :form form
-                  :funobj funobj
-                  :env function-env
-                  :top-level-p t
-                  :result-mode :ignore))))))
+                     (format *query-io* "~&Movitz Compiling ~S..~%"
+                             (cond
+                               ((symbolp form) form)
+                               ((symbolp (car form))
+                                (xsubseq form 0 2)))))
+                   (compiler-call #'compile-form
+                    :form form
+                    :funobj funobj
+                    :env function-env
+                    :top-level-p t
+                    :result-mode :ignore))))))
     (cond
       ((null file-code)
        (setf (image-load-time-funobjs *image*)
@@ -1819,49 +1822,55 @@ falling below the label."
 		   until (eq i 'start-stack-frame-setup))
 	       (assert (eq (car new-code) 'start-stack-frame-setup) ()
 		 "no start-stack-frame-setup label, but we already checked!")
-	       (let* ((frame-map (loop for pos downfrom -8 by 4
+	       (let* ((frame-map (loop with pos = -8
 				     as i = (pop old-code)
-				     if (and (consp i) (eq :pushl (car i)) (symbolp (cadr i)))
-				     collect (cons pos (cadr i))
-				     and do (push i new-code)
+                                     if (instruction-is i :frame-map)
+                                     do (progn :nothing)
+				     else if
+                                      (and (consp i) (eq :pushl (car i)) (symbolp (cadr i)))
+				     collect
+                                      (cons pos (cadr i))
+				     and do
+                                      (decf pos 4)
+                                      (push i new-code)
 				     else do
-					  (push i old-code)
-					  (loop-finish)))
+                                      (push i old-code)
+                                      (loop-finish)))
 		      (mod-p (loop with mod-p = nil
 				 for i = `(:frame-map ,(copy-list frame-map) nil t)
 				 then (pop old-code)
 				 while i
-				 do (let ((new-i (cond
-						  ((let ((store-pos (store-stack-frame-p i)))
-						     (and store-pos
-							  (eq (cdr (assoc store-pos frame-map))
-							      (twop-src i))))
-						   (explain nil "removed stack-init store: ~S" i)
-						   nil)
-						  ((let ((load-pos (load-stack-frame-p i)))
-						     (and load-pos
-							  (eq (cdr (assoc load-pos frame-map))
-							      (twop-dst i))))
-						   (explain nil "removed stack-init load: ~S" i)
-						   nil)
-						  ((and (load-stack-frame-p i)
-							(assoc (load-stack-frame-p i) frame-map))
-						   (let ((old-reg (cdr (assoc (load-stack-frame-p i)
-									      frame-map))))
-						     (explain nil "load ~S already in ~S."
-							      i old-reg)
-						     `(:movl ,old-reg ,(twop-dst i))))
-						  ((and (instruction-is i :pushl)
-							(stack-frame-operand (idst i))
-							(assoc (stack-frame-operand (idst i))
-							       frame-map))
-						   (let ((old-reg
-							  (cdr (assoc (stack-frame-operand (idst i))
-								      frame-map))))
-						     (explain nil "push ~S already in ~S."
-							      i old-reg)
-						     `(:pushl ,old-reg)))
-						  (t i))))
+                                 do (let ((new-i (cond
+                                                   ((let ((store-pos (store-stack-frame-p i)))
+                                                      (and store-pos
+                                                           (eq (cdr (assoc store-pos frame-map))
+                                                               (twop-src i))))
+                                                    (explain nil "removed stack-init store: ~S" i)
+                                                    nil)
+                                                   ((let ((load-pos (load-stack-frame-p i)))
+                                                      (and load-pos
+                                                           (eq (cdr (assoc load-pos frame-map))
+                                                               (twop-dst i))))
+                                                    (explain nil "removed stack-init load: ~S" i)
+                                                    nil)
+                                                   ((and (load-stack-frame-p i)
+                                                         (assoc (load-stack-frame-p i) frame-map))
+                                                    (let ((old-reg (cdr (assoc (load-stack-frame-p i)
+                                                                               frame-map))))
+                                                      (explain nil "load ~S already in ~S."
+                                                               i old-reg)
+                                                      `(:movl ,old-reg ,(twop-dst i))))
+                                                   ((and (instruction-is i :pushl)
+                                                         (stack-frame-operand (idst i))
+                                                         (assoc (stack-frame-operand (idst i))
+                                                                frame-map))
+                                                    (let ((old-reg
+                                                           (cdr (assoc (stack-frame-operand (idst i))
+                                                                       frame-map))))
+                                                      (explain nil "push ~S already in ~S."
+                                                               i old-reg)
+                                                      `(:pushl ,old-reg)))
+                                                   (t i))))
 				      (unless (eq new-i i)
 					(setf mod-p t))
 				      (when (branch-instruction-label new-i t)
@@ -1872,12 +1881,12 @@ falling below the label."
 					(push new-i new-code)
 					;; (warn "new-i: ~S, fm: ~S" new-i frame-map)
 					(setf frame-map
-					  (delete-if (lambda (map)
-						       ;; (warn "considering: ~S" map)
-						       (not (and (preserves-register-p new-i (cdr map))
-								 (preserves-stack-location-p new-i
-											     (car map)))))
-						     frame-map))
+                                              (delete-if (lambda (map)
+                                                           ;; (warn "considering: ~S" map)
+                                                           (not (and (preserves-register-p new-i (cdr map))
+                                                                     (preserves-stack-location-p new-i
+                                                                                                 (car map)))))
+                                                         frame-map))
 					;; (warn "Frame-map now: ~S" frame-map)
 					(when (store-stack-frame-p new-i)
 					  (loop for map in frame-map
@@ -1889,7 +1898,11 @@ falling below the label."
 		 (if (not mod-p)
 		     unoptimized-code
 		   (append (nreverse new-code)
-			   old-code)))))))
+			   old-code))))))
+         (remove-frame-maps (code)
+           (remove-if (lambda (x)
+                        (typep x '(cons (eql :frame-map) *)))
+                      code)))
       (let* ((unoptimized-code (frame-map-code (optimize-stack-frame-init unoptimized-code)))
 	     (code-modified-p nil)
 	     (stack-frame-used-map (loop with map = nil
@@ -2282,13 +2295,7 @@ falling below the label."
 		  nconc p)))
 	(if code-modified-p
 	    (apply #'optimize-code-internal optimized-code (1+ recursive-count) key-args)
-	  (optimize-trim-stack-frame
-	   (remove :frame-map (progn #+ignore (warn "maps:~{~&~A~}" unoptimized-code)
-				     unoptimized-code)
-		   :key (lambda (x)
-			  (when (consp x)
-			    (car x))))))))))
-
+            (optimize-trim-stack-frame (remove-frame-maps unoptimized-code)))))))
 ;;;; Compiler internals  
 
 (defclass binding ()
