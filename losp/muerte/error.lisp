@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Sep  1 00:49:11 2001
 ;;;;                
-;;;; $Id: error.lisp,v 1.5 2007/02/06 20:02:01 ffjeld Exp $
+;;;; $Id: error.lisp,v 1.6 2007/03/11 22:42:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -59,3 +59,9 @@
 (defun formatted-error (type format-control &rest format-arguments)
   (declare (dynamic-extent format-arguments))
   (error type :format-control format-control :format-arguments format-arguments))
+
+(defun cerror (continue-format-control datum &rest arguments)
+  (declare (dynamic-extent arguments))
+  (with-simple-restart (continue "~?" continue-format-control arguments)
+    (apply 'error datum arguments))
+  nil)
