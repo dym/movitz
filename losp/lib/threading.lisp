@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 28 08:30:01 2005
 ;;;;                
-;;;; $Id: threading.lisp,v 1.8 2005/06/10 23:09:14 ffjeld Exp $
+;;;; $Id: threading.lisp,v 1.9 2007/03/12 22:50:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -179,7 +179,7 @@
 		  (muerte::asm-register :esi)) ()
 	"Will not yield to a non-yield frame.")
       ;; Push eflags for later..
-      (setf (memref (decf esp) 0) (eflags))
+      (setf (memref (decf esp) 0 :type :unsigned-byte32) (eflags))
       ;; Store EBP and ESP so we can get to them after the switch
       (setf (%run-time-context-slot target-rtc 'muerte::scratch1) ebp
 	    (%run-time-context-slot target-rtc 'muerte::scratch2) esp)
@@ -194,5 +194,5 @@
 	(:movw :cx :fs)
 	(:locally (:movl (:edi (:edi-offset scratch1)) :ebp))
 	(:locally (:movl (:edi (:edi-offset scratch2)) :esp))
-	(:popfl)))))
+        (:popfl)))))
 
