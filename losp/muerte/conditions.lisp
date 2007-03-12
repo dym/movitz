@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.23 2007/03/11 22:43:32 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.24 2007/03/12 21:53:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -230,7 +230,6 @@
   "Signal the condition denoted by a condition designator.
 Will only make-instance a condition when it is required.
 Return the condition object, if there was one."
-  (declare (dynamic-extent arguments))
   (let* ((class (etypecase datum
 		  (symbol
 		   (or (find-class datum nil)
@@ -243,14 +242,14 @@ Return the condition object, if there was one."
 	 (condition nil)
 	 (bos-type *break-on-signals*))
     (with-simple-restart (continue "Ignore *break-on-signals*.")
-      (let ((*break-on-signals* nil))	; avoid recursive error if *b-o-s* is faulty.
+      (let ((*break-on-signals* nil)) ; avoid recursive error if *b-o-s* is faulty.
 	(when (typecase bos-type
 		(null nil)
 		(symbol
 		 (let ((bos-class (find-class bos-type nil)))
 		   (if (not bos-class)
 		       (typep (class-prototype-value class) bos-type)
-		     (member bos-class cpl))))
+                       (member bos-class cpl))))
 		(list
 		 (typep (class-prototype-value class) bos-type))
 		(t (member bos-type cpl)))
@@ -259,7 +258,7 @@ Return the condition object, if there was one."
 		 `(funcall ,handler
 			   (or condition
 			       (setf condition
-				 (coerce-to-condition default-type datum args))))))
+                                     (coerce-to-condition default-type datum args))))))
       (let ((*active-condition-handlers* *active-condition-handlers*))
 	(do () ((null *active-condition-handlers*))
 	  (let ((handlers (pop *active-condition-handlers*)))
@@ -270,9 +269,9 @@ Return the condition object, if there was one."
 		   (let ((handler-class (find-class handler-type nil)))
 		     (when (if (not handler-class)
 			       (typep (class-prototype-value class) handler-type)
-			     (progn
-			       (setf (car handler) handler-class) ; XXX memoize this find-class..
-			       (member handler-class cpl)))
+                               (progn
+                                 (setf (car handler) handler-class) ; XXX memoize this find-class..
+                                 (member handler-class cpl)))
 		       (invoke-handler (cdr handler)))))
 		  (cons
 		   (when (typep (class-prototype-value class) handler-type)
