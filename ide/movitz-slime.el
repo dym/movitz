@@ -16,19 +16,38 @@
 (require 'slime)
 (require 'cl)
 
-;;;; Minor-mode
+(eval-and-compile 
+  (defvar movitz-slime-path
+    (let ((path (or (locate-library "movitz-slime") load-file-name)))
+      (when path
+        (file-name-directory path)))
+    "Directory containing movitz sources.
+This is used to load the supporting Common Lisp library, ide.lisp.
+The default value is automatically computed from the location of the
+Emacs Lisp package."))
 
 ;; You should set this to something more convenient, e.g. "\C-cm"
 (defvar movitz-command-prefix "\C-c\C-v"
   "The initial key prefixf or movitz commands.")
 
 (define-minor-mode movitz-mode
-  "\\{movitz-mode-map}"
-  nil
-  " Movitz"
+  "\\{movitz-mode-map}
+Interface Movitz via SLIME."
+ :init-value nil
+ :lighter " Movitz"
   ;; Bogus keymap to have movitz-mode-map initialized. We'll fill in
   ;; the real bindings manually.
-  `((,movitz-command-prefix . undefined)))
+ :keymap `((,movitz-command-prefix . undefined))
+ (cond
+  ((not movitz-mode))
+  ((not (slime-connected-p))
+   (message "Movitz-mode: SLIME is not connected."))
+  ((slime-eval '(cl:and (cl:find-package :movitz.ide) t)))
+  ((not (slime-eval '(cl:and (cl:find-package :movitz) t)))
+   (message "Movitz-mode: The Movitz package is not loaded."))
+  (t (slime-eval-async
+      `(cl:progn (cl:load (cl:compile-file ,(concat movitz-slime-path "ide.lisp")))
+                 nil)))))
 
 (defvar movitz-mode-commands-map nil
   "Keymap for movitz-mode commands.
@@ -61,8 +80,6 @@ This command can be called interactively to redefine the keys."
   (define-key movitz-mode-map "\r" 'newline-and-indent)
   (define-key movitz-mode-map " " 'self-insert-command))
 
-(movitz-init-command-keymap)
-
 (defun movitz-auto-mode-setup ()
   "Do some horrible things with regexps to auto-enable movitz-mode.
 You can call this function from your init file, but first read what it
@@ -72,7 +89,7 @@ does."
               (when (string-match ".*/movitz/losp/.*\\.lisp$" (buffer-file-name))
                 (movitz-mode 1)))))
 
-(movitz-auto-mode-setup)
+
 
 
 ;;;; Commands
@@ -268,3 +285,7 @@ your init file.")
          (if (symbolp (cdr el))
              (get (cdr el) 'common-lisp-indent-function)
            (car (cdr el))))))
+
+(movitz-auto-mode-setup)
+(movitz-init-command-keymap)
+

@@ -19,47 +19,59 @@
 
 (in-package #:movitz.ide)
 
+(defmacro with-image ((&optional (image-form 'movitz:*image*)) &body body)
+  `(let ((movitz:*image* ,image-form))
+     (check-type movitz:*image* movitz::movitz-image "a Movitz image")
+     ,@body))
+
 (defun compile-movitz-file (filename)
   "Compile FILENAME as Movitz source."
-  (movitz:movitz-compile-file filename))
+  (with-image ()
+    (movitz:movitz-compile-file filename)))
 
 (defun compile-defun (source package-printname)
   "Compile the string SOURCE as Movitz source."
-  (with-input-from-string (stream source)
-    (movitz:movitz-compile-stream stream :path "movitz-ide-toplevel"
-                                         :package (get-package package-printname))))
+  (with-image ()
+    (with-input-from-string (stream source)
+      (movitz:movitz-compile-stream stream :path "movitz-ide-toplevel"
+                                           :package (get-package package-printname)))))
 
 (defun dump-image (filename)
   "Dump the current image into FILENAME."
-  (movitz:dump-image :path filename))
+  (with-image ()
+    (movitz:dump-image :path filename)))
 
 ;;; slime-friendly entry point.
 (defun movitz-disassemble (printname package-printname)
   "Return the disassembly of SYMBOL-NAME's function as a string."
-  (with-output-to-string (*standard-output*)
-    (movitz:movitz-disassemble (get-sexpr printname
-                                         (get-package package-printname)))))
+  (with-image ()
+    (with-output-to-string (*standard-output*)
+      (movitz:movitz-disassemble (get-sexpr printname
+                                            (get-package package-printname))))))
 
 (defun movitz-disassemble-method (gf-name lambda-list qualifiers package-name)
-  (let ((package (get-package package-name)))
-    (with-output-to-string (*standard-output*)
-      (movitz:movitz-disassemble-method (get-sexpr gf-name package)
-                                        (get-sexpr lambda-list package)
-                                        (mapcar #'read-from-string qualifiers)))))
+  (with-image ()
+    (let ((package (get-package package-name)))
+      (with-output-to-string (*standard-output*)
+        (movitz:movitz-disassemble-method (get-sexpr gf-name package)
+                                          (get-sexpr lambda-list package)
+                                          (mapcar #'read-from-string qualifiers))))))
 
 (defun movitz-arglist (name package-name)
-  (let* ((package (get-package package-name))
-         (funobj (movitz::movitz-env-named-function (get-sexpr name package))))
-    (if (not funobj)
-        "not defined"
-        (let ((*package* package))
-          (princ-to-string (movitz::movitz-print (movitz::movitz-funobj-lambda-list funobj)))))))
+  (with-image ()
+    (let* ((package (get-package package-name))
+           (funobj (movitz::movitz-env-named-function (get-sexpr name package))))
+      (if (not funobj)
+          "not defined"
+          (let ((*package* package))
+            (princ-to-string (movitz::movitz-print (movitz::movitz-funobj-lambda-list funobj))))))))
 
 (defun movitz-macroexpand (string package-name)
-  (let* ((*package* (get-package package-name))
-         (form (get-sexpr string *package*))
-         (expansion (movitz::movitz-macroexpand-1 form)))
-    (princ-to-string (movitz::movitz-print expansion))))
+  (with-image ()
+    (let* ((*package* (get-package package-name))
+           (form (get-sexpr string *package*))
+           (expansion (movitz::movitz-macroexpand-1 form)))
+      (princ-to-string (movitz::movitz-print expansion)))))
     
 
 
