@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:52:58 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: movitz.lisp,v 1.11 2006/04/10 11:45:36 ffjeld Exp $
+;;;; $Id: movitz.lisp,v 1.12 2007/03/13 20:40:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,7 +18,7 @@
 (defvar *i* nil)			; These hold the previous built images,
 (defvar *ii* nil)			; for interactive use.
 
-(defvar *image*)
+(defvar *image* nil)
 
 (define-symbol-macro *movitz-nil*
     (image-nil-object *image*))

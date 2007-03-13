@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.110 2007/03/01 17:49:30 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.111 2007/03/13 20:40:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -779,9 +779,9 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 			:start-address start-address
 			:movitz-features '(:movitz)
 			:function-code-sizes
-			(if (and (boundp '*image*) *image*)
+			(if *image*
 			    (copy-hash-table (function-code-sizes *image*))
-			  (make-hash-table :test #'equal))
+                            (make-hash-table :test #'equal))
 			init-args)))
     (setf (image-nil-word *image*)
       (+ 5 (- (slot-offset 'movitz-run-time-context 'null-symbol)
@@ -824,7 +824,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		   (when init-file
 		     (movitz-compile-file init-file))
 		   *image*)
-	 *i* (when (boundp '*image*) *image*))
+	 *i* *image*)
   (when gc
     #+allegro (setf (sys:gsgc-parameter :generation-spread) 8)
     #+allegro (excl:gc :tenure)
