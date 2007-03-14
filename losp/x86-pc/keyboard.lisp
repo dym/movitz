@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep 24 16:04:12 2001
 ;;;;                
-;;;; $Id: keyboard.lisp,v 1.6 2004/12/10 12:48:34 ffjeld Exp $
+;;;; $Id: keyboard.lisp,v 1.7 2007/03/14 20:42:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -25,57 +25,117 @@
 	   read-keypress
 	   poll-key
 	   set-leds
-	   cpu-reset))
+	   cpu-reset
+           set-kbd-layout))
 
 (in-package muerte.x86-pc.keyboard)
 
-(defvar *scan-codes-shift*
-    #(#\null   nil      #\!      #\@      #\#      #\$      #\%      #\^ ; #x00
-      #\&      #\*      #\(      #\)      #\_      #\+      nil      nil ; #x08
-      #\Q      #\W      #\E      #\R      #\T      #\Y      #\U      #\I ; #x10
-      #\O      #\P      #\{      #\}     #\newline nil      #\A      #\S ; #x18
-			       
-      #\D      #\F      #\G      #\H      #\J      #\K      #\L      #\: ; #x20
-      #\"      #\~      nil      #\|      #\Z      #\X      #\C      #\V ; #x28
-      #\B      #\N      #\M      #\<      #\>      #\?      nil      nil ; #x30
-      nil      nil      nil      nil      nil      nil      nil      nil ; #x38
-      nil      nil      nil      nil      nil    :pause     nil      nil)) ; #x40
 
-(defparameter *scan-codes*
-    #(#\null   #\escape #\1      #\2      #\3      #\4      #\5      #\6 ; #x00
-      #\7      #\8      #\9      #\0      #\-      #\= #\backspace #\tab ; #x08
-      #\q      #\w      #\e      #\r      #\t      #\y      #\u      #\i ; #x10
-      #\o      #\p      #\[      #\]   #\newline :ctrl-left #\a      #\s ; #x18
+(defvar *layouts*
+  '((:qwerty
+     #(#\null   #\escape #\1      #\2      #\3      #\4      #\5      #\6 ; #x00
+       #\7      #\8      #\9      #\0      #\-      #\= #\backspace #\tab ; #x08
+       #\q      #\w      #\e      #\r      #\t      #\y      #\u      #\i ; #x10
+       #\o      #\p      #\[      #\]   #\newline :ctrl-left #\a      #\s ; #x18
 			       
-      #\d      #\f      #\g      #\h      #\j      #\k      #\l      #\; ; #x20
-      #\'      #\`   :shift-left #\\      #\z      #\x      #\c      #\v ; #x28
-      #\b      #\n      #\m      #\,      #\.      #\/  :shift-right #\escape ; #x30
-      :alt-left #\space :caps-lock :f1    :f2      :f3      :f4      :f5 ; #x38
+       #\d      #\f      #\g      #\h      #\j      #\k      #\l      #\; ; #x20
+       #\'      #\`   :shift-left #\\      #\z      #\x      #\c      #\v ; #x28
+       #\b      #\n      #\m      #\,      #\.      #\/  :shift-right #\escape ; #x30
+       :alt-left #\space :caps-lock :f1    :f2      :f3      :f4      :f5 ; #x38
 			       
-      :f6      :f7      :f8      :f9      :f10   :break :scroll-lock nil ; #x40
-      nil      nil      nil      nil      nil      nil      nil      nil ; #x48
-      nil      :kp-ins  nil      :kp-del  nil      nil      nil      :f11 ; #x50
-      :f12     nil      nil      nil      nil      nil      nil      nil ; #x58
+       :f6      :f7      :f8      :f9      :f10   :break :scroll-lock nil ; #x40
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x48
+       nil      :kp-ins  nil      :kp-del  nil      nil      nil      :f11 ; #x50
+       :f12     nil      nil      nil      nil      nil      nil      nil ; #x58
       			       
-      nil      nil      nil      nil      nil      nil      nil      nil ; #x60
-      nil      nil      nil      nil      nil      nil      nil      nil ; #x68
-      nil      nil      nil      nil      nil      nil      nil      nil ; #x70
-      nil      nil      nil      nil      nil      nil      nil      nil ; #x78
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x60
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x68
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x70
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x78
 			       
-      nil      nil      nil      nil      nil      nil      nil      nil ; #x80
-      nil      nil      nil      nil      nil      nil      nil      nil ; #x88
-      nil      nil      nil      nil   :ctrl-right nil      nil      nil ; #x90
-      nil      nil      nil      nil      nil  :ctrl-right  nil      nil ; #x98
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x80
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x88
+       nil      nil      nil      nil   :ctrl-right nil      nil      nil ; #x90
+       nil      nil      nil      nil      nil  :ctrl-right  nil      nil ; #x98
       			       
-      nil      nil      nil      nil      nil      nil      nil      nil ; #xa0
-      nil      nil      nil      nil      nil      nil      nil      nil ; #xa8
-      nil      nil      nil      nil      nil      nil      nil      nil ; #xb0
-      :alt-right nil    nil      nil      nil      nil      nil      nil ; #xb8
+       nil      nil      nil      nil      nil      nil      nil      nil ; #xa0
+       nil      nil      nil      nil      nil      nil      nil      nil ; #xa8
+       nil      nil      nil      nil      nil      nil      nil      nil ; #xb0
+       :alt-right nil    nil      nil      nil      nil      nil      nil ; #xb8
 
-      nil      nil      nil      nil      nil      nil      nil    :home ; #xc0
-      :up      :page-up nil      :left    nil      :right   nil     :end ; #xc8
-      :down  :page-down :insert  nil #+ignore #\delete nil nil      nil      nil      nil ; #xd0
-      :alt-right nil    nil      nil      :win     :menu    nil      nil)) ; #xd8
+       nil      nil      nil      nil      nil      nil      nil    :home ; #xc0
+       :up      :page-up nil      :left    nil      :right   nil     :end ; #xc8
+       :down  :page-down :insert  nil #+ignore #\delete nil nil      nil      nil      nil ; #xd0
+       :alt-right nil    nil      nil      :win     :menu    nil      nil) ; #x40
+     #(#\null   nil      #\!      #\@      #\#      #\$      #\%      #\^ ; #x00
+       #\&      #\*      #\(      #\)      #\_      #\+      nil      nil ; #x08
+       #\Q      #\W      #\E      #\R      #\T      #\Y      #\U      #\I ; #x10
+       #\O      #\P      #\{      #\}     #\newline nil      #\A      #\S ; #x18
+			       
+       #\D      #\F      #\G      #\H      #\J      #\K      #\L      #\: ; #x20
+       #\"      #\~      nil      #\|      #\Z      #\X      #\C      #\V ; #x28
+       #\B      #\N      #\M      #\<      #\>      #\?      nil      nil ; #x30
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x38
+       nil      nil      nil      nil      nil    :pause     nil      nil)) ; #xd8
+    (:dvorak
+     #(#\null   #\escape #\1      #\2      #\3      #\4      #\5      #\6 ; #x00
+       #\7      #\8      #\9      #\0      #\[      #\] #\backspace #\tab ; #x08
+       #\'      #\,      #\.      #\p      #\y      #\f      #\g      #\c ; #x10
+       #\r      #\l      #\/      #\=   #\newline :ctrl-left #\a      #\o ; #x18
+			       
+       #\e      #\u      #\i      #\d      #\h      #\t      #\n      #\s ; #x20
+       #\-      #\`   :shift-left #\\      #\;      #\q      #\j      #\k ; #x28
+       #\x      #\b      #\m      #\w      #\v      #\z  :shift-right #\escape ; #x30
+       :alt-left #\space :caps-lock :f1    :f2      :f3      :f4      :f5 ; #x38
+			       
+       :f6      :f7      :f8      :f9      :f10   :break :scroll-lock nil ; #x40
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x48
+       nil      :kp-ins  nil      :kp-del  nil      nil      nil      :f11 ; #x50
+       :f12     nil      nil      nil      nil      nil      nil      nil ; #x58
+      			       
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x60
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x68
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x70
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x78
+			       
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x80
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x88
+       nil      nil      nil      nil   :ctrl-right nil      nil      nil ; #x90
+       nil      nil      nil      nil      nil  :ctrl-right  nil      nil ; #x98
+      			       
+       nil      nil      nil      nil      nil      nil      nil      nil ; #xa0
+       nil      nil      nil      nil      nil      nil      nil      nil ; #xa8
+       nil      nil      nil      nil      nil      nil      nil      nil ; #xb0
+       :alt-right nil    nil      nil      nil      nil      nil      nil ; #xb8
+
+       nil      nil      nil      nil      nil      nil      nil    :home ; #xc0
+       :up      :page-up nil      :left    nil      :right   nil     :end ; #xc8
+       :down  :page-down :insert  nil #+ignore #\delete nil nil      nil      nil      nil ; #xd0
+       :alt-right nil    nil      nil      :win     :menu    nil      nil) ; #x40
+     #(#\null   nil      #\!      #\@      #\#      #\$      #\%      #\^ ; #x00
+       #\&      #\*      #\(      #\)      #\{      #\}      nil      nil ; #x08
+       #\"      #\<      #\>      #\P      #\Y      #\F      #\G      #\C ; #x10
+       #\R      #\L      #\?      #\+     #\newline nil      #\A      #\O ; #x18
+			       
+       #\E      #\U      #\I      #\D      #\H      #\T      #\N      #\S ; #x20
+       #\_      #\~      nil      #\|      #\:      #\Q      #\J      #\K ; #x28
+       #\X      #\B      #\M      #\W      #\V      #\Z      nil      nil ; #x30
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x38
+       nil      nil      nil      nil      nil    :pause     nil      nil))) ; #xd8
+  "An assoc of all defined keyboard layouts.")
+
+;; default to qwerty
+(defparameter *scan-codes* (second (assoc :qwerty *layouts*)))
+(defparameter *scan-codes-shift* (third (assoc :qwerty *layouts*)))
+
+(defun set-kbd-layout (layout-id)
+  "Set the keyboard layout to one provided in *layouts*."
+  (let* ((layout (or (assoc layout-id *layouts*)
+                     (error "Ther is no layout named ~S defined." layout-id)))
+         (normal (second layout))
+         (shifted (third layout)))
+    (setf *scan-codes* normal
+          *scan-codes-shift* shifted)))
 
 (defun lowlevel-event-p ()
   (logbitp 0 (io-port #x64 :unsigned-byte8)))
@@ -149,10 +209,10 @@ Secondly, whether this was a release event is returned."
 
 (defun decode-key-code (key-code qualifiers)
   (or (and (logbitp +qualifier-shift+ qualifiers)
-	   (< -1 key-code (length *scan-codes-shift*))
-	   (aref *scan-codes-shift* key-code))
+           (< -1 key-code (length *scan-codes-shift*))
+           (aref *scan-codes-shift* key-code))
       (and (< -1 key-code (length *scan-codes*))
-	   (aref *scan-codes* key-code))))
+           (aref *scan-codes* key-code))))
 ;;;  (< -1 key-code (length *scan-codes*)))
 
 (defun get-key ()
