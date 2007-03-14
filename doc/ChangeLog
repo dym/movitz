@@ -1,3 +1,29 @@
+2007-03-14  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
+
+	* movitz/losp/x86-pc/keyboard.lisp: Patch from Shawn Betts
+	improves the keyboard driver and adds dvorak support.
+
+	* movitz/losp/x86-pc/vga.lisp: Patch from Martin Bealby adds some
+	simple VGA graphics capabilities, and a neat splash image.
+
+	* movitz/bootblock.lisp: Added detection of floppy geometry in the
+	bootloader. This was prompted by the fact that Qemu appears to do
+	some weird auto-detection of the floppy geometry based on the
+	floppy image's size. However, it should also mean that movitz can
+	now be booted from a "real" 5 1/4' floppy should you ever find
+	one, and more importantly, probably also 2.88-MB floppies as
+	supported by bochs and qemu, and I think also some actual hardware
+	drives.
+
+	* movitz/compiler.lisp: Much improved keyword argument parsing. It
+	is now faster, smaller in code-size, and more (fully?) ANSI
+	compliant.
+
+	* doc/ChangeLog: Things are not moving quite as slowly as might be
+	suggested by the lack of activity in this file. The last few
+	weeks, there has been quite a bit of activity. I'll try once again
+	to remember to update this ChangeLog.
+
 2005-12-02  Frode Vatvedt Fjeld  <frodef@cs.uit.no>
 
 	* Uploaded a new los0.img.
