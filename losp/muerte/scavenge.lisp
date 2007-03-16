@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.57 2007/03/16 21:12:52 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.58 2007/03/16 21:17:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -60,7 +60,7 @@ start-location and end-location."
 	((>= scan end-location))
       (declare (fixnum scan))
       (let ((x (memref scan 0 :type :unsigned-byte16))
-            (x2 (memref scan 1 :type :unsigned-byte16)))
+            (x2 (memref scan 2 :type :unsigned-byte16)))
         (when verbose
           (format *terminal-io* " [at ~S: ~S]" scan x))
         (cond
