@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.111 2007/03/13 20:40:06 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.112 2007/03/16 17:40:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -843,7 +843,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
   (values))
 
 (defun dump-image (&key (path *default-image-file*) ((:image *image*) *image*)
-			(multiboot-p t) ignore-dump-count)
+                   (multiboot-p t) ignore-dump-count (qemu-align-p t))
   "When <multiboot-p> is true, include a MultiBoot-compliant header in the image."
   (when (and (not ignore-dump-count)
 	     (= 0 (dump-count *image*)))
@@ -934,7 +934,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		   (warn "non-used setf: ~S" v)))
 	  ;; symbol plists
 	  (loop for (symbol plist) on (movitz-environment-plists *movitz-global-environment*) by #'cddr
-											   ;; do (warn "sp: ~S ~S" symbol plist)
+              ;; do (warn "sp: ~S ~S" symbol plist)
 	      do (let ((x (movitz-read symbol)))
 		   (typecase x
 		     (movitz-null)
@@ -974,9 +974,24 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		   (image-end (file-position stream))
 		   (kernel-size (- image-end image-start)))
 	      (format t "~&;; Kernel size: ~D octets.~%" kernel-size)
-	      (unless (zerop (mod image-end 512)) ; Ensure image is multiple of 512 octets
-		(set-file-position stream (+ image-end (- 511 (mod image-end 512))) 'pad-image-tail)
-		(write-byte #x0 stream))
+              (cond
+                (qemu-align-p
+                 ;; QEMU is rather stupid about "auto-detecting" floppy geometries.
+                 (loop for qemu-geo in '(320 360 640 720 720 820 840 1440 1440 1600 1640 1660 1760 2080 2240 2400
+                                         2880 2952 2988 3200 3200 3360 3444 3486 3520 3680 3840 5760 6240 6400 7040 7680)
+                     as qemu-size = (* qemu-geo 512)
+                     do (when (>= qemu-size image-end)
+                          (set-file-position stream (1- qemu-size) 'pad-image-tail)
+                          (write-byte #x0 stream)
+                          (return))
+                     finally
+                      (cerror "Never mind, dump the image."
+                              "No matching QEMU floppy geometry for size ~,2F MB." (/ image-end (* 1024 1024)))))
+                (t (let ((align-image-size 512)) ; Ensure image is multiple of x octets
+                     (unless (zerop (mod image-end align-image-size))
+                       (set-file-position stream (+ image-end (- (1- align-image-size) (mod image-end 512)))
+                                          'pad-image-tail)
+                       (write-byte #x0 stream)))))         
 	      (format t "~&;; Image file size: ~D octets.~%" image-end)
 	      ;; Write simple stage1 bootblock into sector 0..
 	      (format t "~&;; Dump count: ~D." (incf (dump-count *image*)))
