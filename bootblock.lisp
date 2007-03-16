@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:47:19 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: bootblock.lisp,v 1.12 2007/03/11 22:40:16 ffjeld Exp $
+;;;; $Id: bootblock.lisp,v 1.13 2007/03/16 17:39:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -26,6 +26,7 @@
 	      *bootblock-build-file*)
 	0))
 
+(defvar *floppy-size* (* 512 18 2 80))
 
 (defun make-segment-descriptor-byte (&rest descriptor-args)
   (list (complex (binary-types::bitfield-compute-numeric-value
@@ -82,8 +83,6 @@
   (let* ((first-sector (1+ skip-sectors))
 	 (last-sector (+ first-sector (ceiling image-size +sector-size+)))
 	 (read-buffer-segment (floor +read-buffer+ #x10)))
-    (assert (<= last-sector (* 2 18 80)) ()
-      "Image too large for 1.44 floppy geometry.")
     (ia-x86:read-proglist
      `(
        (:jmp (:pc+ 0))			; some BIOSes might check for this.
@@ -402,12 +401,14 @@
 
 (defun make-bootblock (image-size load-address call-address
 		       &key (skip-sectors 0) (include-records))
-  (let ((floppy-room (- (* 512 18 2 80) 512))) ; Size of floppy minus the bootloader.
-    (if (> image-size floppy-room)
-	(error "The image is ~D bytes too big to fit on a floppy."
-	       (- image-size floppy-room))
-      (format t "~&;; Bootloader has room for ~,1F KB more."
-	      (/ (- floppy-room image-size) 1024))))
+  (when *floppy-size*
+    (let ((floppy-room (- *floppy-size* 512))) ; Size of floppy minus the bootloader.
+      (if (> image-size floppy-room)
+          (warn "The image is ~D bytes too big to fit on a ~,2F MB floppy."
+                (- image-size floppy-room)
+                (/ *floppy-size* (* 1024 1000)))
+          (format t "~&;; Bootloader has room for ~,1F KB more."
+                  (/ (- floppy-room image-size) 1024)))))
   (multiple-value-bind (bios-loader bb-symtab)
       (ia-x86:proglist-encode :octet-vector :16-bit #x7c00
 			      (mkasm16-bios-bootloader image-size load-address skip-sectors))
