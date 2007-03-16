@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.58 2007/03/16 21:17:55 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.59 2007/03/16 22:13:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -55,7 +55,7 @@ start-location and end-location."
 	       (declare (ignorable x))
 	       #+ignore `(setf *scan-last* ,x)))
     (do ((verbose *map-header-vals-verbose*)
-	 (*scan-last* nil)		; Last scanned object, for debugging.
+	 #+ignore (*scan-last* nil)		; Last scanned object, for debugging.
 	 (scan start-location (1+ scan)))
 	((>= scan end-location))
       (declare (fixnum scan))
@@ -146,57 +146,45 @@ start-location and end-location."
 		;; lambda-list and name
 		(map-header-vals function (incf scan) (incf scan 2))
 		;; Jumpers
-		(let ((num-jumpers (memref scan 0 :type :unsigned-byte14))
-		      #+ignore (num-constants (memref scan 2 :type :unsigned-byte16)))
+		(let ((num-jumpers (memref scan 0 :type :unsigned-byte14)))
 		  (incf scan num-jumpers))))))
           ((scavenge-typep x :infant-object)
            (assert (evenp scan) ()
                    "Scanned infant ~S at odd location #x~X." x scan)
            (error "Scanning an infant object ~Z at ~S (end ~S)." x scan end-location))
-          ((or (scavenge-wide-typep x :basic-vector
-                                    #.(bt:enum-value 'movitz:movitz-vector-element-type :u8))
-               (scavenge-wide-typep x :basic-vector
-                                    #.(bt:enum-value 'movitz:movitz-vector-element-type :character))
-               (scavenge-wide-typep x :basic-vector
-                                    #.(bt:enum-value 'movitz:movitz-vector-element-type :code)))
-           (assert (evenp scan) ()
-                   "Scanned u8-vector-header ~S at odd location #x~X." x scan)
-           (let ((len (memref scan 0 :index 1 :type :lisp)))
-             (check-type len positive-fixnum)
-             (record-scan (%word-offset scan #.(movitz:tag :other)))
-             (incf scan (1+ (* 2 (truncate (+ 7 len) 8))))))
-          ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u16))
-           (assert (evenp scan) ()
-                   "Scanned u16-vector-header ~S at odd location #x~X." x scan)
-           (let ((len (memref scan 0 :index 1)))
-             (check-type len positive-fixnum)
-             (record-scan (%word-offset scan #.(movitz:tag :other)))
-             (incf scan (1+ (* 2 (truncate (+ 3 len) 4))))))
-          ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u32))
-           (assert (evenp scan) ()
-                   "Scanned u32-vector-header ~S at odd location #x~X." x scan)
-           (let ((len (memref scan 4)))
-             (assert (typep len 'positive-fixnum) ()
-                     "Scanned basic-vector at ~S with illegal length ~S." scan len)
-             (record-scan (%word-offset scan #.(movitz:tag :other)))
-             (incf scan (1+ (logand (1+ len) -2)))))
-          ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :bit))
-           (assert (evenp scan) ()
-                   "Scanned bit-vector-header ~S at odd location #x~X." x scan)
-           (let ((len (memref scan 4)))
-             (assert (typep len 'positive-fixnum) ()
-                     "Scanned basic-vector at ~S with illegal length ~S." scan len)
-             (record-scan (%word-offset scan #.(movitz:tag :other)))
-             (incf scan (1+ (* 2 (truncate (+ 63 len) 64))))))
           ((scavenge-typep x :basic-vector)
-           (if (or (scavenge-wide-typep x :basic-vector
-                                        #.(bt:enum-value 'movitz:movitz-vector-element-type
-                                           :any-t))
-                   (scavenge-wide-typep x :basic-vector
-                                        #.(bt:enum-value 'movitz:movitz-vector-element-type
-                                           :indirects)))
-               (record-scan (%word-offset scan #.(movitz:tag :other)))
-               (error "Scanned unknown basic-vector-header ~S at location #x~X." x scan)))
+           (assert (evenp scan) ()
+                   "Scanned basic-vector-header ~S at odd location #x~X." x scan)
+           (cond
+             ((or (scavenge-wide-typep x :basic-vector
+                                       #.(bt:enum-value 'movitz:movitz-vector-element-type :u8))
+                  (scavenge-wide-typep x :basic-vector
+                                       #.(bt:enum-value 'movitz:movitz-vector-element-type :character))
+                  (scavenge-wide-typep x :basic-vector
+                                       #.(bt:enum-value 'movitz:movitz-vector-element-type :code)))
+              (let ((len (memref scan 4)))
+                (record-scan (%word-offset scan #.(movitz:tag :other)))
+                (incf scan (1+ (* 2 (truncate (+ 7 len) 8))))))
+             ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u16))
+              (let ((len (memref scan 0 :index 1)))
+                (record-scan (%word-offset scan #.(movitz:tag :other)))
+                (incf scan (1+ (* 2 (truncate (+ 3 len) 4))))))
+             ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u32))
+              (let ((len (memref scan 4)))
+                (record-scan (%word-offset scan #.(movitz:tag :other)))
+                (incf scan (1+ (logand (1+ len) -2)))))
+             ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :bit))
+              (let ((len (memref scan 4)))
+                (record-scan (%word-offset scan #.(movitz:tag :other)))
+                (incf scan (1+ (* 2 (truncate (+ 63 len) 64))))))
+             ((or (scavenge-wide-typep x :basic-vector
+                                       #.(bt:enum-value 'movitz:movitz-vector-element-type
+                                          :any-t))
+                  (scavenge-wide-typep x :basic-vector
+                                       #.(bt:enum-value 'movitz:movitz-vector-element-type
+                                          :indirects)))
+              (record-scan (%word-offset scan #.(movitz:tag :other))))
+             (t (error "Scanned unknown basic-vector-header ~S at location #x~X." x scan))))
           ((and (eq x 3) (eq x2 0))
            (record-scan scan)
            (incf scan)
@@ -205,13 +193,12 @@ start-location and end-location."
              ;; (warn "at ~S skipping ~S to ~S." scan delta (+ scan delta))
              (incf scan delta)))
           (t ;; (typep x 'pointer)
-           (let ((old (memref scan 0)))
-             (unless (eq old (load-global-constant new-unbound-value))
-               (let ((new (funcall function old scan)))
-                 (when verbose
-                   (format *terminal-io* " [~Z => ~Z]" old new))
-                 (unless (eq old new)
-                   (setf (memref scan 0) new))))))))))
+           (let* ((old (memref scan 0))
+                  (new (funcall function old scan)))
+             (when verbose
+               (format *terminal-io* " [~Z => ~Z]" old new))
+             (unless (eq old new)
+               (setf (memref scan 0) new))))))))
   (values))
 
 (defun map-stack-vector (function stack start-frame &optional (map-region #'map-header-vals))
