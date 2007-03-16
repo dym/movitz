@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 20 00:39:59 2004
 ;;;;                
-;;;; $Id: ratios.lisp,v 1.7 2004/09/22 17:52:08 ffjeld Exp $
+;;;; $Id: ratios.lisp,v 1.8 2007/03/16 17:41:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -74,3 +74,8 @@
     (ratio (%ratio-denominator x))))
 
 (defconstant pi #xea7632a/4aa1a8b)
+
+(defconstant least-positive-short-float 1/1000)
+(defconstant least-positive-single-float 1/1000)
+(defconstant least-positive-double-float 1/1000)
+(defconstant least-positive-long-float 1/1000)
