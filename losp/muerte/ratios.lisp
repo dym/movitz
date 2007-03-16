@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 20 00:39:59 2004
 ;;;;                
-;;;; $Id: ratios.lisp,v 1.8 2007/03/16 17:41:11 ffjeld Exp $
+;;;; $Id: ratios.lisp,v 1.9 2007/03/16 19:49:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -21,9 +21,7 @@
 
 (in-package muerte)
 
-(defun make-ratio (numerator denominator)
-  (check-type numerator integer)
-  (check-type denominator (integer 1 *))
+(defun %make-ratio (numerator denominator)
   (macrolet
       ((do-it ()
 	 `(with-allocation-assembly (4 :fixed-size-p t
@@ -35,6 +33,11 @@
 	    (:movl :ebx (:eax (:offset movitz-ratio numerator)))
 	    (:movl :edx (:eax (:offset movitz-ratio denominator))))))
     (do-it)))
+
+(defun make-ratio (numerator denominator)
+  (check-type numerator integer)
+  (check-type denominator (integer 1 *))
+  (%make-ratio numerator denominator))
 
 (defun ratio-p (x)
   (typep x 'ratio))
