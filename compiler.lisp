@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.183 2007/03/16 17:47:27 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.184 2007/03/16 18:03:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -620,43 +620,45 @@ of all function-bindings seen."
   (check-type toplevel-funobj movitz-funobj)
   (let ((function-binding-usage ()))
     (labels ((process-binding (funobj binding usages)
-	       (if (not (eq funobj (binding-funobj binding)))
-		   (let ((borrowing-binding
-			  (or (find binding (borrowed-bindings funobj)
-				    :key #'borrowed-binding-target)
-			      (car (push (movitz-env-add-binding (funobj-env funobj)
-								 (make-instance 'borrowed-binding
-								   :name (binding-name binding)
-								   :target-binding binding))
-					 (borrowed-bindings funobj))))))
-		     ;; We don't want to borrow a forwarding-binding..
-		     (when (typep (borrowed-binding-target borrowing-binding)
-				  'forwarding-binding)
-		       (change-class (borrowed-binding-target borrowing-binding)
-				     'located-binding))
+	       (cond
+                 ((typep binding 'constant-object-binding))
+                 ((not (eq funobj (binding-funobj binding)))
+                  (let ((borrowing-binding
+                         (or (find binding (borrowed-bindings funobj)
+                              :key #'borrowed-binding-target)
+                             (car (push (movitz-env-add-binding (funobj-env funobj)
+                                                                (make-instance 'borrowed-binding
+                                                                 :name (binding-name binding)
+                                                                 :target-binding binding))
+                                        (borrowed-bindings funobj))))))
+                    ;; We don't want to borrow a forwarding-binding..
+                    (when (typep (borrowed-binding-target borrowing-binding)
+                                 'forwarding-binding)
+                      (change-class (borrowed-binding-target borrowing-binding)
+                                    'located-binding))
 ;;;		     (warn "binding ~S of ~S is not local to ~S, replacing with ~S of ~S."
 ;;;			   binding (binding-env binding) funobj
 ;;;			   borrowing-binding (binding-env borrowing-binding))
 ;;;		     (pushnew borrowing-binding 
 ;;;			      (getf (binding-lended-p binding) :lended-to))
-		     (dolist (usage usages)
-		       (pushnew usage (borrowed-binding-usage borrowing-binding)))
-		     borrowing-binding)
-		 ;; Binding is local to this funobj
-		 (typecase binding
-		   (forwarding-binding
-		    (process-binding funobj (forwarding-binding-target binding) usages)
-		    #+ignore
-		    (setf (forwarding-binding-target binding)
-		      (process-binding funobj (forwarding-binding-target binding) usages)))
-		   (function-binding
-		    (dolist (usage usages)
-		      (pushnew usage
-			       (getf (sub-function-binding-usage (function-binding-parent binding))
-				     binding))
-		      (pushnew usage (getf function-binding-usage binding)))
-		    binding)
-		   (t binding))))
+                    (dolist (usage usages)
+                      (pushnew usage (borrowed-binding-usage borrowing-binding)))
+                    borrowing-binding))
+                 (t ; Binding is local to this funobj
+                  (typecase binding
+                    (forwarding-binding
+                     (process-binding funobj (forwarding-binding-target binding) usages)
+                     #+ignore
+                     (setf (forwarding-binding-target binding)
+                           (process-binding funobj (forwarding-binding-target binding) usages)))
+                    (function-binding
+                     (dolist (usage usages)
+                       (pushnew usage
+                                (getf (sub-function-binding-usage (function-binding-parent binding))
+                                      binding))
+                       (pushnew usage (getf function-binding-usage binding)))
+                     binding)
+                    (t binding)))))
 	     (resolve-sub-funobj (funobj sub-funobj)
 	       (dolist (binding-we-lend (borrowed-bindings (resolve-funobj-borrowing sub-funobj)))
 		 #+ignore
@@ -6405,16 +6407,16 @@ and a list of any intervening unwind-protect environment-slots."
 
 (defun ensure-local-binding (binding funobj)
   "When referencing binding in funobj, ensure we have the binding local to funobj."
-  (if (not (typep binding 'binding))
-      binding
-    (let ((target-binding (binding-target binding)))
-      (cond
-       ((eq funobj (binding-funobj target-binding))
-	binding)
-       (t (or (find target-binding (borrowed-bindings funobj)
-		    :key (lambda (binding)
-			   (borrowed-binding-target binding)))
-	      (error "Can't install non-local binding ~W." binding)))))))
+  (if (typep binding '(or (not binding) constant-object-binding))
+      binding ; Never mind if "binding" isn't a binding, or is a constant-binding.
+      (let ((target-binding (binding-target binding)))
+        (cond
+          ((eq funobj (binding-funobj target-binding))
+           binding)
+          (t (or (find target-binding (borrowed-bindings funobj)
+                  :key (lambda (binding)
+                         (borrowed-binding-target binding)))
+                 (error "Can't install non-local binding ~W." binding)))))))
 
 (defun binding-store-subtypep (binding type-specifier)
   "Is type-specifier a supertype of all values ever stored to binding?
