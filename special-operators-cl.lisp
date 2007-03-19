@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.50 2007/02/20 20:33:30 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.51 2007/03/19 21:09:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -78,7 +78,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 					`((:locally (:pushl (:edi (:edi-offset dynamic-env)))))
 				      `((:pushl :esp)))
 				    (compiler-call #'compile-form ; binding value
-				      :with-stack-used (incf stack-used)
+                                     :with-stack-used (incf stack-used)
 				      :env init-env
 				      :defaults all
 				      :form init-form
@@ -136,8 +136,7 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 				     (:multiple-values :eax)
 				     (t init-register))
 				   final-form))))))
-	  (setf (stack-used local-env)
-	    (stack-used init-env))
+	  (setf (stack-used local-env) stack-used)
 	  (flet ((compile-body ()
 		   (if (= 0 (num-specials local-env))
 		       (compiler-call #'compile-implicit-progn
