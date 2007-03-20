@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.16 2006/04/10 11:50:34 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.17 2007/03/20 22:40:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -523,8 +523,9 @@
 	   (cond
 	    ((and (movitz:movitz-constantp n1 env)
 		  (movitz:movitz-constantp n2 env))
-	     (list ',2op-name (movitz:movitz-eval n1 env) (movitz:movitz-eval n2 env)))
-	    ((movitz:movitz-constantp n1 env)
+             (if (funcall name (movitz:movitz-eval n1 env) (movitz:movitz-eval n2 env))
+                 t nil))
+            ((movitz:movitz-constantp n1 env)
 	     (let ((n1 (movitz::movitz-eval n1 env)))
 	       (check-type n1 number)
 	       (if (typep n1 '(signed-byte 30))
