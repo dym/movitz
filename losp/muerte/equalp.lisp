@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar 13 17:09:08 2001
 ;;;;                
-;;;; $Id: equalp.lisp,v 1.7 2005/08/26 19:38:56 ffjeld Exp $
+;;;; $Id: equalp.lisp,v 1.8 2007/03/21 21:54:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -26,18 +26,24 @@
 
 (defun equal (x y)
   (typecase x
+    (symbol
+     (eq x y))
     (string
      (and (stringp y)
 	  (string= x y)))
-    (symbol
-     (eq x y))
     (number
-     (and (numberp y)
-	  (= x y)))
+     (eql x y))
     (cons
-     (and (consp y)
-	  (equal (car x) (car y))
-	  (equal (cdr x) (cdr y))))
+     (when (consp y)
+       (do ()
+           ((not (equal (pop x) (pop y)))
+            nil)
+         (when (or (not (consp x))
+                   (not (consp y)))
+           (return (equal x y))))))
+    (bit-vector
+     (when (typep y 'bit-vector)
+       (not (mismatch x y))))
     (t (eq x y))))
 
 (defun equalp (x y)
