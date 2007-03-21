@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.21 2007/03/01 23:16:10 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.22 2007/03/21 19:57:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -217,6 +217,9 @@ lexical environment that a closure funobj captures."))
     :accessor key-decode-map)
    (key-decode-shift
     :accessor key-decode-shift)
+   (aux-vars
+    :initform nil
+    :accessor aux-vars)
    (need-normalized-ecx-p
     :initarg :need-normalized-ecx-p
     :accessor need-normalized-ecx-p)

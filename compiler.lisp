@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.184 2007/03/16 18:03:09 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.185 2007/03/21 19:57:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -246,8 +246,7 @@ If funobj is provided, its identity will be kept, but its type (and values) migh
   ;; mutually recursive (lexically bound) functions.
   (with-retries-until-true (retry-pass1 "Retry first-pass compilation of ~S." name)
     ;; First-pass is mostly functional, so it can safely be restarted.
-    (multiple-value-bind (required-vars optional-vars rest-var key-vars
-			  aux-vars allow-p min max edx-var)
+    (multiple-value-bind (required-vars optional-vars rest-var key-vars aux-vars allow-p min max edx-var)
 	(decode-normal-lambda-list lambda-list)
       (declare (ignore aux-vars allow-p min max))
       ;; There are several main branches through the function
@@ -307,7 +306,7 @@ Otherwise coerce funobj to class."
 		 (setf (extended-code function-env)
 		   (append arg-init-code
 			   (compiler-call #'compile-form
-			     :form (make-special-funarg-shadowing function-env function-form)
+                             :form (make-special-funarg-shadowing function-env function-form)
 			     :funobj funobj
 			     :env function-env
 			     :top-level-p top-level-p
@@ -4190,13 +4189,12 @@ loading borrowed bindings."
 (defun add-bindings-from-lambda-list (lambda-list env)
   "From a (normal) <lambda-list>, add bindings to <env>."
   (let ((arg-pos 0))
-    (multiple-value-bind (required-vars optional-vars rest-var key-vars auxes allow-p
-			  min-args max-args edx-var oddeven key-vars-p)
+    (multiple-value-bind (required-vars optional-vars rest-var key-vars auxes allow-p min-args max-args edx-var oddeven key-vars-p)
 	(decode-normal-lambda-list lambda-list)
-      (declare (ignore auxes))
       (setf (min-args env) min-args
 	    (max-args env) max-args
 	    (oddeven-args env) oddeven
+            (aux-vars env) auxes
 	    (allow-other-keys-p env) allow-p)
       (flet ((shadow-when-special (formal env)
 	       "Iff <formal> is special, return a fresh variable-name that takes <formal>'s place
@@ -4999,6 +4997,7 @@ or when there's a non-dynamic-extent &rest binding."
       function-body
     (let ((shadowing
 	   (append (special-variable-shadows env)
+                   (aux-vars env)
 		   (when (and (rest-var env)
 			      (not (movitz-env-get (rest-var env) 'dynamic-extent nil env nil))
 			      (not (movitz-env-get (rest-var env) 'ignore nil env nil)))
@@ -5518,7 +5517,7 @@ That is, RESULT-MODE is taken to be a suggestion, not an imperative."
   (compiler-values-bind (&all upstream)
       (typecase form
 	(symbol (compiler-call #'compile-symbol :forward downstream))
-	(cons   (compiler-call #'compile-cons :forward downstream))
+ 	(cons   (compiler-call #'compile-cons :forward downstream))
 	(t      (compiler-call #'compile-self-evaluating :forward downstream)))
     (when (typep (upstream :final-form) 'lexical-binding)
       (labels ((fix-extent (binding)
