@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.21 2007/02/22 20:28:37 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.22 2007/03/21 20:17:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -139,8 +139,9 @@
     (if (>= i n) (pop r))))
 
 (defun nthcdr (n list)
-  (do ((n (check-the fixnum n)))
+  (do ((n (check-the index n)))
       ((or (null list) (not (plusp n))) list)
+    (declare (index n))
     (decf n)
     (setf list (cdr list))))
 
@@ -327,6 +328,10 @@
 	first-list))
    (t (function &rest lists)
       (declare (dynamic-extent lists))
+      (unless lists
+        (error 'wrong-argument-count
+               :function #'mapc
+               :argument-count 0))
       (let ((first-list (car lists)))
 	(unless (some 'null lists)
 	  (prog ()
