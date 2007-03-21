@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 25 14:08:20 2001
 ;;;;                
-;;;; $Id: vga.lisp,v 1.10 2007/03/17 15:39:26 ffjeld Exp $
+;;;; $Id: vga.lisp,v 1.11 2007/03/21 21:49:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -207,14 +207,14 @@
        #x38 #x39 #x3A #x3B #x3C #x3D #x3E #x3F
        #x0C #x00 #x0F #x08 #x00)))
 
-(defconstant +vga-state-320x200x256+
+(defconstant +vga-state-320x200x256-modex+
     '((:misc . #x63)
       (:sequencer
-       #x03 #x01 #x0F #x00 #x0E)
+       #x03 #x01 #x0F #x00 #x06)
       (:crtc
        #x5F #x4F #x50 #x82 #x54 #x80 #xBF #x1F
        #x00 #x41 #x00 #x00 #x00 #x00 #x00 #x00
-       #x9C #x0E #x8F #x28 #x40 #x98 #xB9 #xA3
+       #x9C #x0E #x8F #x28 #x00 #x96 #xB9 #xE3
        #xFF)
       (:graphics
        #x00 #x00 #x00 #x00 #x00 #x40 #x05 #x0F
@@ -225,24 +225,18 @@
        #x41 #x00 #x0F #x00 #x00)))
 
 
-;; 640x480 in testing, functions not available yet.
-(defconstant +vga-state-640x480x16+
-    '((:misc . #xE3)
-      (:sequencer
-       #x03 #x01 #x08 #x00 #x06)
-      (:crtc
-       #x5F #x4F #x50 #x82 #x54 #x80 #x0B #x3E
-       #x00 #x40 #x00 #x00 #x00 #x00 #x00 #x00
-       #xEA #x0C #xDF #x28 #x00 #xE7 #x04 #xE3
-       #xFF)
-      (:graphics
-       #x00 #x00 #x00 #x00 #x03 #x00 #x05 #x0F
-       #xFF)
-      (:attribute
-       #x00 #x01 #x02 #x03 #x04 #x05 #x14 #x07
-       #x38 #x39 #x3A #x3B #x3C #x3D #x3E #x3F
-       #x01 #x00 #x0F #x00 #x00)))
+;; intended future wrapper for graphics modes
+(defconstant +graphical-mode-modex+
+  '(+vga-state-320x200x256-modex+   ; vga state
+	320                             ; width
+	200                             ; height
+    3))                             ; page count
 
+
+(defvar *vga-current-page* 0)
+(defvar *vga-page-count* 0)
+(defvar *vga-width* 0)
+(defvar *vga-height* 0)
 
 (defconstant +vga-misc-read+ #x0c)
 (defconstant +vga-misc-write+ #x02)
@@ -347,6 +341,15 @@
     (setf (io-port VGA-SEQ-INDEX :unsigned-byte8) 2)
     (setf (io-port VGA-SEQ-DATA :unsigned-byte8) pmask))
   (values))
+
+(defun set-plane-by-bitmask (p)
+  (check-type p (integer 0 15))
+  ;; set read plane
+  (setf (io-port VGA-GC-INDEX :unsigned-byte8) 4)
+  (setf (io-port VGA-GC-DATA :unsigned-byte8) p)
+  ;; set write plane
+  (setf (io-port VGA-SEQ-INDEX :unsigned-byte8) 2)
+  (setf (io-port VGA-SEQ-DATA :unsigned-byte8) p))
 
 (defun vmemwr (dst-off src start end)
   (loop for i from start below end as dst upfrom dst-off
@@ -1083,18 +1086,23 @@
             (progn ,@body)
          (restore-textmode ,vga-state-var)))))
 
-;; graphics functions below:
+;; graphics functions below
 ;;
 
+
+
+;; TODO: This can be optimised through two methods
+;;   1. Either write all of plane 1, then plane 2 etc (plane switches are slow)
+;;   2. Use multiple plane writes at once (see g-clear for idea)
+;;       -  Probably better because of large areas of the same colour
 (defun rle-blit-splash (splash)
   (loop with index = 0
       for i from 0 below (length splash) by 2
       for value = (aref splash i)
       for count = (1+ (aref splash (1+ i)))
       do (loop repeat count
-             do (setf (memref-int (vga-memory-map)
-                       :index index
-                       :type :unsigned-byte8)
+             do (setf (pixel (mod index *vga-width*) ; ugly hackitude :(
+                             (truncate index *vga-width*))
                       value)
              (incf index)))
   nil)
@@ -1102,35 +1110,82 @@
 ;; show the splash screen
 (defun g-show-splash ()
   (with-textmode-restored ()
-    (setf (vga-state) +vga-state-320x200x256+)
+    (g-start)
     (rle-blit-splash *vga-g-splash*)
+    (page-flip)
     (read-char)
     (g-clear))
   (values))
 
 ;; set a pixel to a colour of our choice
-(defun g-set-pixel (x y col)
+;; always writing to the next page
+(defun (setf pixel) (col x y)
+  (set-plane (logand x 3))
   (setf (memref-int (vga-memory-map)
-         :index (+ (* 320 y) x)
+         :index (+ (* (truncate *vga-width* 4) y) ; pixel
+                   (truncate x 4)
+                   (* (truncate *vga-width* 2) ; page
+                      *vga-height*
+                      *vga-current-page*))
          :type :unsigned-byte8)
         col))
 
-;; clear the graphics screen (simple method but slow)
+;; clear the screen
 (defun g-clear ()
-  (dotimes (y 240)
-    (dotimes (x 320)
-      (g-set-pixel x y 0))))
+  ;; set read plane to all (bitmask 1111)
+  (set-plane-by-bitmask 15)
+  ;; writing to all 4 planes here thus 1/4 of the bytes
+  ;; and by writing 16 bits a time we get double plus good optimisation :)
+  ;; However, we wish to cover four planes, thus four times the memory
+  (loop for x from 0 below (* *vga-width* *vga-height*)
+      do (setf (memref-int (vga-memory-map) 
+                :index x
+                :type :unsigned-byte16)
+               #x0000)))
 
-;; easy way to get into / out of graphics mode
+
+(defun unchain-video-mode ()
+  ;; disable chain-4
+  (setf (io-port VGA-SEQ-INDEX :unsigned-byte8) #x04)
+  (setf (io-port VGA-SEQ-DATA :unsigned-byte8) #x06)
+  ;; disable long mode
+  (setf (io-port VGA-CRTC-INDEX :unsigned-byte8) #x14)
+  (setf (io-port VGA-CRTC-DATA :unsigned-byte8) #x00)
+  ;; enable byte mode
+  (setf (io-port VGA-CRTC-INDEX :unsigned-byte8) #x17)
+  (setf (io-port VGA-CRTC-DATA :unsigned-byte8) #xE3))
+
+
+(defun set-page (page)
+  (setf (io-port VGA-CRTC-INDEX :unsigned-byte8) #x0C)
+  (setf (io-port VGA-CRTC-DATA :unsigned-byte8) (ldb (byte 8 8)
+                                                     (* page
+                                                        (truncate *vga-width* 2)
+                                                        *vga-height*)))
+  (setf (io-port VGA-CRTC-INDEX :unsigned-byte8) #x00)
+  (setf (io-port VGA-CRTC-DATA :unsigned-byte8) (ldb (byte 8 0)
+                                                     (* page
+                                                        (truncate *vga-width* 2)
+                                                        *vga-height*))))
+  
+
+;; Simple wrapper to swap pages
+(defun page-flip ()
+  (set-page *vga-current-page*)
+  (setf *vga-current-page*
+        (mod (1+ *vga-current-page*)
+             *vga-page-count*)))
+
+;; easy way to get into graphics mode
 (defun g-start ()
-  (setf (vga-state) +vga-state-320x200x256+)
-  (g-clear))
-
-
-;; BUG (doesn't restore the text)
-;; store on entering graphics state?
-(defun g-exit ()
-  (set-textmode +vga-state-80x25+))
+  (setf (vga-state) +vga-state-320x200x256-modex+)
+  (setf *vga-width* 320)
+  (setf *vga-height* 200)
+  (setf *vga-page-count* 2)
+  (setf *vga-current-page* 0)           ; writing page
+  (unchain-video-mode)
+  (g-clear)
+  (page-flip))
 
 
 ;; draw-line from ch-image
@@ -1152,7 +1207,7 @@
                   (x x0)
                   (y y0))
               (declare (type fixnum d incr-e incr-ne x y))
-              (g-set-pixel y x col)
+              (setf (pixel y x) col)
               (dotimes (i absdx)
                 (cond
                   ((<= d 0)
@@ -1162,14 +1217,14 @@
                    (incf d incr-ne)
                    (incf x xstep)
                    (incf y ystep)))
-                (g-set-pixel y x col)))
+                (setf (pixel y x) col)))
             (let ((d (- (* 2 absdy) absdx))
                   (incr-n (* 2 absdx))
                   (incr-ne (* 2 (- absdx absdy)))
                   (x x0)
                   (y y0))
               (declare (type fixnum d incr-n incr-ne x y))
-              (g-set-pixel y x col)
+              (setf (pixel y x) col)
               (dotimes (i absdy)
                 (cond
                   ((<= d 0)
@@ -1179,9 +1234,7 @@
                    (incf d incr-ne)
                    (incf y ystep)
                    (incf x xstep)))
-                (g-set-pixel y x col))))))))
-
-
+                (setf (pixel y x) col))))))))
 
 ;; draw-circle from ch-image
 ;; originally written by Cyrus Harmon
@@ -1189,14 +1242,14 @@
 (defmethod draw-circle (center-y center-x radius col)
   (declare (type fixnum center-y center-x radius))
   (flet ((circle-points (y x col)
-           (g-set-pixel (+ center-y y) (+ center-x x) col) 
-           (g-set-pixel (+ center-y x) (+ center-x y) col) 
-           (g-set-pixel (- center-y x) (+ center-x y) col) 
-           (g-set-pixel (- center-y y) (+ center-x x) col) 
-           (g-set-pixel (- center-y y) (- center-x x) col) 
-           (g-set-pixel (- center-y x) (- center-x y) col) 
-           (g-set-pixel (+ center-y x) (- center-x y) col) 
-           (g-set-pixel (+ center-y y) (- center-x x) col)))
+           (setf (pixel (+ center-y y) (+ center-x x)) col) 
+           (setf (pixel (+ center-y x) (+ center-x y)) col) 
+           (setf (pixel (- center-y x) (+ center-x y)) col) 
+           (setf (pixel (- center-y y) (+ center-x x)) col) 
+           (setf (pixel (- center-y y) (- center-x x)) col) 
+           (setf (pixel (- center-y x) (- center-x y)) col) 
+           (setf (pixel (+ center-y x) (- center-x y)) col) 
+           (setf (pixel (+ center-y y) (- center-x x)) col)))
     (let ((x 0)
           (y radius)
           (d (- 1 radius))
@@ -1217,8 +1270,6 @@
               (decf y)))
         (incf x)
         (circle-points y x col)))))
-
-
 
 ;; additional drawing functions (rectangle / triangle)
 (defmethod draw-rectangle (x1 y1 x2 y2 col)
