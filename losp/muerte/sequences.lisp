@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.34 2007/02/20 21:55:29 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.35 2007/03/21 20:20:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -204,6 +204,7 @@
 		 (head (cons (car list-start) nil))
 		 (tail head))
 	       ((or (endp p) (>= i end)) head)
+             (declare (index i))
 	     (setf (cdr tail) (cons (car p) nil)
 		   tail (cdr tail)))))))))
 
@@ -259,6 +260,7 @@
 	       (do ((p (nthcdr start sequence))
 		    (i start (1+ i)))
 		   ((null p) nil)
+                 (declare (index i))
 		 (when (test (key (pop p)) item)
 		   (return (if (not from-end)
 			       i
@@ -306,10 +308,12 @@
 		((not from-end)
 		 (do ((i start (1+ i)))
 		     ((>= i end))
+                   (declare (index i))
 		   (when (predicate (key (sequence-ref i)))
 		     (return i))))
 		(t (do ((i (1- end) (1- i)))
 		       ((< i start))
+                     (declare (index i))
 		     (when (predicate (key (sequence-ref i)))
 		       (return i)))))))
 	    (list
@@ -318,6 +322,7 @@
 	       (do ((p (nthcdr start sequence))
 		    (i start (1+ i)))
 		   ((or (>= i end) (null p)))
+                 (declare (index i))
 		 (when (predicate (key (pop p)))
 		   (return (if (not from-end) i
 			     (let ((next-i (position-if predicate p :key key
@@ -326,6 +331,7 @@
 	      (t (do ((p (nthcdr start sequence))
 		      (i start (1+ i)))
 		     ((null p))
+                   (declare (index i))
 		   (when (predicate (key (pop p)))
 		     (return (if (not from-end) i
 			       (let ((next-i (position-if predicate p :key key :from-end t)))
@@ -1851,12 +1857,14 @@ quick-sort with cut-off greater than 1."
 	      ((and (not count) (not from-end))
 	       (do ((i start (1+ i)))
 		   ((>= i end) sequence)
+                 (declare (index i))
 		 (when (predicate (key (ref i)))
 		   (setf (ref i) newitem))))
 	      ((and count (not from-end))
 	       (do ((c 0)
 		    (i start (1+ i)))
 		   ((>= i end) sequence)
+                 (declare (index i c))
 		 (when (predicate (key (ref i)))
 		   (setf (ref i) newitem)
 		   (when (>= (incf c) count)
@@ -1864,12 +1872,14 @@ quick-sort with cut-off greater than 1."
 	      ((and (not count) from-end)
 	       (do ((i (1- end) (1- i)))
 		   ((< i start) sequence)
+                 (declare (index i))
 		 (when (predicate (key (ref i)))
 		   (setf (ref i) newitem))))
 	      ((and count from-end)
 	       (do ((c 0)
 		    (i (1- end) (1- i)))
 		   ((< i start) sequence)
+                 (declare (index c i))
 		 (when (predicate (key (ref i)))
 		   (setf (ref i) newitem)
 		   (when (>= (incf c) count)
@@ -1884,6 +1894,7 @@ quick-sort with cut-off greater than 1."
 		     ((>= i existing-count)
 		      (nsubstitute-if newitem predicate p :end end :key key)
 		      sequence)
+                   (declare (index i))
 		   (when (predicate (key (car p)))
 		     (incf i))
 		   (setf p (cdr p))))
@@ -1897,12 +1908,14 @@ quick-sort with cut-off greater than 1."
 	       (do ((i start (1+ i))
 		    (p p (cdr p)))
 		   ((or (endp p) (>= i end)) sequence)
+                 (declare (index i))
 		 (when (predicate (key (car p)))
 		   (setf (car p) newitem))))
 	      ((and (not end) count)
 	       (do ((c 0)		 
 		    (p p (cdr p)))
 		   ((endp p) sequence)
+                 (declare (index c))
 		 (when (predicate (key (car p)))
 		   (setf (car p) newitem)
 		   (when (>= (incf c) count)
@@ -1912,6 +1925,7 @@ quick-sort with cut-off greater than 1."
 		    (i start (1+ i))
 		    (p p (cdr p)))
 		   ((or (endp p) (>= i end)) sequence)
+                 (declare (index c i))
 		 (when (predicate (key (car p)))
 		   (setf (car p) newitem)
 		   (when (>= (incf c) count)
