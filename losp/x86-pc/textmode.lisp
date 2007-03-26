@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  9 15:38:56 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: textmode.lisp,v 1.15 2005/08/26 21:42:39 ffjeld Exp $
+;;;; $Id: textmode.lisp,v 1.16 2007/03/26 21:43:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,6 +22,9 @@
 (provide :x86-pc/textmode)
 
 (in-package muerte.x86-pc)
+
+(defvar *text-output-port* nil
+  "Output all text also to this port. For example, bochs #xe9 port hack.")
 
 (defvar *screen* 
     (vga-memory-map))
@@ -67,6 +70,8 @@
   value)
 
 (defun textmode-write-char (c)
+  (when *text-output-port*
+    (setf (io-port *text-output-port* :unsigned-byte8) (char-code c)))
   (case c
     (#\newline
      (setf *cursor-x* 0)
