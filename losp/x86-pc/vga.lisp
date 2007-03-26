@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 25 14:08:20 2001
 ;;;;                
-;;;; $Id: vga.lisp,v 1.11 2007/03/21 21:49:11 ffjeld Exp $
+;;;; $Id: vga.lisp,v 1.12 2007/03/26 18:04:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -237,6 +237,7 @@
 (defvar *vga-page-count* 0)
 (defvar *vga-width* 0)
 (defvar *vga-height* 0)
+(defvar *vga-viewport* '(0 0 0 0))
 
 (defconstant +vga-misc-read+ #x0c)
 (defconstant +vga-misc-write+ #x02)
@@ -1117,18 +1118,45 @@
     (g-clear))
   (values))
 
+;; read a pixel from the DISPLAYED page
+(defun pixel (x y)
+  (memref-int (vga-memory-map)
+			  :index (+ (* (truncate *vga-width* 4) y)
+						(truncate x y)
+						(* (truncate *vga-width* 2)
+						   *vga-height*
+						   (mod (1+ *vga-current-page*)
+								*vga-page-count*)))
+			  :type :unsigned-byte8))
+
 ;; set a pixel to a colour of our choice
-;; always writing to the next page
+;; write to the NEXT page
 (defun (setf pixel) (col x y)
-  (set-plane (logand x 3))
-  (setf (memref-int (vga-memory-map)
-         :index (+ (* (truncate *vga-width* 4) y) ; pixel
-                   (truncate x 4)
-                   (* (truncate *vga-width* 2) ; page
-                      *vga-height*
-                      *vga-current-page*))
-         :type :unsigned-byte8)
-        col))
+  (cond ((< x (nth 0 (viewport))) (return-from pixel nil))
+		((> x (nth 1 (viewport))) (return-from pixel nil))
+		((< y (nth 2 (viewport))) (return-from pixel nil))
+		((> y (nth 3 (viewport))) (return-from pixel nil))
+		(t (set-plane (logand x 3))
+		   (setf (memref-int (vga-memory-map)
+							 :index (+ (* (truncate *vga-width* 4) y) ; pixel
+									   (truncate x 4)
+									   (* (truncate *vga-width* 2) ; page
+										  *vga-height*
+										  *vga-current-page*))
+							 :type :unsigned-byte8)
+				 col))))
+
+
+; return the current viewport as a list
+(defun viewport ()
+  *vga-viewport*)
+
+
+; sets the viewport
+; rectangle is a list of left-bound, right-bound, top-bound, bottom-bound
+(defun (setf viewport) (rectangle)
+  (setf *vga-viewport* rectangle))
+
 
 ;; clear the screen
 (defun g-clear ()
@@ -1176,6 +1204,7 @@
         (mod (1+ *vga-current-page*)
              *vga-page-count*)))
 
+
 ;; easy way to get into graphics mode
 (defun g-start ()
   (setf (vga-state) +vga-state-320x200x256-modex+)
@@ -1183,6 +1212,7 @@
   (setf *vga-height* 200)
   (setf *vga-page-count* 2)
   (setf *vga-current-page* 0)           ; writing page
+  (setf (viewport) `(0 ,(1- *vga-width*) 0 ,(1- *vga-height*)))
   (unchain-video-mode)
   (g-clear)
   (page-flip))
