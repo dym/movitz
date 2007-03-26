@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.54 2007/02/22 21:03:50 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.55 2007/03/26 21:11:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -344,7 +344,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 		(with-inline-assembly (:returns :nothing) (:nop))))
 	  (69 (error 'type-error
 		     :datum (dereference $eax)
-		     :expected-type (aref #(cons)
+		     :expected-type (aref #(cons function)
 					  (dereference $ecx :unsigned-byte8))))
 	  (70 (error "Unaligned memref access."))
 	  ((5 55)
