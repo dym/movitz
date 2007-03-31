@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep 24 16:04:12 2001
 ;;;;                
-;;;; $Id: keyboard.lisp,v 1.7 2007/03/14 20:42:48 ffjeld Exp $
+;;;; $Id: keyboard.lisp,v 1.8 2007/03/31 21:08:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -77,6 +77,53 @@
        #\B      #\N      #\M      #\<      #\>      #\?      nil      nil ; #x30
        nil      nil      nil      nil      nil      nil      nil      nil ; #x38
        nil      nil      nil      nil      nil    :pause     nil      nil)) ; #xd8
+    (:azerty
+     #(#\null   #\escape #\&      #\~      #\"      #\'      #\(      #\- ; #x00
+       #\`      #\_      #\|      #\@      #\)      #\= #\backspace #\tab ; #x08
+       #\a      #\z      #\e      #\r      #\t      #\y      #\u      #\i ; #x10
+       #\o      #\p      #\^      #\$   #\newline :ctrl-left #\q      #\s ; #x18
+			       
+       #\d      #\f      #\g      #\h      #\j      #\k      #\l      #\m ; #x20
+       #\%      #\#   :shift-left #\*      #\w      #\x      #\c      #\v ; #x28
+       #\b      #\n      #\,      #\;      #\:      #\!  :shift-right #\escape ; #x30
+       :alt-left #\space :caps-lock :f1    :f2      :f3      :f4      :f5 ; #x38
+			       
+       :f6      :f7      :f8      :f9      :f10   :break :scroll-lock nil ; #x40
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x48
+       nil      :kp-ins  nil      :kp-del  nil      nil      #\<      :f11 ; #x50
+       :f12     nil      nil      nil      nil      nil      nil      nil ; #x58
+      			       
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x60
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x68
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x70
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x78
+			       
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x80
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x88
+       nil      nil      nil      nil   :ctrl-right nil      nil      nil ; #x90
+       nil      nil      nil      nil      nil  :ctrl-right  nil      nil ; #x98
+      			       
+       nil      nil      nil      nil      nil      nil      nil      nil ; #xa0
+       nil      nil      nil      nil      nil      nil      nil      nil ; #xa8
+       nil      nil      nil      nil      nil      nil      nil      nil ; #xb0
+       :alt-right nil    nil      nil      nil      nil      nil      nil ; #xb8
+
+       nil      nil      nil      nil      nil      nil      nil    :home ; #xc0
+       :up      :page-up nil      :left    nil      :right   nil     :end ; #xc8
+       :down  :page-down :insert  nil #+ignore #\delete nil nil      nil      nil      nil ; #xd0
+       :alt-right nil    nil      nil      :win     :menu    nil      nil) ; #x40
+     #(#\null   nil      #\1      #\2      #\3      #\4      #\5      #\6 ; #x00
+       #\7      #\8      #\9      #\0      #\A      #\+      nil      nil ; #x08
+       #\A      #\Z      #\E      #\R      #\T      #\Y      #\U      #\I ; #x10
+       #\O      #\P      #\{      #\}     #\newline nil      #\Q      #\S ; #x18
+			       
+       #\D      #\F      #\G      #\H      #\J      #\K      #\L      #\M ; #x20
+       #\[      #\|      nil      #\]      #\W      #\X      #\C      #\V ; #x28
+       #\B      #\N      #\?      #\.      #\/      #\\      nil      nil ; #x30
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x38
+       nil      nil      nil      nil      nil    :pause     nil      nil ; #x40
+       nil      nil      nil      nil      nil      nil      nil      nil ; #x48
+       nil      nil      nil      nil      nil      nil      #\>      nil)) ; #x50
     (:dvorak
      #(#\null   #\escape #\1      #\2      #\3      #\4      #\5      #\6 ; #x00
        #\7      #\8      #\9      #\0      #\[      #\] #\backspace #\tab ; #x08
