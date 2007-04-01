@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.17 2007/03/20 22:40:41 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.18 2007/04/01 19:05:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -43,9 +43,7 @@
      (:testb 1 :cl)))
 
 (define-compiler-macro + (&whole form &rest operands &environment env)
-  (flet ((term (x) (if (and nil (symbolp x))
-		       (gensym (format nil "term-~A-" x))
-		     (gensym "term-"))))
+  (flet ((term (x) (gensym "term-")))
     (case (length operands)
       (0 0)
       (1 (first operands))
