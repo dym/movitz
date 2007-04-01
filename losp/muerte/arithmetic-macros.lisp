@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.18 2007/04/01 19:05:07 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.19 2007/04/01 19:22:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -257,7 +257,6 @@
 	   `(* ,(movitz:movitz-eval factor2 env) ,factor1))
 	  ((movitz:movitz-constantp factor1 env)
 	   (let ((f1 (movitz:movitz-eval factor1 env)))
-	     (check-type f1 integer)
 	     (case f1
 	       (0 `(progn ,factor2 0))
 	       (1 factor2)
