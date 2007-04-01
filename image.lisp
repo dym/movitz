@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.112 2007/03/16 17:40:43 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.113 2007/04/01 18:18:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,10 +28,7 @@
    (raw-scratch0			; A non-GC-root scratch register
     :binary-type lu32
     :initform 0)
-
-   
    (pointer-start :binary-type :label)
-
    (ret-trampoline
     :binary-type code-vector-word
     :map-binary-write 'movitz-intern-code-vector
@@ -836,7 +833,6 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
   (or (ignore-errors (file-position stream position))
       (let* ((end (file-position stream :end))
 	     (diff (- position end)))
-	(assert (< 0 diff 10000))
 	(dotimes (i diff)
 	  (write-byte 0 stream))
 	(assert (= position (file-position stream)))))
