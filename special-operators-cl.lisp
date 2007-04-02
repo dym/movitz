@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.51 2007/03/19 21:09:26 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.52 2007/04/02 20:54:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -860,7 +860,9 @@ where zot is not in foo's scope, but _is_ in foo's extent."
       (compiler-values-bind (&code block-code &functional-p block-no-side-effects-p)
 	  (compiler-call #'compile-form
 	    :defaults forward
-	    :result-mode block-result-mode
+	    :result-mode (case block-result-mode
+                           (:function :multiple-values) ; must restore stack
+                           (t block-result-mode))
 	    :form `(muerte.cl:progn ,@body)
 	    :env block-env)
 	(let ((label-set-name (gensym "block-label-set-"))
