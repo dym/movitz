@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.185 2007/03/21 19:57:52 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.186 2007/04/05 21:10:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -7417,7 +7417,7 @@ but it's requested to be in ~S."
 				 (:pushl 0) ; %3op
 				 (:pushl 0) ; %2op
 				 (:pushl 0) ; %1op
-				 (:pushl 0) ; (default)
+				 (:pushl 2) ; (default) 2 is recognized by map-header-vals as non-initialized funobj.
 				 
 				 (:pushl (:eax ,(slot-offset 'movitz-funobj 'type)))
 				 (:leal (:esp ,(tag :other)) :ebx)
