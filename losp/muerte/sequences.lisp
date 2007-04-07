@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.35 2007/03/21 20:20:33 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.36 2007/04/07 07:59:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -124,57 +124,75 @@
 			((= index end) result)
 		      (declare (index index)))))))))))
    (t (function sequence &key (key 'identity) from-end
-		(start 0) (end (length sequence))
+		(start 0) end
 		(initial-value nil initial-value-p))
       (let ((start (check-the index start)))
 	(with-funcallable (funcall-function function)
 	  (with-funcallable (key)
-	    (case (- end start)
-	      (0 (if initial-value-p
-		     initial-value
-		   (funcall-function)))
-	      (1 (if initial-value-p
-		     (funcall-function initial-value (key (elt sequence start)))
-		   (key (elt sequence start))))
-	      (t (sequence-dispatch sequence
-		   (list
-		    (cond
-		     ((not from-end)
-		      (do* ((counter (1+ start) (1+ counter))
-			    (list (nthcdr start sequence))
-			    (result (funcall-function (if initial-value-p
-							  initial-value
-							(key (pop list)))
-						      (key (pop list)))
-				    (funcall-function result (key (pop list)))))
-			  ((or (null list)
-			       (= end counter))
-			   result)
-			(declare (index counter))))
-		     (from-end
-		      (do* ((counter (1+ start) (1+ counter))
-			    (list (nreverse (subseq sequence start end)))
-			    (result (funcall-function (key (pop list))
-						      (if initial-value-p
-							  initial-value
-							(key (pop list))))
-				    (funcall-function (key (pop list)) result)))
-			  ((or (null list)
-			       (= end counter))
-			   result)
-			(declare (index counter))))))
-		   (vector
-		    (when from-end
-		      (error "REDUCE from-end on vectors is not implemented."))
-		    (with-subvector-accessor (sequence-ref sequence start end)
-		      (do* ((index start)
-			    (result (funcall-function (if initial-value-p
-							  initial-value
-							(key (sequence-ref (prog1 index (incf index)))))
-						      (key (sequence-ref (prog1 index (incf index)))))
-				    (funcall-function result (sequence-ref (prog1 index (incf index))))))
-			  ((= index end) result)
-			(declare (index index))))))))))))))
+	    (sequence-dispatch sequence
+              (list
+               (let ((list (nthcdr start sequence)))
+                 (cond
+                   ((null list)
+                    (if initial-value-p
+                        initial-value
+                        (funcall-function)))
+                   ((null (cdr list))
+                    (if initial-value-p
+                        (funcall-function initial-value (key (car list)))
+                        (key (car list))))
+                   ((not from-end)
+                    (if (not end)
+                        (do ((result (funcall-function (if initial-value-p
+                                                           initial-value
+                                                           (key (pop list)))
+                                                       (key (pop list)))
+                                     (funcall-function result (key (pop list)))))
+                            ((null list) result))
+                        (do ((counter (1+ start) (1+ counter))
+                             (result (funcall-function (if initial-value-p
+                                                           initial-value
+                                                           (key (pop list)))
+                                                       (key (pop list)))
+                                     (funcall-function result (key (pop list)))))
+                            ((or (null list)
+                                 (= end counter))
+                             result)
+                          (declare (index counter)))))
+                   (from-end
+                    (do* ((end (or end (+ start (length list))))
+                          (counter (1+ start) (1+ counter))
+                          (list (nreverse (subseq sequence start end)))
+                          (result (funcall-function (key (pop list))
+                                                    (if initial-value-p
+                                                        initial-value
+                                                        (key (pop list))))
+                                  (funcall-function (key (pop list)) result)))
+                         ((or (null list)
+                              (= end counter))
+                          result)
+                      (declare (index counter)))))))
+              (vector
+               (when from-end
+                 (error "REDUCE from-end on vectors is not implemented."))
+               (let ((end (or (check-the index end)
+                              (length sequence))))
+                 (case (- end start)
+                   (0 (if initial-value-p
+                          initial-value
+                          (funcall-function)))
+                   (1 (if initial-value-p
+                          (funcall-function initial-value (key (elt sequence start)))
+                          (key (elt sequence start))))
+                   (t (with-subvector-accessor (sequence-ref sequence start end)
+                        (do* ((index start)
+                              (result (funcall-function (if initial-value-p
+                                                            initial-value
+                                                            (key (sequence-ref (prog1 index (incf index)))))
+                                                        (key (sequence-ref (prog1 index (incf index)))))
+                                      (funcall-function result (sequence-ref (prog1 index (incf index))))))
+                             ((= index end) result)
+                          (declare (index index)))))))))))))))
 
 (defun subseq (sequence start &optional end)
   (sequence-dispatch sequence
@@ -1569,6 +1587,25 @@ quick-sort with cut-off greater than 1."
 		      (right (1- end))
 		      left-item right-item)
 		(declare (index left right))
+                ;; do median-of-three..
+                (let ((p1 (vector-ref start))
+                      (p2 (vector-ref (+ start cut-off -1)))
+                      (p3 (vector-ref (1- end))))
+                  (let ((kp1 (key p1))
+                        (kp2 (key p2))
+                        (kp3 (key p3)))
+                    (cond
+                      ((predicate p1 p2)
+                       (if (predicate p2 p3)
+                           (setf pivot p2 keyed-pivot kp2)
+                           (if (predicate p1 p3)
+                               (setf pivot p3 keyed-pivot kp3)
+                               (setf pivot p1 keyed-pivot kp1))))
+                      ((predicate p2 p3)
+                       (if (predicate p1 p3)
+                           (setf pivot p1 keyed-pivot kp1)
+                           (setf pivot p3 keyed-pivot kp3)))
+                      (t (setf pivot p2 keyed-pivot kp2)))))
 	       partitioning-loop
 		(do-while (not (predicate keyed-pivot (key (setf left-item (vector-ref left)))))
 		  (incf left)
@@ -1586,8 +1623,10 @@ quick-sort with cut-off greater than 1."
 	       partitioning-complete
 		(setf (vector-ref start) right-item ; (aref vector right)
 		      (vector-ref right) pivot)
-		(quick-sort vector predicate key start right cut-off)
-		(quick-sort vector predicate key (1+ right) end cut-off))))))))
+                (when (and (> cut-off (- right start))
+                           (> cut-off (- end right)))
+                  (quick-sort vector predicate key start right cut-off)
+                  (quick-sort vector predicate key (1+ right) end cut-off)))))))))
   vector)
 
 (defun sort (sequence predicate &key (key 'identity))
