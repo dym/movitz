@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Dec 14 22:33:42 2003
 ;;;;                
-;;;; $Id: pci.lisp,v 1.12 2005/08/24 07:33:21 ffjeld Exp $
+;;;; $Id: pci.lisp,v 1.13 2007/04/07 08:03:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -308,7 +308,7 @@ in a somewhat feeble attempt to avoid trouble."
 	 (t
 	  (list (pop mem-keys) (logand base -16))))))
 	    
-(defun scan-pci-bus (bus)
+(defun scan-pci-bus (&optional (bus 0))
   (loop for device from 0 to 31
       do (multiple-value-bind (vendor-id return-code)
 	     (pci-bios-config-space-word bus device 0 0)
