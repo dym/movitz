@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.60 2007/04/05 21:12:19 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.61 2007/04/07 20:50:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -67,7 +67,7 @@ start-location and end-location."
       (let ((x (memref scan 0 :type :unsigned-byte16))
             (x2 (memref scan 2 :type :unsigned-byte16)))
         (when verbose
-          (format *terminal-io* " [at ~S: ~S]" scan x))
+          (format *terminal-io* " [at #x~X: #x~X]" scan x))
         (cond
           ((let ((tag (ldb (byte 3 0) x)))
              (or (= tag #.(movitz:tag :null))
@@ -78,10 +78,10 @@ start-location and end-location."
                (and (= #xffff x2) (= #xfffe x))
                (and (= #x7fff x2) (= #xffff x))))
           ((scavenge-typep x :illegal)
-           (error "Illegal word ~S at ~S." x scan))
+           (error "Illegal word #x~4,'0X at #x~X." x scan))
           ((scavenge-typep x :bignum)
            (assert (evenp scan) ()
-                   "Scanned bignum-header ~S at odd location #x~X." x scan)
+                   "Scanned bignum-header #x~4,'0X at odd location #x~X." x scan)
            ;; Just skip the bigits
            (let* ((bigits (memref scan 0 :index 1 :type :unsigned-byte14))
                   (delta (logior bigits 1)))
@@ -89,11 +89,11 @@ start-location and end-location."
              (incf scan delta)))
           ((scavenge-typep x :defstruct)
            (assert (evenp scan) ()
-                   "Scanned struct-header ~S at odd location #x~X." x scan)
+                   "Scanned struct-header #x~4,'0X at odd location #x~X." x scan)
            (record-scan (%word-offset scan #.(movitz:tag :other))))
           ((scavenge-typep x :run-time-context)
            (assert (evenp scan) ()
-                   "Scanned run-time-context-header ~S at odd location #x~X." 
+                   "Scanned run-time-context-header #x~4,'0X at odd location #x~X." 
                    (memref scan 0 :type :unsigned-byte32) scan)
            (incf scan)
            (let ((non-lispvals #.(cl:truncate (cl:+ -4 (bt:slot-offset 'movitz::movitz-run-time-context
@@ -106,7 +106,7 @@ start-location and end-location."
              (setf scan end)))
           ((scavenge-typep x :funobj)
            (assert (evenp scan) ()
-                   "Scanned funobj-header ~S at odd location #x~X." 
+                   "Scanned funobj-header #x~4,'0X at odd location #x~X." 
                    (memref scan 0 :type :unsigned-byte32) scan)
            (record-scan (%word-offset scan #.(movitz:tag :other)))
            ;; Process code-vector pointers specially..
@@ -157,11 +157,11 @@ start-location and end-location."
 		  (incf scan num-jumpers))))))
           ((scavenge-typep x :infant-object)
            (assert (evenp scan) ()
-                   "Scanned infant ~S at odd location #x~X." x scan)
-           (error "Scanning an infant object ~Z at ~S (end ~S)." x scan end-location))
+                   "Scanned infant #x~4,'0X at odd location #x~X." x scan)
+           (error "Scanning an infant object #x~4,'0X at #x~X (end #x~X)." x scan end-location))
           ((scavenge-typep x :basic-vector)
            (assert (evenp scan) ()
-                   "Scanned basic-vector-header ~S at odd location #x~X." x scan)
+                   "Scanned basic-vector-header #x~4,'0X at odd location #x~X." x scan)
            (cond
              ((or (scavenge-wide-typep x :basic-vector
                                        #.(bt:enum-value 'movitz:movitz-vector-element-type :u8))
@@ -191,7 +191,7 @@ start-location and end-location."
                                        #.(bt:enum-value 'movitz:movitz-vector-element-type
                                           :indirects)))
               (record-scan (%word-offset scan #.(movitz:tag :other))))
-             (t (error "Scanned unknown basic-vector-header ~S at location #x~X." x scan))))
+             (t (error "Scanned unknown basic-vector-header #x~4,'0X at location #x~X." x scan))))
           ((and (eq x 3) (eq x2 0))
            (record-scan scan)
            (incf scan)
@@ -202,9 +202,9 @@ start-location and end-location."
           (t ;; (typep x 'pointer)
            (let* ((old (memref scan 0))
                   (new (funcall function old scan)))
-             (when verbose
-               (format *terminal-io* " [~Z => ~Z]" old new))
              (unless (eq old new)
+               (when verbose
+                 (format *terminal-io* " [~Z => ~Z]" old new))
                (setf (memref scan 0) new))))))))
   (values))
 
