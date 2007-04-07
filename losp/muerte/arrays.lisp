@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.61 2007/03/11 22:41:45 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.62 2007/04/07 20:18:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1040,36 +1040,75 @@ and return basic-vector and accessors for that subsequence."
 
 (defun make-basic-vector%t (length fill-pointer initial-element initial-contents)
   (check-type length (and fixnum (integer 0 *)))
-  (let* ((words (+ 2 length))
-	 (array (macrolet
-		    ((do-it ()
-		       `(with-allocation-assembly (words :fixed-size-p t
-							 :object-register :eax)
-			  (:load-lexical (:lexical-binding length) :ecx)
-			  (:movl ,(movitz:basic-vector-type-tag :any-t)
-				 (:eax (:offset movitz-basic-vector type)))
-			  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements)))
-			  (:addl 4 :ecx)
-			  (:andl -8 :ecx)
-			  (:jz 'init-done)
-			  (:load-lexical (:lexical-binding initial-element) :edx)
-			  init-loop
-			  (:movl :edx (:eax (:offset movitz-basic-vector data) :ecx -4))
-			  (:subl 4 :ecx)
-			  (:jnz 'init-loop)
-			  init-done
-			  )))
-		  (do-it))))
+  (let* ((words (+ 2 length)))
     (cond
-     ((integerp fill-pointer)
-      (setf (fill-pointer array) fill-pointer))
-     ((or (eq t fill-pointer)
-	  (array-has-fill-pointer-p array))
-      (setf (fill-pointer array) length)))
-    (cond
-     (initial-contents
-      (replace array initial-contents)))
-    array))
+      ((<= length 8)
+       (let ((array (macrolet
+                        ((do-it ()
+                           `(with-allocation-assembly (words :fixed-size-p t
+                                                             :object-register :eax)
+                              (:load-lexical (:lexical-binding length) :ecx)
+                              (:movl ,(movitz:basic-vector-type-tag :any-t)
+                                     (:eax (:offset movitz-basic-vector type)))
+                              (:movl :ecx (:eax (:offset movitz-basic-vector num-elements)))
+                              (:addl 4 :ecx)
+                              (:andl -8 :ecx)
+                              (:jz 'init-done)
+                              (:load-lexical (:lexical-binding initial-element) :edx)
+                              init-loop
+                              (:movl :edx (:eax (:offset movitz-basic-vector data) :ecx -4))
+                              (:subl 4 :ecx)
+                              (:jnz 'init-loop)
+                              init-done
+                              )))
+                      (do-it))))
+         (cond
+           ((integerp fill-pointer)
+            (setf (fill-pointer array) fill-pointer))
+           ((or (eq t fill-pointer)
+                (array-has-fill-pointer-p array))
+            (setf (fill-pointer array) length)))
+         (when initial-contents
+           (replace array initial-contents))
+         array))
+      (t (let* ((init-word (if (typep initial-element '(or null fixnum character))
+                               initial-element
+                               nil))
+                (array (macrolet
+                           ((do-it ()
+                              `(with-inline-assembly (:returns :eax)
+                                 (:compile-form (:result-mode :eax)
+                                                (with-non-pointer-allocation-assembly (words :fixed-size-p t
+                                                                                             :object-register :eax)
+                                                  (:load-lexical (:lexical-binding length) :ecx)
+                                                  (:movl ,(movitz:basic-vector-type-tag :u32)
+                                                         (:eax (:offset movitz-basic-vector type)))
+                                                  (:movl :ecx (:eax (:offset movitz-basic-vector num-elements)))))
+                                 (:load-lexical (:lexical-binding length) :ecx)
+                                 (:addl 4 :ecx)
+                                 (:andl -8 :ecx)
+                                 (:jz 'init-done2)
+                                 (:load-lexical (:lexical-binding init-word) :edx)
+                                 init-loop2
+                                 (:movl :edx (:eax (:offset movitz-basic-vector data) :ecx -4))
+                                 (:subl 4 :ecx)
+                                 (:jnz 'init-loop2)
+                                 init-done2
+                                 (:movl ,(movitz:basic-vector-type-tag :any-t)
+                                        (:eax (:offset movitz-basic-vector type))))))
+                         (do-it))))
+           (cond
+             ((integerp fill-pointer)
+              (setf (fill-pointer array) fill-pointer))
+             ((or (eq t fill-pointer)
+                  (array-has-fill-pointer-p array))
+              (setf (fill-pointer array) length)))
+           (cond
+             (initial-contents
+              (replace array initial-contents))
+             ((not (eq init-word initial-element))
+              (fill array initial-element)))
+           array)))))
 
 (defun make-indirect-vector (displaced-to displaced-offset fill-pointer length)
   (let ((x (make-basic-vector%t 4 0 nil nil)))
