@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.122 2006/05/02 20:02:09 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.123 2007/04/07 07:56:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -622,7 +622,7 @@
       (macrolet
 	  ((do-it ()
 	     `(number-double-dispatch (minuend subtrahend)
-		((t (eql 0))
+		((number (eql 0))
 		 minuend)
 		(((eql 0) t)
 		 (- subtrahend))
