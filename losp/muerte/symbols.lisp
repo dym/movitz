@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.28 2007/02/22 22:11:21 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.29 2007/04/07 08:02:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -245,6 +245,14 @@
     (string
      (make-symbol (format nil "~A~D" x (prog1 *gensym-counter*
 					 (incf *gensym-counter*)))))))
+
+(defvar *gentemp-counter* 0)
+
+(defun gentemp (&optional (prefix "T") (package *package*))
+  (intern (do ((name #0=(format nil "~A~D" prefix *gentemp-counter*) #0#))
+              ((not (find-symbol name package)) name)
+            (incf *gentemp-counter*))
+          package))
 
 (defun get (symbol indicator &optional default)
   (getf (symbol-plist symbol) indicator default))
