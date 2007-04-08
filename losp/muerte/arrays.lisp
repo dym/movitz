@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.62 2007/04/07 20:18:20 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.63 2007/04/08 15:52:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -157,7 +157,7 @@
   "Does the basic-vector have a fill-pointer?"
   `(with-inline-assembly (:returns :boolean-zf=1)
      (:compile-form (:result-mode :eax) ,vector)
-     (:testl ,(logxor #xffffffff (1- (expt 2 14)))
+     (:testl ,(logxor #xffffffff (* movitz:+movitz-fixnum-factor+ (1- (expt 2 14))))
 	     (:eax ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements)))))
 
 (define-compiler-macro %basic-vector-fill-pointer (vector)
@@ -232,7 +232,8 @@
 	       (:jnz 'illegal-fill-pointer)
 	       (:movl (:ebx (:offset movitz-basic-vector num-elements))
 		      :ecx)
-	       (:testl ,(logxor #xffffffff (1- (expt 2 14))) :ecx)
+	       (:testl ,(logxor #xffffffff (* movitz:+movitz-fixnum-factor+ (1- (expt 2 14))))
+                :ecx)
 	       (:jnz '(:sub-program ()
 		       (:compile-form (:result-mode :ignore)
 			(error "Vector has no fill-pointer."))))
@@ -1099,6 +1100,7 @@ and return basic-vector and accessors for that subsequence."
                          (do-it))))
            (cond
              ((integerp fill-pointer)
+              (warn "sfp len: ~s" (array-dimension array 0))
               (setf (fill-pointer array) fill-pointer))
              ((or (eq t fill-pointer)
                   (array-has-fill-pointer-p array))
