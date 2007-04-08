@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.63 2007/04/08 15:52:33 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.64 2007/04/08 16:03:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1100,7 +1100,6 @@ and return basic-vector and accessors for that subsequence."
                          (do-it))))
            (cond
              ((integerp fill-pointer)
-              (warn "sfp len: ~s" (array-dimension array 0))
               (setf (fill-pointer array) fill-pointer))
              ((or (eq t fill-pointer)
                   (array-has-fill-pointer-p array))
