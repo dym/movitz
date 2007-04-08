@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 20 00:39:59 2004
 ;;;;                
-;;;; $Id: ratios.lisp,v 1.9 2007/03/16 19:49:24 ffjeld Exp $
+;;;; $Id: ratios.lisp,v 1.10 2007/04/08 13:44:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -76,9 +76,28 @@
     (integer 1)
     (ratio (%ratio-denominator x))))
 
-(defconstant pi #xea7632a/4aa1a8b)
-
 (defconstant least-positive-short-float 1/1000)
 (defconstant least-positive-single-float 1/1000)
 (defconstant least-positive-double-float 1/1000)
 (defconstant least-positive-long-float 1/1000)
+
+;;;
+
+(defconstant pi #xea7632a/4aa1a8b)
+
+(defvar long-float-epsilon 1/10000)
+
+(defun cos (x)
+  "http://mathworld.wolfram.com/Cosine.html"
+  (do* ((rad (mod x 44/7))
+        (n2 0 (+ n2 2))
+        (sign 1 (- sign))
+        (denominator 1 (* denominator (1- n2) n2))
+        (term 1 (/ (expt rad n2)
+                   denominator))
+        (sum 1 (+ sum (* sign term))))
+       ((<= term long-float-epsilon)
+        sum)))
+
+(defun sin (x)
+  (cos (- x (/ pi 2))))
