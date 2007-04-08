@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Mar 23 01:18:36 2002
 ;;;;                
-;;;; $Id: format.lisp,v 1.15 2007/02/11 21:57:14 ffjeld Exp $
+;;;; $Id: format.lisp,v 1.16 2007/04/08 13:14:58 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -68,24 +68,22 @@
    ((minusp x)
     (write-char #\-)
     (format-float (- x) at-sign-p colon-p w d k overflowchar padchar))
-   (t (multiple-value-bind (integer-part decimal-part)
-	  (truncate x)
-	(write-integer integer-part *standard-output* 10 nil)
-	(dotimes (i k)
-	  (write-char #\0))
-	(write-char #\.)
-	(do ((remainder decimal-part)
-	     (last-i (if d (1- d) 15))
-	     (i 0 (1+ i)))
-	    ((or (and (not d) (plusp i) (zerop remainder))
-		 (> i last-i)))
-	  (declare (index i))
-	  (multiple-value-bind (next-digit next-remainder)
-	      (if (= i last-i)
-		  (floor (+ 1/2 (* 10 remainder)))
-		(truncate (* 10 remainder)))
-	    (setf remainder next-remainder)
-	    (write-digit next-digit *standard-output*)))))))
+   (t (let ((decimals (if d (1- d) 15)))
+        (multiple-value-bind (integer-part decimal-part)
+            (truncate (+ x (* 1/20 (expt 1/10 decimals))))
+          (write-integer integer-part *standard-output* 10 nil)
+          (dotimes (i k)
+            (write-char #\0))
+          (write-char #\.)
+          (do ((remainder decimal-part)
+               (i 0 (1+ i)))
+              ((or (and (not d) (plusp i) (zerop remainder))
+                   (> i decimals)))
+            (declare (index i))
+            (multiple-value-bind (next-digit next-remainder)
+                (truncate (* 10 remainder))
+              (setf remainder next-remainder)
+              (write-digit next-digit *standard-output*))))))))
 
 (defun find-directive (string i directive &optional recursive-skip-start
 						    (recursive-skip-end directive))
