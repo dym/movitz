@@ -45,7 +45,7 @@ Interface Movitz via SLIME."
   ((slime-eval '(cl:and (cl:find-package :movitz.ide) t)))
   ((not (slime-eval '(cl:and (cl:find-package :movitz) t)))
    (message "Movitz-mode: The Movitz package is not loaded."))
-  (t (slime-eval-async
+  (t (slime-eval
       `(cl:progn (cl:load (cl:compile-file ,(concat movitz-slime-path "ide.lisp")))
                  nil)))))
 
@@ -161,27 +161,23 @@ then prompt for the file to compile."
                   (options options))
       (cond
        ((string= "function" defun-type)
-        (message "Movitz disassembling %s %s..." defun-type defun-name)
+        (message "Movitz disassembling %s '%s'..." defun-type defun-name)
         (slime-eval-async `(movitz.ide:movitz-disassemble ,defun-name ,package-name)
                           (lambda (result)
                             (slime-show-description result package-name)
-                            (message "Movitz disassembling %s %s...done." defun-type defun-name))))
+                            (message "Movitz disassembling %s '%s'...done." defun-type defun-name))))
        ((string= "method" defun-type)
         (message "Movitz disassembling %s '%s %s'..." defun-type defun-name lambda-list)
         (slime-eval-async `(movitz.ide:movitz-disassemble-method ,defun-name ,lambda-list ',options ,package-name)
                           (lambda (result)
                             (slime-show-description result package-name)
                             (message "Movitz disassembling %s '%s %s'...done." defun-type defun-name lambda-list))))
-       ;; ((string= "primitive-function" defun-type)
-       ;;       (message "Movitz disassembling %s %s..." defun-type defun-name)
-       ;;       (fi:eval-in-lisp
-       ;;        "(cl:let ((defun-name (cl:let ((cl:*package* (cl:find-package :%s)))
-       ;;                                 (cl:read-from-string \"%s\")))
-       ;;                (cl:*print-base* 16))
-       ;;          (movitz::movitz-disassemble-primitive defun-name))"
-       ;;        fi:package defun-name)
-       ;;       (switch-to-buffer "*common-lisp*")
-       ;;       (message "Movitz disassembling %s %s...done." defun-type defun-name))
+       ((string= "primitive-function" defun-type)
+        (message "Movitz disassembling %s '%s'..." defun-type defun-name)
+        (slime-eval-async `(movitz.ide:movitz-disassemble-primitive ,defun-name ,package-name)
+                          (lambda (result)
+                            (slime-show-description result package-name)
+                            (message "Movitz disassembling %s '%s'...done." defun-type defun-name))))
        (t (message "Don't know how to Movitz disassemble %s '%s'." defun-type defun-name))))))
 
 (defun movitz-arglist (string)

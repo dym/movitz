@@ -13,6 +13,7 @@
            #:compile-defun
            #:dump-image
            #:movitz-disassemble
+           #:movitz-disassemble-primitive
            #:movitz-disassemble-method
            #:movitz-arglist
            #:movitz-macroexpand))
@@ -48,6 +49,13 @@
     (with-output-to-string (*standard-output*)
       (movitz:movitz-disassemble (get-sexpr printname
                                             (get-package package-printname))))))
+
+(defun movitz-disassemble-primitive (printname package-printname)
+  "Return the disassembly of SYMBOL-NAME's function as a string."
+  (with-image ()
+    (with-output-to-string (*standard-output*)
+      (movitz::movitz-disassemble-primitive (get-sexpr printname
+                                                       (get-package package-printname))))))
 
 (defun movitz-disassemble-method (gf-name lambda-list qualifiers package-name)
   (with-image ()
