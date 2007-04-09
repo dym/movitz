@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Mar 23 01:18:36 2002
 ;;;;                
-;;;; $Id: format.lisp,v 1.16 2007/04/08 13:14:58 ffjeld Exp $
+;;;; $Id: format.lisp,v 1.17 2007/04/09 21:10:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -315,11 +315,13 @@ clause."
 	      (#\( (multiple-value-setq (i args)
 		     (format-by-string control-string (1+ i) loop-limit args
 				       (cond
-					((and colon-p at-sign-p) :upcase)
+                                         ((and colon-p at-sign-p) :upcase)
 					(colon-p :capitalize)
 					(at-sign-p :capitalize-first)
 					(t :downcase)))))
-	      (#\? (format-by-string (pop args) 0 0 (pop args)))
+	      (#\? (if (not at-sign-p)
+                       (format-by-string (pop args) 0 0 (pop args))
+                       (setf args (nth-value 1 (format-by-string (pop args) 0 0 args)))))
 	      (#\: (setf colon-p t)
 		   (go proceed))
 	      (#\@ (setf at-sign-p t)
