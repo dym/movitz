@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Jan  9 15:57:22 2002
 ;;;;                
-;;;; $Id: malloc-init.lisp,v 1.7 2005/05/05 20:52:40 ffjeld Exp $
+;;;; $Id: malloc-init.lisp,v 1.8 2007/04/09 16:01:53 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,7 +28,7 @@
        (start-location (logand (+ kernel-end-location (1- 4096/4)) -4096/4))
        ;; End-location is the end of the memory.
        (end-location (* (1- memsize-mb) 1024 1024/4)))
-  (muerte:malloc-initialize start-location end-location)
+  (muerte:malloc-initialize start-location (- end-location start-location))
   (setf (cdar muerte::%memory-map%) end-location)
   (loop for x from kernel-end-location below start-location
       do (setf (memref x 0 :type :unsigned-byte32) 0))
