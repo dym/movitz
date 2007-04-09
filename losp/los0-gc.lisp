@@ -10,13 +10,13 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.61 2006/10/27 06:23:32 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.62 2007/04/09 17:30:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (provide :los0-gc)
 
-(in-package muerte.init)
+(in-package los0)
 
 (defvar *gc-quiet* nil)
 (defvar *gc-running* nil)
@@ -91,10 +91,22 @@
       ((do-it ()
 	 `(with-inline-assembly (:returns :eax)
 	   retry-cons
-	    ;; Set up thread-atomical execution
+
+;;             (:locally (:cmpl #xabbabee0 (:edi (:edi-offset values) ,(* 4 #x30))))
+;;             (:je 'no-check)
+;;             (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
+;;             (:movl (:edx 6) :edx); other
+;;             (:cmpl 8 (:edx 2))
+;;             (:jne '(:sub-program ()
+;;                     (:locally (:movl #xabbabee0 (:edi (:edi-offset values) ,(* 4 #x30))))
+;;                     (:break)))
+;;             no-check
+
+            ;; Set up thread-atomical execution
 	    (:locally (:movl ,(movitz::atomically-continuation-simple-pf 'fast-cons)
 			     (:edi (:edi-offset atomically-continuation))))
-	    (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
+
+            (:locally (:movl (:edi (:edi-offset nursery-space)) :edx))
 	    (:movl (:edx 2) :ecx)
 	    (:cmpl (:edx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
 		   :ecx)
@@ -230,6 +242,18 @@ Preserve EAX and EBX."
 (defvar *gc-stack* nil)
 (defvar *gc-stack2* nil)
 
+(defmacro with-hack-space ((&key (size 409600)) &body body)
+  `(let* ((id (with-inline-assembly (:returns :eax) (:movl :esp :eax)))
+          (save-space (%run-time-context-slot nil 'muerte::nursery-space))
+          (hack-space (make-duo-space (duo-space-end-location save-space) ,size)))
+     (warn "[~A] hack-space ~Z from ~Z/~Z: ~A" id hack-space save-space (space-other save-space) ',body)
+     (unwind-protect
+          (progn
+            (setf (%run-time-context-slot nil 'muerte::nursery-space) hack-space)
+            ,@body)
+       (warn "[~A] hack-space done." id)
+       (setf (%run-time-context-slot nil 'muerte::nursery-space) save-space))))
+
 (defun install-los0-consing (&key (context (current-run-time-context))
 				  (kb-size 1024)
 				  duo-space)
@@ -240,26 +264,40 @@ duo-space where each space is KB-SIZE kilobytes."
     (lambda (exception interrupt-frame)
       (declare (ignore exception interrupt-frame))
       (without-interrupts
-	(let ((*standard-output* *terminal-io*))
-	  (cond
-	   (*gc-running*
-	    (let* ((full-space (%run-time-context-slot nil 'muerte::nursery-space))
-		   (hack-space (make-duo-space (duo-space-end-location full-space) 102400)))
-	      (setf (%run-time-context-slot nil 'muerte::nursery-space) hack-space)
-	      (break "Recursive GC triggered. Full-space: ~Z, hack-space: ~Z"
-		     full-space hack-space)))
-	   (t (let ((*gc-running* t))
-		(unless *gc-quiet*
-		  (format t "~&;; GC.. "))
-		(stop-and-copy))))
+	(let ((muerte::*active-condition-handlers* nil)
+              (*debugger-hook* nil)
+              (*standard-output* *terminal-io*))
+          (cond
+            (*gc-running*
+             (let* ((full-space (%run-time-context-slot nil 'muerte::nursery-space))
+                    (hack-space (make-duo-space (duo-space-end-location full-space) 102400)))
+               (setf (%run-time-context-slot nil 'muerte::nursery-space) hack-space)
+               (break "Recursive GC triggered. Full-space: ~Z, hack-space: ~Z"
+                      full-space hack-space)))
+            (t (let ((*gc-running* t))
+                 (unless *gc-quiet*
+                   (format t "~&;; GC ~Z.." (%run-time-context-slot nil 'muerte::nursery-space)))
+                 (let* ((space0 (%run-time-context-slot nil 'nursery-space))
+                        (space1 (space-other space0)))
+                   (unless (= 2 (space-fresh-pointer space1))
+                     (with-hack-space ()
+                       (error "PRE space-other is not initialized: ~S" (space-fresh-pointer space1)))))
+                 (unwind-protect
+                      (stop-and-copy)
+                   (let* ((space0 (%run-time-context-slot nil 'nursery-space))
+                          (space1 (space-other space0)))
+                     (unless (= 2 (space-fresh-pointer space1))
+                       (with-hack-space ()
+                         (error "UP space-other is not initialized: ~S" (space-fresh-pointer space1))))
+                     )))))
 	  (if *gc-break*
 	      (break "GC break.")
-	    (loop			; This is  a nice opportunity to poll the keyboard..
-	      (case (muerte.x86-pc.keyboard:poll-char)
-		((#\escape)
-		 (break "Los0 GC keyboard poll."))
-		((nil)
-		 (return)))))))))
+              (loop ; This is  a nice opportunity to poll the keyboard..
+                 (case (muerte.x86-pc.keyboard:poll-char)
+                   ((#\escape)
+                    (break "Los0 GC keyboard poll."))
+                   ((nil)
+                    (return)))))))))
   (let* ((actual-duo-space (or duo-space
 			       (allocate-duo-space (* kb-size #x100))))
 	 (last-location (object-location (cons 1 2))))
@@ -332,8 +370,11 @@ duo-space where each space is KB-SIZE kilobytes."
       (values))))
 
 
-(defparameter *x* #4000(nil))		; Have this in static space.
+(defparameter *x* (make-array #x1000 :fill-pointer 0))		; Have this in static space.
 ;;;(defparameter *xx* #4000(nil))		; Have this in static space.
+
+(defvar *gc-x1* nil)
+(defvar *gc-x2* nil)
 
 (defparameter *code-vector-foo* 0)
 (defvar *old-code-vectors* #250(nil))
@@ -349,7 +390,10 @@ duo-space where each space is KB-SIZE kilobytes."
 	  (check-type space0 (simple-array (unsigned-byte 32) 1))
 	  (check-type space1 (simple-array (unsigned-byte 32) 1))
 	  (assert (eq space0 (space-other space1)))
-	  (assert (= 2 (space-fresh-pointer space1)))
+	  (unless (= 2 (space-fresh-pointer space1))
+            (with-hack-space ()
+              (error "space1 is not initialized: ~S" (space-fresh-pointer space1))
+              nil))
 	  (setf (%run-time-context-slot nil 'nursery-space) space1)
 	  (values space1 space0)))
     ;; Evacuate-oldspace is to be mapped over every potential pointer.
@@ -364,31 +408,29 @@ duo-space where each space is KB-SIZE kilobytes."
 		   nil)
 		  ((object-in-space-p newspace x)
 		   x)
-		  #+ignore
-		  ((and (typep x 'code-vector)
-			(not (object-in-space-p oldspace x))
-			(not (object-in-space-p newspace x))
-			(= (ldb (byte 12 0) (object-location x))
-			   (ldb (byte 12 0) *code-vector-foo*))
-			(not (eq x (funobj-code-vector #'stop-and-copy)))
-			(not (eq x (symbol-value 'muerte::default-interrupt-trampoline)))
-;;;			(not (eq x (symbol-value 'muerte::ret-trampoline)))
-			(not (muerte::scavenge-find-pf (lambda (x y) x) (object-location x))))
-		   (let ((p (position (object-location x) *old-code-vectors*)))
-		     (if p
-			 (aref *new-code-vectors* p)
-		       (setf (aref *new-code-vectors*
-				   (vector-push (object-location x) *old-code-vectors*))
-			 (let ((new (shallow-copy x)))
-			   (warn "[~S] Migrating ~@[~S ~]~Z => ~Z." 
-				 location
-				 (muerte::locate-function (object-location x))
-				 x new)
-			   new)))))
+		  #+ignore ((and (typep x 'code-vector)
+                                 (not (object-in-space-p oldspace x))
+                                 (not (object-in-space-p newspace x))
+                                 (= (ldb (byte 12 0) (object-location x))
+                                    (ldb (byte 12 0) *code-vector-foo*))
+                                 (not (eq x (funobj-code-vector #'stop-and-copy)))
+                                 (not (eq x (symbol-value 'muerte::default-interrupt-trampoline)))
+                                 (not (muerte::scavenge-find-pf (lambda (x y) x) (object-location x))))
+                            (let ((p (position (object-location x) *old-code-vectors*)))
+                              (if p
+                                  (aref *new-code-vectors* p)
+                                  (setf (aref *new-code-vectors*
+                                              (vector-push (object-location x) *old-code-vectors*))
+                                        (let ((new (shallow-copy x)))
+                                          (warn "[~S] Migrating ~@[~S ~]~Z => ~Z." 
+                                                location
+                                                (muerte::locate-function (object-location x))
+                                                x new)
+                                          new)))))
 		  ((not (object-in-space-p oldspace x))
 		   x)
-		  ((when (typep x 'run-time-context)
-		     (warn "Scavenging ~S" x)))
+		  #+ignore ((when (typep x 'run-time-context)
+                              (warn "Scavenging ~S" x)))
 		  (t (or (and (eq (object-tag x)
 				  (ldb (byte 3 0)
 				       (memref (object-location x) 0 :type :unsigned-byte8)))
@@ -415,10 +457,12 @@ duo-space where each space is KB-SIZE kilobytes."
 	  with scan-pointer of-type index = 2
 	  as fresh-pointer of-type index = (space-fresh-pointer newspace)
 	  while (< scan-pointer fresh-pointer)
-	  do (map-header-vals evacuator
-			      (+ newspace-location scan-pointer)
-			      (+ newspace-location (space-fresh-pointer newspace)))
-	     (setf scan-pointer fresh-pointer))
+	  do (let ((start (+ newspace-location scan-pointer))
+                   (end (+ newspace-location (space-fresh-pointer newspace))))
+               (map-header-vals evacuator start end)
+               (setf *gc-x1* start)
+               (setf *gc-x2* end))
+           (setf scan-pointer fresh-pointer))
       (when *gc-consistency-check*
 	;; Consistency check..
 	(map-stack-vector (lambda (x foo)
@@ -426,7 +470,7 @@ duo-space where each space is KB-SIZE kilobytes."
 			    x)
 			  nil
 			  (current-stack-frame))
-	(with-simple-restart (continue "Ignore failed GC consistency check.")
+	(with-simple-restart (continue "Skip GC consistency check.")
 	  (without-interrupts
 	    (let ((a *x*))
 	      ;; First, restore the state of old-space
