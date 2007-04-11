@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.52 2007/04/02 20:54:34 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.53 2007/04/11 22:09:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1338,12 +1338,15 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 		     :form `(muerte::with-cloak (:multiple-values)
 			      ;; Inside here we don't have to mind current-values.
 			      (muerte::with-inline-assembly (:returns :nothing)
-				;; First, find next-continuation-step..
-				(:locally (:movl (:edi (:edi-offset raw-scratch0)) :eax)) ; final-cont..
+				;; First, save final-continuation across cleanup-forms.
+				(:locally (:pushl (:edi (:edi-offset raw-scratch0)))))
+                              ,@cleanup-forms
+			      (muerte::with-inline-assembly (:returns :nothing)
+				;; Now, find next-continuation-step..
+                                (:popl :eax) ; final-continuation
 				(:locally (:call (:edi (:edi-offset dynamic-unwind-next))))
 				(:locally (:bound (:edi (:edi-offset stack-bottom)) :eax))
-				(:store-lexical ,next-continuation-step-binding :eax :type t))
-			      ,@cleanup-forms))
+				(:store-lexical ,next-continuation-step-binding :eax :type t))))
 		   `((:locally (:popl (:edi (:edi-offset raw-scratch0)))) ; pop final continuation
 		     (:load-lexical ,next-continuation-step-binding :edx)
 		     (:locally (:movl :edx (:edi (:edi-offset dynamic-env))))
