@@ -7,18 +7,18 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: shallow-binding.lisp,v 1.1 2007/04/09 17:30:30 ffjeld Exp $
+;;;; $Id: shallow-binding.lisp,v 1.2 2007/04/12 16:09:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
-(defpackage los0.shallow-binding
+(defpackage lib.shallow-binding
   (:use common-lisp muerte)
   (:export #:install-shallow-binding
            #:deinstall-shallow-binding))
 
 (provide :lib/shallow-binding)
 
-(in-package los0.shallow-binding)
+(in-package lib.shallow-binding)
 
 (define-primitive-function dynamic-variable-install-shallow ()
   "Install each dynamic binding entry between that in ESP
@@ -103,6 +103,7 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
     (:movl (:ecx) :eax)			; symbol?
     (:testb 3 :al)			;
     (:jz 'not-variable-binding)		; not symbol?
+
     (:movl :ebx (:eax (:offset movitz-symbol value))) ; uninstall.
    not-variable-binding
     (:movl (:ecx 12) :ecx)		; proceed search
