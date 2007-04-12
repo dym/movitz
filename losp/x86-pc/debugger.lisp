@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 22 10:09:18 2002
 ;;;;                
-;;;; $Id: debugger.lisp,v 1.42 2006/03/21 20:13:12 ffjeld Exp $
+;;;; $Id: debugger.lisp,v 1.43 2007/04/12 16:11:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -53,7 +53,7 @@
 (defvar *backtrace-stack-frame-barrier* nil)
 (defvar *backtrace-do-fresh-lines* t)
 (defvar *backtrace-print-length* 3)
-(defvar *backtrace-print-level* 2)
+(defvar *backtrace-print-level* 3)
 (defvar *backtrace-print-frames* nil)
 
 (defun pointer-in-range (x)
@@ -71,31 +71,6 @@
 				 (object-location code-vector)))))
       (when (<= 0 delta (length code-vector))
 	delta))))
-
-
-#+ignore	  
-(defun print-dynamic-context (&key terse symbol)
-  (loop for dynamic-context = (current-dynamic-context)
-      then (dynamic-context-uplink dynamic-context)
-      while (stack-ref-p dynamic-context)
-      do (let ((tag (dynamic-context-tag dynamic-context)))
-	   (cond
-	    ((eq tag (load-global-constant unbound-value))
-	     (let ((name (stack-ref dynamic-context 0 0 :lisp)))
-	       (when (or (not symbol) (eq symbol name))
-		 (format t (if terse
-			       "|  #x~X: n: ~S, v: ~Z.  |"
-			     "~&#x~X: name: ~A~%        value: ~A")
-			 dynamic-context name
-			 (stack-ref dynamic-context 8 0 :lisp)))))
-	    ((not symbol)
-	     (format t (if terse
-			   "|  #x~X: t: ~Z.  |"
-			 "~&#x~X:  tag: ~S")
-		     dynamic-context
-		     tag))))
-      finally (format t "~&Last uplink: #x~X~%" dynamic-context)
-	      (return (values))))
 
 (defun funobj-name-or-nil (x)
   (typecase x
