@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.59 2007/04/07 08:01:41 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.60 2007/04/12 16:10:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -37,6 +37,11 @@ This variable should be initialized during bootup initialization.")
 (defun check-stack-limit ()
   (declare (without-check-stack-limit))	; we do it explicitly..
   (check-stack-limit))
+
+(defun protect-unbound (x)
+  (if (not (eq x (%run-time-context-slot nil 'new-unbound-value)))
+      x
+      (format nil "#<unbound #x~X>" (%object-lispval x))))
 
 (defun stack-frame-funobj (stack frame)
   (stack-frame-ref stack frame -1))
@@ -113,6 +118,13 @@ Otherwise, stack-frame is an absolute location."
 (defun dynamic-context-tag (dynamic-context)
   (stack-frame-ref nil dynamic-context 1 :lisp))
 
+(defun stack-index-frame (stack index start-frame)
+  "Find the frame in which index is included."
+  (do ((frame start-frame (stack-frame-uplink stack frame)))
+      ((eq 0 frame) nil)
+    (when (< index frame)
+      (return frame))))
+
 (defmacro with-each-dynamic-context ((&optional start-context result) &rest clauses)
   "Only use this if you know what you're doing. See run-time.lisp."
   (let ((context (gensym "dynamic-context-"))
@@ -120,6 +132,7 @@ Otherwise, stack-frame is an absolute location."
 	(name (gensym "dynamic-name-"))
 	(bind-clause (find :binding clauses :key #'caar))
 	(catch-clause (find :catch clauses :key #'caar))
+        (lcatch-clause (find :lexical-catch clauses :key #'caar))
 	(up-clause (find :unwind-protect clauses :key #'caar))
 	(basic-restart-clause (find :basic-restart clauses :key #'caar)))
     `(do ((,context ,(if start-context start-context '(current-dynamic-context))
@@ -134,7 +147,8 @@ Otherwise, stack-frame is an absolute location."
 		 (multiple-value-bind ,(cdar bind-clause)
 		     (values ,context
 			     (stack-frame-ref nil ,context 0 :lisp)
-			     (stack-frame-ref nil ,context 2 :lisp))
+			     (stack-frame-ref nil ,context 2 :lisp)
+                             (stack-frame-ref nil ,context 1 :lisp))
 		   ,@(rest bind-clause)))))
 	  ,@(when up-clause
 	      `(((eq ,tag (load-global-constant unwind-protect-tag))
@@ -153,29 +167,48 @@ Otherwise, stack-frame is an absolute location."
 					   (stack-frame-ref nil ,context -1 :lisp)) ; name
 					 0 (length (cdar basic-restart-clause))))
 		     ,@(rest basic-restart-clause))))))
+          ,@(when lcatch-clause
+                  `(((eq ,tag (load-global-constant unbound-function))
+                     (multiple-value-bind ,(cdar lcatch-clause)
+                         (values ,context)
+                       ,@(rest lcatch-clause)))))
 	  ,@(when catch-clause
 	      `((t (multiple-value-bind ,(cdar catch-clause)
 		       (values ,context ,tag)
 		     ,@(rest catch-clause))))))))))
 
-(defun pdc (&rest types)
-  (declare (dynamic-extent types))
-  (let ((types (or types '(:restarts :bindings :catch))))
-    (with-each-dynamic-context ()
-      ((:basic-restart context name)
-       (when (member :restarts types)
-	 (format t "~&restart: ~S fmt: ~S/~S [#x~X]" name
-		 (rc-format context)
-		 (rc-args context)
-		 context)))
-      ((:binding context name value)
-       (declare (ignore context))
-       (when (member :bindings types)
-	 (format t "~&bind:    ~S => ~Z" name value)))
-      ((:catch context tag)
-       (declare (ignore context))
-       (when (member :catch types)
-	 (format t "~&catch:   ~Z: ~S" tag tag))))))
+
+(defun print-dynamic-context (&key
+                              (types '(:restart :binding :catch :unwind-protect :lexical-catch) types-p)
+                              variables (spartan t) (show-functions t))
+  (when (and variables (not types-p))
+    (setf types '(:binding)))
+  (let ((format-values (if spartan "~Z" "~S"))
+        (last-frame nil))
+    (flet ((info (context type format &rest args)
+             (when (member type types)
+               (let ((frame (stack-index-frame nil context (current-stack-frame))))
+                 (when (and show-functions frame (not (eq frame last-frame)))
+                   (setf last-frame frame)
+                   (format t "~&  [[[in ~A]]]~%" (stack-frame-funobj nil frame))))
+               (format t "~&[~8,'0X] " context)
+               (apply #'format t format args))))
+      (with-each-dynamic-context ()
+        ((:basic-restart context name)
+         (info context :basic-restart
+               "restart: ~S fmt: ~S/~S [#x~X]"
+               name (rc-format context) (rc-args context) context))
+        ((:binding context name value scratch)
+         (when (or (null variables)
+                   (member name variables))
+           (info context :binding "bind: ~S => ~@? [scratch: ~@?]"
+                 name format-values value format-values scratch)))
+        ((:unwind-protect context)
+         (info context :unwind-protect "unwind-protect"))
+        ((:lexical-catch context tag)
+         (info context :lexical-catch "lexical-catch" tag tag))
+        ((:catch context tag)
+         (info context :catch "catch: ~Z: ~S" tag tag))))))
 
 (define-compiler-macro %location-object (&environment env location tag)
   (assert (movitz:movitz-constantp tag env))
