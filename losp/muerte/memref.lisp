@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.48 2005/08/24 07:30:14 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.49 2007/04/13 23:19:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1043,19 +1043,22 @@
 	    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
 	    (,prefixes :movl :eax (:ecx :ebx))))
 	(:unsigned-byte8
-	 `(with-inline-assembly (:returns :nothing)
-	    (:compile-form (:result-mode :push) ,address)
-	    (:compile-form (:result-mode :push) ,index)
-	    (:compile-form (:result-mode :push) ,offset)
-	    (:compile-form (:result-mode :eax) ,value)
-	    (:popl :edx)		; offset
-	    (:popl :ebx)		; index
-	    (:popl :ecx)		; address
-	    (:shll ,(- 8 movitz::+movitz-fixnum-shift+) :eax)
-	    (:addl :ebx :ecx)
-	    (:addl :edx :ecx)
-	    (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
-	    (,prefixes :movb :ah (:ecx))))
+         (let ((address-var (gensym "memref-int-address-"))
+               (index-var (gensym "memref-int-index-var-"))
+               (offset-var (gensym "memref-int-offset-var-"))
+               (value-var (gensym "memref-int-value-var-")))
+           `(let ((,value-var ,value)
+                  (,address-var ,address)
+                  (,offset-var (+ ,index ,offset)))
+              (with-inline-assembly (:returns :nothing)
+                (:load-lexical (:lexical-binding ,address-var) :ecx)
+                (:load-lexical (:lexical-binding ,offset-var) :edx)
+                (:load-lexical (:lexical-binding ,value-var) :eax)
+                (:shll ,(- 8 movitz::+movitz-fixnum-shift+) :eax)
+                (:addl :edx :ecx)
+                (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
+                (,prefixes :movb :ah (:ecx)))
+              ,value-var)))
 	(:unsigned-byte16
 	 (cond
 	  ((eq 0 offset)
@@ -1102,22 +1105,28 @@
 (defun (setf memref-int)
     (value address &key (offset 0) (index 0) (type :unsigned-byte32) (physicalp t))
   (cond
-   (physicalp
-    (ecase type
-      (:unsigned-byte8
-       (setf (memref-int address :offset offset :index index :type :unsigned-byte8)
-	 value))
-      (:unsigned-byte16
-       (setf (memref-int address :offset offset :index index :type :unsigned-byte16)
-	 value))))
-   ((not physicalp)
-    (ecase type
-      (:unsigned-byte8
-       (setf (memref-int address :offset offset :index index :type :unsigned-byte8 :physicalp nil)
-	 value))
-      (:unsigned-byte16
-       (setf (memref-int address :offset offset :index index :type :unsigned-byte16 :physicalp nil)
-	 value))))))
+    (physicalp
+     (ecase type
+       (:unsigned-byte8
+        (setf (memref-int address :offset offset :index index :type :unsigned-byte8)
+              value))
+       (:unsigned-byte16
+        (setf (memref-int address :offset offset :index index :type :unsigned-byte16)
+              value))
+       (:unsigned-byte32
+        (setf (memref-int address :offset offset :index index :type :unsigned-byte32)
+              value))))
+    ((not physicalp)
+     (ecase type
+       (:unsigned-byte8
+        (setf (memref-int address :offset offset :index index :type :unsigned-byte8 :physicalp nil)
+              value))
+       (:unsigned-byte16
+        (setf (memref-int address :offset offset :index index :type :unsigned-byte16 :physicalp nil)
+              value))
+       (:unsigned-byte32
+        (setf (memref-int address :offset offset :index index :type :unsigned-byte32 :physicalp nil)
+              value))))))
 
 (defun memcopy (object-1 object-2 offset index-1 index-2 count type)
   (ecase type
