@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu May  8 14:25:06 2003
 ;;;;                
-;;;; $Id: segments.lisp,v 1.18 2007/04/13 22:37:04 ffjeld Exp $
+;;;; $Id: segments.lisp,v 1.19 2007/04/13 22:41:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -228,9 +228,8 @@ NB! you need to ensure that the table object isn't garbage-collected."
   (check-type table (and vector (not simple-vector)))
   (let ((offset (+ (logand #xfff8 selector)
 		   (movitz-type-slot-offset 'movitz-basic-vector 'data))))
-    (setf (memref table (+ 6 offset) :type :unsigned-byte8)
-          (logior (ldb (byte 4 16) limit)
-                  (ash (segment-descriptor-avl-x-db-g table selector) 4)))
+    (setf (ldb (byte 4 0) (memref table (+ 6 offset) :type :unsigned-byte8))
+          (ldb (byte 4 16) limit))
     (setf (memref table (+ 0 offset) :type :unsigned-byte16)
           (ldb (byte 16 0) limit))
     limit))
