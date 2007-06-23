@@ -1,23 +1,41 @@
 ;;; movitz-slime.el -- slime frontend for movitz
-;;; Copyright 2004   Luke Gorrie <luke@member.fsf.org>
-;;;
-;;; This is Free Software licensed under the terms of the GNU GPL.
-;;;
-;;; This is a small SLIME-based mode for Movitz development. We define
-;;; a few commands for manipulating the Movitz image within a host
-;;; Lisp. The mode is not comprehensive: it is used as an add-on to
-;;; slime-mode, and all slime commands still manipulate the host Lisp.
-;;;
-;;; You can enable this mode in a file with "-*- movitz-mode: t -*-"
-;;; on the first line, and use a trick such as
-;;; `movitz-auto-mode-setup' (below) to automatically enable it on the
-;;; core Movitz sources.
+
+;; 2004, Written by Luke Gorrie <luke@member.fsf.org> and placed in
+;;       the public domain.
+
+;;; Commentary:
+;;
+;; This is a small SLIME-based mode for Movitz development. We define
+;; a few commands for manipulating the Movitz image within a host
+;; Lisp. The mode is not comprehensive: it is used as an add-on to
+;; slime-mode, and all slime commands still manipulate the host Lisp.
+;;
+;; You can enable this mode in a file with "-*- movitz-mode: t -*-"
+;; on the first line, and use a trick such as
+;; `movitz-auto-mode-setup' (below) to automatically enable it on the
+;; core Movitz sources.
+
+;;; Installing:
+;;
+;; Load this mode by adding the location of this file to your
+;; load-path and invoking (require 'movitz-slime).
+;;
+;; If you use QEMU under GNU/Linux, you should probably also set the
+;; following to some same value, for example:
+;; 
+;; (setq movitz-mode-qemu-binary-path "/usr/bin/qemu")
+;; (setq movitz-mode-qemu-directory "/usr/share/qemu/")
 
 (require 'slime)
 (require 'cl)
 
+(defgroup movitz-mode nil
+  "*Movitz mode."
+  :prefix "movitz-mode-"
+  :group 'movitz)
+
 (eval-and-compile 
-  (defvar movitz-slime-path
+  (defvar movitz-mode-slime-path
     (let ((path (or (locate-library "movitz-slime") load-file-name)))
       (when path
         (file-name-directory path)))
@@ -26,59 +44,27 @@ This is used to load the supporting Common Lisp library, ide.lisp.
 The default value is automatically computed from the location of the
 Emacs Lisp package."))
 
-;; You should set this to something more convenient, e.g. "\C-cm"
-(defvar movitz-command-prefix "\C-c\C-v"
-  "The initial key prefixf or movitz commands.")
+(defcustom movitz-mode-command-prefix "\C-c\C-v"
+  "*The initial key prefix or movitz-slime-mode commands."
+  :type 'string
+  :group 'movitz)
 
-(define-minor-mode movitz-mode
-  "\\{movitz-mode-map}
-Interface Movitz via SLIME."
- :init-value nil
- :lighter " Movitz"
-  ;; Bogus keymap to have movitz-mode-map initialized. We'll fill in
-  ;; the real bindings manually.
- :keymap `((,movitz-command-prefix . undefined))
- (cond
-  ((not movitz-mode))
-  ((not (slime-connected-p))
-   (message "Movitz-mode: SLIME is not connected."))
-  ((slime-eval '(cl:and (cl:find-package :movitz.ide) t)))
-  ((not (slime-eval '(cl:and (cl:find-package :movitz) t)))
-   (message "Movitz-mode: The Movitz package is not loaded."))
-  (t (slime-eval
-      `(cl:progn (cl:load (cl:compile-file ,(concat movitz-slime-path "ide.lisp")))
-                 nil)))))
+(defcustom movitz-mode-qemu-binary-path "c:/progra~1/qemu/qemu"
+  "*Location of the QEMU binary."
+  :type 'string
+  :group 'movitz)
 
-(defvar movitz-mode-commands-map nil
-  "Keymap for movitz-mode commands.
-This map is bound to a prefix sequence in `movitz-mode-map'.")
+(defcustom movitz-mode-qemu-directory "c:/progra~1/qemu/qemu"
+  "*Location for the QEMU -L option."
+  :type 'string
+  :group 'movitz)
 
-(defconst movitz-command-keys '(("k" movitz-compile-file)
-                                ("c" movitz-compile-defun)
-                                ("d" movitz-disassemble-fdefinition)
-                                ("D" movitz-dump-image))
-  "Keys to bind in `movitz-mode-commands-map'.")
-
-(defun movitz-init-command-keymap ()
-  "Bind the movitz-mode keys.
-This command can be called interactively to redefine the keys."
-  (interactive)
-  (setq movitz-mode-commands-map (make-sparse-keymap))
-  (dolist (spec movitz-command-keys)
-    (define-key movitz-mode-commands-map (car spec) (cadr spec)))
-  (define-key movitz-mode-map movitz-command-prefix movitz-mode-commands-map)
-
-  (define-key movitz-mode-map "\C-cd" 'movitz-dump-image)
-  (define-key movitz-mode-map "\C-c\C-v" 'movitz-disassemble-defun)
-  (define-key movitz-mode-map "\C-c\C-b" 'movitz-compile-file)
-  (define-key movitz-mode-map "\C-\M-x" 'movitz-compile-defun)
-  (define-key movitz-mode-map "\C-cm" 'movitz-macroexpand)
-  (define-key movitz-mode-map "\C-ca" 'movitz-arglist)
-  (define-key movitz-mode-map "\C-cd" 'movitz-dump-image-and-qemu)
-  (define-key movitz-mode-map "\M-." 'find-tag)
-  (define-key movitz-mode-map "\M-," 'tags-loop-continue)
-  (define-key movitz-mode-map "\r" 'newline-and-indent)
-  (define-key movitz-mode-map " " 'self-insert-command))
+(defcustom movitz-mode-image-file nil
+  "*Movitz image file.
+This is set by `movitz-dump-image' and can also be preinitialized in
+your init file."
+  :type 'string
+  :group 'movitz)
 
 (defun movitz-auto-mode-setup ()
   "Do some horrible things with regexps to auto-enable movitz-mode.
@@ -88,8 +74,6 @@ does."
             (defun movitz-auto-enable ()
               (when (string-match ".*/movitz/losp/.*\\.lisp$" (buffer-file-name))
                 (movitz-mode 1)))))
-
-
 
 
 ;;;; Commands
@@ -189,18 +173,15 @@ then prompt for the file to compile."
                           (message "Movitz args for %s: %s." string result))))))
 
 
-(defvar movitz-default-image-file nil
-  "The default filename to dump images to.
-This is set by `movitz-dump-image' and can also be preinitialized in
-your init file.")
+
 
 (defun movitz-dump-image (filename)
   "Dump the current image to FILENAME."
   (interactive (list (if (and (null current-prefix-arg)
-                              movitz-default-image-file)
-                         movitz-default-image-file
+                              movitz-mode-image-file)
+                         movitz-mode-image-file
                        (let ((filename (read-file-name "Image file: ")))
-                         (setq movitz-default-image-file filename)
+                         (setq movitz-mode-image-file filename)
                          filename))))
   (message "Dumping..")
   (slime-eval-async `(movitz.ide:dump-image ,filename)
@@ -210,20 +191,20 @@ your init file.")
 (defun movitz-dump-image-and-qemu (filename)
   "Dump the current image to FILENAME."
   (interactive (list (if (and (null current-prefix-arg)
-                              movitz-default-image-file)
-                         movitz-default-image-file
-                       (let ((filename (read-file-name "Image file: ")))
-                         (setq movitz-default-image-file filename)
+                              movitz-mode-image-file)
+                         movitz-mode-image-file
+                       (let ((filename (expand-file-name (read-file-name "Image file: "))))
+                         (setq movitz-mode-image-file filename)
                          filename))))
   (lexical-let ((filename filename))
     (message "Dumping '%s'.." filename)
-    (slime-eval-async `(movitz.ide:dump-image ,filename)
+    (slime-eval-async `(movitz.ide:dump-image ,(file-name-nondirectory filename))
                       (lambda (_)
-                        (message "Dumping '%s'..done, starting quemu." filename)
-                        (call-process "c:/progra~1/qemu/qemu"
+                        (message "Dumping '%s'..done, starting qemu" filename)
+                        (call-process movitz-mode-qemu-binary-path
                                       nil 0 nil
                                       "-s"
-                                      "-L" "c:/progra~1/qemu"
+                                      "-L" movitz-mode-qemu-directory
                                       "-fda" filename
                                       "-boot" "a")))))
 
@@ -283,5 +264,37 @@ your init file.")
            (car (cdr el))))))
 
 (movitz-auto-mode-setup)
-(movitz-init-command-keymap)
 
+(defconst movitz-mode-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map text-mode-map)
+    (define-key map (kbd "C-c d") 'movitz-dump-image)
+    (define-key map (kbd "C-c C-d") 'movitz-dump-image-and-qemu)
+    (define-key map (kbd "C-c C-v") 'movitz-disassemble-defun)
+    (define-key map (kbd "C-c m") 'movitz-macroexpand)
+    (define-key map (kbd "C-c a") 'movitz-arglist)
+    (define-key map (kbd "C-c k") 'movitz-compile-file)
+    (define-key map (kbd "C-c c") 'movitz-compile-defun)
+    map
+    )
+  "Keymap for `movitz-mode'.")
+
+(define-minor-mode movitz-mode
+  "\\{movitz-mode-map}
+Interface Movitz via SLIME."
+  :init-value nil
+  :lighter " Movitz"
+  (cond
+   ((not movitz-mode))
+   ((not (slime-connected-p))
+    (message "Movitz-mode: SLIME is not connected."))
+   ((slime-eval '(cl:and (cl:find-package :movitz.ide) t)))
+   ((not (slime-eval '(cl:and (cl:find-package :movitz) t)))
+    (message "Movitz-mode: The Movitz package is not loaded."))
+   (t (slime-eval
+       `(cl:progn (cl:load (cl:compile-file ,(concat movitz-mode-slime-path "ide.lisp")))
+		  nil)))))
+
+(provide 'movitz-slime)
+
+;;; movitz-slime.el ends here.
