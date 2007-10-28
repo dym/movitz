@@ -178,8 +178,9 @@
       (assert (eq (muerte::stack-frame-funobj nil ebp)
 		  (muerte::asm-register :esi)) ()
 	"Will not yield to a non-yield frame.")
-      ;; Push eflags for later..
-      (setf (memref (decf esp) 0 :type :unsigned-byte32) (eflags))
+      ;; Push eflags (with IF enabled) for later. Make sure interrupt
+      ;; interrupt flag in on.
+      (setf (memref (decf esp) 0 :type :unsigned-byte32) (logior 512 (eflags)))
       ;; Store EBP and ESP so we can get to them after the switch
       (setf (%run-time-context-slot target-rtc 'muerte::scratch1) ebp
 	    (%run-time-context-slot target-rtc 'muerte::scratch2) esp)

@@ -67,6 +67,26 @@
 ;;;	   #:*repl-print-format*
 ;;;	   #:*repl-readline-context*
 ;;;	   #:read-eval-print
+
+           ;; scheduling
+           *ticks-per-second*
+           *scheduler-function*
+           scheduler
+           process-run-function
+           process-wait
+           process-wait-with-timeout
+           process-enable
+           process-disable
+           process-enable-run-reason
+           process-disable-run-reason
+           process-enable-arrest-reason
+           process-disable-arrest-reason
+           clear-process-run-time
+           process-kill
+           process-block-with-timeout
+           process-block
+           process-unblock
+
 	   ))
 
 (provide :lib/package)
