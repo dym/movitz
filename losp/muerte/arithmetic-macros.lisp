@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.19 2007/04/01 19:22:22 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.20 2007/11/19 20:39:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -110,8 +110,12 @@
        ((minusp min)
 	`(let ((x ,x))
 	   (and (<= ,min x) (<= x ,max))))
-       ((or (not (typep min 'fixnum))
-	    (not (typep max 'fixnum)))
+       ((or (not (<= movitz:+movitz-most-negative-fixnum+
+		     min
+		     movitz:+movitz-most-positive-fixnum+))
+	    (not (<= movitz:+movitz-most-negative-fixnum+
+		     max
+		     movitz:+movitz-most-positive-fixnum+)))
 	`(let ((x ,x))
 	   (and (<=%2op ,min x)
 		(<=%2op x ,max))))
