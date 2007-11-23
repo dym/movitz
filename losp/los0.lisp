@@ -32,6 +32,9 @@
 (require :lib/threading)
 (require :lib/scheduler)
 
+(require :lib/graphics)
+
+
 ;; (require :lice-0.1/all)
 
 (defpackage los0

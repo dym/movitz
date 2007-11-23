@@ -18,6 +18,7 @@
 (require :x86-pc/memory)
 (require :x86-pc/keyboard)
 (require :x86-pc/vga)
+(require :x86-pc/bochs-vbe)
 (require :x86-pc/textmode)
 (require :x86-pc/pic8259)
 (require :x86-pc/pit8253)
