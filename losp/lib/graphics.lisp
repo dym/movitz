@@ -1,5 +1,7 @@
 ;;;; Movitz Common Graphics Functions
 ;;;; --------------------------------------------------------------------------
+;;;; [25 Nov 2007]  Martin Bealby
+;;;;   Package modifications
 ;;;; [24 Nov 2007]  Martin Bealby
 ;;;;   Initial Version
 ;;;; --------------------------------------------------------------------------
@@ -12,7 +14,10 @@
 
 (defpackage #:muerte.graphics
   (:use #:common-lisp #:muerte)
-  (:export #:color-pack))
+  (:export #:color-pack
+		   #:graphics-surface
+		   #:make-graphics-surface
+		   #:copy-graphics-surface))
 
 (provide :lib/graphics)
 
@@ -31,7 +36,8 @@
 (defun color-pack (bpp red green blue alpha)
   (cond ((= 8 bpp)
 		 (error "Color packing not supported in palletised modes."))
-		((= 15 bpp)
+		((= 16 bpp)
+		 ; Is actually 15bpp, but is packed into a 2 byte value
 		 ; 15 bpp ignores the 3 least significant bits of each color
 		 (return-from color-pack (+ (ash (logand red 248) 11)
 									(ash (logand green 248) 5)

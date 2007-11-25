@@ -1,5 +1,7 @@
 ;;;; Movitz Common Graphics Functions
 ;;;; --------------------------------------------------------------------------
+;;;; [25 Nov 2007]  Martin Bealby
+;;;;   Package modifications
 ;;;; [23 Nov 2007]  Martin Bealby
 ;;;;   Code refactoring.  Integration with lib/graphics
 ;;;; [XX Jul 2007]  Martin Bealby
@@ -11,9 +13,17 @@
 ;;;; --------------------------------------------------------------------------
 (require :x86-pc/package)
 (require :lib/graphics)
+
+
+(defpackage muerte.x86-pc.bochs-vbe
+  (:use muerte.cl muerte.lib muerte muerte.graphics)
+  (:export #:set-video-mode
+		   #:get-surface))
+
+
 (provide :x86-pc/bochs-vbe)
 
-(in-package muerte.x86-pc)
+(in-package muerte.x86-pc.bochs-vbe)
 
 
 ;;;; --------------------------------------------------------------------------
@@ -57,7 +67,7 @@
 ;;;; --------------------------------------------------------------------------
 ;;;; Support functions
 ;;;; --------------------------------------------------------------------------
-(defun bochs-vbe-write-to-ports (index value)
+(defun write-to-ports (index value)
   "Writes to the Bochs VBE ports."
   (setf (io-port +bochs-vbe-ioport-index+ :unsigned-byte16) index)
   (setf (io-port +bochs-vbe-ioport-data+ :unsigned-byte16) value))
@@ -66,25 +76,25 @@
 ;;;; --------------------------------------------------------------------------
 ;;;; Interface functions
 ;;;; --------------------------------------------------------------------------
-(defun bochs-vbe-set-video-mode (width height bits-per-pixel)
+(defun set-video-mode (width height bits-per-pixel)
   "Sets the video mode to the specified parameters."
-  (bochs-vbe-write-to-ports +bochs-vbe-index-enable+
-			    +bochs-vbe-command-disable+)
-  (bochs-vbe-write-to-ports +bochs-vbe-index-width+
-			    width)
-  (bochs-vbe-write-to-ports +bochs-vbe-index-height+
-			    height)
-  (bochs-vbe-write-to-ports +bochs-vbe-index-bits-per-pixel+
-			    bits-per-pixel)
-  (bochs-vbe-write-to-ports +bochs-vbe-index-enable+
-			    (logior +bochs-vbe-command-enable+
-				    +bochs-vbe-command-linear-framebuffer+))
+;  (bochs-vbe-write-to-ports +bochs-vbe-index-enable+
+;  +bochs-vbe-command-disable+)
+;  (bochs-vbe-write-to-ports +bochs-vbe-index-width+
+;  width)
+;  (bochs-vbe-write-to-ports +bochs-vbe-index-height+
+;  height)
+;  (bochs-vbe-write-to-ports +bochs-vbe-index-bits-per-pixel+
+;  bits-per-pixel)
+;  (bochs-vbe-write-to-ports +bochs-vbe-index-enable+
+;  (logior +bochs-vbe-command-enable+
+;  +bochs-vbe-command-linear-framebuffer+))
   (setf *bochs-vbe-surface*
 		(make-graphics-surface :width width
 							   :height height
 							   :bit-depth bits-per-pixel
 							   :memory-pointer #xe0000000)))
 
-(defun bochs-vbe-get-surface ()
+(defun get-surface ()
   "Returns the framebuffer surface."
   *bochs-vbe-surface*)
