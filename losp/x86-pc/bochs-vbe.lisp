@@ -1,5 +1,7 @@
 ;;;; Movitz Common Graphics Functions
 ;;;; --------------------------------------------------------------------------
+;;;; [26 Nov 2007]  Martin Bealby
+;;;;   Uncomment code
 ;;;; [25 Nov 2007]  Martin Bealby
 ;;;;   Package modifications
 ;;;; [23 Nov 2007]  Martin Bealby
@@ -78,17 +80,17 @@
 ;;;; --------------------------------------------------------------------------
 (defun set-video-mode (width height bits-per-pixel)
   "Sets the video mode to the specified parameters."
-;  (bochs-vbe-write-to-ports +bochs-vbe-index-enable+
-;  +bochs-vbe-command-disable+)
-;  (bochs-vbe-write-to-ports +bochs-vbe-index-width+
-;  width)
-;  (bochs-vbe-write-to-ports +bochs-vbe-index-height+
-;  height)
-;  (bochs-vbe-write-to-ports +bochs-vbe-index-bits-per-pixel+
-;  bits-per-pixel)
-;  (bochs-vbe-write-to-ports +bochs-vbe-index-enable+
-;  (logior +bochs-vbe-command-enable+
-;  +bochs-vbe-command-linear-framebuffer+))
+  (write-to-ports +bochs-vbe-index-enable+
+				  +bochs-vbe-command-disable+)
+  (write-to-ports +bochs-vbe-index-width+
+				  width)
+  (write-to-ports +bochs-vbe-index-height+
+				  height)
+  (write-to-ports +bochs-vbe-index-bits-per-pixel+
+				  bits-per-pixel)
+  (write-to-ports +bochs-vbe-index-enable+
+				  (logior +bochs-vbe-command-enable+
+						  +bochs-vbe-command-linear-framebuffer+))
   (setf *bochs-vbe-surface*
 		(make-graphics-surface :width width
 							   :height height
