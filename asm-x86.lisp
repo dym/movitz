@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.1 2007/12/16 08:57:20 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.2 2007/12/16 19:53:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -77,7 +77,7 @@
 			   ((:symtab *symtab*) *symtab*)
 			   ((:cpu-mode *cpu-mode*) *cpu-mode*))
   "Return list of octets,"
-  (multiple-value-bind (prefixes rexes opcode opcode2 mod reg rm scale index base displacement immediate operand-size address-size)
+  (multiple-value-bind (prefixes rexes opcode mod reg rm scale index base displacement immediate operand-size address-size)
       (encode-to-parts instruction)
     (unless opcode
       (error "Unable to encode instruction ~S." instruction))
@@ -99,9 +99,9 @@
 	       prefixes))
     (append (mapcar #'prefix-lookup (reverse prefixes))
 	    (rex-encode rexes :rm rm)
-	    (list opcode)
- 	    (when opcode2
- 	      (list opcode2))
+            (when (< 8(integer-length opcode))
+              (list (ldb (byte 8 8) opcode)))
+	    (list (ldb (byte 8 0) opcode))
 	    (when (or mod reg rm)
 	      (assert (and mod reg rm) (mod reg rm)
 		      "Either all or none of mod, reg, and rm must be defined. mod=~S, reg=~S, rm=~S." mod reg rm)
@@ -128,9 +128,9 @@
 	    immediate)))
 
 (defmacro merge-encodings (form1 form2)
-  `(multiple-value-bind (prefixes1 rexes1 opcode1 opcode21 mod1 reg1 rm1 scale1 index1 base1 displacement1 immediate1 operand-size1 address-size1)
+  `(multiple-value-bind (prefixes1 rexes1 opcode1 mod1 reg1 rm1 scale1 index1 base1 displacement1 immediate1 operand-size1 address-size1)
        ,form1
-     (multiple-value-bind (prefixes2 rexes2 opcode2 opcode22 mod2 reg2 rm2 scale2 index2 base2 displacement2 immediate2 operand-size2 address-size2)
+     (multiple-value-bind (prefixes2 rexes2 opcode2 mod2 reg2 rm2 scale2 index2 base2 displacement2 immediate2 operand-size2 address-size2)
 	 ,form2
        (macrolet ((getone (a b name)
 		    `(cond
@@ -146,7 +146,6 @@
 					  rexes2
 					  (list rexes2)))
 			 :opcode (getone opcode1 opcode2 opcode)
-			 :opcode2 (getone opcode21 opcode22 opcode2)
 			 :mod (getone mod1 mod2 mod)
 			 :reg (getone reg1 reg2 reg)
 			 :rm (getone rm1 rm2 rm)
@@ -160,7 +159,7 @@
 
 
 
-(defun encoded-values (&key prefixes prefix rex opcode opcode2 mod reg rm scale index base displacement immediate operand-size address-size)
+(defun encoded-values (&key prefixes prefix rex opcode mod reg rm scale index base displacement immediate operand-size address-size)
   (values (append (when prefix
 		    (list prefix))
 		  prefixes)
@@ -168,7 +167,6 @@
 	      (list rex)
 	      rex)
 	  opcode
-	  opcode2
 	  mod reg rm
 	  scale index base
 	  displacement
@@ -185,7 +183,7 @@
 		  instruction))
     (destructuring-bind (operator &rest operands)
 	instruction
-      (multiple-value-bind (prefixes prefix rex opcode opcode2 mod reg rm scale index base displacement immediate operand-size address-size)
+      (multiple-value-bind (prefixes prefix rex opcode mod reg rm scale index base displacement immediate operand-size address-size)
 	  (apply (or (gethash operator *instruction-encoders*)
 		     (error "Unknown instruction operator ~S in ~S." operator instruction))
 		 operands)
@@ -193,7 +191,6 @@
 		prefix
 		rex
 		opcode
-		opcode2
 		mod
 		reg
 		rm
@@ -255,12 +252,26 @@
 			  (t '(:rex.w)))))
        ,@body)))
 
-(defmacro def-simple (operator opcode1 &optional opcode2)
-  (check-type opcode1 octet)
-  (check-type opcode2 (or null octet))
+(defmacro define-operator* ((&key |16| |32| |64|) args &body body)
+  (let ((body16 (subst '(xint 16) :int-16-32-64
+                       (subst :ax :ax-eax-rax body)))
+        (body32 (subst '(xint 32) :int-16-32-64
+                       (subst :eax :ax-eax-rax body)))
+        (body64 (subst '(sint 32) :int-16-32-64
+                       (subst :rax :ax-eax-rax body))))
+    `(progn
+       ,(when |16|
+              `(define-operator/16 ,|16| ,args ,@body16))
+       ,(when |32|
+              `(define-operator/32 ,|32| ,args ,@body32))
+       ,(when |64|
+              `(define-operator/64 ,|64| ,args ,@body64)))))
+       
+
+(defmacro define-simple (operator opcode)
+  (check-type opcode (unsigned-byte 16))
   `(define-operator ,operator ()
-     (encoded-values :opcode ,opcode1
-		     :opcode2 ,opcode2)))
+     (encoded-values :opcode ,opcode)))
 
 (defun resolve (x)
   (etypecase x
@@ -539,13 +550,13 @@
 		    
 
 
-(defmacro encoded-result (&rest args &key prefixes prefix rex opcode opcode2 mod reg rm scale index base displacement immediate operand-size address-size)
-  (declare (ignore prefixes prefix rex opcode opcode2 mod reg rm scale index base displacement immediate operand-size address-size))
+(defmacro encoded-result (&rest args &key prefixes prefix rex opcode mod reg rm scale index base displacement immediate operand-size address-size)
+  (declare (ignore prefixes prefix rex opcode mod reg rm scale index base displacement immediate operand-size address-size))
   `(return-from operator (encoded-values ,@args)))
 
 (defmacro imm (imm-operand condition opcode imm-type &rest extras)
   `(when (and ,(or condition t)
-	      (immediate-p src))
+	      (immediate-p ,imm-operand))
      (let ((immediate (resolve ,imm-operand)))
        (when (typep immediate ',imm-type)
 	 (encoded-result :opcode ,opcode
@@ -553,9 +564,9 @@
 			 :rex default-rex
 			 ,@extras)))))
 
-(defmacro imm-modrm (src dst opcode digit type)
-  `(when (immediate-p ,src)
-     (let ((immediate (resolve ,src)))
+(defmacro imm-modrm (op-imm op-modrm opcode digit type)
+  `(when (immediate-p ,op-imm)
+     (let ((immediate (resolve ,op-imm)))
        (when (typep immediate ',type)
 	 (return-from operator
 	   (merge-encodings (encoded-values :opcode ,opcode
@@ -564,7 +575,7 @@
 							    :16-bit)
 					    :rex default-rex
 					    :immediate (encode-integer immediate ',type))
-			    (encode-reg/mem ,dst operator-mode)))))))
+			    (encode-reg/mem ,op-modrm operator-mode)))))))
 
 (defmacro modrm (operand opcode digit)
   `(return-from operator
@@ -638,7 +649,24 @@
 
 ;;;;;;;;;;;;;;;;
 
-(def-simple :nop #x90)
+(define-simple :nop #x90)
+
+;;;;;;;;;;; ADC
+
+(define-operator/8 :adcb (src dst)
+  (imm src (eq dst :al) #x14 (xint 8))
+  (imm-modrm src dst #x80 2 (xint 8))
+  (reg-modrm dst src #x12)
+  (reg-modrm src dst #x10))
+
+(define-operator* (:16 :adcw :32 :adcl :64 :adcr) (src dst)
+  (imm-modrm src dst #x83 2 (sint 8))
+  (imm src (eq dst :ax-eax-rax) #x15 :int-16-32-64)
+  (imm-modrm src dst #x81 2 :int-16-32-64)
+  (reg-modrm dst src #x13)
+  (reg-modrm src dst #x11))
+
+;;;;;;;;;;; ADD
 
 (define-operator/8 :addb (src dst)
   (imm src (eq dst :al) #x04 (xint 8))
@@ -646,26 +674,175 @@
   (reg-modrm dst src #x02)
   (reg-modrm src dst #x00))
 
-(define-operator/16 :addw (src dst)
+(define-operator* (:16 :addw :32 :addl :64 :addr) (src dst)
   (imm-modrm src dst #x83 0 (sint 8))
-  (imm src (eq dst :ax) #x05 (xint 16))
-  (imm-modrm src dst #x81 0 (xint 16))
+  (imm src (eq dst :ax-eax-rax) #x05 :int-16-32-64)
+  (imm-modrm src dst #x81 0 :int-16-32-64)
   (reg-modrm dst src #x03)
   (reg-modrm src dst #x01))
 
-(define-operator/32 :addl (src dst)
-  (imm-modrm src dst #x83 0 (sint 8))
-  (imm src (eq dst :eax) #x05 (xint 32))
-  (imm-modrm src dst #x81 0 (xint 32))
-  (reg-modrm dst src #x03)
-  (reg-modrm src dst #x01))
+;;;;;;;;;;; AND
 
-(define-operator/64 :addr (src dst)
-  (imm-modrm src dst #x83 0 (sint 8))
-  (imm src (eq dst :rax) #x05 (sint 32))
-  (imm-modrm src dst #x81 0 (sint 32))
-  (reg-modrm dst src #x03)
-  (reg-modrm src dst #x01))
+(define-operator/8 :andb (mask dst)
+  (imm mask (eq dst :al) #x24 (xint 8))
+  (imm-modrm mask dst #x80 4 (xint 8))
+  (reg-modrm dst mask #x22)
+  (reg-modrm mask dst #x20))
+
+(define-operator* (:16 :andw :32 :andl :64 :andr) (mask dst)
+  (imm-modrm mask dst #x83 4 (sint 8))
+  (imm mask (eq dst :ax-eax-rax) #x25 :int-16-32-64)
+  (imm-modrm mask dst #x81 4 :int-16-32-64)
+  (reg-modrm dst mask #x23)
+  (reg-modrm mask dst #x21))
+
+;;;;;;;;;;; BOUND, BSF, BSR, BSWAP
+
+(define-operator* (:16 :boundw :32 :boundl) (bounds reg)
+  (reg-modrm reg bounds #x62))
+
+(define-operator* (:16 :bsfw :32 :bsfl :64 :bsfr) (src dst)
+  (reg-modrm dst src #x0fbc))
+
+(define-operator* (:16 :bsrw :32 :bsrl :64 :bsrr) (src dst)
+  (reg-modrm dst src #x0fbd))
+
+(define-operator* (:32 :bswapl :64 :bswapr) (dst)
+  (opcode-reg #x0fc8 dst))
+
+;;;;;;;;;;; BT, BTC, BTR, BTS
+
+(define-operator* (:16 :btw :32 :btl :64 :btr) (bit src)
+  (imm-modrm bit src #x0fba 4 (uint 8))
+  (reg-modrm bit src #x0fa3))
+
+(define-operator* (:16 :btcw :32 :btcl :64 :btcr) (bit src)
+  (imm-modrm bit src #x0fba 7 (uint 8))
+  (reg-modrm bit src #x0fbb))
+
+(define-operator* (:16 :btrw :32 :btrl :64 :btrr) (bit src)
+  (imm-modrm bit src #x0fba 6 (uint 8))
+  (reg-modrm bit src #x0fb3))
+
+(define-operator* (:16 :btsw :32 :btsl :64 :btsr) (bit src)
+  (imm-modrm bit src #x0fba 5 (uint 8))
+  (reg-modrm bit src #x0fab))
+
+;;;;;;;;;;; CALL
+
+(define-operator/16 :callw (dest)
+  (modrm dest #xff 2))
+
+(define-operator/32 :call (dest)
+  (modrm dest #xff 2))
+
+;;;;;;;;;;; CLC, CLD, CLI, CLTS, CMC
+
+(define-simple :clc #xf8)
+(define-simple :cld #xfc)
+(define-simple :cli #xfa)
+(define-simple :clts #x0f06)
+(define-simple :cmc #xf5)
+
+;;;;;;;;;;; CMOVcc
+
+(define-operator* (:16 :cmovaw :32 :cmova :64 :cmovar) (src dst)
+  (reg-modrm dst src #x0f47)) ; Move if above, CF=0 and ZF=0.
+
+(define-operator* (:16 :cmovaew :32 :cmovae :64 :cmovaer) (src dst)
+  (reg-modrm dst src #x0f43)) ; Move if above or equal, CF=0.
+
+(define-operator* (:16 :cmovbw :32 :cmovb :64 :cmovbr) (src dst)
+  (reg-modrm dst src #x0f42)) ; Move if below, CF=1.
+
+(define-operator* (:16 :cmovbew :32 :cmovbe :64 :cmovber) (src dst)
+  (reg-modrm dst src #x0f46)) ; Move if below or  equal, CF=1 or ZF=1.
+
+(define-operator* (:16 :cmovcw :32 :cmovc :64 :cmovcr) (src dst)
+  (reg-modrm dst src #x0f42)) ; Move if carry, CF=1.
+
+(define-operator* (:16 :cmovew :32 :cmove :64 :cmover) (src dst)
+  (reg-modrm dst src #x0f44)) ; Move if equal, ZF=1.
+
+(define-operator* (:16 :cmovgw :32 :cmovg :64 :cmovgr) (src dst)
+  (reg-modrm dst src #x0f4f)) ; Move if greater, ZF=0 and SF=OF.
+
+(define-operator* (:16 :cmovgew :32 :cmovge :64 :cmovger) (src dst)
+  (reg-modrm dst src #x0f4d)) ; Move if greater or equal, SF=OF.
+
+(define-operator* (:16 :cmovlw :32 :cmovl :64 :cmovlr) (src dst)
+  (reg-modrm dst src #x0f4c))
+
+(define-operator* (:16 :cmovlew :32 :cmovle :64 :cmovler) (src dst)
+  (reg-modrm dst src #x0f4e)) ; Move if less or equal, ZF=1 or SF/=OF.
+
+(define-operator* (:16 :cmovnaw :32 :cmovna :64 :cmovnar) (src dst)
+  (reg-modrm dst src #x0f46)) ; Move if not above, CF=1 or ZF=1.
+
+(define-operator* (:16 :cmovnaew :32 :cmovnae :64 :cmovnaer) (src dst)
+  (reg-modrm dst src #x0f42)) ; Move if not above or equal, CF=1.
+
+(define-operator* (:16 :cmovnbw :32 :cmovnb :64 :cmovnbr) (src dst)
+  (reg-modrm dst src #x0f43)) ; Move if not below, CF=0.
+
+(define-operator* (:16 :cmovnbew :32 :cmovnbe :64 :cmovnber) (src dst)
+  (reg-modrm dst src #x0f47)) ; Move if not below or equal, CF=0 and ZF=0.
+
+(define-operator* (:16 :cmovncw :32 :cmovnc :64 :cmovncr) (src dst)
+  (reg-modrm dst src #x0f43)) ; Move if not carry, CF=0.
+
+(define-operator* (:16 :cmovnew :32 :cmovne :64 :cmovner) (src dst)
+  (reg-modrm dst src #x0f45)) ; Move if not equal, ZF=0.
+
+(define-operator* (:16 :cmovngew :32 :cmovnge :64 :cmovnger) (src dst)
+  (reg-modrm dst src #x0f4c)) ; Move if not greater or equal, SF/=OF.
+
+(define-operator* (:16 :cmovnlw :32 :cmovnl :64 :cmovnlr) (src dst)
+  (reg-modrm dst src #x0f4d)) ; Move if not less SF=OF.
+
+(define-operator* (:16 :cmovnlew :32 :cmovnle :64 :cmovnler) (src dst)
+  (reg-modrm dst src #x0f4f)) ; Move if not less or equal, ZF=0 and SF=OF.
+
+(define-operator* (:16 :cmovnow :32 :cmovno :64 :cmovnor) (src dst)
+  (reg-modrm dst src #x0f41)) ; Move if not overflow, OF=0.
+
+(define-operator* (:16 :cmovnpw :32 :cmovnp :64 :cmovnpr) (src dst)
+  (reg-modrm dst src #x0f4b)) ; Move if not parity, PF=0.
+
+(define-operator* (:16 :cmovnsw :32 :cmovns :64 :cmovnsr) (src dst)
+  (reg-modrm dst src #x0f49)) ; Move if not sign, SF=0.
+
+(define-operator* (:16 :cmovnzw :32 :cmovnz :64 :cmovnzr) (src dst)
+  (reg-modrm dst src #x0f45)) ; Move if not zero, ZF=0.
+
+(define-operator* (:16 :cmovow :32 :cmovo :64 :cmovor) (src dst)
+  (reg-modrm dst src #x0f40)) ; Move if overflow, OF=1.
+
+(define-operator* (:16 :cmovpw :32 :cmovp :64 :cmovpr) (src dst)
+  (reg-modrm dst src #x0f4a)) ; Move if parity, PF=1.
+
+(define-operator* (:16 :cmovsw :32 :cmovs :64 :cmovsr) (src dst)
+  (reg-modrm dst src #x0f48)) ; Move if sign, SF=1
+
+(define-operator* (:16 :cmovzw :32 :cmovz :64 :cmovzr) (src dst)
+  (reg-modrm dst src #x0f44)) ; Move if zero, ZF=1
+
+;;;;;;;;;;; CMP
+
+(define-operator/8 :cmpb (src dst)
+  (imm src (eq dst :al) #x3c (xint 8))
+  (imm-modrm src dst #x80 7 (xint 8))
+  (reg-modrm dst src #x3a)
+  (reg-modrm src dst #x38))
+
+(define-operator* (:16 :cmpw :32 :cmpl :64 :cmpr) (src dst)
+  (imm-modrm src dst #x83 7 (sint 8))
+  (imm src (eq dst :ax-eax-rax) #x3d :int-16-32-64)
+  (imm-modrm src dst #x81 7 :int-16-32-64)
+  (reg-modrm dst src #x3b)
+  (reg-modrm src dst #x39))
+
+;;;;;;;;;;; MOV
 
 (define-operator/8 :movb (src dst)
   (opcode-reg-imm #xb0 dst src (xint 8))
@@ -685,23 +862,15 @@
   (reg-modrm dst src #x8b)
   (reg-modrm src dst #x89))
 
-(define-operator/16 :popw (dst)
-  (case dst
-    (:ds (yield :opcode #x1f))
-    (:es (yield :opcode #x07))
-    (:ss (yield :opcode #x17))
-    (:fs (yield :opcode #x0f :opcode2 #xa1))
-    (:gs (yield :opcode #x0f :opcode2 #xa9)))
-  (opcode-reg #x58 dst)
-  (modrm dst #x8f 0))
+;;;;;;;;;;; POP
 
-(define-operator/32 :popl (dst)
+(define-operator* (:16 :popw :32 :popl) (dst)
   (case dst
     (:ds (yield :opcode #x1f))
     (:es (yield :opcode #x07))
     (:ss (yield :opcode #x17))
-    (:fs (yield :opcode #x0f :opcode2 #xa1))
-    (:gs (yield :opcode #x0f :opcode2 #xa9)))
+    (:fs (yield :opcode #x0fa1))
+    (:gs (yield :opcode #x0fa9)))
   (opcode-reg #x58 dst)
   (modrm dst #x8f 0))
 
@@ -709,32 +878,29 @@
   (opcode-reg #x58 dst)
   (modrm dst #x8f 0))
 
+;;;;;;;;;;; CMPXCHG
 
-(define-operator/16 :pushw (src)
+(define-operator/8 :cmpxchgb (cmp-reg cmp-modrm al-dst)
+  (when (eq al-dst :al)
+    (reg-modrm cmp-reg cmp-modrm #x0fb0)))
+
+(define-operator* (:16 :cmpxchgw :32 :cmpxchgl :64 :cmpxchgr) (cmp-reg cmp-modrm al-dst)
+  (when (eq al-dst :ax-eax-rax)
+    (reg-modrm cmp-reg cmp-modrm #x0fb1)))
+
+;;;;;;;;;;; PUSH
+
+(define-operator* (:16 :pushw :32 :pushl) (src)
   (case src
     (:cs (yield :opcode #x0e))
     (:ss (yield :opcode #x16))
     (:ds (yield :opcode #x1e))
     (:es (yield :opcode #x06))
-    (:fs (yield :opcode #x0f :opcode2 #xa0))
-    (:gs (yield :opcode #x0f :opcode2 #xa8)))
+    (:fs (yield :opcode #x0fa0))
+    (:gs (yield :opcode #x0fa8)))
   (opcode-reg #x50 src)
   (imm src t #x6a (sint 8))
-  (imm src t #x68 (sint 16) :operand-size :16-bit)
-  (modrm src #xff 6))
-
-(define-operator/32 :pushl (src)
-  (case src
-    (:cs (yield :opcode #x0e))
-    (:ss (yield :opcode #x16))
-    (:ds (yield :opcode #x1e))
-    (:es (yield :opcode #x06))
-    (:fs (yield :opcode #x0f :opcode2 #xa0))
-    (:gs (yield :opcode #x0f :opcode2 #xa8)))
-  (opcode-reg #x50 src)
-  (imm src t #x6a (sint 8))
-  ;; (imm src t #x68 (sint 16) :operand-size 16)
-  (imm src t #x68 (xint 32))
+  (imm src t #x68 :int-16-32-64 :operand-size operator-mode)
   (modrm src #xff 6))
 
 (define-operator/64* :pushr (src)
