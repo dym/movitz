@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.2 2007/12/16 19:53:39 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.3 2007/12/18 21:45:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -323,6 +323,11 @@
 	((cons (eql :+))
 	 (dolist (term (cdr expr))
 	   (push term offsets)))))
+    (when (and (eq reg2 :esp)
+	       (or (not reg-scale)
+		   (eql 1 reg-scale)))
+      (psetf reg reg2
+	     reg2 reg))
     (values reg offsets reg2 (if (not reg)
 				 nil
 				 (or reg-scale 1)))))
@@ -383,32 +388,33 @@
 				:base #b100
 				:address-size :16-bit))))
 	    ((and (eq reg :esp)
-		  (not reg2)
 		  (= 1 reg-scale))
-	     (etypecase offset
-	       ((eql 0)
-		(encoded-values :mod #b00
-				:rm #b100
-				:scale 0
-				:index #b100
-				:base #b100
-				:address-size :32-bit))
-	       ((sint 8)
-		(encoded-values :mod #b01
-				:rm #b100
-				:displacement (encode-integer offset '(sint 8))
-				:scale 0
-				:index #b100
-				:base #b100
-				:address-size :32-bit))
-	       ((xint 32)
-		(encoded-values :mod #b10
-				:rm #b100
-				:displacement (encode-integer offset '(xint 32))
-				:scale 0
-				:index #b100
-				:base #b100
-				:address-size :32-bit))))
+	     (let ((reg2-index (or (position reg2 '(:eax :ecx :edx :ebx nil :ebp :esi :edi))
+				   (error "Unknown reg2 [F] ~S." reg2))))
+	       (etypecase offset
+		 ((eql 0)
+		  (encoded-values :mod #b00
+				  :rm #b100
+				  :scale 0
+				  :index reg2-index
+				  :base #b100
+				  :address-size :32-bit))
+		 ((sint 8)
+		  (encoded-values :mod #b01
+				  :rm #b100
+				  :displacement (encode-integer offset '(sint 8))
+				  :scale 0
+				  :index reg2-index
+				  :base #b100
+				  :address-size :32-bit))
+		 ((xint 32)
+		  (encoded-values :mod #b10
+				  :rm #b100
+				  :displacement (encode-integer offset '(xint 32))
+				  :scale 0
+				  :index reg2-index
+				  :base #b100
+				  :address-size :32-bit)))))
 	    ((and (eq reg :rsp)
 		  (not reg2)
 		  (= 1 reg-scale))
@@ -437,9 +443,9 @@
 				:base #b100
 				:address-size :64-bit))))
 	    (t (multiple-value-bind (register-index map address-size)
-		   (let* ((map32 '(:eax :ecx :edx :ebx nil :ebp :esi :edi))
+		   (let* ((map32 '(:eax :ecx :edx :ebx :esp :ebp :esi :edi))
 			  (index32 (position reg map32))
-			  (map64 '(:rax :rcx :rdx :rbx nil :rbp :rsi :rdi :r8 :r9 :r10 :r11 :r12 :r13 :r14 :r15))
+			  (map64 '(:rax :rcx :rdx :rbx :rsp :rbp :rsi :rdi :r8 :r9 :r10 :r11 :r12 :r13 :r14 :r15))
 			  (index64 (unless index32
 				     (position reg map64))))
 		     (if index32
@@ -480,7 +486,7 @@
 				    :scale (position reg-scale '(1 2 4 8))
 				    :index register-index
 				    :base (or (position reg2 map)
-					      (error "unknown reg2 ~S" reg2))
+					      (error "unknown reg2 [A] ~S" reg2))
 				    :address-size address-size))
 		   ((and reg2
 			 register-index
@@ -491,7 +497,20 @@
 				    :scale (position reg-scale '(1 2 4 8))
 				    :index register-index
 				    :base (or (position reg2 map)
-					      (error "unknown reg2 ~S" reg2))
+					      (error "unknown reg2 [B] ~S" reg2))
+				    :address-size address-size
+				    :displacement (encode-integer offset '(sint 8))))
+		   ((and reg2
+			 register-index
+			 (eq :32-bit address-size)
+			 (typep offset '(sint 8))
+			 (not (= register-index #b100)))
+		    (encoded-values :mod #b01
+				    :rm #b100
+				    :scale (position reg-scale '(1 2 4 8))
+				    :index register-index
+				    :base (or (position reg2 map)
+					      (error "unknown reg2 [C] ~S." reg2))
 				    :address-size address-size
 				    :displacement (encode-integer offset '(sint 8))))
 		   ((and reg2
@@ -499,13 +518,14 @@
 			 (eq :32-bit address-size)
 			 (typep offset '(xint 32))
 			 (not (= register-index #b100)))
-		    (encoded-values :mod #b01
+		    (encoded-values :mod #b10
 				    :rm #b100
 				    :scale (position reg-scale '(1 2 4 8))
 				    :index register-index
-				    :base (position reg2 (cdr map))
-				    :address-size (car map)
-				    :displacement (encode-integer offset '(xint 8))))
+				    :base (or (position reg2 map)
+					      (error "unknown reg2 [D] ~S." reg2))
+				    :address-size address-size
+				    :displacement (encode-integer offset '(xint 32))))
 		   ((and reg2
 			 register-index
 			 (eq :64-bit address-size)
@@ -516,7 +536,7 @@
 				    :scale (position reg-scale '(1 2 4 8))
 				    :index register-index
 				    :base (or (position reg2 map)
-					      (error "unknown reg2 ~S" reg2))
+					      (error "unknown reg2 [E] ~S" reg2))
 				    :address-size address-size
 				    :displacement (encode-integer offset '(sint 32))))
 		   (t (let ((rm16 (position-if (lambda (x)
@@ -601,6 +621,16 @@
 					  :reg reg-index
 					  :operand-size (case operator-mode
 							  (:16-bit :16-bit))
+					  :rex default-rex)
+			  (encode-reg/mem ,op-modrm operator-mode))))))
+
+(defmacro sreg-modrm (op-sreg op-modrm opcode)
+  `(let* ((reg-map '(:es :cs :ss :ds :fs :gs))
+	  (reg-index (position ,op-sreg reg-map)))
+     (when reg-index
+       (return-from operator
+	 (merge-encodings (encoded-values :opcode ,opcode
+					  :reg reg-index
 					  :rex default-rex)
 			  (encode-reg/mem ,op-modrm operator-mode))))))
 
@@ -853,6 +883,8 @@
 (define-operator/16 :movw (src dst)
   (opcode-reg-imm #xb8 dst src (xint 16))
   (imm-modrm src dst #xc7 0 (xint 16))
+  (sreg-modrm src dst #x8c)
+  (sreg-modrm dst src #x8e)
   (reg-modrm dst src #x8b)
   (reg-modrm src dst #x89))
 
@@ -909,4 +941,3 @@
   (imm src t #x68 (sint 16) :operand-size :16-bit)
   (imm src t #x68 (sint 32))
   (modrm src #xff 6))
-
