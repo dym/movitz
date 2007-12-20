@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.3 2007/12/18 21:45:06 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.4 2007/12/20 22:52:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -295,6 +295,12 @@
 		       value))
 		    (t (error "Unresolved symbol ~S (size ~S)." x size)))
 		  type))
+
+(defun encode-pc-relative (operand type)
+  (when (typep operand '(cons (eql :pc+)))
+    (encode-integer (reduce #'+ (cdr operand)
+			    :key #'resolve)
+		    type)))
 
 (defun encode-integer (i type)
   (assert (typep i type))
@@ -597,6 +603,13 @@
 					    :immediate (encode-integer immediate ',type))
 			    (encode-reg/mem ,op-modrm operator-mode)))))))
 
+(defmacro pc-rel (opcode operand type)
+  `(let ((offset (encode-pc-relative ,operand ',type)))
+     (when offset
+       (return-from operator
+	 (encoded-values :opcode ,opcode
+			 :displacement offset)))))
+
 (defmacro modrm (operand opcode digit)
   `(return-from operator
      (merge-encodings (encoded-values :opcode ,opcode
@@ -633,6 +646,18 @@
 					  :reg reg-index
 					  :rex default-rex)
 			  (encode-reg/mem ,op-modrm operator-mode))))))
+
+(defmacro moffset (opcode op-offset type)
+  `(when (indirect-operand-p ,op-offset)
+     (multiple-value-bind (reg offsets reg2)
+	 (parse-indirect-operand ,op-offset)
+       (when (and (not reg)
+		  (not reg2))
+	 (return-from operator
+	   (encoded-values :opcode ,opcode
+			   :displacement (encode-integer (reduce #'+ offsets
+								 :key #'resolve)
+							 ',type)))))))
 
 (defmacro opcode-reg (opcode op-reg)
   `(let* ((reg-map (ecase operator-mode
@@ -761,9 +786,14 @@
 ;;;;;;;;;;; CALL
 
 (define-operator/16 :callw (dest)
+  (pc-rel #xe8 dest (sint 16))
   (modrm dest #xff 2))
 
 (define-operator/32 :call (dest)
+  (pc-rel #xe8 dest (sint 32))
+  (modrm dest #xff 2))
+
+(define-operator/32 :callr (dest)
   (modrm dest #xff 2))
 
 ;;;;;;;;;;; CLC, CLD, CLI, CLTS, CMC
@@ -875,12 +905,20 @@
 ;;;;;;;;;;; MOV
 
 (define-operator/8 :movb (src dst)
+  (when (eq src :al)
+    (moffset #xa2 dst (uint 8)))
+  (when (eq dst :al)
+    (moffset #xa0 src (uint 8)))
   (opcode-reg-imm #xb0 dst src (xint 8))
   (imm-modrm src dst #xc6 0 (xint 8))
   (reg-modrm dst src #x8a)
   (reg-modrm src dst #x88))
 
 (define-operator/16 :movw (src dst)
+  (when (eq src :ax)
+    (moffset #xa3 dst (uint 16)))
+  (when (eq dst :ax)
+    (moffset #xa0 src (uint 16)))
   (opcode-reg-imm #xb8 dst src (xint 16))
   (imm-modrm src dst #xc7 0 (xint 16))
   (sreg-modrm src dst #x8c)
@@ -889,6 +927,10 @@
   (reg-modrm src dst #x89))
 
 (define-operator/32 :movl (src dst)
+  (when (eq src :eax)
+    (moffset #xa3 dst (uint 32)))
+  (when (eq dst :eax)
+    (moffset #xa0 src (uint 32)))
   (opcode-reg-imm #xb8 dst src (xint 32))
   (imm-modrm src dst #xc7 0 (xint 32))
   (reg-modrm dst src #x8b)
