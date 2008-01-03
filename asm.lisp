@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.1 2007/12/16 08:57:19 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.2 2008/01/03 10:34:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -47,10 +47,10 @@
   (typep operand 'register-operand))
 
 (deftype indirect-operand ()
-  'cons)
+  '(and cons (not (cons (eql quote)))))
 
 (defun indirect-operand-p (operand)
-  (consp operand))
+  (typep operand 'indirect-operand))
 
 (define-condition unresolved-symbol ()
   ((symbol
