@@ -80,17 +80,17 @@
 ;;;; --------------------------------------------------------------------------
 (defun set-video-mode (width height bits-per-pixel)
   "Sets the video mode to the specified parameters."
-;;   (write-to-ports +bochs-vbe-index-enable+
-;; 				  +bochs-vbe-command-disable+)
-;;   (write-to-ports +bochs-vbe-index-width+
-;; 				  width)
-;;   (write-to-ports +bochs-vbe-index-height+
-;; 				  height)
-;;   (write-to-ports +bochs-vbe-index-bits-per-pixel+
-;; 				  bits-per-pixel)
-;;   (write-to-ports +bochs-vbe-index-enable+
-;; 				  (logior +bochs-vbe-command-enable+
-;; 						  +bochs-vbe-command-linear-framebuffer+))
+  (write-to-ports +bochs-vbe-index-enable+
+				  +bochs-vbe-command-disable+)
+  (write-to-ports +bochs-vbe-index-width+
+				  width)
+  (write-to-ports +bochs-vbe-index-height+
+				  height)
+  (write-to-ports +bochs-vbe-index-bits-per-pixel+
+				  bits-per-pixel)
+  (write-to-ports +bochs-vbe-index-enable+
+				  (logior +bochs-vbe-command-enable+
+						  +bochs-vbe-command-linear-framebuffer+))
   (setf *bochs-vbe-surface*
 		(muerte.graphics:make-graphics-surface :width width
 											   :height height
