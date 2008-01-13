@@ -437,7 +437,7 @@
        (with-simple-restart (abort "Abort to the top command level.")
          (read-eval-print))))
 
-  (set-textmode +vga-state-90x30+)
+;  (set-textmode +vga-state-90x30+)
   (let ((muerte::*error-no-condition-for-debugger* t))
     (clos-bootstrap))
 
