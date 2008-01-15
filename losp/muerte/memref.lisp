@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Mar  6 21:25:49 2001
 ;;;;                
-;;;; $Id: memref.lisp,v 1.50 2008/01/13 22:27:10 ffjeld Exp $
+;;;; $Id: memref.lisp,v 1.51 2008/01/15 23:01:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -432,24 +432,39 @@
 	      (t (error "Unknown memref type: ~S" (movitz:movitz-eval type nil nil))
 		 form))))))))
 
-(defun memref (object offset &key (index 0) (type :lisp) localp (endian :host))
-  (ecase type
-    (:lisp              (if localp
-			    (memref object offset :index index :localp t)
-			  (memref object offset :index index :localp nil)))
-    (:unsigned-byte32   (memref object offset :index index :type :unsigned-byte32))
-    (:character         (memref object offset :index  index :type :character))
-    (:unsigned-byte8    (memref object offset :index index :type :unsigned-byte8))
-    (:location          (memref object offset :index index :type :location))
-    (:unsigned-byte16   (ecase endian
-			  ((:host :little)
-			   (memref object offset :index index :type :unsigned-byte16 :endian :little))
-			  ((:big)
-			   (memref object offset :index index :type :unsigned-byte16 :endian :big))))
-    (:code-vector       (memref object offset :index index :type :code-vector))
-    (:unsigned-byte14   (memref object offset :index index :type :unsigned-byte14))
-    (:signed-byte30+2   (memref object offset :index index :type :signed-byte30+2))
-    (:unsigned-byte29+3 (memref object offset :index index :type :unsigned-byte29+3))))
+(defun memref (object offset &key (index 0) (type :lisp) localp (endian :host) physicalp)
+  (macrolet
+      ((do-memref (physicalp)
+	 `(ecase type
+	    (:lisp
+	     (if localp
+		 (memref object offset :index index :localp t :physicalp ,physicalp)
+		 (memref object offset :index index :localp nil :physicalp ,physicalp)))
+	    (:unsigned-byte32
+	     (memref object offset :index index :type :unsigned-byte32 :physicalp ,physicalp))
+	    (:character
+	     (memref object offset :index  index :type :character :physicalp ,physicalp))
+	    (:unsigned-byte8
+	     (memref object offset :index index :type :unsigned-byte8 :physicalp ,physicalp))
+	    (:location
+	     (memref object offset :index index :type :location :physicalp ,physicalp))
+	    (:unsigned-byte16
+	     (ecase endian
+	       ((:host :little)
+		(memref object offset :index index :type :unsigned-byte16 :endian :little :physicalp ,physicalp))
+	       ((:big)
+		(memref object offset :index index :type :unsigned-byte16 :endian :big :physicalp ,physicalp))))
+	    (:code-vector
+	     (memref object offset :index index :type :code-vector :physicalp ,physicalp))
+	    (:unsigned-byte14
+	     (memref object offset :index index :type :unsigned-byte14 :physicalp ,physicalp))
+	    (:signed-byte30+2
+	     (memref object offset :index index :type :signed-byte30+2 :physicalp ,physicalp))
+	    (:unsigned-byte29+3
+	     (memref object offset :index index :type :unsigned-byte29+3 :physicalp ,physicalp)))))
+    (if physicalp
+	(do-memref t)
+	(do-memref nil))))
 
 (define-compiler-macro (setf memref) (&whole form &environment env value object offset
 				      &key (index 0) (type :lisp) (localp nil) (endian :host))
@@ -885,14 +900,14 @@
 (define-compiler-macro memref-int
     (&whole form address &key (offset 0) (index 0) (type :unsigned-byte32) (physicalp t)
      &environment env)
-  (if (or (not (movitz:movitz-constantp type physicalp))
+  (if (or (not (movitz:movitz-constantp type env))
 	  (not (movitz:movitz-constantp physicalp env)))
       form
     (let* ((physicalp (movitz::eval-form physicalp env))
 	   (prefixes (if (not physicalp)
 			 ()
 		       movitz:*compiler-physical-segment-prefix*)))
-      (ecase (movitz::eval-form type)
+      (ecase (movitz::movitz-eval type env)
 	(:lisp
 	 (let ((address-var (gensym "memref-int-address-")))
 	   `(let ((,address-var ,address))
@@ -909,17 +924,22 @@
 		(:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale down address
 		(,prefixes :movl (:ecx) :eax)))))
 	(:unsigned-byte32
-	 (let ((address-var (gensym "memref-int-address-")))
-	   `(let ((,address-var ,address))
-	      (with-inline-assembly (:returns :untagged-fixnum-ecx)
-		(:compile-two-forms (:eax :ecx) ,offset ,index)
-		(:load-lexical (:lexical-binding ,address-var) :ebx)
-		(:shll 2 :ecx)
-		(:addl :ebx :eax)
-		(:into)
-		(:addl :eax :ecx)
-		(:shrl ,movitz::+movitz-fixnum-shift+ :ecx) ; scale down address
-		(,prefixes :movl (:ecx) :ecx)))))
+	 (cond
+	   ((integerp index)
+	    (let ((address-var (gensym "memref-int-address-")))
+	      `(let ((,address-var (+ ,address ,offset)))
+		 (with-inline-assembly (:returns :untagged-fixnum-ecx)
+		   (:compile-form (:result-mode :untagged-fixnum-ecx) ,address-var)
+		   (,prefixes :movl (:ecx ,index) :ecx)))))
+	   (t (let ((address-var (gensym "memref-int-address-"))
+		    (index-var (gensym "memref-int-index-")))
+		`(let ((,address-var (+ ,address ,offset))
+		       (,index-var ,index))
+		   (with-inline-assembly (:returns :untagged-fixnum-ecx)
+		     (:compile-two-forms (:eax :untagged-fixnum-ecx) ,index-var ,address-var)
+		     (:testb ,movitz:+movitz-fixnum-zmask+ :al)
+		     (:jnz '(:sub-program () (:int 64)))
+		     (,prefixes :movl (:ecx :eax) :ecx)))))))
 	(:unsigned-byte8
 	 (cond
 	  ((and (eq 0 offset) (eq 0 index))
@@ -1026,7 +1046,7 @@
 		     (:pushl :ecx) ; an untagged integer (zerop (mod x 4)) is still GC-safe.
 		     (:compile-form (:result-mode :untagged-fixnum-ecx) ,value-var)
 		     (:popl :eax)
-		     (:movl :ecx (:eax ,offset))))))
+		     (,prefixes :movl :ecx (:eax ,offset))))))
 	     (t (let ((offset-var (gensym "memref-int-offset-"))
 		      (addr-var (gensym "memref-int-address-"))
 		      (value-var (gensym "memref-int-value-")))
@@ -1044,7 +1064,7 @@
 		       (:compile-form (:result-mode :edx) ,offset-var)
 		       (:std)
 		       (:shrl ,movitz:+movitz-fixnum-shift+ :edx)
-		       (:movl :ecx (:eax :edx))
+		       (,prefixes :movl :ecx (:eax :edx))
 		       (:movl :edi :edx) ; make EDX GC-safe
 		       (:cld)))))))
 	  (:lisp
