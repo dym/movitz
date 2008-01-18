@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.6 2008/01/18 21:37:41 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.7 2008/01/18 23:57:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -672,6 +672,23 @@
                                           ,@extras)
 			  (encode-reg/mem ,op-modrm operator-mode))))))
 
+(defmacro reg-cr (op-reg op-cr opcode &rest extras)
+  `(let* ((reg-map (ecase operator-mode
+		     (:32-bit '(:eax :ecx :edx :ebx :esp :ebp :esi :edi))
+		     (:64-bit '(:rax :rcx :rdx :rbx :rsp :rbp :rsi :rdi :r8 :r9 :r10 :r11 :r12 :r13 :r14 :r15))))
+	  (reg-index (position ,op-reg reg-map))
+	  (cr-index (position ,op-cr '(:cr0 :cr1 :cr2 :cr3 :cr4 :cr5 :cr6 :cr7))))
+     (when (and reg-index
+		cr-index)
+       (return-from operator
+	 (encoded-values :opcode ,opcode
+			 :mod #b11
+			 :rm reg-index
+			 :reg cr-index
+			 :operand-size operator-mode
+			 :rex default-rex
+			 ,@extras)))))
+
 (defmacro sreg-modrm (op-sreg op-modrm opcode)
   `(let* ((reg-map '(:es :cs :ss :ds :fs :gs))
 	  (reg-index (position ,op-sreg reg-map)))
@@ -815,7 +832,7 @@
 (define-operator* (:16 :bsrw :32 :bsrl :64 :bsrr) (src dst)
   (reg-modrm dst src #x0fbd))
 
-(define-operator* (:32 :bswapl :64 :bswapr) (dst)
+(define-operator* (:32 :bswap :64 :bswapr) (dst)
   (opcode-reg #x0fc8 dst))
 
 ;;;;;;;;;;; BT, BTC, BTR, BTS
@@ -1250,6 +1267,16 @@
   (reg-modrm dst src #x8b)
   (reg-modrm src dst #x89))
 
+;;;;;;;;;;; MOVCR
+
+(define-operator/32 :movcr (src dst)
+  (when (eq src :cr8)
+    (reg-cr dst :cr0 #xf00f20))
+  (when (eq dst :cr8)
+    (reg-cr src :cr0 #xf00f22))
+  (reg-cr src dst #x0f22)
+  (reg-cr dst src #x0f20))
+
 ;;;;;;;;;;; MOVSX
 
 (define-operator* (:32 :movsxb) (src dst)
@@ -1265,6 +1292,22 @@
 
 (define-operator* (:32 :movzxw) (src dst)
   (reg-modrm dst src #x0fb7))
+
+;;;;;;;;;;; NEG
+
+(define-operator/8 :negb (dst)
+  (modrm dst #xf6 3))
+
+(define-operator* (:16 :negw :32 :negl :64 :negr) (dst)
+  (modrm dst #xf7 3))
+
+;;;;;;;;;;; NOT
+
+(define-operator/8 :notb (dst)
+  (modrm dst #xf6 2))
+
+(define-operator* (:16 :notw :32 :notl :64 :notr) (dst)
+  (modrm dst #xf7 2))
 
 ;;;;;;;;;;; OR
 
@@ -1325,6 +1368,11 @@
   (opcode-reg #x58 dst)
   (modrm dst #x8f 0))
 
+;;;;;;;;;;; POPF
+
+(define-operator* (:16 :popfw :32 :popfl :64 :popfr) ()
+  (opcode #x9d))
+
 ;;;;;;;;;;; PUSH
 
 (define-operator* (:16 :pushw :32 :pushl) (src)
@@ -1347,6 +1395,16 @@
   (imm src #x68 (sint 32))
   (modrm src #xff 6))
 
+;;;;;;;;;;; PUSHF
+
+(define-operator* (:16 :pushfw :32 :pushfl :64 :pushfr) ()
+  (opcode #x9c))
+
+;;;;;;;;;;; RDTSC
+
+(define-operator :rdtsc ()
+  (opcode #x0f31))
+
 ;;;;;;;;;;; RET
 
 (define-operator :ret ()
@@ -1366,6 +1424,23 @@
     (:cl (modrm dst #xd3 7)))
   (imm-modrm count dst #xc1 7 (uint 8)))
 
+;;;;;;;;;;; SBB
+
+(define-operator/8 :sbbb (subtrahend dst)
+  (when (eq dst :al)
+    (imm subtrahend #x1c (xint 8)))
+  (imm-modrm subtrahend dst #x80 3 (xint 8))
+  (reg-modrm dst subtrahend #x1a)
+  (reg-modrm subtrahend dst #x18))
+
+(define-operator* (:16 :sbbw :32 :sbbl :64 :sbbr) (subtrahend dst)
+  (imm-modrm subtrahend dst #x83 3 (sint 8))
+  (when (eq dst :ax-eax-rax)
+    (imm subtrahend #x1d :int-16-32-64))
+  (imm-modrm subtrahend dst #x81 3 :int-16-32-64)
+  (reg-modrm dst subtrahend #x1b)
+  (reg-modrm subtrahend dst #x19))
+
 ;;;;;;;;;;; SHL
 
 (define-operator/8 :shlb (count dst)
@@ -1380,6 +1455,17 @@
     (:cl (modrm dst #xd3 4)))
   (imm-modrm count dst #xc1 4 (uint 8)))
 
+;;;;;;;;;;; SHLD
+
+(define-operator* (:16 :shldw :32 :shldl :64 :shldr) (count dst1 dst2)
+  (when (eq :cl count)
+    (reg-modrm dst1 dst2 #x0fa5))
+  (when (immediate-p count)
+    (let ((immediate (resolve count)))
+      (when (typep immediate '(uint #x8))
+	(reg-modrm dst1 dst2 #x0fa4
+		   :immediate (encode-integer count '(uint 8)))))))
+
 ;;;;;;;;;;; SHR
 
 (define-operator/8 :shrb (count dst)
@@ -1393,6 +1479,18 @@
     (1 (modrm dst #xd1 5))
     (:cl (modrm dst #xd3 5)))
   (imm-modrm count dst #xc1 5 (uint 8)))
+
+;;;;;;;;;;; SHRD
+
+(define-operator* (:16 :shrdw :32 :shrdl :64 :shrdr) (count dst1 dst2)
+  (when (eq :cl count)
+    (reg-modrm dst1 dst2 #x0fad))
+  (when (immediate-p count)
+    (let ((immediate (resolve count)))
+      (when (typep immediate '(uint #x8))
+	(reg-modrm dst1 dst2 #x0fac
+		   :immediate (encode-integer count '(uint 8)))))))
+    
 
 ;;;;;;;;;;; STC, STD, STI
 
@@ -1437,8 +1535,21 @@
   (reg-modrm mask dst #x85))
 
 
-;;;;;;;;;;; XOR
+;;;;;;;;;;; XCHG
 
+(define-operator/8 :xchgb (x y)
+  (reg-modrm y x #x86)
+  (reg-modrm x y #x86))
+
+(define-operator* (:16 :xchgw :32 :xchgl :64 :xchgr) (x y)
+  (when (eq y :ax-eax-rax)
+    (opcode-reg #x90 x))
+  (when (eq x :ax-eax-rax)
+    (opcode-reg #x90 y))
+  (reg-modrm x y #x87)
+  (reg-modrm y x #x87))
+
+;;;;;;;;;;; XOR
 
 (define-operator/8 :xorb (src dst)
   (when (eq dst :al)
