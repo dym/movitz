@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.5 2008/01/03 10:34:18 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.6 2008/01/18 21:37:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -102,7 +102,9 @@
 	       prefixes))
     (append (mapcar #'prefix-lookup (reverse prefixes))
 	    (rex-encode rexes :rm rm)
-            (when (< 8(integer-length opcode))
+            (when (< 16 (integer-length opcode))
+              (list (ldb (byte 8 16) opcode)))
+	    (when (< 8(integer-length opcode))
               (list (ldb (byte 8 8) opcode)))
 	    (list (ldb (byte 8 0) opcode))
 	    (when (or mod reg rm)
@@ -479,7 +481,8 @@
 		   ((and (not reg2)
 			 register-index
 			 (= 1 reg-scale)
-			 (zerop offset))
+			 (and (zerop offset)
+			      (not (= register-index #b101))))
 		    (encoded-values :mod #b00
 				    :rm register-index
 				    :address-size address-size))
@@ -803,7 +806,7 @@
 
 ;;;;;;;;;;; BOUND, BSF, BSR, BSWAP
 
-(define-operator* (:16 :boundw :32 :boundl) (bounds reg)
+(define-operator* (:16 :boundw :32 :bound) (bounds reg)
   (reg-modrm reg bounds #x62))
 
 (define-operator* (:16 :bsfw :32 :bsfl :64 :bsfr) (src dst)
@@ -953,56 +956,6 @@
   (imm-modrm src dst #x81 7 :int-16-32-64)
   (reg-modrm dst src #x3b)
   (reg-modrm src dst #x39))
-
-;;;;;;;;;;; MOV
-
-(define-operator/8 :movb (src dst)
-  (when (eq src :al)
-    (moffset #xa2 dst (uint 8)))
-  (when (eq dst :al)
-    (moffset #xa0 src (uint 8)))
-  (opcode-reg-imm #xb0 dst src (xint 8))
-  (imm-modrm src dst #xc6 0 (xint 8))
-  (reg-modrm dst src #x8a)
-  (reg-modrm src dst #x88))
-
-(define-operator/16 :movw (src dst)
-  (when (eq src :ax)
-    (moffset #xa3 dst (uint 16)))
-  (when (eq dst :ax)
-    (moffset #xa0 src (uint 16)))
-  (opcode-reg-imm #xb8 dst src (xint 16))
-  (imm-modrm src dst #xc7 0 (xint 16))
-  (sreg-modrm src dst #x8c)
-  (sreg-modrm dst src #x8e)
-  (reg-modrm dst src #x8b)
-  (reg-modrm src dst #x89))
-
-(define-operator/32 :movl (src dst)
-  (when (eq src :eax)
-    (moffset #xa3 dst (uint 32)))
-  (when (eq dst :eax)
-    (moffset #xa0 src (uint 32)))
-  (opcode-reg-imm #xb8 dst src (xint 32))
-  (imm-modrm src dst #xc7 0 (xint 32))
-  (reg-modrm dst src #x8b)
-  (reg-modrm src dst #x89))
-
-;;;;;;;;;;; POP
-
-(define-operator* (:16 :popw :32 :popl) (dst)
-  (case dst
-    (:ds (yield :opcode #x1f))
-    (:es (yield :opcode #x07))
-    (:ss (yield :opcode #x17))
-    (:fs (yield :opcode #x0fa1))
-    (:gs (yield :opcode #x0fa9)))
-  (opcode-reg #x58 dst)
-  (modrm dst #x8f 0))
-
-(define-operator/64* :popr (dst)
-  (opcode-reg #x58 dst)
-  (modrm dst #x8f 0))
 
 ;;;;;;;;;;; CMPXCHG
 
@@ -1206,6 +1159,11 @@
 (define-jcc :jpo #x7b)
 (define-jcc :js #x78)
 (define-jcc :jz #x74)
+
+(define-operator* (:16 :jcxz :32 :jecxz :64 :jrcxz) (dst)
+  (pc-rel #xe3 dst (sint 8)
+	  :operand-size operator-mode
+	  :rex default-rex))
   
 ;;;;;;;;;;; JMP
 
@@ -1242,6 +1200,131 @@
 (define-operator* (:16 :lidtw :32 :lidtl :64 :lidtr) (addr)
   (modrm addr #x0f01 3))
 
+;;;;;;;;;;; LFENCE
+
+(define-operator :lfence ()
+  (opcode #x0faee8))
+
+;;;;;;;;;;; LOOP, LOOPE, LOOPNE
+
+(define-operator :loop (dst)
+  (pc-rel #xe2 dst (sint 8)))
+
+(define-operator :loope (dst)
+  (pc-rel #xe1 dst (sint 8)))
+
+(define-operator :loopne (dst)
+  (pc-rel #xe0 dst (sint 8)))
+
+;;;;;;;;;;; MOV
+
+(define-operator/8 :movb (src dst)
+  (when (eq src :al)
+    (moffset #xa2 dst (uint 8)))
+  (when (eq dst :al)
+    (moffset #xa0 src (uint 8)))
+  (opcode-reg-imm #xb0 dst src (xint 8))
+  (imm-modrm src dst #xc6 0 (xint 8))
+  (reg-modrm dst src #x8a)
+  (reg-modrm src dst #x88))
+
+(define-operator/16 :movw (src dst)
+  (when (eq src :ax)
+    (moffset #xa3 dst (uint 16)))
+  (when (eq dst :ax)
+    (moffset #xa0 src (uint 16)))
+  (opcode-reg-imm #xb8 dst src (xint 16))
+  (imm-modrm src dst #xc7 0 (xint 16))
+  (sreg-modrm src dst #x8c)
+  (sreg-modrm dst src #x8e)
+  (reg-modrm dst src #x8b)
+  (reg-modrm src dst #x89))
+
+(define-operator/32 :movl (src dst)
+  (when (eq src :eax)
+    (moffset #xa3 dst (uint 32)))
+  (when (eq dst :eax)
+    (moffset #xa0 src (uint 32)))
+  (opcode-reg-imm #xb8 dst src (xint 32))
+  (imm-modrm src dst #xc7 0 (xint 32))
+  (reg-modrm dst src #x8b)
+  (reg-modrm src dst #x89))
+
+;;;;;;;;;;; MOVSX
+
+(define-operator* (:32 :movsxb) (src dst)
+  (reg-modrm dst src #x0fbe))
+
+(define-operator* (:32 :movsxw) (src dst)
+  (reg-modrm dst src #x0fbf))
+
+;;;;;;;;;;; MOVZX
+
+(define-operator* (:32 :movzxb) (src dst)
+  (reg-modrm dst src #x0fb6))
+
+(define-operator* (:32 :movzxw) (src dst)
+  (reg-modrm dst src #x0fb7))
+
+;;;;;;;;;;; OR
+
+(define-operator/8 :orb (src dst)
+  (when (eq dst :al)
+    (imm src #x0c (xint 8)))
+  (imm-modrm src dst #x80 1 (xint 8))
+  (reg-modrm dst src #x0a)
+  (reg-modrm src dst #x08))
+
+(define-operator* (:16 :orw :32 :orl :64 :orr) (src dst)
+  (imm-modrm src dst #x83 1 (sint 8))
+  (when (eq dst :ax-eax-rax)
+    (imm src #x0d :int-16-32-64))
+  (imm-modrm src dst #x81 1 :int-16-32-64)
+  (reg-modrm dst src #x0b)
+  (reg-modrm src dst #x09))
+
+;;;;;;;;;;; OUT
+
+(define-operator/8 :outb (src port)
+  (when (eq :al src)
+    (typecase port
+      ((eql :dx)
+       (opcode #xee))
+      ((uint 8)
+       (imm port #xe6 (uint 8))))))
+
+(define-operator/16 :outw (src port)
+  (when (eq :ax src)
+    (typecase port
+      ((eql :dx)
+       (opcode #xef))
+      ((uint 8)
+       (imm port #xe7 (uint 8))))))
+
+(define-operator/32 :outl (src port)
+  (when (eq :eax src)
+    (typecase port
+      ((eql :dx)
+       (opcode #xef))
+      ((uint 8)
+       (imm port #xe7 (uint 8))))))
+
+;;;;;;;;;;; POP
+
+(define-operator* (:16 :popw :32 :popl) (dst)
+  (case dst
+    (:ds (yield :opcode #x1f))
+    (:es (yield :opcode #x07))
+    (:ss (yield :opcode #x17))
+    (:fs (yield :opcode #x0fa1))
+    (:gs (yield :opcode #x0fa9)))
+  (opcode-reg #x58 dst)
+  (modrm dst #x8f 0))
+
+(define-operator/64* :popr (dst)
+  (opcode-reg #x58 dst)
+  (modrm dst #x8f 0))
+
 ;;;;;;;;;;; PUSH
 
 (define-operator* (:16 :pushw :32 :pushl) (src)
@@ -1268,3 +1351,106 @@
 
 (define-operator :ret ()
   (opcode #xc3))
+
+;;;;;;;;;;; SAR
+
+(define-operator/8 :sarb (count dst)
+  (case count
+    (1 (modrm dst #xd0 7))
+    (:cl (modrm dst #xd2 7)))
+  (imm-modrm count dst #xc0 7 (uint 8)))
+
+(define-operator* (:16 :sarw :32 :sarl :64 :sarr) (count dst)
+  (case count
+    (1 (modrm dst #xd1 7))
+    (:cl (modrm dst #xd3 7)))
+  (imm-modrm count dst #xc1 7 (uint 8)))
+
+;;;;;;;;;;; SHL
+
+(define-operator/8 :shlb (count dst)
+  (case count
+    (1 (modrm dst #xd0 4))
+    (:cl (modrm dst #xd2 4)))
+  (imm-modrm count dst #xc0 4 (uint 8)))
+
+(define-operator* (:16 :shlw :32 :shll :64 :shlr) (count dst)
+  (case count
+    (1 (modrm dst #xd1 4))
+    (:cl (modrm dst #xd3 4)))
+  (imm-modrm count dst #xc1 4 (uint 8)))
+
+;;;;;;;;;;; SHR
+
+(define-operator/8 :shrb (count dst)
+  (case count
+    (1 (modrm dst #xd0 5))
+    (:cl (modrm dst #xd2 5)))
+  (imm-modrm count dst #xc0 5 (uint 8)))
+
+(define-operator* (:16 :shrw :32 :shrl :64 :shrr) (count dst)
+  (case count
+    (1 (modrm dst #xd1 5))
+    (:cl (modrm dst #xd3 5)))
+  (imm-modrm count dst #xc1 5 (uint 8)))
+
+;;;;;;;;;;; STC, STD, STI
+
+(define-operator :stc ()
+  (opcode #xf9))
+
+(define-operator :std ()
+  (opcode #xfd))
+
+(define-operator :sti ()
+  (opcode #xfb))
+
+;;;;;;;;;;; SUB
+
+(define-operator/8 :subb (subtrahend dst)
+  (when (eq dst :al)
+    (imm subtrahend #x2c (xint 8)))
+  (imm-modrm subtrahend dst #x80 5 (xint 8))
+  (reg-modrm dst subtrahend #x2a)
+  (reg-modrm subtrahend dst #x28))
+
+(define-operator* (:16 :subw :32 :subl :64 :subr) (subtrahend dst)
+  (imm-modrm subtrahend dst #x83 5 (sint 8))
+  (when (eq dst :ax-eax-rax)
+    (imm subtrahend #x2d :int-16-32-64))
+  (imm-modrm subtrahend dst #x81 5 :int-16-32-64)
+  (reg-modrm dst subtrahend #x2b)
+  (reg-modrm subtrahend dst #x29))
+
+;;;;;;;;;;; TEST
+
+(define-operator/8 :testb (mask dst)
+  (when (eq dst :al)
+    (imm mask #xa8 (xint 8)))
+  (imm-modrm mask dst #xf6 0 (xint 8))
+  (reg-modrm mask dst #x84))
+
+(define-operator* (:16 :testw :32 :testl :64 :testr) (mask dst)
+  (when (eq dst :ax-eax-rax)
+    (imm mask #xa9 :int-16-32-64))
+  (imm-modrm mask dst #xf7 0 :int-16-32-64)
+  (reg-modrm mask dst #x85))
+
+
+;;;;;;;;;;; XOR
+
+
+(define-operator/8 :xorb (src dst)
+  (when (eq dst :al)
+    (imm src #x34 (xint 8)))
+  (imm-modrm src dst #x80 6 (xint 8))
+  (reg-modrm dst src #x32)
+  (reg-modrm src dst #x30))
+
+(define-operator* (:16 :xorw :32 :xorl :64 :xorr) (src dst)
+  (imm-modrm src dst #x83 6 (sint 8))
+  (when (eq dst :ax-eax-rax)
+    (imm src #x35 :int-16-32-64))
+  (imm-modrm src dst #x81 6 :int-16-32-64)
+  (reg-modrm dst src #x33)
+  (reg-modrm src dst #x31))
