@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.9 2008/01/29 22:09:05 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.10 2008/01/29 22:25:09 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -670,6 +670,7 @@
 
 (defun encode-pc-rel (opcode operand type &rest extras)
   (when (typep operand '(or pc-relative-operand symbol-reference))
+    (assert *pc* (*pc*) "Cannot encode a pc-relative operand without a value for ~S." '*pc*)
     (let* ((estimated-code-size (+ (type-octet-size type)
 				   (opcode-octet-size opcode)))
 	   (offset (let ((*pc* (+ *pc* estimated-code-size)))
@@ -799,7 +800,8 @@
 				     (t default-rex)))))))
 
 (defmacro opcode-reg (opcode op-reg)
-  `(encode-opcode-reg ,opcode ,op-reg operator-mode default-rex))
+  `(return-when
+    (encode-opcode-reg ,opcode ,op-reg operator-mode default-rex)))
 
 (defun encode-opcode-reg-imm (opcode op-reg op-imm type operator-mode default-rex)
   (when (immediate-p op-imm)
@@ -816,7 +818,7 @@
 	  (when reg-index
 	    (encode (encoded-values :opcode (+ opcode (ldb (byte 3 0) reg-index))
 				    :operand-size operator-mode
-				    :immediate (encode-integer immediate 'type)
+				    :immediate (encode-integer immediate type)
 				    :rex (cond
 					   ((>= reg-index 8)
 					    (assert (eq :64-bit operator-mode))
@@ -824,7 +826,8 @@
 					   (t default-rex))))))))))
 
 (defmacro opcode-reg-imm (opcode op-reg op-imm type)
-  `(encode-opcode-reg-imm ,opcode ,op-reg ,op-imm ',type operator-mode default-rex))
+  `(return-when
+    (encode-opcode-reg-imm ,opcode ,op-reg ,op-imm ',type operator-mode default-rex)))
 
 ;;;;;;;;;;;;;;;;
 
