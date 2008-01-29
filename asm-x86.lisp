@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.8 2008/01/29 22:04:34 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.9 2008/01/29 22:09:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -237,7 +237,8 @@
 	   (default-rex nil))
        (declare (ignorable operator-mode default-rex))
        (macrolet ((yield (&rest args)
-		    `(encoded-result :operand-size 8 ,@args)))
+		    `(return-from operator
+		       (encode (encoded-values :operand-size operator-mode ,@args)))))
 	 ,@body))))
 
 (defmacro define-operator/16 (operator lambda-list &body body)
@@ -246,7 +247,8 @@
 	   (default-rex nil))
        (declare (ignorable operator-mode default-rex))
        (macrolet ((yield (&rest args)
-		    `(encoded-result :operand-size operator-mode ,@args)))
+		    `(return-from operator
+		       (encode (encoded-values :operand-size operator-mode ,@args)))))
 	 ,@body))))
 
 (defmacro define-operator/32 (operator lambda-list &body body)
@@ -255,7 +257,8 @@
 	   (default-rex nil))
        (declare (ignorable operator-mode default-rex))
        (macrolet ((yield (&rest args)
-		    `(encoded-result :operand-size operator-mode ,@args)))
+		    `(return-from operator
+		       (encode (encoded-values :operand-size operator-mode ,@args)))))
 	 ,@body))))
 
 (defmacro define-operator/64 (operator lambda-list &body body)
@@ -264,7 +267,8 @@
 	   (default-rex '(:rex.w)))
        (declare (ignorable operator-mode default-rex))
        (macrolet ((yield (&rest args)
-		    `(encoded-result :operand-size operator-mode ,@args)))
+		    `(return-from operator
+		       (encode (encoded-values :operand-size operator-mode ,@args)))))
 	 ,@body))))
 
 (defmacro define-operator/64* (operator lambda-list &body body)
@@ -632,11 +636,6 @@
 			  (t (error "Huh? reg: ~S, reg2: ~S, scale: ~S, offset: ~S" reg reg2 reg-scale offset))
 			  )))))))))))
 		    
-
-
-;; (defmacro encoded-result (&rest args &key prefixes prefix rex opcode mod reg rm scale index base displacement immediate operand-size address-size)
-;;   (declare (ignore prefixes prefix rex opcode mod reg rm scale index base displacement immediate operand-size address-size))
-;;   `(return-from operator (encoded-values ,@args)))
 
 (defmacro return-when (form)
   `(let ((x ,form))
