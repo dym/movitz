@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.7 2008/01/18 23:57:41 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.8 2008/01/29 22:04:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -15,9 +15,7 @@
 
 (in-package asm-x86)
 
-(defvar *symtab* nil)
 (defvar *cpu-mode* :32-bit)
-(defvar *pc* nil "Current program counter.")
 
 (defvar *instruction-encoders*
   (make-hash-table :test 'eq))
@@ -74,63 +72,61 @@
   (loop for b from 0 below (* 8 n) by 8
      collect (ldb (byte 8 b) i)))
 
-(defun encode-instruction (instruction &key
-			   ((:symtab *symtab*) *symtab*)
-			   ((:cpu-mode *cpu-mode*) *cpu-mode*))
-  "Return list of octets,"
-  (multiple-value-bind (prefixes rexes opcode mod reg rm scale index base displacement immediate operand-size address-size)
-      (encode-to-parts instruction)
-    (unless opcode
-      (error "Unable to encode instruction ~S." instruction))
-    (when (or (and (eq address-size :32-bit)
-		   (eq *cpu-mode* :64-bit))
-	      (and (eq address-size :16-bit)
-		   (eq *cpu-mode* :32-bit))
-              (and (eq address-size :64-bit)
-		   (eq *cpu-mode* :32-bit))
-	      (and (eq address-size :32-bit)
-		   (eq *cpu-mode* :16-bit)))
-      (pushnew :address-size-override
-	       prefixes))
-    (when (or (and (eq operand-size :16-bit)
-		   (eq *cpu-mode* :64-bit))
-	      (and (eq operand-size :16-bit)
-		   (eq *cpu-mode* :32-bit))
-	      (and (eq operand-size :32-bit)
-		   (eq *cpu-mode* :16-bit)))
-      (pushnew :operand-size-override
-	       prefixes))
-    (append (mapcar #'prefix-lookup (reverse prefixes))
-	    (rex-encode rexes :rm rm)
-            (when (< 16 (integer-length opcode))
-              (list (ldb (byte 8 16) opcode)))
-	    (when (< 8(integer-length opcode))
-              (list (ldb (byte 8 8) opcode)))
-	    (list (ldb (byte 8 0) opcode))
-	    (when (or mod reg rm)
-	      (assert (and mod reg rm) (mod reg rm)
-		      "Either all or none of mod, reg, and rm must be defined. mod=~S, reg=~S, rm=~S." mod reg rm)
-	      (check-type mod (unsigned-byte 2))
-	      (list (logior (ash (ldb (byte 2 0) mod)
-				 6)
-			    (ash (ldb (byte 3 0) reg)
-				 3)
-			    (ash (ldb (byte 3 0) rm)
-				 0))))
-	    (when (or scale index base)
-	      (assert (and scale index base) (scale index base)
-		      "Either all or none of scale, index, and base must be defined. scale=~S, index=~S, base=~S." scale index base)
-	      (check-type scale (unsigned-byte 2))
-	      (check-type index (unsigned-byte 4))
-	      (check-type base (unsigned-byte 4))
-	      (list (logior (ash (ldb (byte 2 0) scale)
-				 6)
-			    (ash (ldb (byte 3 0) index)
-				 3)
-			    (ash (ldb (byte 3 0) base)
-				 0))))
- 	    displacement
-	    immediate)))
+(defun encode-values-fun (prefixes rexes opcode mod reg rm scale index base displacement immediate operand-size address-size)
+  (assert opcode)
+  (when (or (and (eq address-size :32-bit)
+		 (eq *cpu-mode* :64-bit))
+	    (and (eq address-size :16-bit)
+		 (eq *cpu-mode* :32-bit))
+	    (and (eq address-size :64-bit)
+		 (eq *cpu-mode* :32-bit))
+	    (and (eq address-size :32-bit)
+		 (eq *cpu-mode* :16-bit)))
+    (pushnew :address-size-override
+	     prefixes))
+  (when (or (and (eq operand-size :16-bit)
+		 (eq *cpu-mode* :64-bit))
+	    (and (eq operand-size :16-bit)
+		 (eq *cpu-mode* :32-bit))
+	    (and (eq operand-size :32-bit)
+		 (eq *cpu-mode* :16-bit)))
+    (pushnew :operand-size-override
+	     prefixes))
+  (append (mapcar #'prefix-lookup (reverse prefixes))
+	  (rex-encode rexes :rm rm)
+	  (when (< 16 (integer-length opcode))
+	    (list (ldb (byte 8 16) opcode)))
+	  (when (< 8(integer-length opcode))
+	    (list (ldb (byte 8 8) opcode)))
+	  (list (ldb (byte 8 0) opcode))
+	  (when (or mod reg rm)
+	    (assert (and mod reg rm) (mod reg rm)
+		    "Either all or none of mod, reg, and rm must be defined. mod=~S, reg=~S, rm=~S." mod reg rm)
+	    (check-type mod (unsigned-byte 2))
+	    (list (logior (ash (ldb (byte 2 0) mod)
+			       6)
+			  (ash (ldb (byte 3 0) reg)
+			       3)
+			  (ash (ldb (byte 3 0) rm)
+			       0))))
+	  (when (or scale index base)
+	    (assert (and scale index base) (scale index base)
+		    "Either all or none of scale, index, and base must be defined. scale=~S, index=~S, base=~S." scale index base)
+	    (check-type scale (unsigned-byte 2))
+	    (check-type index (unsigned-byte 4))
+	    (check-type base (unsigned-byte 4))
+	    (list (logior (ash (ldb (byte 2 0) scale)
+			       6)
+			  (ash (ldb (byte 3 0) index)
+			       3)
+			  (ash (ldb (byte 3 0) base)
+			       0))))
+	  displacement
+	  immediate))
+
+(defmacro encode (values-form)
+  `(multiple-value-call #'encode-values-fun ,values-form))
+
 
 (defmacro merge-encodings (form1 form2)
   `(multiple-value-bind (prefixes1 rexes1 opcode1 mod1 reg1 rm1 scale1 index1 base1 displacement1 immediate1 operand-size1 address-size1)
@@ -179,6 +175,20 @@
 	  operand-size
 	  address-size))
  
+(defun encode-instruction (instruction)
+  (multiple-value-bind (legacy-prefixes instruction)
+      (if (listp (car instruction))
+	  (values (car instruction)
+		  (cdr instruction))
+	  (values nil
+		  instruction))
+    (destructuring-bind (operator &rest operands)
+	instruction
+      (nconc (mapcar #'prefix-lookup legacy-prefixes)
+	     (apply (or (gethash operator *instruction-encoders*)
+			(error "Unknown instruction operator ~S in ~S." operator instruction))
+		    operands)))))
+
 (defun encode-to-parts (instruction)
   (multiple-value-bind (legacy-prefixes instruction)
       (if (listp (car instruction))
@@ -234,6 +244,7 @@
   `(define-operator ,operator ,lambda-list
      (let ((operator-mode :16-bit)
 	   (default-rex nil))
+       (declare (ignorable operator-mode default-rex))
        (macrolet ((yield (&rest args)
 		    `(encoded-result :operand-size operator-mode ,@args)))
 	 ,@body))))
@@ -242,7 +253,7 @@
   `(define-operator ,operator ,lambda-list
      (let ((operator-mode :32-bit)
 	   (default-rex nil))
-       (declare (ignorable operator-mode))
+       (declare (ignorable operator-mode default-rex))
        (macrolet ((yield (&rest args)
 		    `(encoded-result :operand-size operator-mode ,@args)))
 	 ,@body))))
@@ -251,7 +262,7 @@
   `(define-operator ,operator ,lambda-list
      (let ((operator-mode :64-bit)
 	   (default-rex '(:rex.w)))
-       (declare (ignorable operator-mode))
+       (declare (ignorable operator-mode default-rex))
        (macrolet ((yield (&rest args)
 		    `(encoded-result :operand-size operator-mode ,@args)))
 	 ,@body))))
@@ -307,18 +318,30 @@
 		  type))
 
 (defun resolve-pc-relative (operand)
-  (typecase operand
+  (etypecase operand
     ((cons (eql :pc+))
      (reduce #'+ (cdr operand)
-      :key #'resolve))
+	     :key #'resolve))
     (symbol-reference
-     (- (resolve operand) *pc*))))
+     (- (resolve operand)
+	*pc*))))
 
 (defun encode-integer (i type)
   (assert (typep i type))
   (let ((bit-size (cadr type)))
     (loop for b upfrom 0 below bit-size by 8
        collect (ldb (byte 8 b) i))))	 
+
+(defun type-octet-size (type)
+  (assert (member (car type)
+		  '(sint uint xint))
+	  (type))
+  (values (ceiling (cadr type) 8)))
+
+(defun opcode-octet-size (opcode)
+  (loop do (setf opcode (ash opcode -8))
+     count t
+     while (plusp opcode)))
 
 (defun parse-indirect-operand (operand)
   (assert (indirect-operand-p operand))
@@ -611,93 +634,129 @@
 		    
 
 
-(defmacro encoded-result (&rest args &key prefixes prefix rex opcode mod reg rm scale index base displacement immediate operand-size address-size)
-  (declare (ignore prefixes prefix rex opcode mod reg rm scale index base displacement immediate operand-size address-size))
-  `(return-from operator (encoded-values ,@args)))
+;; (defmacro encoded-result (&rest args &key prefixes prefix rex opcode mod reg rm scale index base displacement immediate operand-size address-size)
+;;   (declare (ignore prefixes prefix rex opcode mod reg rm scale index base displacement immediate operand-size address-size))
+;;   `(return-from operator (encoded-values ,@args)))
+
+(defmacro return-when (form)
+  `(let ((x ,form))
+     (when x (return-from operator x))))
+
+(defmacro return-values-when (form)
+  `(let ((x (encode ,form)))
+     (when x (return-from operator x))))
 
 (defmacro imm (imm-operand opcode imm-type &rest extras)
   `(when (immediate-p ,imm-operand)
      (let ((immediate (resolve ,imm-operand)))
        (when (typep immediate ',imm-type)
-	 (encoded-result :opcode ,opcode
-			 :immediate (encode-integer immediate ',imm-type)
-                         :operand-size operator-mode
-			 :rex default-rex
-			 ,@extras)))))
+	 (return-values-when
+	  (encoded-values :opcode ,opcode
+			  :immediate (encode-integer immediate ',imm-type)
+			  :operand-size operator-mode
+			  :rex default-rex
+			  ,@extras))))))
 
 (defmacro imm-modrm (op-imm op-modrm opcode digit type)
   `(when (immediate-p ,op-imm)
      (let ((immediate (resolve ,op-imm)))
        (when (typep immediate ',type)
-	 (return-from operator
-	   (merge-encodings (encoded-values :opcode ,opcode
-					    :reg ,digit
-					    :operand-size operator-mode
-					    :rex default-rex
-					    :immediate (encode-integer immediate ',type))
-			    (encode-reg/mem ,op-modrm operator-mode)))))))
+	 (return-values-when
+	  (merge-encodings (encoded-values :opcode ,opcode
+					   :reg ,digit
+					   :operand-size operator-mode
+					   :rex default-rex
+					   :immediate (encode-integer immediate ',type))
+			   (encode-reg/mem ,op-modrm operator-mode)))))))
+
+(defun encode-pc-rel (opcode operand type &rest extras)
+  (when (typep operand '(or pc-relative-operand symbol-reference))
+    (let* ((estimated-code-size (+ (type-octet-size type)
+				   (opcode-octet-size opcode)))
+	   (offset (let ((*pc* (+ *pc* estimated-code-size)))
+		     (resolve-pc-relative operand))))
+      (when (typep offset type)
+	(let ((code (encode (apply #'encoded-values
+				   :opcode opcode
+				   :displacement (encode-integer offset type)
+				   extras))))
+	  (if (= (length code)
+		 estimated-code-size)
+	      code
+	      (let* ((code-size (length code))
+		     (offset (let ((*pc* (+ *pc* code-size)))
+			       (resolve-pc-relative operand))))
+		(when (typep offset type)
+		  (let ((code (encode (apply #'encoded-values
+					     :opcode opcode
+					     :displacement (encode-integer offset type)
+					     extras))))
+		    (assert (= code-size (length code)))
+		    code)))))))))
 
 (defmacro pc-rel (opcode operand type &rest extras)
-  `(let ((offset (resolve-pc-relative ,operand)))
-     (when (typep offset ',type)
-       (return-from operator
-	 (encoded-values :opcode ,opcode
-			 :displacement (encode-integer offset ',type)
-                         ,@extras)))))
+  `(return-when (encode-pc-rel ,opcode ,operand ',type ,@extras)))
 
 (defmacro modrm (operand opcode digit)
   `(when (typep ,operand '(or register-operand indirect-operand))
-     (return-from operator
-       (merge-encodings (encoded-values :opcode ,opcode
-                                        :reg ,digit
-                                        :operand-size operator-mode
-                                        :rex default-rex)
-                        (encode-reg/mem ,operand operator-mode)))))
+     (return-values-when
+      (merge-encodings (encoded-values :opcode ,opcode
+				       :reg ,digit
+				       :operand-size operator-mode
+				       :rex default-rex)
+		       (encode-reg/mem ,operand operator-mode)))))
+
+(defun encode-reg-modrm (op-reg op-modrm opcode operator-mode default-rex &rest extras)
+  (let* ((reg-map (ecase operator-mode
+		    (:8-bit '(:al :cl :dl :bl :ah :ch :dh :bh))
+		    (:16-bit '(:ax :cx :dx :bx :sp :bp :si :di))
+		    (:32-bit '(:eax :ecx :edx :ebx :esp :ebp :esi :edi))
+		    (:64-bit '(:rax :rcx :rdx :rbx :rsp :rbp :rsi :rdi :r8 :r9 :r10 :r11 :r12 :r13 :r14 :r15))
+		    (:mm '(:mm0 :mm1 :mm2 :mm3 :mm4 :mm5 :mm6 :mm7 :mm8))
+		    (:xmm '(:xmm0 :xmm1 :xmm2 :xmm3 :xmm4 :xmm5 :xmm6 :xmm7))))
+	 (reg-index (position op-reg reg-map)))
+    (when reg-index
+      (encode (merge-encodings (apply #'encoded-values
+				      :opcode opcode
+				      :reg reg-index
+				      :operand-size operator-mode
+				      :rex default-rex
+				      extras)
+			       (encode-reg/mem op-modrm operator-mode))))))
 
 (defmacro reg-modrm (op-reg op-modrm opcode &rest extras)
-  `(let* ((reg-map (ecase operator-mode
-		     (:8-bit '(:al :cl :dl :bl :ah :ch :dh :bh))
-		     (:16-bit '(:ax :cx :dx :bx :sp :bp :si :di))
-		     (:32-bit '(:eax :ecx :edx :ebx :esp :ebp :esi :edi))
-		     (:64-bit '(:rax :rcx :rdx :rbx :rsp :rbp :rsi :rdi :r8 :r9 :r10 :r11 :r12 :r13 :r14 :r15))
-		     (:mm '(:mm0 :mm1 :mm2 :mm3 :mm4 :mm5 :mm6 :mm7 :mm8))
-		     (:xmm '(:xmm0 :xmm1 :xmm2 :xmm3 :xmm4 :xmm5 :xmm6 :xmm7))))
-	  (reg-index (position ,op-reg reg-map)))
-     (when reg-index
-       (return-from operator
-	 (merge-encodings (encoded-values :opcode ,opcode
-					  :reg reg-index
-					  :operand-size operator-mode
-					  :rex default-rex
-                                          ,@extras)
-			  (encode-reg/mem ,op-modrm operator-mode))))))
+  `(return-when (encode-reg-modrm ,op-reg ,op-modrm ,opcode operator-mode default-rex ,@extras)))
+
+
+(defun encode-reg-cr (op-reg op-cr opcode operator-mode default-rex &rest extras)
+  (let* ((reg-map (ecase operator-mode
+		    (:32-bit '(:eax :ecx :edx :ebx :esp :ebp :esi :edi))
+		    (:64-bit '(:rax :rcx :rdx :rbx :rsp :rbp :rsi :rdi :r8 :r9 :r10 :r11 :r12 :r13 :r14 :r15))))
+	 (reg-index (position op-reg reg-map))
+	 (cr-index (position op-cr '(:cr0 :cr1 :cr2 :cr3 :cr4 :cr5 :cr6 :cr7))))
+    (when (and reg-index
+	       cr-index)
+      (encode (apply #'encoded-values
+		     :opcode opcode
+		     :mod #b11
+		     :rm reg-index
+		     :reg cr-index
+		     :operand-size operator-mode
+		     :rex default-rex
+		     extras)))))
 
 (defmacro reg-cr (op-reg op-cr opcode &rest extras)
-  `(let* ((reg-map (ecase operator-mode
-		     (:32-bit '(:eax :ecx :edx :ebx :esp :ebp :esi :edi))
-		     (:64-bit '(:rax :rcx :rdx :rbx :rsp :rbp :rsi :rdi :r8 :r9 :r10 :r11 :r12 :r13 :r14 :r15))))
-	  (reg-index (position ,op-reg reg-map))
-	  (cr-index (position ,op-cr '(:cr0 :cr1 :cr2 :cr3 :cr4 :cr5 :cr6 :cr7))))
-     (when (and reg-index
-		cr-index)
-       (return-from operator
-	 (encoded-values :opcode ,opcode
-			 :mod #b11
-			 :rm reg-index
-			 :reg cr-index
-			 :operand-size operator-mode
-			 :rex default-rex
-			 ,@extras)))))
+  `(return-when (encode-reg-cr ,op-reg ,op-cr ,opcode operator-mode default-rex ,@extras)))
 
 (defmacro sreg-modrm (op-sreg op-modrm opcode)
   `(let* ((reg-map '(:es :cs :ss :ds :fs :gs))
 	  (reg-index (position ,op-sreg reg-map)))
      (when reg-index
-       (return-from operator
-	 (merge-encodings (encoded-values :opcode ,opcode
-					  :reg reg-index
-					  :rex default-rex)
-			  (encode-reg/mem ,op-modrm operator-mode))))))
+       (return-values-when
+	(merge-encodings (encoded-values :opcode ,opcode
+					 :reg reg-index
+					 :rex default-rex)
+			 (encode-reg/mem ,op-modrm operator-mode))))))
 
 (defmacro moffset (opcode op-offset type)
   `(when (indirect-operand-p ,op-offset)
@@ -705,65 +764,68 @@
 	 (parse-indirect-operand ,op-offset)
        (when (and (not reg)
 		  (not reg2))
-	 (return-from operator
-	   (encoded-values :opcode ,opcode
-			   :displacement (encode-integer (reduce #'+ offsets
-								 :key #'resolve)
-							 ',type)))))))
+	 (return-values-when
+	  (encoded-values :opcode ,opcode
+			  :displacement (encode-integer (reduce #'+ offsets
+								:key #'resolve)
+							',type)))))))
 
 (defmacro opcode (opcode &rest extras)
-  `(return-from operator
-     (encoded-values :opcode ,opcode
-                     ,@extras
-                     :operand-size operator-mode)))
+  `(return-values-when
+    (encoded-values :opcode ,opcode
+		    ,@extras
+		    :operand-size operator-mode)))
 
 (defmacro opcode* (opcode &rest extras)
-  `(return-from operator
-     (encoded-values :opcode ,opcode
+  `(return-values-when
+    (encoded-values :opcode ,opcode
                      ,@extras)))
 
+(defun encode-opcode-reg (opcode op-reg operator-mode default-rex)
+  (let* ((reg-map (ecase operator-mode
+		    (:8-bit '(:al :cl :dl :bl :ah :ch :dh :bh))
+		    (:16-bit '(:ax :cx :dx :bx :sp :bp :si :di))
+		    (:32-bit '(:eax :ecx :edx :ebx :esp :ebp :esi :edi))
+		    (:64-bit '(:rax :rcx :rdx :rbx :rsp :rbp :rsi :rdi :r8 :r9 :r10 :r11 :r12 :r13 :r14 :r15))
+		    (:mm '(:mm0 :mm1 :mm2 :mm3 :mm4 :mm5 :mm6 :mm7 :mm8))
+		    (:xmm '(:xmm0 :xmm1 :xmm2 :xmm3 :xmm4 :xmm5 :xmm6 :xmm7))))
+	 (reg-index (position op-reg reg-map)))
+    (when reg-index
+      (encode (encoded-values :opcode (+ opcode (ldb (byte 3 0) reg-index))
+			      :operand-size operator-mode
+			      :rex (cond
+				     ((>= reg-index 8)
+				      (assert (eq :64-bit operator-mode))
+				      '(:rex.w :rex.r))
+				     (t default-rex)))))))
+
 (defmacro opcode-reg (opcode op-reg)
-  `(let* ((reg-map (ecase operator-mode
-		     (:8-bit '(:al :cl :dl :bl :ah :ch :dh :bh))
-		     (:16-bit '(:ax :cx :dx :bx :sp :bp :si :di))
-		     (:32-bit '(:eax :ecx :edx :ebx :esp :ebp :esi :edi))
-		     (:64-bit '(:rax :rcx :rdx :rbx :rsp :rbp :rsi :rdi :r8 :r9 :r10 :r11 :r12 :r13 :r14 :r15))
-		     (:mm '(:mm0 :mm1 :mm2 :mm3 :mm4 :mm5 :mm6 :mm7 :mm8))
-		     (:xmm '(:xmm0 :xmm1 :xmm2 :xmm3 :xmm4 :xmm5 :xmm6 :xmm7))))
-	  (reg-index (position ,op-reg reg-map)))
-     (when reg-index
-       (return-from operator
-	 (encoded-values :opcode (+ ,opcode (ldb (byte 3 0) reg-index))
-			 :operand-size operator-mode
-			 :rex (cond
-				((>= reg-index 8)
-				 (assert (eq :64-bit operator-mode))
-				 '(:rex.w :rex.r))
-				(t default-rex)))))))
+  `(encode-opcode-reg ,opcode ,op-reg operator-mode default-rex))
+
+(defun encode-opcode-reg-imm (opcode op-reg op-imm type operator-mode default-rex)
+  (when (immediate-p op-imm)
+    (let ((immediate (resolve op-imm)))
+      (when (typep immediate type)
+	(let* ((reg-map (ecase operator-mode
+			  (:8-bit '(:al :cl :dl :bl :ah :ch :dh :bh))
+			  (:16-bit '(:ax :cx :dx :bx :sp :bp :si :di))
+			  (:32-bit '(:eax :ecx :edx :ebx :esp :ebp :esi :edi))
+			  (:64-bit '(:rax :rcx :rdx :rbx :rsp :rbp :rsi :rdi :r8 :r9 :r10 :r11 :r12 :r13 :r14 :r15))
+			  (:mm '(:mm0 :mm1 :mm2 :mm3 :mm4 :mm5 :mm6 :mm7 :mm8))
+			  (:xmm '(:xmm0 :xmm1 :xmm2 :xmm3 :xmm4 :xmm5 :xmm6 :xmm7))))
+	       (reg-index (position op-reg reg-map)))
+	  (when reg-index
+	    (encode (encoded-values :opcode (+ opcode (ldb (byte 3 0) reg-index))
+				    :operand-size operator-mode
+				    :immediate (encode-integer immediate 'type)
+				    :rex (cond
+					   ((>= reg-index 8)
+					    (assert (eq :64-bit operator-mode))
+					    '(:rex.w :rex.r))
+					   (t default-rex))))))))))
 
 (defmacro opcode-reg-imm (opcode op-reg op-imm type)
-  `(when (immediate-p ,op-imm)
-     (let ((immediate (resolve ,op-imm)))
-       (when (typep immediate ',type)
-	 (let* ((reg-map (ecase operator-mode
-			   (:8-bit '(:al :cl :dl :bl :ah :ch :dh :bh))
-			   (:16-bit '(:ax :cx :dx :bx :sp :bp :si :di))
-			   (:32-bit '(:eax :ecx :edx :ebx :esp :ebp :esi :edi))
-			   (:64-bit '(:rax :rcx :rdx :rbx :rsp :rbp :rsi :rdi :r8 :r9 :r10 :r11 :r12 :r13 :r14 :r15))
-			   (:mm '(:mm0 :mm1 :mm2 :mm3 :mm4 :mm5 :mm6 :mm7 :mm8))
-			   (:xmm '(:xmm0 :xmm1 :xmm2 :xmm3 :xmm4 :xmm5 :xmm6 :xmm7))))
-		(reg-index (position ,op-reg reg-map)))
-	   (when reg-index
-	     (return-from operator
-	       (encoded-values :opcode (+ ,opcode (ldb (byte 3 0) reg-index))
-			       :operand-size operator-mode
-			       :immediate (encode-integer immediate ',type)
-			       :rex (cond
-				      ((>= reg-index 8)
-				       (assert (eq :64-bit operator-mode))
-				       '(:rex.w :rex.r))
-				      (t default-rex))))))))))
-
+  `(encode-opcode-reg-imm ,opcode ,op-reg ,op-imm ',type operator-mode default-rex))
 
 ;;;;;;;;;;;;;;;;
 
