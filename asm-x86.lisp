@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.10 2008/01/29 22:25:09 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.11 2008/01/31 21:11:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -304,9 +304,10 @@
      x)
     (symbol-reference
      (let ((s (symbol-reference-symbol x)))
-       (cdr (or (assoc s *symtab*)
-		(error 'unresolved-symbol 
-		       :symbol s)))))))
+       (loop (with-simple-restart (retry-symbol-resolve "Retry resolving ~S." s)
+	       (return (cdr (or (assoc s *symtab*)
+				(error 'unresolved-symbol 
+				       :symbol s))))))))))
 
 (defun resolve-and-encode (x type &key size)
   (encode-integer (cond

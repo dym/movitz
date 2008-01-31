@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.3 2008/01/29 22:04:31 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.4 2008/01/31 21:11:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -21,6 +21,7 @@
 	   #:indirect-operand
 	   #:register-operand
 	   #:unresolved-symbol
+	   #:retry-symbol-resolve
 	   #:pc-relative-operand
 	   #:proglist-encode
 	   #:*pc*
@@ -76,19 +77,64 @@
 ;;;;;;;;;;;;
 
 
-(defun proglist-encode (proglist &key symtab (pc 0) (encoder (find-symbol (string '#:encode-instruction) '#:asm-x86)))
-  (let ((*pc* pc)
-	(*symtab* symtab))
-    (loop for instruction in proglist
-       appending
-	 (etypecase instruction
-	   (symbol
-	    (when (assoc instruction *symtab*)
-	      (error "Label ~S doubly defined." instruction))
-	    (push (cons instruction *pc*)
-		  *symtab*)
-	    nil)
-	   (cons
-	    (let ((code (funcall encoder instruction)))
-	      (incf *pc* (length code))
-	      code))))))
+(defun proglist-encode (proglist &key corrections (start-pc 0) (cpu-package '#:asm-x86))
+  "Encode a proglist, using instruction-encoder in symbol encode-instruction from cpu-package."
+  (let ((encoder (find-symbol (string '#:encode-instruction) cpu-package))
+	(*pc* start-pc)
+	(*symtab* corrections)
+	(assumptions nil)
+	(new-corrections nil))
+    (values (loop for instruction in proglist
+	       appending
+	       (etypecase instruction
+		 (symbol
+		  (let ((previous-definition (assoc instruction *symtab*)))
+		    (cond
+		      ((null previous-definition)
+		       (push (cons instruction *pc*)
+			     *symtab*))
+		      ((assoc instruction new-corrections)
+		       (error "prev-def in new-corrections?? new: ~S, old: ~S"
+			      *pc*
+			      (cdr (assoc instruction new-corrections))))
+		      ((member previous-definition assumptions)
+		       (setf (cdr previous-definition) *pc*)
+		       (setf assumptions (delete previous-definition assumptions))
+		       (push previous-definition new-corrections))
+		      ((member previous-definition corrections)
+		       (cond
+			 ((> *pc* (cdr previous-definition))
+			  (setf (cdr previous-definition) *pc*)
+			  (push previous-definition new-corrections))
+			 ((< *pc* (cdr previous-definition))
+			  (error "Definition for ~S shrunk from ~S to ~S."
+				 instruction
+				 (cdr previous-definition)
+				 *pc*))))
+		      (t (error "Label ~S doubly defined. Old value: ~S, new value: ~S"
+				instruction
+				(cdr previous-definition)
+				*pc*))))
+		  nil)
+		 (cons
+		  (let ((code (handler-bind
+				  ((unresolved-symbol (lambda (c)
+							(let ((a (cons (unresolved-symbol c) 0)))
+							  (push a assumptions)
+							  (push a *symtab*)
+							  (invoke-restart 'retry-symbol-resolve)))))
+				(funcall encoder instruction))))
+		    (incf *pc* (length code))
+		    code)))
+	       finally
+	       (cond
+		 ((not (null assumptions))
+		  (error "Undefined symbol~P: ~{~S~^, ~}"
+			 (length assumptions)
+			 (mapcar #'car assumptions)))
+		 ((not (null new-corrections))
+		  (return (proglist-encode proglist
+					   :start-pc start-pc
+					   :cpu-package cpu-package
+					   :corrections new-corrections)))))
+	    *symtab*)))
