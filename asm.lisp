@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.4 2008/01/31 21:11:24 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.5 2008/02/02 00:33:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -25,12 +25,14 @@
 	   #:pc-relative-operand
 	   #:proglist-encode
 	   #:*pc*
-	   #:*symtab*))
+	   #:*symtab*
+	   #:*instruction-compute-extra-prefix-map*))
 
 (in-package asm)
 
 (defvar *pc* nil "Current program counter.")
 (defvar *symtab* nil "Current symbol table.")
+(defvar *instruction-compute-extra-prefix-map* nil)
 
 (deftype symbol-reference ()
   '(cons (eql quote) (cons symbol null)))
