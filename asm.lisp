@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.5 2008/02/02 00:33:04 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.6 2008/02/03 10:23:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -26,13 +26,15 @@
 	   #:proglist-encode
 	   #:*pc*
 	   #:*symtab*
-	   #:*instruction-compute-extra-prefix-map*))
+	   #:*instruction-compute-extra-prefix-map*
+	   #:*position-independent-p*))
 
 (in-package asm)
 
 (defvar *pc* nil "Current program counter.")
 (defvar *symtab* nil "Current symbol table.")
 (defvar *instruction-compute-extra-prefix-map* nil)
+(defvar *position-independent-p* t)
 
 (deftype symbol-reference ()
   '(cons (eql quote) (cons symbol null)))
@@ -106,13 +108,26 @@
 		      ((member previous-definition corrections)
 		       (cond
 			 ((> *pc* (cdr previous-definition))
+;; 			  (warn "correcting ~S from ~D to ~D" instruction (cdr previous-definition) *pc*)
 			  (setf (cdr previous-definition) *pc*)
 			  (push previous-definition new-corrections))
 			 ((< *pc* (cdr previous-definition))
-			  (error "Definition for ~S shrunk from ~S to ~S."
-				 instruction
-				 (cdr previous-definition)
-				 *pc*))))
+;; 			  (warn "Definition for ~S shrunk from ~S to ~S (corrections: ~{~D~}."
+;; 				instruction
+;; 				(cdr previous-definition)
+;; 				*pc*
+;; 				corrections)
+;; 			  (warn "prg: ~{~%~A~}" proglist)
+;; 			  (warn "Definition for ~S shrunk from ~S to ~S."
+;; 				instruction
+;; 				(cdr previous-definition)
+;; 				*pc*)
+;; 			  (break "Definition for ~S shrunk from ~S to ~S."
+;; 				 instruction
+;; 				 (cdr previous-definition)
+;; 				 *pc*)
+			  (setf (cdr previous-definition) *pc*)
+			  (push previous-definition new-corrections))))
 		      (t (error "Label ~S doubly defined. Old value: ~S, new value: ~S"
 				instruction
 				(cdr previous-definition)
@@ -121,7 +136,8 @@
 		 (cons
 		  (let ((code (handler-bind
 				  ((unresolved-symbol (lambda (c)
-							(let ((a (cons (unresolved-symbol c) 0)))
+							(let ((a (cons (unresolved-symbol c) *pc*)))
+;; 							  (warn "assuming ~S for ~S" (unresolved-symbol c) *pc*)
 							  (push a assumptions)
 							  (push a *symtab*)
 							  (invoke-restart 'retry-symbol-resolve)))))
@@ -138,5 +154,5 @@
 		  (return (proglist-encode proglist
 					   :start-pc start-pc
 					   :cpu-package cpu-package
-					   :corrections new-corrections)))))
+					   :corrections (nconc new-corrections corrections))))))
 	    *symtab*)))

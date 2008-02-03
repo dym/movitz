@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.12 2008/02/02 00:33:06 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.13 2008/02/03 10:23:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,6 +19,9 @@
 
 (defvar *instruction-encoders*
   (make-hash-table :test 'eq))
+
+(defvar *use-jcc-16-bit-p* nil
+  "Whether to use 16-bit JCC instructions in 32-bit mode.")
 
 (defun prefix-lookup (prefix-name)
   (cdr (or (assoc prefix-name
@@ -821,6 +824,7 @@
   `(return-when
     (encode-opcode-reg-imm operator legacy-prefixes ,opcode ,op-reg ,op-imm ',type operator-mode default-rex)))
 
+
 ;;;;;;;;;;;;;;;;
 
 (define-operator :nop ()
@@ -1057,17 +1061,17 @@
 
 (define-operator/16 :cwd (reg1 reg2)
   (when (and (eq reg1 :ax)
-             (eq reg2 :dx))
+	     (eq reg2 :dx))
     (opcode #x99)))
 
 (define-operator/32 :cdq (reg1 reg2)
   (when (and (eq reg1 :eax)
-             (eq reg2 :edx))
+		 (eq reg2 :edx))
     (opcode #x99)))
 
 (define-operator/64 :cqo (reg1 reg2)
   (when (and (eq reg1 :rax)
-             (eq reg2 :rdx))
+		 (eq reg2 :rdx))
     (opcode #x99)))
 
 ;;;;;;;;;;; DEC
@@ -1091,7 +1095,7 @@
 
 (define-operator* (:16 :divw :32 :divl :64 :divr) (divisor dividend1 dividend2)
   (when (and (eq dividend1 :ax-eax-rax)
-             (eq dividend2 :dx-edx-rdx))
+	     (eq dividend2 :dx-edx-rdx))
     (modrm divisor #xf7 6)))
 
 ;;;;;;;;;;; HLT
@@ -1103,12 +1107,12 @@
 
 (define-operator/8 :idivb (divisor dividend1 dividend2)
   (when (and (eq dividend1 :al)
-             (eq dividend2 :ah))
+	     (eq dividend2 :ah))
     (modrm divisor #xf6 7)))
 
 (define-operator* (:16 :idivw :32 :idivl :64 :idivr) (divisor dividend1 dividend2)
   (when (and (eq dividend1 :ax-eax-rax)
-             (eq dividend2 :dx-edx-rdx))
+		 (eq dividend2 :dx-edx-rdx))
     (modrm divisor #xf7 7)))
 
 ;;;;;;;;;;; IMUL
@@ -1117,7 +1121,7 @@
   (when (not product2)
     (reg-modrm product1 factor #x0faf))
   (when (and (eq product1 :eax)
-             (eq product2 :edx))
+	     (eq product2 :edx))
     (modrm factor #xf7 5))
   (typecase factor
     ((sint 8)
@@ -1192,14 +1196,15 @@
 (defmacro define-jcc (name opcode1 &optional (opcode2 (+ #x0f10 opcode1)))
  `(define-operator ,name (dst)
     (pc-rel ,opcode1 dst (sint 8))
-    (case *cpu-mode*
-      ((:16-bit :32-bit)
-       (pc-rel ,opcode2 dst (sint 16)
-        :operand-size :16-bit)))
+    (when (or (and (eq *cpu-mode* :32-bit)
+		   *use-jcc-16-bit-p*)
+	      (eq *cpu-mode* :16-bit))
+      (pc-rel ,opcode2 dst (sint 16)
+	      :operand-size :16-bit))
     (pc-rel ,opcode2 dst (sint 32)
-     :operand-size (case *cpu-mode*
-                     ((:16-bit :32-bit)
-                      :32-bit)))))
+	    :operand-size (case *cpu-mode*
+			    ((:16-bit :32-bit)
+			     :32-bit)))))
 
 (define-jcc :ja #x77)
 (define-jcc :jae #x73)
@@ -1243,7 +1248,9 @@
 (define-operator :jmp (dst)
   (pc-rel #xeb dst (sint 8))
   (pc-rel #xe9 dst (sint 32))
-  (modrm dst #xff 4))
+  (when (or (not *position-independent-p*)
+	    (indirect-operand-p dst))
+    (modrm dst #xff 4)))
 
 ;;;;;;;;;;; LAHF, LAR
 
