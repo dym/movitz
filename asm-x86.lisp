@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.15 2008/02/04 11:48:27 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.16 2008/02/04 12:11:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1444,6 +1444,20 @@
 
 (define-operator* (:16 :popfw :32 :popfl :64 :popfr) ()
   (opcode #x9d))
+
+;;;;;;;;;;; PRFETCH
+
+(define-operator :prefetch-nta (m8)
+  (modrm m8 #x0f18 0))
+
+(define-operator :prefetch-t0 (m8)
+  (modrm m8 #x0f18 1))
+
+(define-operator :prefetch-t1 (m8)
+  (modrm m8 #x0f18 2))
+
+(define-operator :prefetch-t2 (m8)
+  (modrm m8 #x0f18 3))
 
 ;;;;;;;;;;; PUSH
 
