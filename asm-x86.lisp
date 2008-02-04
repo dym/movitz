@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.16 2008/02/04 12:11:00 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.17 2008/02/04 21:03:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -182,19 +182,28 @@
 	  address-size))
  
 (defun encode-instruction (instruction)
-  (multiple-value-bind (legacy-prefixes instruction)
+  (multiple-value-bind (instruction legacy-prefixes options)
       (if (listp (car instruction))
-	  (values (car instruction)
-		  (cdr instruction))
-	  (values nil
-		  instruction))
+	  (values (cdr instruction)
+		  (remove-if #'listp (car instruction))
+		  (remove-if #'keywordp (car instruction)))
+	  (values instruction
+		  nil
+		  nil))
     (destructuring-bind (operator &rest operands)
 	instruction
-      (apply (or (gethash operator *instruction-encoders*)
-		 (error "Unknown instruction operator ~S in ~S." operator instruction))
-	     operator
-	     (mapcar #'prefix-lookup legacy-prefixes)
-	     operands))))
+      (let ((code (apply (or (gethash operator *instruction-encoders*)
+			     (error "Unknown instruction operator ~S in ~S." operator instruction))
+			 operator
+			 (mapcar #'prefix-lookup legacy-prefixes)
+			 operands)))
+	(cond
+	  ((null options)
+	   code)
+	  ((assoc :size options)
+	   (assert (= (second (assoc :size options))
+		      (length code)))
+	   code))))))
 
 
 (defmacro define-operator (operator lambda-list &body body)
@@ -202,7 +211,7 @@
   (let ((defun-name (intern (format nil "~A-~A" 'instruction-encoder operator))))
     `(progn
        (defun ,defun-name (operator legacy-prefixes ,@lambda-list)
-	 (declare (ignorable operator))
+	 (declare (ignorable operator legacy-prefixes))
          (let ((operator-mode nil)
                (default-rex nil))
            (declare (ignorable operator-mode default-rex))
@@ -281,16 +290,6 @@
        ,(when |64|
               `(define-operator/64 ,|64| ,args ,@body64)))))
        
-(defun resolve (x)
-  (etypecase x
-    (integer
-     x)
-    (symbol-reference
-     (let ((s (symbol-reference-symbol x)))
-       (loop (with-simple-restart (retry-symbol-resolve "Retry resolving ~S." s)
-	       (return (cdr (or (assoc s *symtab*)
-				(error 'unresolved-symbol 
-				       :symbol s))))))))))
 
 (defun resolve-and-encode (x type &key size)
   (encode-integer (cond
@@ -309,9 +308,9 @@
   (etypecase operand
     ((cons (eql :pc+))
      (reduce #'+ (cdr operand)
-	     :key #'resolve))
+	     :key #'resolve-operand))
     (symbol-reference
-     (- (resolve operand)
+     (- (resolve-operand operand)
 	*pc*))))
 
 (defun encode-integer (i type)
@@ -382,7 +381,7 @@
 	(assert (or (not reg-scale)
 		    (and reg reg-scale)))
 	(let ((offset (reduce #'+ offsets
-			      :key #'resolve)))
+			      :key #'resolve-operand)))
 	  (cond
             ((and (not reg)
                   (eq mode :16-bit)
@@ -631,7 +630,7 @@
 
 (defmacro imm (imm-operand opcode imm-type &rest extras)
   `(when (immediate-p ,imm-operand)
-     (let ((immediate (resolve ,imm-operand)))
+     (let ((immediate (resolve-operand ,imm-operand)))
        (when (typep immediate ',imm-type)
 	 (return-values-when
 	  (encoded-values :opcode ,opcode
@@ -642,7 +641,7 @@
 
 (defmacro imm-modrm (op-imm op-modrm opcode digit type)
   `(when (immediate-p ,op-imm)
-     (let ((immediate (resolve ,op-imm)))
+     (let ((immediate (resolve-operand ,op-imm)))
        (when (typep immediate ',type)
 	 (return-values-when
 	  (merge-encodings (encoded-values :opcode ,opcode
@@ -764,7 +763,7 @@
 	 (return-values-when
 	  (encoded-values :opcode ,opcode
 			  :displacement (encode-integer (reduce #'+ offsets
-								:key #'resolve)
+								:key #'resolve-operand)
 							',type)))))))
 
 (defmacro opcode (opcode &rest extras)
@@ -802,7 +801,7 @@
 
 (defun encode-opcode-reg-imm (operator legacy-prefixes opcode op-reg op-imm type operator-mode default-rex)
   (when (immediate-p op-imm)
-    (let ((immediate (resolve op-imm)))
+    (let ((immediate (resolve-operand op-imm)))
       (when (typep immediate type)
 	(let* ((reg-map (ecase operator-mode
 			  (:8-bit '(:al :cl :dl :bl :ah :ch :dh :bh))
@@ -827,10 +826,20 @@
     (encode-opcode-reg-imm operator legacy-prefixes ,opcode ,op-reg ,op-imm ',type operator-mode default-rex)))
 
 
-;;;;;;;;;;;;;;;;
+;;;;;;;;;;;
 
-(define-operator :nop ()
-  (opcode #x90))
+;;;;;;;;;;;;;;;; NOP
+
+(define-operator :% (op &rest data)
+  (case op
+    (:bytes
+     (let ((byte-size (pop data)))
+       (return-from operator
+	 (loop for datum in data
+	    append (loop for b from 0 below byte-size by 8
+		      collect (ldb (byte 8 b)
+				   datum))))))))
+
 
 ;;;;;;;;;;; ADC
 
@@ -927,6 +936,9 @@
 
 (define-operator/32 :callr (dest)
   (modrm dest #xff 2))
+
+(define-operator :call-segment (dest)
+  (modrm dest #xff 3))
 
 ;;;;;;;;;;; CLC, CLD, CLI, CLTS, CMC
 
@@ -1254,6 +1266,9 @@
 	    (indirect-operand-p dst))
     (modrm dst #xff 4)))
 
+(define-operator* (:16 :jmpw-segment :32 :jmp-segment :64 :jmpr-segment) (addr)
+  (modrm addr #xff 5))
+
 ;;;;;;;;;;; LAHF, LAR
 
 (define-operator :lahf ()
@@ -1267,6 +1282,9 @@
 ;;;;;;;;;;; LEA
 
 (define-operator* (:16 :leaw :32 :leal :64 :lear) (addr dst)
+  (when (and (equal addr '(:esp :edx)) ; REMOVEME: ia-x86 compat. hack!!
+	     (eq dst :esp))
+    (return-from operator '(#x8D #x64 #x14 #x00)))
   (reg-modrm dst addr #x8d))
 
 ;;;;;;;;;;; LEAVE
@@ -1276,10 +1294,10 @@
 
 ;;;;;;;;;;; LGDT, LIDT
 
-(define-operator* (:16 :lgdtw :32 :lgdtl :64 :lgdtr) (addr)
+(define-operator* (:16 :lgdtw :32 :lgdt :64 :lgdtr) (addr)
   (modrm addr #x0f01 2))
 
-(define-operator* (:16 :lidtw :32 :lidtl :64 :lidtr) (addr)
+(define-operator* (:16 :lidtw :32 :lidt :64 :lidtr) (addr)
   (modrm addr #x0f01 3))
 
 ;;;;;;;;;;; LFENCE
@@ -1372,6 +1390,11 @@
 
 (define-operator* (:16 :negw :32 :negl :64 :negr) (dst)
   (modrm dst #xf7 3))
+
+;;;;;;;;;;;;;;;; NOP
+
+(define-operator :nop ()
+  (opcode #x90))
 
 ;;;;;;;;;;; NOT
 
@@ -1527,6 +1550,11 @@
   (reg-modrm dst subtrahend #x1b)
   (reg-modrm subtrahend dst #x19))
 
+;;;;;;;;;;; SGDT
+
+(define-operator/8 :sgdt (addr)
+  (modrm addr #x0f01 0))
+
 ;;;;;;;;;;; SHL
 
 (define-operator/8 :shlb (count dst)
@@ -1547,7 +1575,7 @@
   (when (eq :cl count)
     (reg-modrm dst1 dst2 #x0fa5))
   (when (immediate-p count)
-    (let ((immediate (resolve count)))
+    (let ((immediate (resolve-operand count)))
       (when (typep immediate '(uint #x8))
 	(reg-modrm dst1 dst2 #x0fa4
 		   :immediate (encode-integer count '(uint 8)))))))
@@ -1572,7 +1600,7 @@
   (when (eq :cl count)
     (reg-modrm dst1 dst2 #x0fad))
   (when (immediate-p count)
-    (let ((immediate (resolve count)))
+    (let ((immediate (resolve-operand count)))
       (when (typep immediate '(uint #x8))
 	(reg-modrm dst1 dst2 #x0fac
 		   :immediate (encode-integer count '(uint 8)))))))
@@ -1620,6 +1648,10 @@
   (imm-modrm mask dst #xf7 0 :int-16-32-64)
   (reg-modrm mask dst #x85))
 
+;;;;;;;;;;; XCHG
+
+(define-operator :wrmsr ()
+  (opcode #x0f30))
 
 ;;;;;;;;;;; XCHG
 

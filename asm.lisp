@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.9 2008/02/04 12:00:36 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.10 2008/02/04 21:03:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,6 +20,7 @@
 	   #:indirect-operand-p
 	   #:indirect-operand
 	   #:register-operand
+	   #:resolve-operand
 	   #:unresolved-symbol
 	   #:retry-symbol-resolve
 	   #:pc-relative-operand
@@ -36,18 +37,30 @@
 (defvar *symtab* nil "Current symbol table.")
 (defvar *instruction-compute-extra-prefix-map* nil)
 (defvar *position-independent-p* t)
-(defvar *sub-program-instructions* '(:jmp :ret)
+(defvar *sub-program-instructions* '(:jmp :ret :iretd)
   "Instruction operators after which to insert sub-programs.")
 
 (defvar *anonymous-sub-program-identities* nil)
 
+(defun quotep (x)
+  "Is x a symbol (in any package) named 'quote'?"
+  ;; This is required because of Movitz package-fiddling.
+  (and (symbolp x)
+       (string= x 'quote)))
+
 (deftype simple-symbol-reference ()
-  '(cons (eql quote) (cons symbol null)))
+  '(cons (satisfies quotep) (cons symbol null)))
 
 (deftype sub-program-operand ()
-  '(cons (eql quote)
+  '(cons (satisfies quotep)
     (cons
      (cons (eql :sub-program))
+     null)))
+
+(deftype funcall-operand ()
+  '(cons (satisfies quotep)
+    (cons
+     (cons (eql :funcall))
      null)))
 
 (deftype symbol-reference ()
@@ -64,7 +77,6 @@
 		 (car (push (cons operand (gensym "sub-program-"))
 			    *anonymous-sub-program-identities*)))))))
 
-
 (defun sub-program-program (operand)
   (cddadr operand))
 
@@ -75,8 +87,14 @@
     (sub-program-operand
      (sub-program-label expr))))
 
+(defun funcall-operand-operator (operand)
+  (cadadr operand))
+
+(defun funcall-operand-operands (operand)
+  (cddadr operand))
+
 (deftype immediate-operand ()
-  '(or integer symbol-reference))
+  '(or integer symbol-reference funcall-operand))
 
 (defun immediate-p (expr)
   (typep expr 'immediate-operand))
@@ -88,7 +106,7 @@
   (typep operand 'register-operand))
 
 (deftype indirect-operand ()
-  '(and cons (not (cons (eql quote)))))
+  '(and cons (not (cons (satisfies quotep)))))
 
 (defun indirect-operand-p (operand)
   (typep operand 'indirect-operand))
@@ -107,6 +125,21 @@
 	     (format s "Unresolved symbol ~S." (unresolved-symbol c)))))
 
 
+
+(defun resolve-operand (operand)
+  (etypecase operand
+    (integer
+     operand)
+    (symbol-reference
+     (let ((s (symbol-reference-symbol operand)))
+       (loop (with-simple-restart (retry-symbol-resolve "Retry resolving ~S." s)
+	       (return (cdr (or (assoc s *symtab*)
+				(error 'unresolved-symbol 
+				       :symbol s))))))))
+    (funcall-operand
+     (apply (funcall-operand-operator operand)
+	    (mapcar #'resolve-operand
+		    (funcall-operand-operands operand))))))
 ;;;;;;;;;;;;
 
 
@@ -121,7 +154,7 @@
 	(sub-programs nil))
     (flet ((process-instruction (instruction)
 	     (etypecase instruction
-	       (symbol
+	       ((or symbol integer)
 		(let ((previous-definition (assoc instruction *symtab*)))
 		  (cond
 		    ((null previous-definition)
@@ -139,24 +172,24 @@
 		    ((member previous-definition corrections)
 		     (cond
 		       ((> *pc* (cdr previous-definition))
-			;; 			  (warn "correcting ~S from ~D to ~D" instruction (cdr previous-definition) *pc*)
+;; 			(warn "correcting ~S from ~D to ~D" instruction (cdr previous-definition) *pc*)
 			(setf (cdr previous-definition) *pc*)
 			(push previous-definition new-corrections))
 		       ((< *pc* (cdr previous-definition))
-			;; 			  (warn "Definition for ~S shrunk from ~S to ~S (corrections: ~{~D~}."
-			;; 				instruction
-			;; 				(cdr previous-definition)
-			;; 				*pc*
-			;; 				corrections)
-			;; 			  (warn "prg: ~{~%~A~}" proglist)
-			;; 			  (warn "Definition for ~S shrunk from ~S to ~S."
-			;; 				instruction
-			;; 				(cdr previous-definition)
-			;; 				*pc*)
-			;; 			  (break "Definition for ~S shrunk from ~S to ~S."
-			;; 				 instruction
-			;; 				 (cdr previous-definition)
-			;; 				 *pc*)
+;; 			(warn "Definition for ~S shrunk from ~S to ~S (corrections: ~{~D~}."
+;; 			      instruction
+;; 			      (cdr previous-definition)
+;; 			      *pc*
+;; 			      corrections)
+;; 			(warn "prg: ~{~%~A~}" proglist)
+;; 			(warn "Definition for ~S shrunk from ~S to ~S."
+;; 			      instruction
+;; 			      (cdr previous-definition)
+;; 			      *pc*)
+;; 			  (break "Definition for ~S shrunk from ~S to ~S."
+;; 				 instruction
+;; 				 (cdr previous-definition)
+;; 				 *pc*)
 			(setf (cdr previous-definition) *pc*)
 			(push previous-definition new-corrections))))
 		    (t (error "Label ~S doubly defined. Old value: ~S, new value: ~S"
@@ -168,7 +201,7 @@
 		(let ((code (handler-bind
 				((unresolved-symbol (lambda (c)
 						      (let ((a (cons (unresolved-symbol c) *pc*)))
-							;; 							  (warn "assuming ~S for ~S" (unresolved-symbol c) *pc*)
+;; 							(warn "assuming ~S for ~S" (unresolved-symbol c) *pc*)
 							(push a assumptions)
 							(push a *symtab*)
 							(invoke-restart 'retry-symbol-resolve)))))
