@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.13 2008/02/03 10:23:07 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.14 2008/02/04 07:45:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -207,7 +207,9 @@
                (default-rex nil))
            (declare (ignorable operator-mode default-rex))
            (block operator
-             ,@body)))
+             ,@body
+	     (error "Unable to encode ~S." (list operator ,@(remove #\& lambda-list
+								    :key (lambda (x) (char (string x) 0))))))))
        (setf (gethash ',operator *instruction-encoders*)
 	     ',defun-name)
        ',operator)))
