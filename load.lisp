@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Jan 15 18:40:58 2004
 ;;;;                
-;;;; $Id: load.lisp,v 1.11 2004/12/09 14:05:52 ffjeld Exp $
+;;;; $Id: load.lisp,v 1.12 2008/02/04 21:05:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -27,6 +27,10 @@
 					   (debug 0) (compilation-speed 3))))
 
 (load (compile-file #p"../binary-types/binary-types"))
+
+(load (compile-file #p"asm")) ; these are here for now, because
+(load (compile-file #p"asm-x86")) ; ia-x86 needs them while testing/migrating.
+
 
 (let ((*default-pathname-defaults* (merge-pathnames #p"../ia-x86/")))
   #+(or cmu) (let ((pwd (ext:default-directory)))
