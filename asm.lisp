@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.10 2008/02/04 21:03:32 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.11 2008/02/04 23:01:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -154,7 +154,7 @@
 	(sub-programs nil))
     (flet ((process-instruction (instruction)
 	     (etypecase instruction
-	       ((or symbol integer)
+	       ((or symbol integer) ; a label?
 		(let ((previous-definition (assoc instruction *symtab*)))
 		  (cond
 		    ((null previous-definition)
@@ -172,24 +172,14 @@
 		    ((member previous-definition corrections)
 		     (cond
 		       ((> *pc* (cdr previous-definition))
-;; 			(warn "correcting ~S from ~D to ~D" instruction (cdr previous-definition) *pc*)
+ 			;; (warn "correcting ~S from ~D to ~D" instruction (cdr previous-definition) *pc*)
 			(setf (cdr previous-definition) *pc*)
 			(push previous-definition new-corrections))
 		       ((< *pc* (cdr previous-definition))
-;; 			(warn "Definition for ~S shrunk from ~S to ~S (corrections: ~{~D~}."
-;; 			      instruction
-;; 			      (cdr previous-definition)
-;; 			      *pc*
-;; 			      corrections)
-;; 			(warn "prg: ~{~%~A~}" proglist)
-;; 			(warn "Definition for ~S shrunk from ~S to ~S."
-;; 			      instruction
-;; 			      (cdr previous-definition)
-;; 			      *pc*)
-;; 			  (break "Definition for ~S shrunk from ~S to ~S."
-;; 				 instruction
-;; 				 (cdr previous-definition)
-;; 				 *pc*)
+			;; 			  (break "Definition for ~S shrunk from ~S to ~S."
+			;; 				 instruction
+			;; 				 (cdr previous-definition)
+			;; 				 *pc*)
 			(setf (cdr previous-definition) *pc*)
 			(push previous-definition new-corrections))))
 		    (t (error "Label ~S doubly defined. Old value: ~S, new value: ~S"
@@ -197,45 +187,43 @@
 			      (cdr previous-definition)
 			      *pc*))))
 		nil)
-	       (cons
-		(let ((code (handler-bind
-				((unresolved-symbol (lambda (c)
-						      (let ((a (cons (unresolved-symbol c) *pc*)))
-;; 							(warn "assuming ~S for ~S" (unresolved-symbol c) *pc*)
-							(push a assumptions)
-							(push a *symtab*)
-							(invoke-restart 'retry-symbol-resolve)))))
-			      (funcall encoder instruction))))
+	       (cons ; a bona fide instruction?
+		(let ((code (funcall encoder instruction)))
 		  (incf *pc* (length code))
 		  code)))))
-      (values (loop for instruction in proglist
-		 for operands = (when (consp instruction)
-				  instruction)
-		 for operator = (when (consp instruction)
-				  (let ((x (pop operands)))
-				    (if (not (listp x)) x (pop operands))))
-		 append (process-instruction instruction)		   
-		 do (loop for operand in operands
-		       do (when (sub-program-operand-p operand)
-			    (push (cons (sub-program-label operand)
-					(sub-program-program operand))
-				  sub-programs)))
-		 when (and (not (null sub-programs))
-			   (member operator *sub-program-instructions*))
-		 append (loop for sub-program in (nreverse sub-programs)
-			   append (mapcan #'process-instruction sub-program)
-			   finally (setf sub-programs nil))
-		 finally
-		 (cond
-		   ((not (null assumptions))
-		    (warn "prg: ~{~%~A~}" proglist)
-		    (error "Undefined symbol~P: ~{~S~^, ~}"
-			   (length assumptions)
-			   (mapcar #'car assumptions)))
-		   ((not (null new-corrections))
-		    (return (proglist-encode proglist
-					     :symtab incoming-symtab
-					     :start-pc start-pc
-					     :cpu-package cpu-package
-					     :corrections (nconc new-corrections corrections))))))
-	      *symtab*))))
+      (handler-bind
+	  ((unresolved-symbol (lambda (c)
+				(let ((a (cons (unresolved-symbol c) *pc*)))
+				  ;; (warn "assuming ~S for ~S" (unresolved-symbol c) *pc*)
+				  (push a assumptions)
+				  (push a *symtab*)
+				  (invoke-restart 'retry-symbol-resolve)))))
+	(let ((code (loop for instruction in proglist
+		       for operands = (when (consp instruction)
+					instruction)
+		       for operator = (when (consp instruction)
+					(let ((x (pop operands)))
+					  (if (not (listp x)) x (pop operands))))
+		       append (process-instruction instruction)		   
+		       do (loop for operand in operands
+			     do (when (sub-program-operand-p operand)
+				  (push (cons (sub-program-label operand)
+					      (sub-program-program operand))
+					sub-programs)))
+		       when (and (not (null sub-programs))
+				 (member operator *sub-program-instructions*))
+		       append (loop for sub-program in (nreverse sub-programs)
+				 append (mapcan #'process-instruction sub-program)
+				 finally (setf sub-programs nil)))))
+	  (cond
+	    ((not (null assumptions))
+	     (error "Undefined symbol~P: ~{~S~^, ~}"
+		    (length assumptions)
+		    (mapcar #'car assumptions)))
+	    ((not (null new-corrections))
+	     (proglist-encode proglist
+			      :symtab incoming-symtab
+			      :start-pc start-pc
+			      :cpu-package cpu-package
+			      :corrections (nconc new-corrections corrections)))
+	    (t (values code *symtab*))))))))
