@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.8 2008/02/04 08:33:39 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.9 2008/02/04 12:00:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -39,6 +39,8 @@
 (defvar *sub-program-instructions* '(:jmp :ret)
   "Instruction operators after which to insert sub-programs.")
 
+(defvar *anonymous-sub-program-identities* nil)
+
 (deftype simple-symbol-reference ()
   '(cons (eql quote) (cons symbol null)))
 
@@ -55,7 +57,13 @@
   (typep expr 'sub-program-operand))
 
 (defun sub-program-label (operand)
-  (car (cadadr operand)))
+  (let ((x (cadadr operand)))
+    (if (not (eq '() x))
+	(car x)
+	(cdr (or (assoc operand *anonymous-sub-program-identities*)
+		 (car (push (cons operand (gensym "sub-program-"))
+			    *anonymous-sub-program-identities*)))))))
+
 
 (defun sub-program-program (operand)
   (cddadr operand))
@@ -107,6 +115,7 @@
   (let ((encoder (find-symbol (string '#:encode-instruction) cpu-package))
 	(*pc* start-pc)
 	(*symtab* (append incoming-symtab corrections))
+	(*anonymous-sub-program-identities* *anonymous-sub-program-identities*)
 	(assumptions nil)
 	(new-corrections nil)
 	(sub-programs nil))
