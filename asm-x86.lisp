@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.14 2008/02/04 07:45:12 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.15 2008/02/04 11:48:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1357,6 +1357,13 @@
 
 (define-operator* (:32 :movzxw) (src dst)
   (reg-modrm dst src #x0fb7))
+
+;;;;;;;;;;; MUL
+
+(define-operator/32 :mull (factor product1 &optional product2)
+  (when (and (eq product1 :eax)
+	     (eq product2 :edx))
+    (modrm factor #xf7 4)))
 
 ;;;;;;;;;;; NEG
 
