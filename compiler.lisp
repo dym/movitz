@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.186 2007/04/05 21:10:39 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.187 2008/02/04 23:08:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -131,6 +131,22 @@ which enables tracing of recursive functions.")
       '(#x90 #x90 #x90)
       '(#x90)))))
 
+(defun new-compute-call-extra-prefix (pc size)
+  (let* ((return-pointer-tag (ldb (byte 3 0)
+				  (+ pc size))))
+    (cond
+      ((or (= (tag :even-fixnum) return-pointer-tag)
+	   (= (tag :odd-fixnum) return-pointer-tag))
+       ;; Insert a NOP
+       '(#x90))
+;;;     ((= 3 return-pointer-tag)
+;;;      ;; Insert two NOPs, 3 -> 5
+;;;      '(#x90 #x90))
+      ((= (tag :character) return-pointer-tag)
+       ;; Insert three NOPs, 2 -> 5
+       '(#x90 #x90 #x90)
+       '(#x90)))))
+
 (defun make-compiled-primitive (form environment top-level-p docstring)
   "Primitive functions have no funobj, no stack-frame, and no implied
    parameter/return value passing conventions."
@@ -143,19 +159,24 @@ which enables tracing of recursive functions.")
 		      :top-level-p nil
 		      :result-mode :ignore))
 	 ;; (ignmore (format t "~{~S~%~}" body-code))
-	 (resolved-code (finalize-code body-code nil nil))
-	 (function-code (ia-x86:read-proglist resolved-code)))
+	 (resolved-code (finalize-code body-code nil nil)))
+
     (multiple-value-bind (code-vector symtab)
-	(let ((ia-x86:*instruction-compute-extra-prefix-map*
-	       '((:call . compute-call-extra-prefix))))
-	  (ia-x86:proglist-encode :octet-vector
-				  :32-bit
-				  #x00000000
-				  function-code
-				  :symtab-lookup
-				  #'(lambda (label)
-				      (case label
-					(:nil-value (image-nil-word *image*))))))
+	#+use-old-ia-x86
+      (let ((ia-x86:*instruction-compute-extra-prefix-map*
+	     '((:call . compute-call-extra-prefix))))
+	(ia-x86:proglist-encode :octet-vector
+				:32-bit
+				#x00000000
+				(ia-x86:read-proglist resolved-code)
+				:symtab-lookup (lambda (label)
+						 (case label
+						   (:nil-value (image-nil-word *image*))))))
+      (let ((asm:*instruction-compute-extra-prefix-map*
+	     '((:call . new-compute-call-extra-prefix))))
+	(asm:proglist-encode (translate-program resolved-code :muerte.cl :cl)
+			     :symtab (list (cons :nil-value (image-nil-word *image*)))))
+
       (values (make-movitz-vector (length code-vector)
 				  :element-type 'code
 				  :initial-contents code-vector)
@@ -1001,40 +1022,72 @@ a (lexical-extent) sub-function might care about its parent frame-map."
   funobj)
 
 
+(defun diss (code)
+  (format nil "~&;; Diss:
+~:{~4D: ~16<~{ ~2,'0X~}~;~> ~A~@[ ;~{ ~A~}~]~%~}"
+	  (loop with code-position = 0
+	     for pc = 0 then code-position
+	     for instruction = (ia-x86:decode-read-octet
+				#'(lambda ()
+				    (incf code-position)
+				    (pop code)))
+	     for cbyte = (and instruction
+			      (ia-x86::instruction-original-datum instruction))
+	     until (null instruction)
+	     collect (list pc
+			   (ia-x86::cbyte-to-octet-list cbyte)
+			   instruction
+			   (comment-instruction instruction nil pc)))))
+
+
 (defun assemble-funobj (funobj combined-code)
   (multiple-value-bind (code-vector code-symtab)
-      (let ((ia-x86:*instruction-compute-extra-prefix-map*
-	     '((:call . compute-call-extra-prefix))))
-	(ia-x86:proglist-encode :octet-vector :32-bit #x00000000
-				(ia-x86:read-proglist combined-code)
-				:symtab-lookup
-				(lambda (label)
-				  (case label
-				    (:nil-value (image-nil-word *image*))
-				    (t (let ((set (cdr (assoc label
-							      (movitz-funobj-jumpers-map funobj)))))
-					 (when set
-					   (let ((pos (search set (movitz-funobj-const-list funobj)
-							      :end2 (movitz-funobj-num-jumpers funobj))))
-					     (assert pos ()
-					       "Couldn't find for ~s set ~S in ~S."
-					       label set (subseq (movitz-funobj-const-list funobj)
-								 0 (movitz-funobj-num-jumpers funobj)))
-					     (* 4 pos)))))))))
+      #+use-old-ia-x86
+    (let ((ia-x86:*instruction-compute-extra-prefix-map*
+	   '((:call . compute-call-extra-prefix))))
+      (ia-x86:proglist-encode :octet-vector :32-bit #x00000000
+			      (ia-x86:read-proglist combined-code)
+			      :symtab-lookup
+			      (lambda (label)
+				(case label
+				  (:nil-value (image-nil-word *image*))
+				  (t (let ((set (cdr (assoc label
+							    (movitz-funobj-jumpers-map funobj)))))
+				       (when set
+					 (let ((pos (search set (movitz-funobj-const-list funobj)
+							    :end2 (movitz-funobj-num-jumpers funobj))))
+					   (assert pos ()
+						   "Couldn't find for ~s set ~S in ~S."
+						   label set (subseq (movitz-funobj-const-list funobj)
+								     0 (movitz-funobj-num-jumpers funobj)))
+					   (* 4 pos)))))))))
+    (let ((asm:*instruction-compute-extra-prefix-map*
+	   '((:call . new-compute-call-extra-prefix))))
+      (asm:proglist-encode combined-code
+			   :symtab (list* (cons :nil-value (image-nil-word *image*))
+					  (loop for (label . set) in (movitz-funobj-jumpers-map funobj)
+					     collect (cons label
+							   (* 4 (or (search set (movitz-funobj-const-list funobj)
+									    :end2 (movitz-funobj-num-jumpers funobj))
+								    (error "Jumper for ~S missing." label))))))))
+
     (setf (movitz-funobj-symtab funobj) code-symtab)
-    (let ((code-length (- (length code-vector) 3 -3)))
+    (let* ((code-length (- (length code-vector) 3 -3))
+	   (code-vector (make-array code-length
+				    :initial-contents code-vector
+				    :fill-pointer t)))
       (setf (fill-pointer code-vector) code-length)
       ;; debug info
       (setf (ldb (byte 1 5) (slot-value funobj 'debug-info))
-	1 #+ignore (if use-stack-frame-p 1 0))
+	    1 #+ignore (if use-stack-frame-p 1 0))
       (let ((x (cdr (assoc 'start-stack-frame-setup code-symtab))))
 	(cond
-	 ((not x)
-	  #+ignore (warn "No start-stack-frame-setup label for ~S." name))
-	 ((<= 0 x 30)
-	  (setf (ldb (byte 5 0) (slot-value funobj 'debug-info)) x))
-	 (t (warn "Can't encode start-stack-frame-setup label ~D into debug-info for ~S."
-		  x (movitz-funobj-name funobj)))))
+	  ((not x)
+	   #+ignore (warn "No start-stack-frame-setup label for ~S." name))
+	  ((<= 0 x 30)
+	   (setf (ldb (byte 5 0) (slot-value funobj 'debug-info)) x))
+	  (t (warn "Can't encode start-stack-frame-setup label ~D into debug-info for ~S."
+		   x (movitz-funobj-name funobj)))))
       (let* ((a (or (cdr (assoc 'entry%1op code-symtab)) 0))
 	     (b (or (cdr (assoc 'entry%2op code-symtab)) a))
 	     (c (or (cdr (assoc 'entry%3op code-symtab)) b)))
@@ -1049,11 +1102,11 @@ a (lexical-extent) sub-function might care about its parent frame-map."
       (loop for ((entry-label slot-name)) on '((entry%1op code-vector%1op)
 					       (entry%2op code-vector%2op)
 					       (entry%3op code-vector%3op))
-	  do (cond
+	 do (cond
 	      ((assoc entry-label code-symtab)
 	       (let ((offset (cdr (assoc entry-label code-symtab))))
 		 (setf (slot-value funobj slot-name)
-		   (cons offset funobj))
+		       (cons offset funobj))
 		 #+ignore (when (< offset #x100)
 			    (vector-push offset code-vector))))
 	      #+ignore
@@ -1065,24 +1118,24 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	    (make-movitz-vector (length code-vector)
 				:fill-pointer code-length
 				:element-type 'code
-				:initial-contents code-vector))))
+				:initial-contents code-vector)))))
   funobj)
 
 (defun check-locate-concistency (code-vector)
   (loop for x from 0 below (length code-vector) by 8
-      do (when (and (= (tag :basic-vector) (aref code-vector x))
-		    (= (enum-value 'movitz-vector-element-type :code) (aref code-vector (1+ x)))
-		    (or (<= #x4000 (length code-vector))
-			(and (= (ldb (byte 8 0) (length code-vector))
-				(aref code-vector (+ x 2)))
-			     (= (ldb (byte 8 8) (length code-vector))
-				(aref code-vector (+ x 3))))))
-	   (break "Code-vector (length #x~X) can break %find-code-vector at ~D: #x~2,'0X~2,'0X ~2,'0X~2,'0X."
-		  (length code-vector) x
-		  (aref code-vector (+ x 0))
-		  (aref code-vector (+ x 1))
-		  (aref code-vector (+ x 2))
-		  (aref code-vector (+ x 3)))))
+     do (when (and (= (tag :basic-vector) (aref code-vector x))
+		   (= (enum-value 'movitz-vector-element-type :code) (aref code-vector (1+ x)))
+		   (or (<= #x4000 (length code-vector))
+		       (and (= (ldb (byte 8 0) (length code-vector))
+			       (aref code-vector (+ x 2)))
+			    (= (ldb (byte 8 8) (length code-vector))
+			       (aref code-vector (+ x 3))))))
+	  (break "Code-vector (length #x~X) can break %find-code-vector at ~D: #x~2,'0X~2,'0X ~2,'0X~2,'0X."
+		 (length code-vector) x
+		 (aref code-vector (+ x 0))
+		 (aref code-vector (+ x 1))
+		 (aref code-vector (+ x 2))
+		 (aref code-vector (+ x 3)))))
   (values))
 
 #+ignore
