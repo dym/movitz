@@ -6,12 +6,15 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.17 2008/02/04 21:03:35 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.18 2008/02/05 22:40:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (defpackage asm-x86
-  (:use :common-lisp :asm))
+  (:use :common-lisp :asm)
+  (:export #:encode-instruction
+	   #:*cpu-mode*
+	   #:*position-independent-p*))
 
 (in-package asm-x86)
 
@@ -132,7 +135,6 @@
 
 (defmacro encode (values-form)
   `(multiple-value-call #'encode-values-fun operator legacy-prefixes ,values-form))
-
 
 (defmacro merge-encodings (form1 form2)
   `(multiple-value-bind (prefixes1 rexes1 opcode1 mod1 reg1 rm1 scale1 index1 base1 displacement1 immediate1 operand-size1 address-size1)
@@ -372,7 +374,7 @@
 						  (:64-bit '(:rax :rcx :rdx :rbx :rsp :rbp :rsi :rdi :r8 :r9 :r10 :r11 :r12 :13 :r14 :r15))
 						  (:mm '(:mm0 :mm1 :mm2 :mm3 :mm4 :mm5 :mm6 :mm7))
 						  (:xmm '(:xmm0 :xmm1 :xmm2 :xmm3 :xmm4 :xmm5 :xmm6 :xmm7))))
-			      (error "Unknown ~D-bit register ~S." mode operand)))
+			      (error "Unknown ~(~D~) register ~S." mode operand)))
       (multiple-value-bind (reg offsets reg2 reg-scale)
 	  (parse-indirect-operand operand)
 	(check-type reg-scale (member nil 1 2 4 8))
@@ -702,7 +704,7 @@
 				       :rex default-rex)
 		       (encode-reg/mem ,operand operator-mode)))))
 
-(defun encode-reg-modrm (operator legacy-prefixes op-reg op-modrm opcode operator-mode default-rex &rest extras)
+(defun encode-reg-modrm (operator legacy-prefixes op-reg op-modrm opcode operator-mode default-rex &optional reg/mem-mode &rest extras)
   (let* ((reg-map (ecase operator-mode
 		    (:8-bit '(:al :cl :dl :bl :ah :ch :dh :bh))
 		    (:16-bit '(:ax :cx :dx :bx :sp :bp :si :di))
@@ -718,11 +720,10 @@
 				      :operand-size operator-mode
 				      :rex default-rex
 				      extras)
-			       (encode-reg/mem op-modrm operator-mode))))))
+			       (encode-reg/mem op-modrm (or reg/mem-mode operator-mode)))))))
 
-(defmacro reg-modrm (op-reg op-modrm opcode &rest extras)
-  `(return-when (encode-reg-modrm operator legacy-prefixes ,op-reg ,op-modrm ,opcode operator-mode default-rex ,@extras)))
-
+(defmacro reg-modrm (op-reg op-modrm opcode &optional reg/mem-mode &rest extras)
+  `(return-when (encode-reg-modrm operator legacy-prefixes ,op-reg ,op-modrm ,opcode operator-mode default-rex ,reg/mem-mode ,@extras)))
 
 (defun encode-reg-cr (operator legacy-prefixes op-reg op-cr opcode operator-mode default-rex &rest extras)
   (let* ((reg-map (ecase operator-mode
@@ -1140,10 +1141,12 @@
   (typecase factor
     ((sint 8)
      (reg-modrm product1 product2 #x6b
-      :displacement (encode-integer factor '(sint 8))))
+		nil
+		:displacement (encode-integer factor '(sint 8))))
     ((sint 32)
      (reg-modrm product1 product2 #x69
-      :displacement (encode-integer factor '(sint 32))))))
+		nil
+		:displacement (encode-integer factor '(sint 32))))))
 
 ;;;;;;;;;;; IN
 
@@ -1264,7 +1267,8 @@
   (pc-rel #xe9 dst (sint 32))
   (when (or (not *position-independent-p*)
 	    (indirect-operand-p dst))
-    (modrm dst #xff 4)))
+    (let ((operator-mode :32-bit))
+      (modrm dst #xff 4))))
 
 (define-operator* (:16 :jmpw-segment :32 :jmp-segment :64 :jmpr-segment) (addr)
   (modrm addr #xff 5))
@@ -1292,6 +1296,11 @@
 (define-operator :leave ()
   (opcode #xc9))
 
+;;;;;;;;;;; LFENCE
+
+(define-operator :lfence ()
+  (opcode #x0faee8))
+
 ;;;;;;;;;;; LGDT, LIDT
 
 (define-operator* (:16 :lgdtw :32 :lgdt :64 :lgdtr) (addr)
@@ -1300,10 +1309,10 @@
 (define-operator* (:16 :lidtw :32 :lidt :64 :lidtr) (addr)
   (modrm addr #x0f01 3))
 
-;;;;;;;;;;; LFENCE
+;;;;;;;;;;; LMSW
 
-(define-operator :lfence ()
-  (opcode #x0faee8))
+(define-operator/16 :lmsw (src)
+  (modrm src #x0f01 6))
 
 ;;;;;;;;;;; LOOP, LOOPE, LOOPNE
 
@@ -1360,6 +1369,17 @@
   (reg-cr src dst #x0f22)
   (reg-cr dst src #x0f20))
 
+;;;;;;;;;;; MOVS
+
+(define-operator/8 :movsb ()
+  (opcode #xa4))
+
+(define-operator/16 :movsw ()
+  (opcode #xa5))
+
+(define-operator/32 :movsl ()
+  (opcode #xa5))
+
 ;;;;;;;;;;; MOVSX
 
 (define-operator* (:32 :movsxb) (src dst)
@@ -1371,7 +1391,7 @@
 ;;;;;;;;;;; MOVZX
 
 (define-operator* (:32 :movzxb) (src dst)
-  (reg-modrm dst src #x0fb6))
+  (reg-modrm dst src #x0fb6 :8-bit))
 
 (define-operator* (:32 :movzxw) (src dst)
   (reg-modrm dst src #x0fb7))
@@ -1578,6 +1598,7 @@
     (let ((immediate (resolve-operand count)))
       (when (typep immediate '(uint #x8))
 	(reg-modrm dst1 dst2 #x0fa4
+		   nil
 		   :immediate (encode-integer count '(uint 8)))))))
 
 ;;;;;;;;;;; SHR
@@ -1603,6 +1624,7 @@
     (let ((immediate (resolve-operand count)))
       (when (typep immediate '(uint #x8))
 	(reg-modrm dst1 dst2 #x0fac
+		   nil
 		   :immediate (encode-integer count '(uint 8)))))))
     
 
@@ -1648,7 +1670,10 @@
   (imm-modrm mask dst #xf7 0 :int-16-32-64)
   (reg-modrm mask dst #x85))
 
-;;;;;;;;;;; XCHG
+;;;;;;;;;;; WBINVD, WSRMSR
+
+(define-operator :wbinvd ()
+  (opcode #x0f09))
 
 (define-operator :wrmsr ()
   (opcode #x0f30))
