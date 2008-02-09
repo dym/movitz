@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.113 2007/04/01 18:18:26 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.114 2008/02/09 18:42:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1313,7 +1313,7 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 		    (format nil "branch to ~S at ~D" label x)
 		  (format nil "branch to ~D" x)))
       when (and (typep operand 'ia-x86::operand-immediate)
-		(<= 256 (ia-x86::operand-value operand))
+		(<= #x100 (ia-x86::operand-value operand) #x10000)
 		(= (tag :character) (mod (ia-x86::operand-value operand) 256)))
       collect (format nil "#\\~C" (code-char (truncate (ia-x86::operand-value operand) 256)))
       when (and (typep operand 'ia-x86::operand-immediate)
