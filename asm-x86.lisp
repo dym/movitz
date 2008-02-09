@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.18 2008/02/05 22:40:54 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.19 2008/02/09 09:50:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -194,12 +194,15 @@
 		  nil))
     (destructuring-bind (operator &rest operands)
 	instruction
-      (let ((code (apply (or (gethash operator *instruction-encoders*)
-			     (error "Unknown instruction operator ~S in ~S." operator instruction))
-			 operator
-			 (mapcar #'prefix-lookup legacy-prefixes)
-			 operands)))
+      (multiple-value-bind (code failp)
+	  (apply (or (gethash operator *instruction-encoders*)
+		     (error "Unknown instruction operator ~S in ~S." operator instruction))
+		 operator
+		 (mapcar #'prefix-lookup legacy-prefixes)
+		 operands)
 	(cond
+	  (failp
+	   (error "Unable to encode ~S." instruction))
 	  ((null options)
 	   code)
 	  ((assoc :size options)
@@ -219,8 +222,7 @@
            (declare (ignorable operator-mode default-rex))
            (block operator
              ,@body
-	     (error "Unable to encode ~S." (list operator ,@(remove #\& lambda-list
-								    :key (lambda (x) (char (string x) 0))))))))
+	     (values nil 'fail))))
        (setf (gethash ',operator *instruction-encoders*)
 	     ',defun-name)
        ',operator)))
@@ -274,7 +276,7 @@
        (declare (ignorable operator-mode))
        ,@body)))
 
-(defmacro define-operator* ((&key |16| |32| |64|) args &body body)
+(defmacro define-operator* ((&key |16| |32| |64| dispatch) args &body body)
   (let ((body16 (subst '(xint 16) :int-16-32-64
                        (subst :dx :dx-edx-rdx
                               (subst :ax :ax-eax-rax body))))
@@ -290,8 +292,21 @@
        ,(when |32|
               `(define-operator/32 ,|32| ,args ,@body32))
        ,(when |64|
-              `(define-operator/64 ,|64| ,args ,@body64)))))
-       
+              `(define-operator/64 ,|64| ,args ,@body64))
+       ,(when dispatch
+	      (let ((dispatch-name (intern (format nil "~A-~A" 'instruction-dispatcher dispatch))))
+		`(progn
+		   (defun ,dispatch-name (&rest args)
+		     (declare (dynamic-extent args))
+		     (loop for encoder in (ecase *cpu-mode*
+					    (:32-bit ',(remove nil (list |32| |16| |64|)))
+					    (:64-bit ',(remove nil (list |64| |32| |16|)))
+					    (:16-bit ',(remove nil (list |16| |32| |64|))))
+			thereis (apply (gethash encoder *instruction-encoders*) args)
+			finally (return (values nil 'fail))))
+		   (setf (gethash ',dispatch *instruction-encoders*)
+			 ',dispatch-name))))
+       nil)))
 
 (defun resolve-and-encode (x type &key size)
   (encode-integer (cond
@@ -738,7 +753,9 @@
 		     :mod #b11
 		     :rm reg-index
 		     :reg cr-index
-		     :operand-size operator-mode
+		     :operand-size (if (not (eq *cpu-mode* :64-bit))
+				       nil
+				       operator-mode)
 		     :rex default-rex
 		     extras)))))
 
@@ -826,21 +843,62 @@
   `(return-when
     (encode-opcode-reg-imm operator legacy-prefixes ,opcode ,op-reg ,op-imm ',type operator-mode default-rex)))
 
+(defmacro far-pointer (opcode segment offset offset-type &rest extra)
+  `(when (and (immediate-p ,segment)
+	      (indirect-operand-p ,offset)); FIXME: should be immediate-p, change in bootblock.lisp.
+     (let ((segment (resolve-operand ,segment))
+	   (offset (resolve-operand (car ,offset))))
+       (when (and (typep segment '(uint 16))
+		  (typep offset ',offset-type))
+	 (return-when (encode (encoded-values :opcode ,opcode
+					      :immediate (append (encode-integer offset ',offset-type)
+								 (encode-integer segment '(uint 16)))
+					      ,@extra)))))))
 
-;;;;;;;;;;;
 
-;;;;;;;;;;;;;;;; NOP
+;;;;;;;;;;; Pseudo-instructions
 
-(define-operator :% (op &rest data)
+(define-operator :% (op &rest form)
   (case op
     (:bytes
-     (let ((byte-size (pop data)))
-       (return-from operator
+     (return-from operator
+       (destructuring-bind (byte-size &rest data)
+	   form
 	 (loop for datum in data
 	    append (loop for b from 0 below byte-size by 8
 		      collect (ldb (byte 8 b)
-				   datum))))))))
-
+				   (resolve-operand datum)))))))
+    (:funcall
+     (return-from operator
+       (destructuring-bind (function &rest args)
+	   form
+	 (apply function (mapcar #'resolve-operand args)))))
+    (:fun
+     (return-from operator
+       (destructuring-bind (function &rest args)
+	   (car form)
+	 (loop for cbyte in (apply function (mapcar #'resolve-operand args))
+	    append (loop for octet from 0 below (imagpart cbyte)
+		      collect (ldb (byte 8 (* 8 octet))
+				   (realpart cbyte)))))))
+    (:format
+     (return-from operator
+       (destructuring-bind (byte-size format-control &rest format-args)
+	   form
+	 (ecase byte-size
+	   (8 (let ((data (map 'list #'char-code
+			       (apply #'format nil format-control
+				      (mapcar #'resolve-operand format-args)))))
+		(cons (length data)
+		      data)))))))
+    (:align
+     (return-from operator
+       (destructuring-bind (alignment)
+	   form
+	 (let* ((offset (mod *pc* alignment)))
+	   (when (plusp offset)
+	     (make-list (- alignment offset)
+			:initial-element 0))))))))
 
 ;;;;;;;;;;; ADC
 
@@ -927,16 +985,14 @@
 
 ;;;;;;;;;;; CALL
 
-(define-operator/16 :callw (dest)
-  (pc-rel #xe8 dest (sint 16))
-  (modrm dest #xff 2))
-
-(define-operator/32 :call (dest)
-  (pc-rel #xe8 dest (sint 32))
-  (modrm dest #xff 2))
-
-(define-operator/32 :callr (dest)
-  (modrm dest #xff 2))
+(define-operator* (:16 :callw :32 :calll :64 :callr :dispatch :call) (dest)
+  (case *cpu-mode*
+    (:16-bit
+     (pc-rel #xe8 dest (sint 16)))
+    (:32-bit
+     (pc-rel #xe8 dest (sint 32))))
+  (when (eq operator-mode *cpu-mode*)
+    (modrm dest #xff 2)))
 
 (define-operator :call-segment (dest)
   (modrm dest #xff 3))
@@ -1262,13 +1318,24 @@
   
 ;;;;;;;;;;; JMP
 
-(define-operator :jmp (dst)
-  (pc-rel #xeb dst (sint 8))
-  (pc-rel #xe9 dst (sint 32))
-  (when (or (not *position-independent-p*)
-	    (indirect-operand-p dst))
-    (let ((operator-mode :32-bit))
-      (modrm dst #xff 4))))
+(define-operator :jmp (seg-dst &optional dst)
+  (cond
+    (dst
+     (when (eq *cpu-mode* :16-bit)
+       (far-pointer #xea seg-dst dst (uint 16)))
+     (when (eq *cpu-mode* :32-bit)
+       (far-pointer #xea seg-dst dst (xint 32))))
+    (t (let ((dst seg-dst))
+	 (pc-rel #xeb dst (sint 8))
+	 (when (or (and (eq *cpu-mode* :32-bit)
+			*use-jcc-16-bit-p*)
+		   (eq *cpu-mode* :16-bit))
+	   (pc-rel #xe9 dst (sint 16)))
+	 (pc-rel #xe9 dst (sint 32))
+	 (when (or (not *position-independent-p*)
+		   (indirect-operand-p dst))
+	   (let ((operator-mode :32-bit))
+	     (modrm dst #xff 4)))))))
 
 (define-operator* (:16 :jmpw-segment :32 :jmp-segment :64 :jmpr-segment) (addr)
   (modrm addr #xff 5))
@@ -1303,8 +1370,9 @@
 
 ;;;;;;;;;;; LGDT, LIDT
 
-(define-operator* (:16 :lgdtw :32 :lgdt :64 :lgdtr) (addr)
-  (modrm addr #x0f01 2))
+(define-operator* (:16 :lgdtw :32 :lgdtl :64 :lgdtr :dispatch :lgdt) (addr)
+  (when (eq operator-mode *cpu-mode*)
+    (modrm addr #x0f01 2)))
 
 (define-operator* (:16 :lidtw :32 :lidt :64 :lidtr) (addr)
   (modrm addr #x0f01 3))
@@ -1313,6 +1381,14 @@
 
 (define-operator/16 :lmsw (src)
   (modrm src #x0f01 6))
+
+;;;;;;;;;;; LODS
+
+(define-operator/8 :lodsb ()
+  (opcode #xac))
+
+(define-operator* (:16 :lodsw :32 :lodsl :64 :lodsr) ()
+  (opcode #xad))
 
 ;;;;;;;;;;; LOOP, LOOPE, LOOPNE
 
@@ -1361,13 +1437,17 @@
 
 ;;;;;;;;;;; MOVCR
 
-(define-operator/32 :movcr (src dst)
+(define-operator* (:32 :movcrl :64 :movcrr :dispatch :movcr) (src dst)
   (when (eq src :cr8)
-    (reg-cr dst :cr0 #xf00f20))
+    (reg-cr dst :cr0 #xf00f20
+	    :operand-size nil))
   (when (eq dst :cr8)
-    (reg-cr src :cr0 #xf00f22))
-  (reg-cr src dst #x0f22)
-  (reg-cr dst src #x0f20))
+    (reg-cr src :cr0 #xf00f22
+	    :operand-size nil))
+  (reg-cr src dst #x0f22
+	  :operand-size nil)
+  (reg-cr dst src #x0f20
+	  :operand-size nil))
 
 ;;;;;;;;;;; MOVS
 
@@ -1390,7 +1470,7 @@
 
 ;;;;;;;;;;; MOVZX
 
-(define-operator* (:32 :movzxb) (src dst)
+(define-operator* (:16 :movzxbw :32 :movzxbl :dispatch :movzxb) (src dst)
   (reg-modrm dst src #x0fb6 :8-bit))
 
 (define-operator* (:32 :movzxw) (src dst)

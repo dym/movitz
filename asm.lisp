@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.11 2008/02/04 23:01:11 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.12 2008/02/09 09:50:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -127,7 +127,7 @@
 
 
 (defun resolve-operand (operand)
-  (etypecase operand
+  (typecase operand
     (integer
      operand)
     (symbol-reference
@@ -139,7 +139,8 @@
     (funcall-operand
      (apply (funcall-operand-operator operand)
 	    (mapcar #'resolve-operand
-		    (funcall-operand-operands operand))))))
+		    (funcall-operand-operands operand))))
+    (t operand)))
 ;;;;;;;;;;;;
 
 
