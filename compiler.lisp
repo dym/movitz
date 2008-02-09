@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.187 2008/02/04 23:08:07 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.188 2008/02/09 18:42:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -112,7 +112,7 @@ which enables tracing of recursive functions.")
     (or (member (car list) (cdr list))
 	(duplicatesp (cdr list)))))
 
-(defun compute-call-extra-prefix (instr env size)
+(defun old-compute-call-extra-prefix (instr env size)
   (let* ((return-pointer-tag (ldb (byte 3 0)
 				  (+ (ia-x86::assemble-env-current-pc env)
 				     size))))
@@ -131,7 +131,7 @@ which enables tracing of recursive functions.")
       '(#x90 #x90 #x90)
       '(#x90)))))
 
-(defun new-compute-call-extra-prefix (pc size)
+(defun compute-call-extra-prefix (pc size)
   (let* ((return-pointer-tag (ldb (byte 3 0)
 				  (+ pc size))))
     (cond
@@ -162,21 +162,19 @@ which enables tracing of recursive functions.")
 	 (resolved-code (finalize-code body-code nil nil)))
 
     (multiple-value-bind (code-vector symtab)
-	#+use-old-ia-x86
-      (let ((ia-x86:*instruction-compute-extra-prefix-map*
-	     '((:call . compute-call-extra-prefix))))
-	(ia-x86:proglist-encode :octet-vector
-				:32-bit
-				#x00000000
-				(ia-x86:read-proglist resolved-code)
-				:symtab-lookup (lambda (label)
-						 (case label
-						   (:nil-value (image-nil-word *image*))))))
-      (let ((asm:*instruction-compute-extra-prefix-map*
-	     '((:call . new-compute-call-extra-prefix))))
-	(asm:proglist-encode (translate-program resolved-code :muerte.cl :cl)
-			     :symtab (list (cons :nil-value (image-nil-word *image*)))))
-
+;;       (let ((ia-x86:*instruction-compute-extra-prefix-map*
+;; 	     '((:call . old-compute-call-extra-prefix))))
+;; 	(ia-x86:proglist-encode :octet-vector
+;; 				:32-bit
+;; 				#x00000000
+;; 				(ia-x86:read-proglist resolved-code)
+;; 				:symtab-lookup (lambda (label)
+;; 						 (case label
+;; 						   (:nil-value (image-nil-word *image*))))))
+	(let ((asm:*instruction-compute-extra-prefix-map*
+	       '((:call . compute-call-extra-prefix))))
+	  (asm:proglist-encode (translate-program resolved-code :muerte.cl :cl)
+			       :symtab (list (cons :nil-value (image-nil-word *image*)))))
       (values (make-movitz-vector (length code-vector)
 				  :element-type 'code
 				  :initial-contents code-vector)
@@ -1025,52 +1023,58 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 (defun diss (code)
   (format nil "~&;; Diss:
 ~:{~4D: ~16<~{ ~2,'0X~}~;~> ~A~@[ ;~{ ~A~}~]~%~}"
-	  (loop with code-position = 0
+	  (loop with code-position = 0 and instruction-octets = nil
 	     for pc = 0 then code-position
-	     for instruction = (ia-x86:decode-read-octet
-				#'(lambda ()
-				    (incf code-position)
-				    (pop code)))
-	     for cbyte = (and instruction
-			      (ia-x86::instruction-original-datum instruction))
-	     until (null instruction)
-	     collect (list pc
-			   (ia-x86::cbyte-to-octet-list cbyte)
-			   instruction
-			   (comment-instruction instruction nil pc)))))
+	     for instruction = (progn
+				 (setf instruction-octets nil)
+				 (ia-x86:decode-read-octet (lambda ()
+							     (incf code-position)
+							     (loop while (and code (not (typep (car code) '(unsigned-byte 8))))
+								  do (warn "diss bad byte at ~D: ~S" code-position (pop code))
+								  (incf code-position))
+							     (let ((x (pop code)))
+							       (when x (push x instruction-octets))
+							       x))))
+	     collect (if (not instruction)
+			 (list pc (nreverse instruction-octets) nil '("???"))
+			 (list pc
+			       (nreverse instruction-octets)
+			       ;;(ia-x86::cbyte-to-octet-list (ia-x86::instruction-original-datum instruction))
+			       instruction
+			       (comment-instruction instruction nil pc)))
+	     while code)))
 
 
 (defun assemble-funobj (funobj combined-code)
+;;   (multiple-value-bind (code-vector code-symtab)
+;;       (let ((ia-x86:*instruction-compute-extra-prefix-map*
+;; 	     '((:call . old-compute-call-extra-prefix))))
+;; 	(ia-x86:proglist-encode :octet-vector :32-bit #x00000000
+;; 				(ia-x86:read-proglist combined-code)
+;; 				:symtab-lookup
+;; 				(lambda (label)
+;; 				  (case label
+;; 				    (:nil-value (image-nil-word *image*))
+;; 				    (t (let ((set (cdr (assoc label
+;; 							      (movitz-funobj-jumpers-map funobj)))))
+;; 					 (when set
+;; 					   (let ((pos (search set (movitz-funobj-const-list funobj)
+;; 							      :end2 (movitz-funobj-num-jumpers funobj))))
+;; 					     (assert pos ()
+;; 						     "Couldn't find for ~s set ~S in ~S."
+;; 						     label set (subseq (movitz-funobj-const-list funobj)
+;; 								       0 (movitz-funobj-num-jumpers funobj)))
+;; 					     (* 4 pos)))))))))
   (multiple-value-bind (code-vector code-symtab)
-      #+use-old-ia-x86
-    (let ((ia-x86:*instruction-compute-extra-prefix-map*
-	   '((:call . compute-call-extra-prefix))))
-      (ia-x86:proglist-encode :octet-vector :32-bit #x00000000
-			      (ia-x86:read-proglist combined-code)
-			      :symtab-lookup
-			      (lambda (label)
-				(case label
-				  (:nil-value (image-nil-word *image*))
-				  (t (let ((set (cdr (assoc label
-							    (movitz-funobj-jumpers-map funobj)))))
-				       (when set
-					 (let ((pos (search set (movitz-funobj-const-list funobj)
-							    :end2 (movitz-funobj-num-jumpers funobj))))
-					   (assert pos ()
-						   "Couldn't find for ~s set ~S in ~S."
-						   label set (subseq (movitz-funobj-const-list funobj)
-								     0 (movitz-funobj-num-jumpers funobj)))
-					   (* 4 pos)))))))))
-    (let ((asm:*instruction-compute-extra-prefix-map*
-	   '((:call . new-compute-call-extra-prefix))))
-      (asm:proglist-encode combined-code
-			   :symtab (list* (cons :nil-value (image-nil-word *image*))
-					  (loop for (label . set) in (movitz-funobj-jumpers-map funobj)
-					     collect (cons label
-							   (* 4 (or (search set (movitz-funobj-const-list funobj)
-									    :end2 (movitz-funobj-num-jumpers funobj))
-								    (error "Jumper for ~S missing." label))))))))
-
+      (let ((asm:*instruction-compute-extra-prefix-map*
+	     '((:call . compute-call-extra-prefix))))
+	(asm:proglist-encode combined-code
+			     :symtab (list* (cons :nil-value (image-nil-word *image*))
+					    (loop for (label . set) in (movitz-funobj-jumpers-map funobj)
+					       collect (cons label
+							     (* 4 (or (search set (movitz-funobj-const-list funobj)
+									      :end2 (movitz-funobj-num-jumpers funobj))
+								      (error "Jumper for ~S missing." label))))))))
     (setf (movitz-funobj-symtab funobj) code-symtab)
     (let* ((code-length (- (length code-vector) 3 -3))
 	   (code-vector (make-array code-length
@@ -1118,7 +1122,7 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	    (make-movitz-vector (length code-vector)
 				:fill-pointer code-length
 				:element-type 'code
-				:initial-contents code-vector)))))
+				:initial-contents code-vector))))
   funobj)
 
 (defun check-locate-concistency (code-vector)
@@ -1138,123 +1142,6 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 		 (aref code-vector (+ x 3)))))
   (values))
 
-#+ignore
-(defun make-compiled-function-body-default (form funobj env top-level-p)
-  (make-compiled-body-pass2 (make-compiled-function-pass1 form funobj env top-level-p)
-			    env))
-
-#+ignore
-(defun old-make-compiled-function-body-default (form funobj env top-level-p &key include-programs)
-  (multiple-value-bind (arg-init-code body-form need-normalized-ecx-p)
-      (make-function-arguments-init funobj env form)
-    (multiple-value-bind (resolved-code stack-frame-size use-stack-frame-p frame-map)
-	(make-compiled-body body-form funobj env top-level-p arg-init-code include-programs)
-      (multiple-value-bind (prelude-code have-normalized-ecx-p)
-	  (make-compiled-function-prelude stack-frame-size env use-stack-frame-p
-					  need-normalized-ecx-p frame-map)
-	(values (install-arg-cmp (append prelude-code
-					 resolved-code
-					 (make-compiled-function-postlude funobj env use-stack-frame-p))
-				 have-normalized-ecx-p)
-		use-stack-frame-p)))))
-
-#+ignore
-(defun make-compiled-function-body-without-prelude (form funobj env top-level-p)
-  (multiple-value-bind (code stack-frame-size use-stack-frame-p)
-      (make-compiled-body form funobj env top-level-p)
-    (if (not use-stack-frame-p)
-	(append code (make-compiled-function-postlude funobj env nil))
-      (values (append `((:pushl :ebp)
-			(:movl :esp :ebp)
-			(:pushl :esi)
-			start-stack-frame-setup)
-		      (case stack-frame-size
-			(0 nil)
-			(1 '((:pushl :edi)))
-			(2 '((:pushl :edi) (:pushl :edi)))
-			(t `((:subl ,(* 4 stack-frame-size) :esp))))
-		      (when (tree-search code '(:ecx))
-			`((:testb :cl :cl)
-			  (:js '(:sub-program (normalize-ecx)
-				 (:shrl 8 :ecx)
-				 (:jmp 'normalize-ecx-ok)))
-			  (:andl #x7f :ecx)
-			  normalize-ecx-ok))
-		      code
-		      (make-compiled-function-postlude funobj env t))
-	      use-stack-frame-p))))
-
-#+ignore
-(defun make-compiled-function-body-2req-1opt (form funobj env top-level-p)
-  (when (and (= 2 (length (required-vars env)))
-	     (= 1 (length (optional-vars env)))
-	     (= 0 (length (key-vars env)))
-	     (null (rest-var env)))
-    (let* ((opt-var (first (optional-vars env)))
-	   (opt-binding (movitz-binding opt-var env nil))
-	   (req1-binding (movitz-binding (first (required-vars env)) env nil))
-	   (req2-binding (movitz-binding (second (required-vars env)) env nil))
-	   (default-form (optional-function-argument-init-form opt-binding)))
-      (compiler-values-bind (&code push-default-code-uninstalled &producer default-code-producer)
-	  (compiler-call #'compile-form
-	    :form default-form
-	    :result-mode :push
-	    :env env
-	    :funobj funobj)
-	(cond
-	 ((eq 'compile-self-evaluating default-code-producer)
-	  (multiple-value-bind (code stack-frame-size use-stack-frame-p frame-map)
-	      (make-compiled-body form funobj env top-level-p nil (list push-default-code-uninstalled))
-	    (when (and (new-binding-located-p req1-binding frame-map)
-		       (new-binding-located-p req2-binding frame-map)
-		       (new-binding-located-p opt-binding frame-map))
-	      (multiple-value-bind (eax-ebx-code eax-ebx-stack-offset)
-		  (make-2req req1-binding req2-binding frame-map)
-		(let ((stack-init-size (- stack-frame-size eax-ebx-stack-offset))
-		      (push-default-code
-		       (finalize-code push-default-code-uninstalled funobj env frame-map)))
-		  (values (append `((:jmp '(:sub-program ()
-					    (:cmpb 2 :cl)
-					    (:je 'entry%2op)
-					    (:cmpb 3 :cl)
-					    (:je 'entry%3op)
-					    (:int 100)))
-				    entry%3op
-				    (:pushl :ebp)
-				    (:movl :esp :ebp)
-				    (:pushl :esi)
-				    start-stack-frame-setup
-				    ,@(when (and (edx-var env) (new-binding-located-p (edx-var env) frame-map))
-					`((:movl :edx (:ebp ,(stack-frame-offset
-							      (new-binding-location (edx-var env) frame-map))))))
-				    ,@eax-ebx-code
-				    ,@(if (eql (1+ eax-ebx-stack-offset)
-					       (new-binding-location opt-binding frame-map))
-					  (append `((:pushl (:ebp ,(argument-stack-offset-shortcut 3 2))))
-						  (make-compiled-stack-frame-init (1- stack-init-size)))
-					(append (make-compiled-stack-frame-init stack-init-size)
-						`((:movl (:ebp ,(argument-stack-offset-shortcut 3 2)) :edx)
-						  (:movl :edx (:ebp ,(stack-frame-offset
-								      (new-binding-location opt-binding
-											    frame-map)))))))
-				    (:jmp 'arg-init-done)
-				    entry%2op
-				    (:pushl :ebp)
-				    (:movl :esp :ebp)
-				    (:pushl :esi)
-				    ,@eax-ebx-code
-				    ,@(if (eql (1+ eax-ebx-stack-offset)
-					       (new-binding-location opt-binding frame-map))
-					  (append push-default-code
-						  (make-compiled-stack-frame-init (1- stack-init-size)))
-					(append (make-compiled-stack-frame-init stack-init-size)
-						push-default-code
-						`((:popl (:ebp ,(stack-frame-offset (new-binding-location opt-binding frame-map)))))))
-				    arg-init-done)
-				  code
-				  (make-compiled-function-postlude funobj env t))
-			  use-stack-frame-p))))))
-	 (t nil))))))
 
 (defun make-2req (binding0 binding1 frame-map)
   (let ((location-0 (new-binding-location binding0 frame-map))
