@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.20 2008/02/13 21:46:51 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.21 2008/02/14 21:56:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -265,7 +265,7 @@
   (make-array 256 :initial-element nil))
 
 (deftype disassembly-decoder ()
-  '(list-of keyword (or keyword nil) symbol))
+  '(list-of keyword (or keyword null) symbol))
 
 (defun (setf opcode-disassembler) (decoder opcode operator-mode)
   (check-type decoder disassembly-decoder)
@@ -278,8 +278,8 @@
 		     (unless (or (eq nil decoder)
 				 (eq nil (svref table pos))
 				 (equal decoder (svref table pos)))
-		       (warn "Redefining disassembler for opcode #x~X from ~{~S ~}to ~{~S~^ ~}."
-			     opcode (svref table pos) decoder))
+		       (warn "Redefining disassembler for ~@[~(~A~) ~]opcode #x~X from ~{~S ~}to ~{~S~^ ~}."
+			     operator-mode opcode (svref table pos) decoder))
 		     (setf (svref table pos) decoder))
 		   (set-it (or (svref table (ldb (byte 8 bit-pos) pos))
 			       (setf (svref table (ldb (byte 8 bit-pos) pos))
@@ -292,12 +292,12 @@
        (set-it *opcode-disassemblers-32* opcode))
       (:64-bit
        (set-it *opcode-disassemblers-64* opcode))
-      (:8-bit
+      ((:8-bit nil)
        (set-it *opcode-disassemblers-16* opcode)
        (set-it *opcode-disassemblers-32* opcode)
        (set-it *opcode-disassemblers-64* opcode)))))
 
-(defun disassemble-code (code)
+(defun disassemble-code (code &optional override-operand-size override-address-size rex)
   (labels ((lookup-decoder (table opcode)
 	     (let* ((datum (pop-code code))
 		    (opcode (logior (ash opcode 8)
@@ -310,18 +310,68 @@
 		  (values decoder
 			  opcode))
 		 (t (error "No disassembler registered for opcode #x~X." opcode))))))
-    (destructuring-bind (operator operator-mode operand-decoder)
-	(lookup-decoder (ecase *cpu-mode*
+    (multiple-value-bind (decoder opcode)
+	(lookup-decoder (ecase (or override-operand-size *cpu-mode*)
 			  (:16-bit *opcode-disassemblers-16*)
 			  (:32-bit *opcode-disassemblers-32*)
 			  (:64-bit *opcode-disassemblers-64*))
 			0)
-      (values (list* operator (code-call (funcall operand-decoder code operator-mode) code))
-	      code))))
+      (destructuring-bind (operator operand-size decoder-function)
+	  decoder
+	(values (code-call (funcall decoder-function
+				    code
+				    operator
+				    opcode
+				    (or operand-size override-operand-size)
+				    (or override-address-size *cpu-mode*)
+				    rex))
+		code)))))
 
-(defmacro define-disassembler (opcode operands operator-mode)
-  `(disassembler
-    (setf (opcode-disassembler ,opcode ,operator-mode) (list operator ,operator-mode ',operands))))
+(defmacro define-disassembler ((operator opcode &optional cpu-mode) lambda-list &body body)
+  (if (and (symbolp lambda-list)
+	   (null body))
+      `(setf (opcode-disassembler ',opcode ,cpu-mode) (list ,operator ,cpu-mode ',lambda-list))
+      (let ((defun-name (intern (format nil "~A-~A-~X~@[-~A~]" 'disassembler operator opcode cpu-mode))))
+	`(progn
+	   (defun ,defun-name ,lambda-list ,@body)
+	   (setf (opcode-disassembler ',opcode ',cpu-mode) (list ,operator ',cpu-mode ',defun-name))
+	   ',defun-name))))
+
+(defun disassemble-simple-prefix (code operator opcode operand-size address-size rex)
+  (declare (ignore opcode rex))
+  (let ((instruction (code-call (disassemble-code code operand-size address-size nil))))
+    (values (if (consp (car instruction))
+		(list* (list* operator (car instruction))
+		       (cdr instruction))
+		(list* (list operator)
+		       instruction))
+	    code)))
+
+(define-disassembler (:lock #xf0) disassemble-simple-prefix)
+(define-disassembler (:repne #xf2) disassemble-simple-prefix)
+(define-disassembler (:repz #xf3) disassemble-simple-prefix)
+(define-disassembler (:cs-override #x2e) disassemble-simple-prefix)
+(define-disassembler (:ss-override #x36) disassemble-simple-prefix)
+(define-disassembler (:ds-override #x3e) disassemble-simple-prefix)
+(define-disassembler (:es-override #x26) disassemble-simple-prefix)
+(define-disassembler (:fs-override #x64) disassemble-simple-prefix)
+(define-disassembler (:gs-override #x65) disassemble-simple-prefix)
+
+(define-disassembler (:operand-size-override #x66 :32-bit) (code operator opcode operand-size address-size rex)
+  (declare (ignore operator opcode operand-size rex))
+  (disassemble-code code :16-bit address-size nil))
+
+(define-disassembler (:address-size-override #x67 :32-bit) (code operator opcode operand-size address-size rex)
+  (declare (ignore operator opcode operand-size rex))
+  (disassemble-code code operand-size :16-bit nil))
+
+(define-disassembler (:operand-size-override #x66 :16-bit) (code operator opcode operand-size address-size rex)
+  (declare (ignore operator opcode operand-size rex))
+  (disassemble-code code :32-bit address-size nil))
+
+(define-disassembler (:address-size-override #x67 :16-bit) (code operator opcode operand-size address-size rex)
+  (declare (ignore operator opcode operand-size rex))
+  (disassemble-code code operand-size :32-bit nil))
 
 (defmacro define-operator/8 (operator lambda-list &body body)
   `(define-operator ,operator :8-bit ,lambda-list
@@ -733,11 +783,10 @@
      (check-type x (unsigned-byte 8) ,(format nil "an octet (context: ~A)" context))
      x))
 
-(defmacro code-call (form &optional (code-place (cadr form)))
-  `(multiple-value-bind (value new-code)
-       ,form
-     (setf ,code-place new-code)
-     value))
+(defmacro code-call (form &optional (code-place (case (car form) (funcall (third form)) (t (second form)))))
+  "Execute form, then 'magically' update the code binding with the secondary return value from form."
+  `(let (tmp)
+     (setf (values tmp ,code-place) ,form)))
 
 (defun decode-integer (code type)
   "Decode an integer of specified type."
@@ -751,20 +800,48 @@
 			(1+ (lognot unsigned-integer)))))
 	    code)))
 
-(defun decode-reg-modrm (code operator-mode)
-  (ecase *cpu-mode*
+(defun decode-reg-modrm (code operator opcode operand-size address-size rex)
+  (declare (ignore opcode rex))
+  (ecase address-size
     (:32-bit
-     (decode-reg-modrm-32 code operator-mode))))
+     (decode-reg-modrm-32 code operator operand-size))
+    (:16-bit
+     (decode-reg-modrm-16 code operator operand-size))))
 
-(defun decode-reg-modrm-32 (code &optional (reg-mode :32-bit))
+(defun decode-reg-modrm-16 (code operator operand-size)
+  (let* ((modrm (pop-code code mod/rm))
+	 (mod (ldb (byte 2 6) modrm))
+	 (reg (ldb (byte 3 3) modrm))
+	 (r/m (ldb (byte 3 0) modrm)))
+    (values (list operator
+		  (nth reg (register-set-by-mode operand-size))
+		  (if (= mod #b11)
+		      (nth reg (register-set-by-mode operand-size))
+		      (flet ((operands (i)
+			       (nth i '((:bx :si) (:bx :di) (:bp :si) (:bp :di) (:si) (:di) (:bp) (:bx)))))
+			(ecase mod
+			  (#b00
+			   (case r/m
+			     (#b110 (code-call (decode-integer code '(uint 16))))
+			     (t (operands r/m))))
+			  (#b01
+			   (append (operands r/m)
+				   (code-call (decode-integer code '(sint 8)))))
+			  (#b10
+			   (append (operands r/m)
+				   (code-call (decode-integer code '(uint 16)))))))))
+	    code)))
+
+(defun decode-reg-modrm-32 (code operator operand-size)
   "Return a list of the REG, and the MOD/RM operands."
   (let* ((modrm (pop-code code mod/rm))
 	 (mod (ldb (byte 2 6) modrm))
 	 (reg (ldb (byte 3 3) modrm))
 	 (r/m (ldb (byte 3 0) modrm)))
-    (values (list (nth reg (register-set-by-mode reg-mode))
+    (values (list operator
+		  (nth reg (register-set-by-mode operand-size))
 		  (if (= mod #b11)
-		      (nth r/m (register-set-by-mode reg-mode))
+		      (nth r/m (register-set-by-mode operand-size))
 		      (flet ((decode-sib ()
 			       (let* ((sib (pop-code code sib))
 				      (ss (ldb (byte 2 6) sib))
@@ -904,7 +981,7 @@
       (return-when (encode-reg-modrm operator legacy-prefixes ,op-reg ,op-modrm ,opcode
 				     operator-mode default-rex ,reg/mem-mode ,@extras)))
      (disassembler
-      (define-disassembler ,opcode decode-reg-modrm operator-mode))))
+      (define-disassembler (operator ,opcode operator-mode) decode-reg-modrm))))
 
 (defun encode-reg-cr (operator legacy-prefixes op-reg op-cr opcode operator-mode default-rex &rest extras)
   (let* ((reg-map (ecase operator-mode
