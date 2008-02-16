@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.25 2008/02/16 21:58:57 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.26 2008/02/16 22:13:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -243,7 +243,7 @@
 	   (let ((operator ',operator)
 		 (operator-mode ',operator-mode)
 		 (operand-formals ',lambda-list))
-	     (declare (ignorable operand-formals))
+	     (declare (ignorable operator operand-formals operator-mode))
 	     ,@(find-forms body)))
 	 ',operator))))
 
@@ -384,7 +384,7 @@
   (disassemble-instruction code :16-bit address-size nil))
 
 (define-disassembler (:address-size-override #x67 :32-bit) (code operator opcode operand-size address-size rex)
-  (declare (ignore operator opcode operand-size rex))
+  (declare (ignore operator opcode address-size rex))
   (disassemble-instruction code operand-size :16-bit nil))
 
 (define-disassembler (:operand-size-override #x66 :16-bit) (code operator opcode operand-size address-size rex)
@@ -392,7 +392,7 @@
   (disassemble-instruction code :32-bit address-size nil))
 
 (define-disassembler (:address-size-override #x67 :16-bit) (code operator opcode operand-size address-size rex)
-  (declare (ignore operator opcode operand-size rex))
+  (declare (ignore operator opcode address-size rex))
   (disassemble-instruction code operand-size :32-bit nil))
 
 (defmacro define-operator/8 (operator lambda-list &body body)
@@ -808,6 +808,7 @@
 (defmacro code-call (form &optional (code-place (case (car form) ((funcall apply) (third form)) (t (second form)))))
   "Execute form, then 'magically' update the code binding with the secondary return value from form."
   `(let (tmp)
+     (declare (ignorable tmp))
      (setf (values tmp ,code-place) ,form)))
 
 (defun decode-integer (code type)
@@ -843,6 +844,7 @@
 	      
 
 (defun decode-modrm (code operator opcode operand-size address-size rex)
+  (declare (ignore opcode rex))
   (values (list operator
 		(ecase address-size
 		  (:32-bit
@@ -852,6 +854,7 @@
 	  code))
 
 (defun decode-imm-modrm (code operator opcode operand-size address-size rex imm-type operand-ordering &key fixed-modrm)
+  (declare (ignore opcode rex))
   (values (list* operator
 		 (order-operands operand-ordering
 				 :modrm (or fixed-modrm
@@ -865,11 +868,13 @@
 	  code))
 
 (defun decode-pc-rel (code operator opcode operand-size address-size rex type)
+  (declare (ignore opcode operand-size address-size rex))
   (values (list operator
 		`(:pc+ ,(code-call (decode-integer code type))))
 	  code))
 
 (defun decode-opcode-reg (code operator opcode operand-size address-size rex operand-ordering extra-operand)
+  (declare (ignore address-size rex))
   (values (list* operator
 		 (order-operands operand-ordering
 				 :reg (nth (ldb (byte 3 0) opcode)
@@ -903,7 +908,6 @@
   "Return a list of the REG, and the MOD/RM operands."
   (let* ((modrm (pop-code code mod/rm))
 	 (mod (ldb (byte 2 6) modrm))
-	 (reg (ldb (byte 3 3) modrm))
 	 (r/m (ldb (byte 3 0) modrm)))
     (values (if (= mod #b11)
 		(nth r/m (register-set-by-mode operand-size))
