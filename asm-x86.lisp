@@ -6,13 +6,14 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.22 2008/02/16 18:01:07 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.23 2008/02/16 19:14:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (defpackage asm-x86
   (:use :common-lisp :asm)
-  (:export #:encode-instruction
+  (:export #:assemble-instruction
+	   #:disassemble-instruction
 	   #:*cpu-mode*
 	   #:*position-independent-p*))
 
@@ -167,7 +168,6 @@
 			 :address-size (getone address-size1 address-size2 address-size))))))
 
 
-
 (defun encoded-values (&key prefixes prefix rex opcode mod reg rm scale index base displacement immediate operand-size address-size)
   (values (append (when prefix
 		    (list prefix))
@@ -183,7 +183,8 @@
 	  operand-size
 	  address-size))
  
-(defun encode-instruction (instruction)
+(defun assemble-instruction (instruction)
+  "Assemble a single instruction to a list of octets of x86 machine code, according to *cpu-mode* etc."
   (multiple-value-bind (instruction legacy-prefixes options)
       (if (listp (car instruction))
 	  (values (cdr instruction)
@@ -216,7 +217,7 @@
 	     (cond
 	       ((atom body)
 		nil)
-	       ((member (car body) '(reg-modrm modrm opcode imm-modrm imm))
+	       ((member (car body) '(reg-modrm modrm opcode imm-modrm imm opcode-reg))
 		(list body))
 	       (t (mapcan #'find-forms body)))))
     (let ((defun-name (intern (format nil "~A-~A" 'instruction-encoder operator))))
@@ -330,7 +331,6 @@
 			0)
       (destructuring-bind (operator operand-size decoder-function &rest extra-args)
 	  decoder
-	(warn "extraS: ~S" extra-args)
 	(values (code-call (apply decoder-function
 				  code
 				  operator
@@ -874,6 +874,14 @@
 				 :imm (code-call (decode-integer code imm-type))))
 	  code))
 
+(defun decode-opcode-reg (code operator opcode operand-size address-size rex operand-ordering extra-operand)
+  (values (list* operator
+		 (order-operands operand-ordering
+				 :reg (nth (ldb (byte 3 0) opcode)
+					   (register-set-by-mode operand-size))
+				 :extra extra-operand))
+	  code))
+
 (defun decode-reg-modrm-16 (code operand-size)
   (let* ((modrm (pop-code code mod/rm))
 	 (mod (ldb (byte 2 6) modrm))
@@ -1156,9 +1164,26 @@
 				      '(:rex.w :rex.r))
 				     (t default-rex)))))))
 
-(defmacro opcode-reg (opcode op-reg)
-  `(return-when
-    (encode-opcode-reg operator legacy-prefixes ,opcode ,op-reg operator-mode default-rex)))
+(defmacro opcode-reg (opcode op-reg &optional extra-operand)
+  `(progn
+     (assembler
+      (when (and ,@(when extra-operand
+			 `((eql ,@extra-operand))))
+	(return-when
+	 (encode-opcode-reg operator legacy-prefixes ,opcode ,op-reg operator-mode default-rex))))
+     (disassembler
+      (loop for reg from #b000 to #b111
+	 do ,(if (not extra-operand)
+		 `(define-disassembler (operator (logior ,opcode reg) operator-mode)
+		      decode-opcode-reg
+		    '(:reg)
+		    nil)
+		 `(define-disassembler (operator (logior ,opcode reg) operator-mode)
+		      decode-opcode-reg
+		    (operand-ordering operand-formals
+				      :reg ',op-reg
+				      :extra ',(first extra-operand))
+		    ',(second extra-operand)))))))
 
 (defun encode-opcode-reg-imm (operator legacy-prefixes opcode op-reg op-imm type operator-mode default-rex)
   (when (immediate-p op-imm)
@@ -2089,10 +2114,8 @@
   (reg-modrm x y #x86))
 
 (define-operator* (:16 :xchgw :32 :xchgl :64 :xchgr) (x y)
-  (when (eq y :ax-eax-rax)
-    (opcode-reg #x90 x))
-  (when (eq x :ax-eax-rax)
-    (opcode-reg #x90 y))
+  (opcode-reg #x90 x (y :ax-eax-rax))
+  (opcode-reg #x90 y (x :ax-eax-rax))
   (reg-modrm x y #x87)
   (reg-modrm y x #x87))
 

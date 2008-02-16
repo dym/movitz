@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.12 2008/02/09 09:50:46 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.13 2008/02/16 19:14:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -24,7 +24,7 @@
 	   #:unresolved-symbol
 	   #:retry-symbol-resolve
 	   #:pc-relative-operand
-	   #:proglist-encode
+	   #:assemble-proglist
 	   #:*pc*
 	   #:*symtab*
 	   #:*instruction-compute-extra-prefix-map*
@@ -141,12 +141,12 @@
 	    (mapcar #'resolve-operand
 		    (funcall-operand-operands operand))))
     (t operand)))
+
 ;;;;;;;;;;;;
 
-
-(defun proglist-encode (proglist &key ((:symtab incoming-symtab) *symtab*) corrections (start-pc 0) (cpu-package '#:asm-x86))
-  "Encode a proglist, using instruction-encoder in symbol encode-instruction from cpu-package."
-  (let ((encoder (find-symbol (string '#:encode-instruction) cpu-package))
+(defun assemble-proglist (proglist &key ((:symtab incoming-symtab) *symtab*) corrections (start-pc 0) (cpu-package '#:asm-x86))
+  "Encode a proglist, using instruction-encoder in symbol assemble-instruction from cpu-package."
+  (let ((encoder (find-symbol (string '#:assemble-instruction) cpu-package))
 	(*pc* start-pc)
 	(*symtab* (append incoming-symtab corrections))
 	(*anonymous-sub-program-identities* *anonymous-sub-program-identities*)
@@ -222,9 +222,21 @@
 		    (length assumptions)
 		    (mapcar #'car assumptions)))
 	    ((not (null new-corrections))
-	     (proglist-encode proglist
-			      :symtab incoming-symtab
-			      :start-pc start-pc
-			      :cpu-package cpu-package
-			      :corrections (nconc new-corrections corrections)))
+	     (assemble-proglist proglist
+				:symtab incoming-symtab
+				:start-pc start-pc
+				:cpu-package cpu-package
+				:corrections (nconc new-corrections corrections)))
 	    (t (values code *symtab*))))))))
+
+(defun disassemble-proglist (code &key (cpu-package '#:asm-x86))
+  (let ((instruction-disassembler (find-symbol (string '#:disassemble-instruction)
+					       cpu-package)))
+    (loop while code
+       collect (multiple-value-bind (instruction new-code)
+		   (funcall instruction-disassembler
+			    code)
+		 (when (eq code new-code)
+		   (loop-finish))
+		 (setf code new-code)
+		 instruction))))

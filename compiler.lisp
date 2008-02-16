@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.188 2008/02/09 18:42:29 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.189 2008/02/16 19:14:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -173,8 +173,8 @@ which enables tracing of recursive functions.")
 ;; 						   (:nil-value (image-nil-word *image*))))))
 	(let ((asm:*instruction-compute-extra-prefix-map*
 	       '((:call . compute-call-extra-prefix))))
-	  (asm:proglist-encode (translate-program resolved-code :muerte.cl :cl)
-			       :symtab (list (cons :nil-value (image-nil-word *image*)))))
+	  (asm:assemble-proglist (translate-program resolved-code :muerte.cl :cl)
+				 :symtab (list (cons :nil-value (image-nil-word *image*)))))
       (values (make-movitz-vector (length code-vector)
 				  :element-type 'code
 				  :initial-contents code-vector)
@@ -1068,13 +1068,13 @@ a (lexical-extent) sub-function might care about its parent frame-map."
   (multiple-value-bind (code-vector code-symtab)
       (let ((asm:*instruction-compute-extra-prefix-map*
 	     '((:call . compute-call-extra-prefix))))
-	(asm:proglist-encode combined-code
-			     :symtab (list* (cons :nil-value (image-nil-word *image*))
-					    (loop for (label . set) in (movitz-funobj-jumpers-map funobj)
-					       collect (cons label
-							     (* 4 (or (search set (movitz-funobj-const-list funobj)
-									      :end2 (movitz-funobj-num-jumpers funobj))
-								      (error "Jumper for ~S missing." label))))))))
+	(asm:assemble-proglist combined-code
+			       :symtab (list* (cons :nil-value (image-nil-word *image*))
+					      (loop for (label . set) in (movitz-funobj-jumpers-map funobj)
+						 collect (cons label
+							       (* 4 (or (search set (movitz-funobj-const-list funobj)
+										:end2 (movitz-funobj-num-jumpers funobj))
+									(error "Jumper for ~S missing." label))))))))
     (setf (movitz-funobj-symtab funobj) code-symtab)
     (let* ((code-length (- (length code-vector) 3 -3))
 	   (code-vector (make-array code-length
