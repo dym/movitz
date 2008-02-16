@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.23 2008/02/16 19:14:08 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.24 2008/02/16 21:43:59 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -217,7 +217,7 @@
 	     (cond
 	       ((atom body)
 		nil)
-	       ((member (car body) '(reg-modrm modrm opcode imm-modrm imm opcode-reg))
+	       ((member (car body) '(reg-modrm modrm opcode imm-modrm imm opcode-reg pc-rel))
 		(list body))
 	       (t (mapcan #'find-forms body)))))
     (let ((defun-name (intern (format nil "~A-~A" 'instruction-encoder operator))))
@@ -490,6 +490,7 @@
      (reduce #'+ (cdr operand)
 	     :key #'resolve-operand))
     (symbol-reference
+     (assert *pc* (*pc*) "Cannot encode a pc-relative operand without a value for ~S." '*pc*)
      (- (resolve-operand operand)
 	*pc*))))
 
@@ -874,6 +875,11 @@
 				 :imm (code-call (decode-integer code imm-type))))
 	  code))
 
+(defun decode-pc-rel (code operator opcode operand-size address-size rex type)
+  (values (list operator
+		`(:pc+ ,(code-call (decode-integer code type))))
+	  code))
+
 (defun decode-opcode-reg (code operator opcode operand-size address-size rex operand-ordering extra-operand)
   (values (list* operator
 		 (order-operands operand-ordering
@@ -1010,14 +1016,14 @@
 
 (defun encode-pc-rel (operator legacy-prefixes opcode operand type &rest extras)
   (when (typep operand '(or pc-relative-operand symbol-reference))
-    (assert *pc* (*pc*) "Cannot encode a pc-relative operand without a value for ~S." '*pc*)
     (let* ((estimated-code-size-no-extras (+ (length legacy-prefixes)
 					     (type-octet-size type)
 					     (opcode-octet-size opcode)))
 	   (estimated-extra-prefixes (compute-extra-prefixes operator *pc* estimated-code-size-no-extras))
 	   (estimated-code-size (+ estimated-code-size-no-extras
 				   (length estimated-extra-prefixes)))
-	   (offset (let ((*pc* (+ *pc* estimated-code-size)))
+	   (offset (let ((*pc* (when *pc*
+				 (+ *pc* estimated-code-size))))
 		     (resolve-pc-relative operand))))
       (when (typep offset type)
 	(let ((code (let ((*instruction-compute-extra-prefix-map* nil))
@@ -1030,7 +1036,8 @@
 	      (append estimated-extra-prefixes code)
 	      (let* ((code-size (length code))
 		     (extra-prefixes (compute-extra-prefixes operator *pc* code-size))
-		     (offset (let ((*pc* (+ *pc* code-size (length extra-prefixes))))
+		     (offset (let ((*pc* (when *pc*
+					   (+ *pc* code-size (length extra-prefixes)))))
 			       (resolve-pc-relative operand))))
 		(when (typep offset type)
 		  (let ((code (let ((*instruction-compute-extra-prefix-map* nil))
@@ -1042,7 +1049,13 @@
 		    (append extra-prefixes code))))))))))
 
 (defmacro pc-rel (opcode operand type &rest extras)
-  `(return-when (encode-pc-rel operator legacy-prefixes ,opcode ,operand ',type ,@extras)))
+  `(progn
+     (assembler
+      (return-when (encode-pc-rel operator legacy-prefixes ,opcode ,operand ',type ,@extras)))
+     (disassembler
+      (define-disassembler (operator ,opcode operator-mode)
+	  decode-pc-rel
+	',type))))
 
 (defmacro modrm (operand opcode digit)
   `(progn
