@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.24 2008/02/16 21:43:59 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.25 2008/02/16 21:58:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -399,37 +399,25 @@
   `(define-operator ,operator :8-bit ,lambda-list
      (let ((default-rex nil))
        (declare (ignorable default-rex))
-       (macrolet ((yield (&rest args)
-		    `(return-from operator
-		       (encode (encoded-values :operand-size operator-mode ,@args)))))
-	 ,@body))))
+       ,@body)))
 
 (defmacro define-operator/16 (operator lambda-list &body body)
   `(define-operator ,operator :16-bit ,lambda-list
      (let ((default-rex nil))
        (declare (ignorable default-rex))
-       (macrolet ((yield (&rest args)
-		    `(return-from operator
-		       (encode (encoded-values :operand-size operator-mode ,@args)))))
-	 ,@body))))
+       ,@body)))
 
 (defmacro define-operator/32 (operator lambda-list &body body)
   `(define-operator ,operator :32-bit ,lambda-list
      (let ((default-rex nil))
        (declare (ignorable default-rex))
-       (macrolet ((yield (&rest args)
-		    `(return-from operator
-		       (encode (encoded-values :operand-size operator-mode ,@args)))))
-	 ,@body))))
+       ,@body)))
 
 (defmacro define-operator/64 (operator lambda-list &body body)
   `(define-operator ,operator :64-bit ,lambda-list
      (let ((default-rex '(:rex.w)))
        (declare (ignorable default-rex))
-       (macrolet ((yield (&rest args)
-		    `(return-from operator
-		       (encode (encoded-values :operand-size operator-mode ,@args)))))
-	 ,@body))))
+       ,@body)))
 
 (defmacro define-operator/64* (operator lambda-list &body body)
   `(define-operator ,operator :64-bit ,lambda-list
@@ -834,9 +822,10 @@
 			(1+ (lognot unsigned-integer)))))
 	    code)))
 
-(defun decode-no-operands (code operator opcode operand-size address-size rex)
+(defun decode-no-operands (code operator opcode operand-size address-size rex &rest fixed-operands)
   (declare (ignore opcode operand-size address-size rex))
-  (values (list operator)
+  (values (list* operator
+		 (remove nil fixed-operands))
 	  code))
 
 (defun decode-reg-modrm (code operator opcode operand-size address-size rex operand-ordering)
@@ -1144,15 +1133,19 @@
 								:key #'resolve-operand)
 							',type)))))))
 
-(defmacro opcode (opcode &rest extras)
+(defmacro opcode (opcode &optional fixed-operand &rest extras)
   `(progn
      (assembler
-      (return-values-when
-       (encoded-values :opcode ,opcode
-		       ,@extras
-		       :operand-size operator-mode)))
+      (when (and ,@(when fixed-operand
+			 `((eql ,@fixed-operand))))
+	(return-values-when
+	 (encoded-values :opcode ,opcode
+			 ,@extras
+			 :operand-size operator-mode))))
      (disassembler
-      (define-disassembler (operator ,opcode) decode-no-operands))))
+      (define-disassembler (operator ,opcode)
+	  decode-no-operands
+	,(second fixed-operand)))))
 
 (defmacro opcode* (opcode &rest extras)
   `(return-values-when
@@ -1635,7 +1628,7 @@
 ;;;;;;;;;;; IRET
 
 (define-operator* (:16 :iret :32 :iretd :64 :iretq) ()
-  (opcode #xcf :rex default-rex))
+  (opcode #xcf () :rex default-rex))
 
 ;;;;;;;;;;; Jcc
 
@@ -1918,12 +1911,11 @@
 ;;;;;;;;;;; POP
 
 (define-operator* (:16 :popw :32 :popl) (dst)
-  (case dst
-    (:ds (yield :opcode #x1f))
-    (:es (yield :opcode #x07))
-    (:ss (yield :opcode #x17))
-    (:fs (yield :opcode #x0fa1))
-    (:gs (yield :opcode #x0fa9)))
+  (opcode #x1f (dst :ds))
+  (opcode #x07 (dst :es))
+  (opcode #x17 (dst :ss))
+  (opcode #x0fa1 (dst :fs))
+  (opcode #x0fa9 (dst :gs))
   (opcode-reg #x58 dst)
   (modrm dst #x8f 0))
 
@@ -1953,13 +1945,12 @@
 ;;;;;;;;;;; PUSH
 
 (define-operator* (:16 :pushw :32 :pushl) (src)
-  (case src
-    (:cs (yield :opcode #x0e))
-    (:ss (yield :opcode #x16))
-    (:ds (yield :opcode #x1e))
-    (:es (yield :opcode #x06))
-    (:fs (yield :opcode #x0fa0))
-    (:gs (yield :opcode #x0fa8)))
+  (opcode #x0e (src :cs))
+  (opcode #x16 (src :ss))
+  (opcode #x1e (src :ds))
+  (opcode #x06 (src :es))
+  (opcode #x0fa0 (src :fs))
+  (opcode #x0fa8 (src :gs))
   (opcode-reg #x50 src)
   (imm src #x6a (sint 8))
   (imm src #x68 :int-16-32-64 () :operand-size operator-mode)
