@@ -2,11 +2,11 @@
 ;;;; 
 ;;;;    Copyright (C) 2007 Frode V. Fjeld
 ;;;; 
-;;;; Description:   x86 assembler for 32 and 64-bit.
+;;;; Description:   x86 assembler for 16, 32, and 64-bit modes.
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.21 2008/02/14 21:56:36 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.22 2008/02/16 18:01:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -216,7 +216,7 @@
 	     (cond
 	       ((atom body)
 		nil)
-	       ((member (car body) '(reg-modrm))
+	       ((member (car body) '(reg-modrm modrm opcode imm-modrm imm))
 		(list body))
 	       (t (mapcan #'find-forms body)))))
     (let ((defun-name (intern (format nil "~A-~A" 'instruction-encoder operator))))
@@ -240,7 +240,9 @@
 		    (assembler (&body body)
 		      (declare (ignore body))))
 	   (let ((operator ',operator)
-		 (operator-mode ',operator-mode))
+		 (operator-mode ',operator-mode)
+		 (operand-formals ',lambda-list))
+	     (declare (ignorable operand-formals))
 	     ,@(find-forms body)))
 	 ',operator))))
 
@@ -248,9 +250,19 @@
   `(define-operator ,name nil ,lambda-list ,@body))
 
 (deftype list-of (&rest elements)
+  "A list with elements of specified type(s)."
   (labels ((make-list-of (elements)
 	     (if (null elements)
 		 'null
+		 `(cons ,(car elements)
+			,(make-list-of (cdr elements))))))
+    (make-list-of elements)))
+
+(deftype list-of* (&rest elements)
+  "A list starting with elements of specified type(s)."
+  (labels ((make-list-of (elements)
+	     (if (null elements)
+		 'list
 		 `(cons ,(car elements)
 			,(make-list-of (cdr elements))))))
     (make-list-of elements)))
@@ -265,7 +277,7 @@
   (make-array 256 :initial-element nil))
 
 (deftype disassembly-decoder ()
-  '(list-of keyword (or keyword null) symbol))
+  '(list-of* keyword (or keyword null) symbol))
 
 (defun (setf opcode-disassembler) (decoder opcode operator-mode)
   (check-type decoder disassembly-decoder)
@@ -297,7 +309,7 @@
        (set-it *opcode-disassemblers-32* opcode)
        (set-it *opcode-disassemblers-64* opcode)))))
 
-(defun disassemble-code (code &optional override-operand-size override-address-size rex)
+(defun disassemble-instruction (code &optional override-operand-size override-address-size rex)
   (labels ((lookup-decoder (table opcode)
 	     (let* ((datum (pop-code code))
 		    (opcode (logior (ash opcode 8)
@@ -306,7 +318,7 @@
 	       (typecase decoder
 		 ((simple-vector 256)
 		  (lookup-decoder decoder opcode))
-		 ((list-of keyword (or keyword null) symbol)
+		 (disassembly-decoder
 		  (values decoder
 			  opcode))
 		 (t (error "No disassembler registered for opcode #x~X." opcode))))))
@@ -316,30 +328,40 @@
 			  (:32-bit *opcode-disassemblers-32*)
 			  (:64-bit *opcode-disassemblers-64*))
 			0)
-      (destructuring-bind (operator operand-size decoder-function)
+      (destructuring-bind (operator operand-size decoder-function &rest extra-args)
 	  decoder
-	(values (code-call (funcall decoder-function
-				    code
-				    operator
-				    opcode
-				    (or operand-size override-operand-size)
-				    (or override-address-size *cpu-mode*)
-				    rex))
+	(warn "extraS: ~S" extra-args)
+	(values (code-call (apply decoder-function
+				  code
+				  operator
+				  opcode
+				  (or operand-size override-operand-size)
+				  (or override-address-size *cpu-mode*)
+				  rex
+				  extra-args))
 		code)))))
 
-(defmacro define-disassembler ((operator opcode &optional cpu-mode) lambda-list &body body)
-  (if (and (symbolp lambda-list)
-	   (null body))
-      `(setf (opcode-disassembler ',opcode ,cpu-mode) (list ,operator ,cpu-mode ',lambda-list))
-      (let ((defun-name (intern (format nil "~A-~A-~X~@[-~A~]" 'disassembler operator opcode cpu-mode))))
-	`(progn
-	   (defun ,defun-name ,lambda-list ,@body)
-	   (setf (opcode-disassembler ',opcode ',cpu-mode) (list ,operator ',cpu-mode ',defun-name))
-	   ',defun-name))))
+(defmacro define-disassembler ((operator opcode &optional cpu-mode (digit nil digit-p)) lambda-list &body body)
+  (cond
+    (digit-p
+     `(loop for mod from #b00 to #b11
+	 do (loop for r/m from #b000 to #b111
+	       as ext-opcode = (logior (ash ,opcode 8)
+				       (ash ,digit 3)
+				       (ash mod 6)
+				       r/m)
+	       do (define-disassembler (,operator ext-opcode ,cpu-mode) ,lambda-list ,@body))))
+    ((symbolp lambda-list)
+      `(setf (opcode-disassembler ,opcode ,cpu-mode) (list ,operator ,cpu-mode ',lambda-list ,@body)))
+    (t (let ((defun-name (intern (format nil "~A-~A-~X~@[-~A~]" 'disassembler operator opcode cpu-mode))))
+	 `(progn
+	    (defun ,defun-name ,lambda-list ,@body)
+	    (setf (opcode-disassembler ,opcode ',cpu-mode) (list ,operator ',cpu-mode ',defun-name))
+	    ',defun-name)))))
 
 (defun disassemble-simple-prefix (code operator opcode operand-size address-size rex)
   (declare (ignore opcode rex))
-  (let ((instruction (code-call (disassemble-code code operand-size address-size nil))))
+  (let ((instruction (code-call (disassemble-instruction code operand-size address-size nil))))
     (values (if (consp (car instruction))
 		(list* (list* operator (car instruction))
 		       (cdr instruction))
@@ -359,19 +381,19 @@
 
 (define-disassembler (:operand-size-override #x66 :32-bit) (code operator opcode operand-size address-size rex)
   (declare (ignore operator opcode operand-size rex))
-  (disassemble-code code :16-bit address-size nil))
+  (disassemble-instruction code :16-bit address-size nil))
 
 (define-disassembler (:address-size-override #x67 :32-bit) (code operator opcode operand-size address-size rex)
   (declare (ignore operator opcode operand-size rex))
-  (disassemble-code code operand-size :16-bit nil))
+  (disassemble-instruction code operand-size :16-bit nil))
 
 (define-disassembler (:operand-size-override #x66 :16-bit) (code operator opcode operand-size address-size rex)
   (declare (ignore operator opcode operand-size rex))
-  (disassemble-code code :32-bit address-size nil))
+  (disassemble-instruction code :32-bit address-size nil))
 
 (define-disassembler (:address-size-override #x67 :16-bit) (code operator opcode operand-size address-size rex)
   (declare (ignore operator opcode operand-size rex))
-  (disassemble-code code operand-size :32-bit nil))
+  (disassemble-instruction code operand-size :32-bit nil))
 
 (defmacro define-operator/8 (operator lambda-list &body body)
   `(define-operator ,operator :8-bit ,lambda-list
@@ -778,12 +800,23 @@
 					   :displacement (encode-integer offset '(xint 16))))
 			  (t (error "Huh? reg: ~S, reg2: ~S, scale: ~S, offset: ~S" reg reg2 reg-scale offset)))))))))))))
 
+(defun operand-ordering (formals &rest arrangement)
+  (loop with rarrangement = (reverse arrangement)
+     for formal in formals
+     when (getf rarrangement formal)
+     collect it))
+
+(defun order-operands (ordering &rest operands)
+  (loop for key in ordering
+     collect (or (getf operands key)
+		 (error "No operand ~S in ~S." key operands))))
+
 (defmacro pop-code (code-place &optional context)
   `(let ((x (pop ,code-place)))
      (check-type x (unsigned-byte 8) ,(format nil "an octet (context: ~A)" context))
      x))
 
-(defmacro code-call (form &optional (code-place (case (car form) (funcall (third form)) (t (second form)))))
+(defmacro code-call (form &optional (code-place (case (car form) ((funcall apply) (third form)) (t (second form)))))
   "Execute form, then 'magically' update the code binding with the secondary return value from form."
   `(let (tmp)
      (setf (values tmp ,code-place) ,form)))
@@ -800,78 +833,107 @@
 			(1+ (lognot unsigned-integer)))))
 	    code)))
 
-(defun decode-reg-modrm (code operator opcode operand-size address-size rex)
-  (declare (ignore opcode rex))
-  (ecase address-size
-    (:32-bit
-     (decode-reg-modrm-32 code operator operand-size))
-    (:16-bit
-     (decode-reg-modrm-16 code operator operand-size))))
+(defun decode-no-operands (code operator opcode operand-size address-size rex)
+  (declare (ignore opcode operand-size address-size rex))
+  (values (list operator)
+	  code))
 
-(defun decode-reg-modrm-16 (code operator operand-size)
+(defun decode-reg-modrm (code operator opcode operand-size address-size rex operand-ordering)
+  (declare (ignore opcode rex))
+  (values (list* operator
+		 (order-operands operand-ordering
+				 :reg (nth (ldb (byte 3 3) (car code))
+					   (register-set-by-mode operand-size))
+				 :modrm (ecase address-size
+					  (:32-bit
+					   (code-call (decode-reg-modrm-32 code operand-size)))
+					  (:16-bit
+					   (code-call (decode-reg-modrm-16 code operand-size))))))
+	  code))
+	      
+
+(defun decode-modrm (code operator opcode operand-size address-size rex)
+  (values (list operator
+		(ecase address-size
+		  (:32-bit
+		   (code-call (decode-reg-modrm-32 code operand-size)))
+		  (:16-bit
+		   (code-call (decode-reg-modrm-16 code operand-size)))))
+	  code))
+
+(defun decode-imm-modrm (code operator opcode operand-size address-size rex imm-type operand-ordering &key fixed-modrm)
+  (values (list* operator
+		 (order-operands operand-ordering
+				 :modrm (or fixed-modrm
+					    (when (member :modrm operand-ordering)
+					      (ecase address-size
+						(:32-bit
+						 (code-call (decode-reg-modrm-32 code operand-size)))
+						(:16-bit
+						 (code-call (decode-reg-modrm-16 code operand-size))))))
+				 :imm (code-call (decode-integer code imm-type))))
+	  code))
+
+(defun decode-reg-modrm-16 (code operand-size)
   (let* ((modrm (pop-code code mod/rm))
 	 (mod (ldb (byte 2 6) modrm))
 	 (reg (ldb (byte 3 3) modrm))
 	 (r/m (ldb (byte 3 0) modrm)))
-    (values (list operator
-		  (nth reg (register-set-by-mode operand-size))
-		  (if (= mod #b11)
-		      (nth reg (register-set-by-mode operand-size))
-		      (flet ((operands (i)
-			       (nth i '((:bx :si) (:bx :di) (:bp :si) (:bp :di) (:si) (:di) (:bp) (:bx)))))
-			(ecase mod
-			  (#b00
-			   (case r/m
-			     (#b110 (code-call (decode-integer code '(uint 16))))
-			     (t (operands r/m))))
-			  (#b01
-			   (append (operands r/m)
-				   (code-call (decode-integer code '(sint 8)))))
-			  (#b10
-			   (append (operands r/m)
-				   (code-call (decode-integer code '(uint 16)))))))))
+    (values (if (= mod #b11)
+		(nth reg (register-set-by-mode operand-size))
+		(flet ((operands (i)
+			 (nth i '((:bx :si) (:bx :di) (:bp :si) (:bp :di) (:si) (:di) (:bp) (:bx)))))
+		  (ecase mod
+		    (#b00
+		     (case r/m
+		       (#b110 (code-call (decode-integer code '(uint 16))))
+		       (t (operands r/m))))
+		    (#b01
+		     (append (operands r/m)
+			     (code-call (decode-integer code '(sint 8)))))
+		    (#b10
+		     (append (operands r/m)
+			     (code-call (decode-integer code '(uint 16))))))))
 	    code)))
 
-(defun decode-reg-modrm-32 (code operator operand-size)
+(defun decode-reg-modrm-32 (code operand-size)
   "Return a list of the REG, and the MOD/RM operands."
   (let* ((modrm (pop-code code mod/rm))
 	 (mod (ldb (byte 2 6) modrm))
 	 (reg (ldb (byte 3 3) modrm))
 	 (r/m (ldb (byte 3 0) modrm)))
-    (values (list operator
-		  (nth reg (register-set-by-mode operand-size))
-		  (if (= mod #b11)
-		      (nth r/m (register-set-by-mode operand-size))
-		      (flet ((decode-sib ()
-			       (let* ((sib (pop-code code sib))
-				      (ss (ldb (byte 2 6) sib))
-				      (index (ldb (byte 3 3) sib))
-				      (base (ldb (byte 3 0) sib)))
-				 (nconc (unless (= index #b100)
-					  (let ((index-reg (nth index (register-set-by-mode :32-bit))))
-					    (if (= ss #b00)
-						(list index-reg)
-						(list (list index-reg (ash 2 ss))))))
-					(if (/= base #b101)
-					    (list (nth base (register-set-by-mode :32-bit)))
-					    (ecase mod
-					      (#b00 nil)
-					      ((#b01 #b10) (list :ebp))))))))
-			(ecase mod
-			  (#b00 (case r/m
-				  (#b100 (decode-sib))
-				  (#b101 (code-call (decode-integer code '(uint 32))))
-				  (t (list (nth r/m (register-set-by-mode :32-bit))))))
-			  (#b01 (case r/m
-				  (#b100 (nconc(decode-sib)
-					       (list (code-call (decode-integer code '(sint 8))))))
-				  (t (list (nth r/m (register-set-by-mode :32-bit))
-					   (code-call (decode-integer code '(sint 8)))))))
-			  (#b10 (case r/m
-				  (#b100 (nconc (decode-sib)
-						(list (code-call (decode-integer code '(uint 32))))))
-				  (t (list (nth r/m (register-set-by-mode :32-bit))
-					   (code-call (decode-integer code '(uint 32)))))))))))
+    (values (if (= mod #b11)
+		(nth r/m (register-set-by-mode operand-size))
+		(flet ((decode-sib ()
+			 (let* ((sib (pop-code code sib))
+				(ss (ldb (byte 2 6) sib))
+				(index (ldb (byte 3 3) sib))
+				(base (ldb (byte 3 0) sib)))
+			   (nconc (unless (= index #b100)
+				    (let ((index-reg (nth index (register-set-by-mode :32-bit))))
+				      (if (= ss #b00)
+					  (list index-reg)
+					  (list (list index-reg (ash 2 ss))))))
+				  (if (/= base #b101)
+				      (list (nth base (register-set-by-mode :32-bit)))
+				      (ecase mod
+					(#b00 nil)
+					((#b01 #b10) (list :ebp))))))))
+		  (ecase mod
+		    (#b00 (case r/m
+			    (#b100 (decode-sib))
+			    (#b101 (code-call (decode-integer code '(uint 32))))
+			    (t (list (nth r/m (register-set-by-mode :32-bit))))))
+		    (#b01 (case r/m
+			    (#b100 (nconc(decode-sib)
+					 (list (code-call (decode-integer code '(sint 8))))))
+			    (t (list (nth r/m (register-set-by-mode :32-bit))
+				     (code-call (decode-integer code '(sint 8)))))))
+		    (#b10 (case r/m
+			    (#b100 (nconc (decode-sib)
+					  (list (code-call (decode-integer code '(uint 32))))))
+			    (t (list (nth r/m (register-set-by-mode :32-bit))
+				     (code-call (decode-integer code '(uint 32))))))))))
 	    code)))
 
 
@@ -883,28 +945,54 @@
   `(let ((x (encode ,form)))
      (when x (return-from operator x))))
 
-(defmacro imm (imm-operand opcode imm-type &rest extras)
-  `(when (immediate-p ,imm-operand)
-     (let ((immediate (resolve-operand ,imm-operand)))
-       (when (typep immediate ',imm-type)
-	 (return-values-when
-	  (encoded-values :opcode ,opcode
-			  :immediate (encode-integer immediate ',imm-type)
-			  :operand-size operator-mode
-			  :rex default-rex
-			  ,@extras))))))
+(defmacro imm (imm-operand opcode imm-type &optional extra-operand &rest extras)
+  `(progn
+     (assembler
+      (when (and ,@(when extra-operand
+			 (list (list* 'eql extra-operand)))
+		 (immediate-p ,imm-operand))
+	(let ((immediate (resolve-operand ,imm-operand)))
+	  (when (typep immediate ',imm-type)
+	    (return-values-when
+	     (encoded-values :opcode ,opcode
+			     :immediate (encode-integer immediate ',imm-type)
+			     :operand-size operator-mode
+			     :rex default-rex
+			     ,@extras))))))
+     (disassembler
+      ,(if extra-operand
+	   `(define-disassembler (operator ,opcode operator-mode)
+		decode-imm-modrm
+	      ',imm-type
+	      (operand-ordering operand-formals
+				:imm ',imm-operand
+				:modrm ',(first extra-operand))
+	      :fixed-modrm ',(second extra-operand))
+	   `(define-disassembler (operator ,opcode operator-mode)
+		decode-imm-modrm
+	      ',imm-type
+	      '(:imm))))))
 
 (defmacro imm-modrm (op-imm op-modrm opcode digit type)
-  `(when (immediate-p ,op-imm)
-     (let ((immediate (resolve-operand ,op-imm)))
-       (when (typep immediate ',type)
-	 (return-values-when
-	  (merge-encodings (encoded-values :opcode ,opcode
-					   :reg ,digit
-					   :operand-size operator-mode
-					   :rex default-rex
-					   :immediate (encode-integer immediate ',type))
-			   (encode-reg/mem ,op-modrm operator-mode)))))))
+  `(progn
+     (assembler
+      (when (immediate-p ,op-imm)
+	(let ((immediate (resolve-operand ,op-imm)))
+	  (when (typep immediate ',type)
+	    (return-values-when
+	     (merge-encodings (encoded-values :opcode ,opcode
+					      :reg ,digit
+					      :operand-size operator-mode
+					      :rex default-rex
+					      :immediate (encode-integer immediate ',type))
+			      (encode-reg/mem ,op-modrm operator-mode)))))))
+     (disassembler
+      (define-disassembler (operator ,opcode operator-mode ,digit)
+	  decode-imm-modrm
+	',type
+	(operand-ordering operand-formals
+			  :imm ',op-imm
+			  :modrm ',op-modrm)))))
 
 
 (defun compute-extra-prefixes (operator pc size)
@@ -949,13 +1037,17 @@
   `(return-when (encode-pc-rel operator legacy-prefixes ,opcode ,operand ',type ,@extras)))
 
 (defmacro modrm (operand opcode digit)
-  `(when (typep ,operand '(or register-operand indirect-operand))
-     (return-values-when
-      (merge-encodings (encoded-values :opcode ,opcode
-				       :reg ,digit
-				       :operand-size operator-mode
-				       :rex default-rex)
-		       (encode-reg/mem ,operand operator-mode)))))
+  `(progn
+     (assembler
+      (when (typep ,operand '(or register-operand indirect-operand))
+	(return-values-when
+	 (merge-encodings (encoded-values :opcode ,opcode
+					  :reg ,digit
+					  :operand-size operator-mode
+					  :rex default-rex)
+			  (encode-reg/mem ,operand operator-mode)))))
+     (disassembler
+      (define-disassembler (operator ,opcode operator-mode ,digit) decode-modrm))))
 
 (defun encode-reg-modrm (operator legacy-prefixes op-reg op-modrm opcode operator-mode default-rex &optional reg/mem-mode &rest extras)
   (let* ((reg-map (ecase operator-mode
@@ -981,7 +1073,11 @@
       (return-when (encode-reg-modrm operator legacy-prefixes ,op-reg ,op-modrm ,opcode
 				     operator-mode default-rex ,reg/mem-mode ,@extras)))
      (disassembler
-      (define-disassembler (operator ,opcode operator-mode) decode-reg-modrm))))
+      (define-disassembler (operator ,opcode operator-mode)
+	  decode-reg-modrm
+	(operand-ordering operand-formals
+			  :reg ',op-reg
+			  :modrm ',op-modrm)))))
 
 (defun encode-reg-cr (operator legacy-prefixes op-reg op-cr opcode operator-mode default-rex &rest extras)
   (let* ((reg-map (ecase operator-mode
@@ -1028,10 +1124,14 @@
 							',type)))))))
 
 (defmacro opcode (opcode &rest extras)
-  `(return-values-when
-    (encoded-values :opcode ,opcode
-		    ,@extras
-		    :operand-size operator-mode)))
+  `(progn
+     (assembler
+      (return-values-when
+       (encoded-values :opcode ,opcode
+		       ,@extras
+		       :operand-size operator-mode)))
+     (disassembler
+      (define-disassembler (operator ,opcode) decode-no-operands))))
 
 (defmacro opcode* (opcode &rest extras)
   `(return-values-when
@@ -1146,16 +1246,14 @@
 ;;;;;;;;;;; ADC
 
 (define-operator/8 :adcb (src dst)
-  (when (eq dst :al)
-    (imm src #x14 (xint 8)))
+  (imm src #x14 (xint 8) (dst :al))
   (imm-modrm src dst #x80 2 (xint 8))
   (reg-modrm dst src #x12)
   (reg-modrm src dst #x10))
 
 (define-operator* (:16 :adcw :32 :adcl :64 :adcr) (src dst)
   (imm-modrm src dst #x83 2 (sint 8))
-  (when (eq dst :ax-eax-rax)
-    (imm src #x15 :int-16-32-64))
+  (imm src #x15 :int-16-32-64 (dst :ax-eax-rax))
   (imm-modrm src dst #x81 2 :int-16-32-64)
   (reg-modrm dst src #x13)
   (reg-modrm src dst #x11))
@@ -1163,16 +1261,14 @@
 ;;;;;;;;;;; ADD
 
 (define-operator/8 :addb (src dst)
-  (when (eq dst :al)
-    (imm src #x04 (xint 8)))
+  (imm src #x04 (xint 8) (dst :al))
   (imm-modrm src dst #x80 0 (xint 8))
   (reg-modrm dst src #x02)
   (reg-modrm src dst #x00))
 
 (define-operator* (:16 :addw :32 :addl :64 :addr) (src dst)
   (imm-modrm src dst #x83 0 (sint 8))
-  (when (eq dst :ax-eax-rax)
-    (imm src #x05 :int-16-32-64))
+  (imm src #x05 :int-16-32-64 (dst :ax-eax-rax))
   (imm-modrm src dst #x81 0 :int-16-32-64)
   (reg-modrm dst src #x03)
   (reg-modrm src dst #x01))
@@ -1180,16 +1276,14 @@
 ;;;;;;;;;;; AND
 
 (define-operator/8 :andb (mask dst)
-  (when (eq dst :al)
-    (imm mask #x24 (xint 8)))
+  (imm mask #x24 (xint 8) (dst :al))
   (imm-modrm mask dst #x80 4 (xint 8))
   (reg-modrm dst mask #x22)
   (reg-modrm mask dst #x20))
 
 (define-operator* (:16 :andw :32 :andl :64 :andr) (mask dst)
   (imm-modrm mask dst #x83 4 (sint 8))
-  (when (eq dst :ax-eax-rax)
-    (imm mask #x25 :int-16-32-64))
+  (imm mask #x25 :int-16-32-64 (dst :ax-eax-rax))
   (imm-modrm mask dst #x81 4 :int-16-32-64)
   (reg-modrm dst mask #x23)
   (reg-modrm mask dst #x21))
@@ -1334,16 +1428,14 @@
 ;;;;;;;;;;; CMP
 
 (define-operator/8 :cmpb (src dst)
-  (when (eq dst :al)
-    (imm src #x3c (xint 8)))
+  (imm src #x3c (xint 8) (dst :al))
   (imm-modrm src dst #x80 7 (xint 8))
   (reg-modrm dst src #x3a)
   (reg-modrm src dst #x38))
 
 (define-operator* (:16 :cmpw :32 :cmpl :64 :cmpr) (src dst)
   (imm-modrm src dst #x83 7 (sint 8))
-  (when (eq dst :ax-eax-rax)
-    (imm src #x3d :int-16-32-64))
+  (imm src #x3d :int-16-32-64 (dst :ax-eax-rax))
   (imm-modrm src dst #x81 7 :int-16-32-64)
   (reg-modrm dst src #x3b)
   (reg-modrm src dst #x39))
@@ -1455,7 +1547,7 @@
       ((eql :dx)
        (opcode #xec))
       ((uint 8)
-       (imm port #xe4 (uint 8))))))
+       (imm port #xe4 (uint 8) (dst :al))))))
 
 (define-operator/16 :inw (port dst)
   (when (eq :ax dst)
@@ -1463,7 +1555,7 @@
       ((eql :dx)
        (opcode #xed))
       ((uint 8)
-       (imm port #xe5 (uint 8))))))
+       (imm port #xe5 (uint 8) (dst :ax))))))
 
 (define-operator/32 :inl (port dst)
   (when (eq :eax dst)
@@ -1471,7 +1563,7 @@
       ((eql :dx)
        (opcode #xed))
       ((uint 8)
-       (imm port #xe5 (uint 8))))))
+       (imm port #xe5 (uint 8) (dst :eax))))))
 
 ;;;;;;;;;;; INC
 
@@ -1747,16 +1839,14 @@
 ;;;;;;;;;;; OR
 
 (define-operator/8 :orb (src dst)
-  (when (eq dst :al)
-    (imm src #x0c (xint 8)))
+  (imm src #x0c (xint 8) (dst :al))
   (imm-modrm src dst #x80 1 (xint 8))
   (reg-modrm dst src #x0a)
   (reg-modrm src dst #x08))
 
 (define-operator* (:16 :orw :32 :orl :64 :orr) (src dst)
   (imm-modrm src dst #x83 1 (sint 8))
-  (when (eq dst :ax-eax-rax)
-    (imm src #x0d :int-16-32-64))
+  (imm src #x0d :int-16-32-64 (dst :ax-eax-rax))
   (imm-modrm src dst #x81 1 :int-16-32-64)
   (reg-modrm dst src #x0b)
   (reg-modrm src dst #x09))
@@ -1769,7 +1859,7 @@
       ((eql :dx)
        (opcode #xee))
       ((uint 8)
-       (imm port #xe6 (uint 8))))))
+       (imm port #xe6 (uint 8) (src :al))))))
 
 (define-operator/16 :outw (src port)
   (when (eq :ax src)
@@ -1777,7 +1867,7 @@
       ((eql :dx)
        (opcode #xef))
       ((uint 8)
-       (imm port #xe7 (uint 8))))))
+       (imm port #xe7 (uint 8) (src :ax))))))
 
 (define-operator/32 :outl (src port)
   (when (eq :eax src)
@@ -1785,7 +1875,7 @@
       ((eql :dx)
        (opcode #xef))
       ((uint 8)
-       (imm port #xe7 (uint 8))))))
+       (imm port #xe7 (uint 8) (src :eax))))))
 
 ;;;;;;;;;;; POP
 
@@ -1834,13 +1924,13 @@
     (:gs (yield :opcode #x0fa8)))
   (opcode-reg #x50 src)
   (imm src #x6a (sint 8))
-  (imm src #x68 :int-16-32-64 :operand-size operator-mode)
+  (imm src #x68 :int-16-32-64 () :operand-size operator-mode)
   (modrm src #xff 6))
 
 (define-operator/64* :pushr (src)
   (opcode-reg #x50 src)
   (imm src #x6a (sint 8))
-  (imm src #x68 (sint 16) :operand-size :16-bit)
+  (imm src #x68 (sint 16) () :operand-size :16-bit)
   (imm src #x68 (sint 32))
   (modrm src #xff 6))
 
@@ -1876,16 +1966,14 @@
 ;;;;;;;;;;; SBB
 
 (define-operator/8 :sbbb (subtrahend dst)
-  (when (eq dst :al)
-    (imm subtrahend #x1c (xint 8)))
+  (imm subtrahend #x1c (xint 8) (dst :al))
   (imm-modrm subtrahend dst #x80 3 (xint 8))
   (reg-modrm dst subtrahend #x1a)
   (reg-modrm subtrahend dst #x18))
 
 (define-operator* (:16 :sbbw :32 :sbbl :64 :sbbr) (subtrahend dst)
   (imm-modrm subtrahend dst #x83 3 (sint 8))
-  (when (eq dst :ax-eax-rax)
-    (imm subtrahend #x1d :int-16-32-64))
+  (imm subtrahend #x1d :int-16-32-64 (dst :ax-eax-rax))
   (imm-modrm subtrahend dst #x81 3 :int-16-32-64)
   (reg-modrm dst subtrahend #x1b)
   (reg-modrm subtrahend dst #x19))
@@ -1962,16 +2050,14 @@
 ;;;;;;;;;;; SUB
 
 (define-operator/8 :subb (subtrahend dst)
-  (when (eq dst :al)
-    (imm subtrahend #x2c (xint 8)))
+  (imm subtrahend #x2c (xint 8) (dst :al))
   (imm-modrm subtrahend dst #x80 5 (xint 8))
   (reg-modrm dst subtrahend #x2a)
   (reg-modrm subtrahend dst #x28))
 
 (define-operator* (:16 :subw :32 :subl :64 :subr) (subtrahend dst)
   (imm-modrm subtrahend dst #x83 5 (sint 8))
-  (when (eq dst :ax-eax-rax)
-    (imm subtrahend #x2d :int-16-32-64))
+  (imm subtrahend #x2d :int-16-32-64 (dst :ax-eax-rax))
   (imm-modrm subtrahend dst #x81 5 :int-16-32-64)
   (reg-modrm dst subtrahend #x2b)
   (reg-modrm subtrahend dst #x29))
@@ -1979,14 +2065,12 @@
 ;;;;;;;;;;; TEST
 
 (define-operator/8 :testb (mask dst)
-  (when (eq dst :al)
-    (imm mask #xa8 (xint 8)))
+  (imm mask #xa8 (xint 8) (mask :al))
   (imm-modrm mask dst #xf6 0 (xint 8))
   (reg-modrm mask dst #x84))
 
 (define-operator* (:16 :testw :32 :testl :64 :testr) (mask dst)
-  (when (eq dst :ax-eax-rax)
-    (imm mask #xa9 :int-16-32-64))
+  (imm mask #xa9 :int-16-32-64 (dst :ax-eax-rax))
   (imm-modrm mask dst #xf7 0 :int-16-32-64)
   (reg-modrm mask dst #x85))
 
@@ -2015,16 +2099,14 @@
 ;;;;;;;;;;; XOR
 
 (define-operator/8 :xorb (src dst)
-  (when (eq dst :al)
-    (imm src #x34 (xint 8)))
+  (imm src #x34 (xint 8) (dst :al))
   (imm-modrm src dst #x80 6 (xint 8))
   (reg-modrm dst src #x32)
   (reg-modrm src dst #x30))
 
 (define-operator* (:16 :xorw :32 :xorl :64 :xorr) (src dst)
   (imm-modrm src dst #x83 6 (sint 8))
-  (when (eq dst :ax-eax-rax)
-    (imm src #x35 :int-16-32-64))
+  (imm src #x35 :int-16-32-64 (dst :ax-eax-rax))
   (imm-modrm src dst #x81 6 :int-16-32-64)
   (reg-modrm dst src #x33)
   (reg-modrm src dst #x31))
