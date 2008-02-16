@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.189 2008/02/16 19:14:15 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.190 2008/02/16 21:22:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -112,25 +112,6 @@ which enables tracing of recursive functions.")
     (or (member (car list) (cdr list))
 	(duplicatesp (cdr list)))))
 
-(defun old-compute-call-extra-prefix (instr env size)
-  (let* ((return-pointer-tag (ldb (byte 3 0)
-				  (+ (ia-x86::assemble-env-current-pc env)
-				     size))))
-    (cond
-     ((not (typep instr 'ia-x86-instr::call))
-      nil)
-     ((or (= (tag :even-fixnum) return-pointer-tag)
-	  (= (tag :odd-fixnum) return-pointer-tag))
-      ;; Insert a NOP
-      '(#x90))
-;;;     ((= 3 return-pointer-tag)
-;;;      ;; Insert two NOPs, 3 -> 5
-;;;      '(#x90 #x90))
-     ((= (tag :character) return-pointer-tag)
-      ;; Insert three NOPs, 2 -> 5
-      '(#x90 #x90 #x90)
-      '(#x90)))))
-
 (defun compute-call-extra-prefix (pc size)
   (let* ((return-pointer-tag (ldb (byte 3 0)
 				  (+ pc size))))
@@ -162,15 +143,6 @@ which enables tracing of recursive functions.")
 	 (resolved-code (finalize-code body-code nil nil)))
 
     (multiple-value-bind (code-vector symtab)
-;;       (let ((ia-x86:*instruction-compute-extra-prefix-map*
-;; 	     '((:call . old-compute-call-extra-prefix))))
-;; 	(ia-x86:proglist-encode :octet-vector
-;; 				:32-bit
-;; 				#x00000000
-;; 				(ia-x86:read-proglist resolved-code)
-;; 				:symtab-lookup (lambda (label)
-;; 						 (case label
-;; 						   (:nil-value (image-nil-word *image*))))))
 	(let ((asm:*instruction-compute-extra-prefix-map*
 	       '((:call . compute-call-extra-prefix))))
 	  (asm:assemble-proglist (translate-program resolved-code :muerte.cl :cl)
@@ -1046,25 +1018,6 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 
 
 (defun assemble-funobj (funobj combined-code)
-;;   (multiple-value-bind (code-vector code-symtab)
-;;       (let ((ia-x86:*instruction-compute-extra-prefix-map*
-;; 	     '((:call . old-compute-call-extra-prefix))))
-;; 	(ia-x86:proglist-encode :octet-vector :32-bit #x00000000
-;; 				(ia-x86:read-proglist combined-code)
-;; 				:symtab-lookup
-;; 				(lambda (label)
-;; 				  (case label
-;; 				    (:nil-value (image-nil-word *image*))
-;; 				    (t (let ((set (cdr (assoc label
-;; 							      (movitz-funobj-jumpers-map funobj)))))
-;; 					 (when set
-;; 					   (let ((pos (search set (movitz-funobj-const-list funobj)
-;; 							      :end2 (movitz-funobj-num-jumpers funobj))))
-;; 					     (assert pos ()
-;; 						     "Couldn't find for ~s set ~S in ~S."
-;; 						     label set (subseq (movitz-funobj-const-list funobj)
-;; 								       0 (movitz-funobj-num-jumpers funobj)))
-;; 					     (* 4 pos)))))))))
   (multiple-value-bind (code-vector code-symtab)
       (let ((asm:*instruction-compute-extra-prefix-map*
 	     '((:call . compute-call-extra-prefix))))
