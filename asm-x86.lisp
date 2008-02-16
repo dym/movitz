@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.26 2008/02/16 22:13:25 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.27 2008/02/16 23:15:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2098,7 +2098,7 @@
 ;;;;;;;;;;; TEST
 
 (define-operator/8 :testb (mask dst)
-  (imm mask #xa8 (xint 8) (mask :al))
+  (imm mask #xa8 (xint 8) (dst :al))
   (imm-modrm mask dst #xf6 0 (xint 8))
   (reg-modrm mask dst #x84))
 
