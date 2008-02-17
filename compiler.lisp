@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.191 2008/02/16 23:35:22 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.192 2008/02/17 00:10:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3256,12 +3256,24 @@ the sub-program options (&optional label) as secondary value."
 	   (binding-eql x (forwarding-binding-target y)))))
 
 (defun tree-search (tree items)
-  (etypecase tree
-    (atom (if (atom items)
-	      (eql tree items)
-	    (member tree items)))
-    (cons (or (tree-search (car tree) items)
-	      (tree-search (cdr tree) items)))))
+  (if (and (atom items)			; make common case fast(er), hopefully.
+	   (not (numberp items)))
+      (labels ((tree-search* (tree item)
+		 (etypecase tree
+		   (null nil)
+		   (cons
+		    (or (tree-search* (car tree) item)
+			(tree-search* (cdr tree) item)))
+		   (t (eq tree item)))))
+	(tree-search* tree items))
+    (etypecase tree
+      (atom
+       (if (atom items)
+	   (eql tree items)
+	 (member tree items)))
+      (cons
+       (or (tree-search (car tree) items)
+	   (tree-search (cdr tree) items))))))
 
 (defun operator (x)
   (if (atom x) x (car x)))
