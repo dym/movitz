@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.28 2008/02/18 20:57:14 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.29 2008/02/18 22:30:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -445,7 +445,7 @@
 
 (defun resolve-pc-relative (operand)
   (etypecase operand
-    ((cons (eql :pc+))
+    (pc-relative-operand
      (reduce #'+ (cdr operand)
 	     :key #'resolve-operand))
     (symbol-reference
@@ -772,9 +772,12 @@
 		 (error "No operand ~S in ~S." key operands))))
 
 (defmacro pop-code (code-place &optional context)
-  `(let ((x (pop ,code-place)))
+  `(progn
+     (unless ,code-place
+       (error "End of byte-stream in the middle of an instruction."))
+     (let ((x (pop ,code-place)))
      (check-type x (unsigned-byte 8) ,(format nil "an octet (context: ~A)" context))
-     x))
+     x)))
 
 (defmacro code-call (form &optional (code-place (case (car form) ((funcall apply) (third form)) (t (second form)))))
   "Execute form, then 'magically' update the code binding with the secondary return value from form."

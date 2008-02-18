@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.13 2008/02/16 19:14:06 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.14 2008/02/18 22:30:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -25,6 +25,7 @@
 	   #:retry-symbol-resolve
 	   #:pc-relative-operand
 	   #:assemble-proglist
+	   #:disassemble-proglist
 	   #:*pc*
 	   #:*symtab*
 	   #:*instruction-compute-extra-prefix-map*
@@ -116,6 +117,10 @@
 
 (defun pc-relative-operand-p (operand)
   (typep operand 'pc-relative-operand))
+
+(defun pc-relative-operand-offset (operand)
+  (check-type operand pc-relative-operand)
+  (second operand))
 
 (define-condition unresolved-symbol ()
   ((symbol
@@ -229,14 +234,40 @@
 				:corrections (nconc new-corrections corrections)))
 	    (t (values code *symtab*))))))))
 
-(defun disassemble-proglist (code &key (cpu-package '#:asm-x86))
-  (let ((instruction-disassembler (find-symbol (string '#:disassemble-instruction)
-					       cpu-package)))
-    (loop while code
-       collect (multiple-value-bind (instruction new-code)
-		   (funcall instruction-disassembler
-			    code)
-		 (when (eq code new-code)
-		   (loop-finish))
-		 (setf code new-code)
-		 instruction))))
+(defun instruction-operands (instruction)
+  (if (listp (car instruction)) ; skip any instruction prefixes etc.
+      (cddr instruction)
+      (cdr instruction)))
+
+
+(defun disassemble-proglist (code &key (cpu-package '#:asm-x86) (pc (or *pc* 0)) (symtab *symtab*))
+  (let* ((instruction-disassembler (find-symbol (string '#:disassemble-instruction)
+						cpu-package))
+	 (proglist0 (loop while code
+		       collect pc
+		       collect (multiple-value-bind (instruction new-code)
+				   (funcall instruction-disassembler
+					    code)
+				 (when (eq code new-code)
+				   (loop-finish))
+				 (loop until (eq code new-code)
+				    do (incf pc)
+				    (setf code (cdr code)))
+				 (let ((operands (instruction-operands instruction)))
+				   (if (notany #'pc-relative-operand-p operands)
+				       instruction
+				       (nconc (loop until (eq instruction operands)
+						 collect (pop instruction))
+					      (loop for operand in operands
+						 collect (if (not (pc-relative-operand-p operand))
+							     operand
+							     (let* ((location (+ pc (pc-relative-operand-offset operand)))
+								    (entry (or (rassoc location symtab)
+									       (car (push (cons (gensym) location)
+											  symtab)))))
+							       `(quote ,(car entry))))))))))))
+    (values (loop for (pc instruction) on proglist0 by #'cddr
+	       when (car (rassoc pc symtab))
+	       collect it
+	       collect instruction)
+	    symtab)))
