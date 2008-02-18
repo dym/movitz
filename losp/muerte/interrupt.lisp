@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.56 2007/04/07 20:49:17 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.57 2008/02/18 22:31:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -133,7 +133,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	    
 	    ;; Do RET promotion of EIP.
 	    (:movl (:ebp ,(dit-frame-offset :eip)) :ecx)
-	    ((:cs-override) :cmpb ,(realpart (ia-x86:asm :ret)) (:ecx))
+	    ((:cs-override) :cmpb ,@(asm-x86:assemble-instruction '(:ret)) (:ecx))
 	    (:jne 'not-at-ret-instruction)
 	    (:globally (:movl (:edi (:edi-offset ret-trampoline)) :ecx))
 	    (:movl :ecx (:ebp ,(dit-frame-offset :eip)))
