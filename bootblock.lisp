@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:47:19 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: bootblock.lisp,v 1.14 2008/02/09 18:42:26 ffjeld Exp $
+;;;; $Id: bootblock.lisp,v 1.15 2008/02/18 22:30:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -402,13 +402,13 @@
   (multiple-value-bind (bios-loader bb-symtab)
       (let ((asm-x86:*position-independent-p* nil)
 	    (asm-x86:*cpu-mode* :16-bit))
-	(asm:proglist-encode (mkasm16-bios-bootloader image-size load-address skip-sectors)
-			     :start-pc #x7c00))
+	(asm:assemble-proglist (mkasm16-bios-bootloader image-size load-address skip-sectors)
+			       :start-pc #x7c00))
     (multiple-value-bind (protected-loader protected-symtab)
 	(let ((asm-x86:*position-independent-p* nil))
-	  (asm:proglist-encode (mkasm-loader image-size load-address call-address)
-			       :start-pc (cdr (or (assoc 'new-world bb-symtab)
-						  (error "No new-world defined in bios-loader.")))))
+	  (asm:assemble-proglist (mkasm-loader image-size load-address call-address)
+				 :start-pc (cdr (or (assoc 'new-world bb-symtab)
+						    (error "No new-world defined in bios-loader.")))))
       (let* ((loader-length (+ (length bios-loader)
 			       (length protected-loader)))
 	     (bootblock (progn
