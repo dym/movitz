@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.27 2008/02/16 23:15:04 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.28 2008/02/18 20:57:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -217,7 +217,7 @@
 	     (cond
 	       ((atom body)
 		nil)
-	       ((member (car body) '(reg-modrm modrm opcode imm-modrm imm opcode-reg pc-rel))
+	       ((member (car body) '(reg-modrm modrm opcode imm-modrm imm opcode-reg pc-rel moffset))
 		(list body))
 	       (t (mapcan #'find-forms body)))))
     (let ((defun-name (intern (format nil "~A-~A" 'instruction-encoder operator))))
@@ -310,36 +310,7 @@
        (set-it *opcode-disassemblers-32* opcode)
        (set-it *opcode-disassemblers-64* opcode)))))
 
-(defun disassemble-instruction (code &optional override-operand-size override-address-size rex)
-  (labels ((lookup-decoder (table opcode)
-	     (let* ((datum (pop-code code))
-		    (opcode (logior (ash opcode 8)
-				    datum))
-		    (decoder (svref table datum)))
-	       (typecase decoder
-		 ((simple-vector 256)
-		  (lookup-decoder decoder opcode))
-		 (disassembly-decoder
-		  (values decoder
-			  opcode))
-		 (t (error "No disassembler registered for opcode #x~X." opcode))))))
-    (multiple-value-bind (decoder opcode)
-	(lookup-decoder (ecase (or override-operand-size *cpu-mode*)
-			  (:16-bit *opcode-disassemblers-16*)
-			  (:32-bit *opcode-disassemblers-32*)
-			  (:64-bit *opcode-disassemblers-64*))
-			0)
-      (destructuring-bind (operator operand-size decoder-function &rest extra-args)
-	  decoder
-	(values (code-call (apply decoder-function
-				  code
-				  operator
-				  opcode
-				  (or operand-size override-operand-size)
-				  (or override-address-size *cpu-mode*)
-				  rex
-				  extra-args))
-		code)))))
+
 
 (defmacro define-disassembler ((operator opcode &optional cpu-mode (digit nil digit-p)) lambda-list &body body)
   (cond
@@ -823,6 +794,37 @@
 			(1+ (lognot unsigned-integer)))))
 	    code)))
 
+(defun disassemble-instruction (code &optional override-operand-size override-address-size rex)
+  (labels ((lookup-decoder (table opcode)
+	     (let* ((datum (pop-code code))
+		    (opcode (logior (ash opcode 8)
+				    datum))
+		    (decoder (svref table datum)))
+	       (typecase decoder
+		 ((simple-vector 256)
+		  (lookup-decoder decoder opcode))
+		 (disassembly-decoder
+		  (values decoder
+			  opcode))
+		 (t (error "No disassembler registered for opcode #x~X." opcode))))))
+    (multiple-value-bind (decoder opcode)
+	(lookup-decoder (ecase (or override-operand-size *cpu-mode*)
+			  (:16-bit *opcode-disassemblers-16*)
+			  (:32-bit *opcode-disassemblers-32*)
+			  (:64-bit *opcode-disassemblers-64*))
+			0)
+      (destructuring-bind (operator operand-size decoder-function &rest extra-args)
+	  decoder
+	(values (code-call (apply decoder-function
+				  code
+				  operator
+				  opcode
+				  (or operand-size override-operand-size)
+				  (or override-address-size *cpu-mode*)
+				  rex
+				  extra-args))
+		code)))))
+
 (defun decode-no-operands (code operator opcode operand-size address-size rex &rest fixed-operands)
   (declare (ignore opcode operand-size address-size rex))
   (values (list* operator
@@ -871,6 +873,14 @@
   (declare (ignore opcode operand-size address-size rex))
   (values (list operator
 		`(:pc+ ,(code-call (decode-integer code type))))
+	  code))
+
+(defun decode-moffset (code operator opcode operand-size address-size rex type operand-ordering fixed-operand)
+  (declare (ignore opcode operand-size address-size rex))
+  (values (list* operator
+		 (order-operands operand-ordering
+				 :moffset (list (code-call (decode-integer code type)))
+				 :fixed fixed-operand))
 	  code))
 
 (defun decode-opcode-reg (code operator opcode operand-size address-size rex operand-ordering extra-operand)
@@ -1125,17 +1135,31 @@
 					 :rex default-rex)
 			 (encode-reg/mem ,op-modrm operator-mode))))))
 
-(defmacro moffset (opcode op-offset type)
-  `(when (indirect-operand-p ,op-offset)
-     (multiple-value-bind (reg offsets reg2)
-	 (parse-indirect-operand ,op-offset)
-       (when (and (not reg)
-		  (not reg2))
-	 (return-values-when
-	  (encoded-values :opcode ,opcode
-			  :displacement (encode-integer (reduce #'+ offsets
-								:key #'resolve-operand)
-							',type)))))))
+(defmacro moffset (opcode op-offset type fixed-operand)
+  `(progn
+     (assembler
+      (when (and ,@(when fixed-operand
+			 `((eql ,@fixed-operand)))
+		 (indirect-operand-p ,op-offset))
+	(multiple-value-bind (reg offsets reg2)
+	    (parse-indirect-operand ,op-offset)
+	  (when (and (not reg)
+		     (not reg2))
+	    (return-values-when
+	     (encoded-values :opcode ,opcode
+			     :displacement (encode-integer (reduce #'+ offsets
+								   :key #'resolve-operand)
+							   ',type)))))))
+     (disassembler
+      (define-disassembler (operator ,opcode operator-mode)
+	  decode-moffset
+	',type
+	(operand-ordering operand-formals
+			  :moffset ',op-offset
+			  :fixed ',(first fixed-operand))
+	',(second fixed-operand)))))
+
+
 
 (defmacro opcode (opcode &optional fixed-operand &rest extras)
   `(progn
@@ -1771,20 +1795,16 @@
 ;;;;;;;;;;; MOV
 
 (define-operator/8 :movb (src dst)
-  (when (eq src :al)
-    (moffset #xa2 dst (uint 8)))
-  (when (eq dst :al)
-    (moffset #xa0 src (uint 8)))
+  (moffset #xa2 dst (uint 8) (src :al))
+  (moffset #xa0 src (uint 8) (dst :al))
   (opcode-reg-imm #xb0 dst src (xint 8))
   (imm-modrm src dst #xc6 0 (xint 8))
   (reg-modrm dst src #x8a)
   (reg-modrm src dst #x88))
 
 (define-operator/16 :movw (src dst)
-  (when (eq src :ax)
-    (moffset #xa3 dst (uint 16)))
-  (when (eq dst :ax)
-    (moffset #xa0 src (uint 16)))
+  (moffset #xa3 dst (uint 16) (src :ax))
+  (moffset #xa0 src (uint 16) (dst :ax))
   (opcode-reg-imm #xb8 dst src (xint 16))
   (imm-modrm src dst #xc7 0 (xint 16))
   (sreg-modrm src dst #x8c)
@@ -1793,10 +1813,8 @@
   (reg-modrm src dst #x89))
 
 (define-operator/32 :movl (src dst)
-  (when (eq src :eax)
-    (moffset #xa3 dst (uint 32)))
-  (when (eq dst :eax)
-    (moffset #xa0 src (uint 32)))
+  (moffset #xa3 dst (uint 32) (src :eax))
+  (moffset #xa0 src (uint 32) (dst :eax))
   (opcode-reg-imm #xb8 dst src (xint 32))
   (imm-modrm src dst #xc7 0 (xint 32))
   (reg-modrm dst src #x8b)
