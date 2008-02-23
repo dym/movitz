@@ -1,5 +1,7 @@
 ;;;; Movitz ATA Hard Drive Driver
 ;;;; --------------------------------------------------------------------------
+;;;; [23 Feb 2008]  Martin Bealby
+;;;;   Read / write sector functions converted to work with lists of bytes
 ;;;; [25 Oct 2007]  Martin Bealby
 ;;;;   Rewritten from scratch based on http://www.osdever.net/tutorials/lba.php
 ;;;; --------------------------------------------------------------------------
@@ -87,18 +89,20 @@
   (ata-busy-wait ata-controller)
   ;; read the data
   (loop for position from 0 to 255
-	   for data = (io-port (+ ata-controller +ata-offset-data+)
+	 for data = (io-port (+ ata-controller +ata-offset-data+)
 						   :unsigned-byte16)
-	   collect data))
+     collect (logand #x00FF data)
+	 collect (ash (logand #xFF00 data) -8)))
 
 
 (defun ata-lba-write-sector (ata-controller drive-number block-address data)
   "Writes data to a sector of the disk."
-  ;; data must be a list of 256 unsigned-byte16's
+  ;; data must be a list of 512 unsigned-byte8's
   ;; based upon ata-lba-read-sector-above
   (ata-lba-read-write-common ata-controller drive-number block-address)
   (ata-send-command ata-controller +ata-command-write+)
   (ata-busy-wait ata-controller)
-  (loop for position from 0 to 255
+  (loop for position from 0 to 511 by 2
 	 do (setf (io-port (+ ata-controller +ata-offset-data+) :unsigned-byte16)
-			  (nth position data))))
+			  (+ (ash (nth position data) 8)
+				 (nth (+ 1 position) data)))))
