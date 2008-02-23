@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.114 2008/02/09 18:42:00 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.115 2008/02/23 22:34:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1244,6 +1244,7 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
     (when (= offset (bt:slot-offset 'movitz-run-time-context slot-name))
       (return slot-name))))
 
+#+ia-x86
 (defun comment-instruction (instruction funobj pc)
   "Return a list of strings that comments on INSTRUCTION."
   (loop for operand in (ia-x86::instruction-operands instruction)
@@ -1361,8 +1362,57 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 
 (defparameter *recursive-disassemble-remember-funobjs* nil)
 
+(defun movitz-foo (funobj &key (name (movitz-funobj-name funobj)) ((:image *image*) *image*)
+				  (recursive t))
+  (coerce (movitz-vector-symbolic-data (movitz-funobj-code-vector funobj))
+	  'list))
+
+#-ia-x86
 (defun movitz-disassemble-funobj (funobj &key (name (movitz-funobj-name funobj)) ((:image *image*) *image*)
-					   (recursive t))
+				  (recursive t))
+  (let ((code (coerce (movitz-vector-symbolic-data (movitz-funobj-code-vector funobj))
+		      'list))
+	(entry-points (loop for slot in '(code-vector%1op code-vector%2op code-vector%3op)
+			 for entry-arg-count upfrom 1
+			 for entry = (slot-value funobj slot)
+			 when (and (consp entry)
+				   (eq funobj (cdr entry)))
+			 collect (cons (car entry)
+				       entry-arg-count))))
+    (let ((*print-case* :downcase))
+      (format t "~&;; Movitz Disassembly of ~A:
+;;  ~D Constant~:P~@[: ~A~].
+~:{~4D: ~16<~{ ~2,'0X~}~;~> ~A~@[ ;~{ ~A~}~]~%~}"
+	      (movitz-print (or (movitz-funobj-name funobj) name))
+	      (length (movitz-funobj-const-list funobj))
+	      (movitz-funobj-const-list funobj)
+	      (loop with pc = 0
+		 for (data . instruction) in (asm:disassemble-proglist code :symtab (movitz-funobj-symtab funobj)
+									    :collect-data t)
+		 when (assoc pc entry-points)
+		 collect (list pc nil
+			       (format nil "  => Entry-point for ~D arguments <=" (cdr (assoc pc entry-points)))
+			       nil)
+		 when (let ((x (find pc (movitz-funobj-symtab funobj) :key #'cdr)))
+			(when x (list pc (list (format nil "  ~A" (car x))) "" nil)))
+		 collect it
+		 collect (list pc data instruction nil)
+		 do (incf pc (length data))))))
+  (when recursive
+    (let ((*recursive-disassemble-remember-funobjs*
+	   (cons funobj *recursive-disassemble-remember-funobjs*)))
+      (loop for x in (movitz-funobj-const-list funobj)
+	 do (when (and (typep x '(and movitz-funobj (not movitz-funobj-standard-gf)))
+		       (not (member x *recursive-disassemble-remember-funobjs*)))
+	      (push x *recursive-disassemble-remember-funobjs*)
+	      (terpri)
+	      (movitz-disassemble-funobj x))))))
+  
+  
+
+#+ia-x86
+(defun movitz-disassemble-funobj (funobj &key (name (movitz-funobj-name funobj)) ((:image *image*) *image*)
+				  (recursive t))
   (let* ((code-vector (movitz-funobj-code-vector funobj))
 	 (code (map 'vector #'identity
 		    (movitz-vector-symbolic-data code-vector)))
@@ -1375,44 +1425,65 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 	    (length (movitz-funobj-const-list funobj))
 	    (movitz-funobj-const-list funobj)
 	    (loop
-		for pc = 0 then code-position
-		for instruction = (ia-x86:decode-read-octet
-				   #'(lambda ()
-				       (when (< code-position
-						(movitz-vector-fill-pointer code-vector))
-					 (prog1
-					     (aref code code-position)
-					   (incf code-position)))))
-		for cbyte = (and instruction
-				 (ia-x86::instruction-original-datum instruction))
-		until (null instruction)
-		when (let ((x (find pc (movitz-funobj-symtab funobj) :key #'cdr)))
-		       (when x (list pc (list (format nil "  ~S" (car x))) "" nil)))
-		collect it
-		when (some (lambda (x)
-			     (and (plusp pc) (= pc x)))
-			   entry-points)
-		collect (list pc nil
-			      (format nil "  => Entry-point for ~D arguments <="
-				      (1+ (position-if (lambda (x)
-							 (= pc x))
-						       entry-points)))
-			      nil)
-		collect (list pc
-			      (ia-x86::cbyte-to-octet-list cbyte)
-			      instruction
-			      (comment-instruction instruction funobj pc)))))
+	       for pc = 0 then code-position
+	       for instruction = (ia-x86:decode-read-octet
+				  #'(lambda ()
+				      (when (< code-position
+					       (movitz-vector-fill-pointer code-vector))
+					(prog1
+					    (aref code code-position)
+					  (incf code-position)))))
+	       for cbyte = (and instruction
+				(ia-x86::instruction-original-datum instruction))
+	       until (null instruction)
+	       when (let ((x (find pc (movitz-funobj-symtab funobj) :key #'cdr)))
+		      (when x (list pc (list (format nil "  ~S" (car x))) "" nil)))
+	       collect it
+	       when (some (lambda (x)
+			    (and (plusp pc) (= pc x)))
+			  entry-points)
+	       collect (list pc nil
+			     (format nil "  => Entry-point for ~D arguments <="
+				     (1+ (position-if (lambda (x)
+							(= pc x))
+						      entry-points)))
+			     nil)
+	       collect (list pc
+			     (ia-x86::cbyte-to-octet-list cbyte)
+			     instruction
+			     (comment-instruction instruction funobj pc)))))
   (when recursive
     (let ((*recursive-disassemble-remember-funobjs*
 	   (cons funobj *recursive-disassemble-remember-funobjs*)))
       (loop for x in (movitz-funobj-const-list funobj)
-	  do (when (and (typep x '(and movitz-funobj (not movitz-funobj-standard-gf)))
-			(not (member x *recursive-disassemble-remember-funobjs*)))
-	       (push x *recursive-disassemble-remember-funobjs*)
-	       (terpri)
-	       (movitz-disassemble-funobj x)))))
+	 do (when (and (typep x '(and movitz-funobj (not movitz-funobj-standard-gf)))
+		       (not (member x *recursive-disassemble-remember-funobjs*)))
+	      (push x *recursive-disassemble-remember-funobjs*)
+	      (terpri)
+	      (movitz-disassemble-funobj x)))))
   (values))
 
+#-ia-x86
+(defun movitz-disassemble-primitive (name &optional (*image* *image*))
+  (let* ((code-vector (cond
+		       ((slot-exists-p (image-run-time-context *image*) name)
+			(slot-value (image-run-time-context *image*) name))
+		       (t (movitz-symbol-value (movitz-read name)))))
+	 (code (coerce (movitz-vector-symbolic-data code-vector)
+		       'list)))
+    (format t "~&;; Movitz disassembly of ~S:
+~:{~4D: ~16<~{ ~2,'0X~}~;~> ~A~@[ ;~{ ~A~}~]~%~}"
+	    name
+	    (loop with pc = 0
+	       for (data . instruction) in (asm:disassemble-proglist code :collect-data t)
+	       collect (list pc
+			     data
+			     instruction
+			     nil #+ignore (comment-instruction instruction nil pc))
+	       do (incf pc (length data))))
+    (values)))
+
+#+ia-x86
 (defun movitz-disassemble-primitive (name &optional (*image* *image*))
   (let* ((code-vector (cond
 		       ((slot-exists-p (image-run-time-context *image*) name)
