@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.14 2008/02/18 22:30:45 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.15 2008/02/23 22:35:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -234,13 +234,22 @@
 				:corrections (nconc new-corrections corrections)))
 	    (t (values code *symtab*))))))))
 
+(defun instruction-operator (instruction)
+  (if (listp (car instruction)) ; skip any instruction prefixes etc.
+      (cadr instruction)
+      (car instruction)))
+
 (defun instruction-operands (instruction)
   (if (listp (car instruction)) ; skip any instruction prefixes etc.
       (cddr instruction)
       (cdr instruction)))
 
+(defun instruction-modifiers (instruction)
+  (if (listp (car instruction))
+      (car instruction)
+      nil))
 
-(defun disassemble-proglist (code &key (cpu-package '#:asm-x86) (pc (or *pc* 0)) (symtab *symtab*))
+(defun disassemble-proglist (code &key (cpu-package '#:asm-x86) (pc (or *pc* 0)) (symtab *symtab*) collect-data collect-labels)
   (let* ((instruction-disassembler (find-symbol (string '#:disassemble-instruction)
 						cpu-package))
 	 (proglist0 (loop while code
@@ -250,24 +259,33 @@
 					    code)
 				 (when (eq code new-code)
 				   (loop-finish))
-				 (loop until (eq code new-code)
-				    do (incf pc)
-				    (setf code (cdr code)))
-				 (let ((operands (instruction-operands instruction)))
-				   (if (notany #'pc-relative-operand-p operands)
-				       instruction
-				       (nconc (loop until (eq instruction operands)
-						 collect (pop instruction))
-					      (loop for operand in operands
-						 collect (if (not (pc-relative-operand-p operand))
-							     operand
-							     (let* ((location (+ pc (pc-relative-operand-offset operand)))
-								    (entry (or (rassoc location symtab)
-									       (car (push (cons (gensym) location)
-											  symtab)))))
-							       `(quote ,(car entry))))))))))))
-    (values (loop for (pc instruction) on proglist0 by #'cddr
-	       when (car (rassoc pc symtab))
-	       collect it
-	       collect instruction)
+				 (let* ((data (loop until (eq code new-code)
+						 do (incf pc)
+						 collect (pop code)))
+					(operands (instruction-operands instruction)))
+				   ;; (format *debug-io* "~D: ~X ~S~%" pc data instruction)
+				   (cons data
+					 (if (notany #'pc-relative-operand-p operands)
+					     instruction
+					     (nconc (loop until (eq instruction operands)
+						       collect (pop instruction))
+						    (loop for operand in operands
+						       collect (if (not (pc-relative-operand-p operand))
+								   operand
+								   (let* ((location (+ pc (pc-relative-operand-offset operand)))
+									  (entry (or (rassoc location symtab)
+										     (car (push (cons (gensym) location)
+												symtab)))))
+								     `(quote ,(car entry)))))))))))))
+    (values (loop for (pc data-instruction) on proglist0 by #'cddr
+	       for (data . instruction) = data-instruction
+	       for label = (when collect-labels
+			     (rassoc pc symtab))
+	       when label
+	       collect (if (not collect-data)
+			   (car label)
+			   (cons nil (car label)))
+	       collect (if (not collect-data)
+			   instruction
+			   data-instruction))
 	    symtab)))

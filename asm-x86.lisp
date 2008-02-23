@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.29 2008/02/18 22:30:47 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.30 2008/02/23 22:35:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -278,7 +278,7 @@
   (make-array 256 :initial-element nil))
 
 (deftype disassembly-decoder ()
-  '(list-of* keyword (or keyword null) symbol))
+  '(list-of* boolean keyword (or keyword null) symbol))
 
 (defun (setf opcode-disassembler) (decoder opcode operator-mode)
   (check-type decoder disassembly-decoder)
@@ -312,22 +312,22 @@
 
 
 
-(defmacro define-disassembler ((operator opcode &optional cpu-mode (digit nil digit-p)) lambda-list &body body)
+(defmacro define-disassembler ((operator opcode &optional cpu-mode digit backup-p) lambda-list &body body)
   (cond
-    (digit-p
+    (digit
      `(loop for mod from #b00 to #b11
 	 do (loop for r/m from #b000 to #b111
 	       as ext-opcode = (logior (ash ,opcode 8)
 				       (ash ,digit 3)
 				       (ash mod 6)
 				       r/m)
-	       do (define-disassembler (,operator ext-opcode ,cpu-mode) ,lambda-list ,@body))))
+	       do (define-disassembler (,operator ext-opcode ,cpu-mode nil t) ,lambda-list ,@body))))
     ((symbolp lambda-list)
-      `(setf (opcode-disassembler ,opcode ,cpu-mode) (list ,operator ,cpu-mode ',lambda-list ,@body)))
+      `(setf (opcode-disassembler ,opcode ,cpu-mode) (list ,backup-p ,operator ,cpu-mode ',lambda-list ,@body)))
     (t (let ((defun-name (intern (format nil "~A-~A-~X~@[-~A~]" 'disassembler operator opcode cpu-mode))))
 	 `(progn
 	    (defun ,defun-name ,lambda-list ,@body)
-	    (setf (opcode-disassembler ,opcode ',cpu-mode) (list ,operator ',cpu-mode ',defun-name))
+	    (setf (opcode-disassembler ,opcode ',cpu-mode) (list ,backup-p ,operator ',cpu-mode ',defun-name))
 	    ',defun-name)))))
 
 (defun disassemble-simple-prefix (code operator opcode operand-size address-size rex)
@@ -799,15 +799,18 @@
 
 (defun disassemble-instruction (code &optional override-operand-size override-address-size rex)
   (labels ((lookup-decoder (table opcode)
-	     (let* ((datum (pop-code code))
+	     (let* ((backup-code code)
+		    (datum (pop-code code))
 		    (opcode (logior (ash opcode 8)
 				    datum))
 		    (decoder (svref table datum)))
 	       (typecase decoder
-		 ((simple-vector 256)
+		 (vector
 		  (lookup-decoder decoder opcode))
 		 (disassembly-decoder
-		  (values decoder
+		  (when (car decoder)
+		    (setf code backup-code))
+		  (values (cdr decoder)
 			  opcode))
 		 (t (error "No disassembler registered for opcode #x~X." opcode))))))
     (multiple-value-bind (decoder opcode)
@@ -1384,14 +1387,13 @@
 
 ;;;;;;;;;;; CALL
 
-(define-operator* (:16 :callw :32 :calll :64 :callr :dispatch :call) (dest)
-  (case *cpu-mode*
-    (:16-bit
-     (pc-rel #xe8 dest (sint 16)))
-    (:32-bit
-     (pc-rel #xe8 dest (sint 32))))
-  (when (eq operator-mode *cpu-mode*)
-    (modrm dest #xff 2)))
+(define-operator/16 :callw (dest)
+  (pc-rel #xe8 dest (sint 16))
+  (modrm dest #xff 2))
+
+(define-operator/32 :call (dest)
+  (pc-rel #xe8 dest (sint 32))
+  (modrm dest #xff 2))
 
 (define-operator/none :call-segment (dest)
   (modrm dest #xff 3))
@@ -1879,11 +1881,6 @@
 (define-operator* (:16 :negw :32 :negl :64 :negr) (dst)
   (modrm dst #xf7 3))
 
-;;;;;;;;;;;;;;;; NOP
-
-(define-operator/none :nop ()
-  (opcode #x90))
-
 ;;;;;;;;;;; NOT
 
 (define-operator/8 :notb (dst)
@@ -2162,3 +2159,9 @@
   (imm-modrm src dst #x81 6 :int-16-32-64)
   (reg-modrm dst src #x33)
   (reg-modrm src dst #x31))
+
+;;;;;;;;;;;;;;;; NOP
+
+(define-operator/none :nop ()
+  (opcode #x90))
+
