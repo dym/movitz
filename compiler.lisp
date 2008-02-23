@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.192 2008/02/17 00:10:11 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.193 2008/02/23 22:36:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -991,32 +991,6 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	(assemble-funobj funobj combined-code))))
   funobj)
 
-
-(defun diss (code)
-  (format nil "~&;; Diss:
-~:{~4D: ~16<~{ ~2,'0X~}~;~> ~A~@[ ;~{ ~A~}~]~%~}"
-	  (loop with code-position = 0 and instruction-octets = nil
-	     for pc = 0 then code-position
-	     for instruction = (progn
-				 (setf instruction-octets nil)
-				 (ia-x86:decode-read-octet (lambda ()
-							     (incf code-position)
-							     (loop while (and code (not (typep (car code) '(unsigned-byte 8))))
-								  do (warn "diss bad byte at ~D: ~S" code-position (pop code))
-								  (incf code-position))
-							     (let ((x (pop code)))
-							       (when x (push x instruction-octets))
-							       x))))
-	     collect (if (not instruction)
-			 (list pc (nreverse instruction-octets) nil '("???"))
-			 (list pc
-			       (nreverse instruction-octets)
-			       ;;(ia-x86::cbyte-to-octet-list (ia-x86::instruction-original-datum instruction))
-			       instruction
-			       (comment-instruction instruction nil pc)))
-	     while code)))
-
-
 (defun assemble-funobj (funobj combined-code)
   (multiple-value-bind (code-vector code-symtab)
       (let ((asm:*instruction-compute-extra-prefix-map*
@@ -1056,20 +1030,13 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	  (break "entry%2: ~D" b))
 	(unless (<= 0 c 4095)
 	  (break "entry%3: ~D" c)))
-      (loop for ((entry-label slot-name)) on '((entry%1op code-vector%1op)
-					       (entry%2op code-vector%2op)
-					       (entry%3op code-vector%3op))
-	 do (cond
-	      ((assoc entry-label code-symtab)
-	       (let ((offset (cdr (assoc entry-label code-symtab))))
-		 (setf (slot-value funobj slot-name)
-		       (cons offset funobj))
-		 #+ignore (when (< offset #x100)
-			    (vector-push offset code-vector))))
-	      #+ignore
-	      ((some (lambda (label) (assoc label code-symtab))
-		     (mapcar #'car rest))
-	       (vector-push 0 code-vector))))
+      (loop for (entry-label slot-name) in '((entry%1op code-vector%1op)
+					     (entry%2op code-vector%2op)
+					     (entry%3op code-vector%3op))
+	 do (when (assoc entry-label code-symtab)
+	      (let ((offset (cdr (assoc entry-label code-symtab))))
+		(setf (slot-value funobj slot-name)
+		      (cons offset funobj)))))
       (check-locate-concistency code-vector)
       (setf (movitz-funobj-code-vector funobj)
 	    (make-movitz-vector (length code-vector)
