@@ -7,7 +7,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: scratch.lisp,v 1.2 2008/02/04 21:04:51 ffjeld Exp $
+;;;; $Id: scratch.lisp,v 1.3 2008/02/23 22:28:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
