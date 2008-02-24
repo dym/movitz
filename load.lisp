@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Jan 15 18:40:58 2004
 ;;;;                
-;;;; $Id: load.lisp,v 1.12 2008/02/04 21:05:23 ffjeld Exp $
+;;;; $Id: load.lisp,v 1.13 2008/02/24 11:57:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -32,15 +32,15 @@
 (load (compile-file #p"asm-x86")) ; ia-x86 needs them while testing/migrating.
 
 
-(let ((*default-pathname-defaults* (merge-pathnames #p"../ia-x86/")))
-  #+(or cmu) (let ((pwd (ext:default-directory)))
-	       (progn
-		 (unwind-protect
-		     (progn
-		       (setf (ext:default-directory) #p"../ia-x86/")
-		       (load "load"))
-		   (setf (ext:default-directory) pwd))))
-  #-(or cmu) (load "load"))
+#+ia-x86 (let ((*default-pathname-defaults* (merge-pathnames #p"../ia-x86/")))
+	   #+(or cmu) (let ((pwd (ext:default-directory)))
+			(progn
+			  (unwind-protect
+			       (progn
+				 (setf (ext:default-directory) #p"../ia-x86/")
+				 (load "load"))
+			    (setf (ext:default-directory) pwd))))
+	   #-(or cmu) (load "load"))
 
 #+allegro (progn
 	    (load (compile-file #p"../infunix/procfs"))
