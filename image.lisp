@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.115 2008/02/23 22:34:14 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.116 2008/02/24 12:13:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1244,6 +1244,79 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
     (when (= offset (bt:slot-offset 'movitz-run-time-context slot-name))
       (return slot-name))))
 
+#-ia-x86
+(defun comment-instruction (instruction funobj pc)
+  "Return a list of strings that comments on INSTRUCTION."
+  (declare (ignore pc))
+  (loop for operand in (asm:instruction-operands instruction)
+     when (and (typep operand 'asm:indirect-operand)
+	       (member :edi operand)
+	       (run-time-context-find-slot (asm:indirect-operand-offset operand))
+	       (not (member (asm:instruction-operator instruction)
+			    '(:leal :lea))))
+     collect (format nil "<Global slot ~A>" 
+		     (run-time-context-find-slot (asm:indirect-operand-offset operand)))
+;;      when (and (typep operand 'ia-x86::operand-indirect-register)
+;; 	       (eq 'ia-x86::edi (ia-x86::operand-register operand))
+;; 	       (typep instruction 'ia-x86-instr::lea)
+;; 	       (or (not (ia-x86::operand-register2 operand))
+;; 		   (eq 'ia-x86::edi (ia-x86::operand-register2 operand))))
+;;      collect (let ((x (+ (* (ia-x86::operand-scale operand)
+;; 			    (image-nil-word *image*))
+;; 			 (ia-x86::operand-offset operand)
+;; 			 (ecase (ia-x86::operand-register2 operand)
+;; 			   (ia-x86::edi (image-nil-word *image*))
+;; 			   ((nil) 0)))))
+;; 	       (case (ldb (byte 3 0) x)
+;; 		 (#.(tag :character)
+;; 		    (format nil "Immediate ~D (char ~S)"
+;; 			    x (code-char (ldb (byte 8 8) x))))
+;; 		 (#.(mapcar 'tag +fixnum-tags+)
+;; 		    (format nil "Immediate ~D (fixnum ~D #x~X)"
+;; 			    x
+;; 			    (truncate x +movitz-fixnum-factor+)
+;; 			    (truncate x +movitz-fixnum-factor+)))
+;; 		 (t (format nil "Immediate ~D" x))))
+     when (and funobj
+	       (typep operand 'asm:indirect-operand)
+	       (member :esi operand)
+	       (<= 12 (asm:indirect-operand-offset operand)))
+     collect (format nil "~A"
+		     (nth (truncate (- (+ (asm:indirect-operand-offset operand)
+					  (if (member :edi operand)
+					      (image-nil-word *image*)
+					      0))
+				       (slot-offset 'movitz-funobj 'constant0))
+				    4)
+			  (movitz-funobj-const-list funobj)))
+;;      when (and funobj
+;; 	       (typep operand 'ia-x86::operand-indirect-register)
+;; 	       (eq 'ia-x86::esi (ia-x86::operand-register2 operand))
+;; 	       (eq 'ia-x86::edi (ia-x86::operand-register operand))
+;; 	       (<= 12 (ia-x86::operand-offset operand)))
+;;      collect (format nil "~A" (nth (truncate (- (+ (ia-x86::operand-offset operand)
+;; 						   (* (ia-x86::operand-scale operand)
+;; 						      (image-nil-word *image*)))
+;; 						(slot-offset 'movitz-funobj 'constant0))
+;; 					     4)
+;; 				   (movitz-funobj-const-list funobj)))
+;;      when (typep operand 'ia-x86::operand-rel-pointer)
+;;      collect (let* ((x (+ pc
+;; 			  (imagpart (ia-x86::instruction-original-datum instruction))
+;; 			  (length (ia-x86:instruction-prefixes instruction))
+;; 			  (ia-x86::operand-offset operand)))
+;; 		    (label (and funobj (car (find x (movitz-funobj-symtab funobj) :key #'cdr)))))
+;; 	       (if label
+;; 		   (format nil "branch to ~S at ~D" label x)
+;; 		   (format nil "branch to ~D" x)))
+     when (and (typep operand '(and integer asm:immediate-operand))
+	       (<= #x100 operand #x10000)
+	       (= (tag :character) (mod operand 256)))
+     collect (format nil "#\\~C" (code-char (truncate operand 256)))
+     when (and (typep operand '(and integer asm:immediate-operand))
+	       (zerop (mod operand +movitz-fixnum-factor+)))
+     collect (format nil "#x~X" (truncate operand +movitz-fixnum-factor+))))
+
 #+ia-x86
 (defun comment-instruction (instruction funobj pc)
   "Return a list of strings that comments on INSTRUCTION."
@@ -1396,7 +1469,7 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 		 when (let ((x (find pc (movitz-funobj-symtab funobj) :key #'cdr)))
 			(when x (list pc (list (format nil "  ~A" (car x))) "" nil)))
 		 collect it
-		 collect (list pc data instruction nil)
+		 collect (list pc data instruction (comment-instruction instruction funobj pc))
 		 do (incf pc (length data))))))
   (when recursive
     (let ((*recursive-disassemble-remember-funobjs*
@@ -1479,7 +1552,7 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 	       collect (list pc
 			     data
 			     instruction
-			     nil #+ignore (comment-instruction instruction nil pc))
+			     (comment-instruction instruction nil pc))
 	       do (incf pc (length data))))
     (values)))
 
