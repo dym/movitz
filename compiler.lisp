@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.186 2007/04/05 21:10:39 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.193 2008/02/23 22:36:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -112,24 +112,21 @@ which enables tracing of recursive functions.")
     (or (member (car list) (cdr list))
 	(duplicatesp (cdr list)))))
 
-(defun compute-call-extra-prefix (instr env size)
+(defun compute-call-extra-prefix (pc size)
   (let* ((return-pointer-tag (ldb (byte 3 0)
-				  (+ (ia-x86::assemble-env-current-pc env)
-				     size))))
+				  (+ pc size))))
     (cond
-     ((not (typep instr 'ia-x86-instr::call))
-      nil)
-     ((or (= (tag :even-fixnum) return-pointer-tag)
-	  (= (tag :odd-fixnum) return-pointer-tag))
-      ;; Insert a NOP
-      '(#x90))
+      ((or (= (tag :even-fixnum) return-pointer-tag)
+	   (= (tag :odd-fixnum) return-pointer-tag))
+       ;; Insert a NOP
+       '(#x90))
 ;;;     ((= 3 return-pointer-tag)
 ;;;      ;; Insert two NOPs, 3 -> 5
 ;;;      '(#x90 #x90))
-     ((= (tag :character) return-pointer-tag)
-      ;; Insert three NOPs, 2 -> 5
-      '(#x90 #x90 #x90)
-      '(#x90)))))
+      ((= (tag :character) return-pointer-tag)
+       ;; Insert three NOPs, 2 -> 5
+       '(#x90 #x90 #x90)
+       '(#x90)))))
 
 (defun make-compiled-primitive (form environment top-level-p docstring)
   "Primitive functions have no funobj, no stack-frame, and no implied
@@ -143,19 +140,13 @@ which enables tracing of recursive functions.")
 		      :top-level-p nil
 		      :result-mode :ignore))
 	 ;; (ignmore (format t "~{~S~%~}" body-code))
-	 (resolved-code (finalize-code body-code nil nil))
-	 (function-code (ia-x86:read-proglist resolved-code)))
+	 (resolved-code (finalize-code body-code nil nil)))
+
     (multiple-value-bind (code-vector symtab)
-	(let ((ia-x86:*instruction-compute-extra-prefix-map*
+	(let ((asm:*instruction-compute-extra-prefix-map*
 	       '((:call . compute-call-extra-prefix))))
-	  (ia-x86:proglist-encode :octet-vector
-				  :32-bit
-				  #x00000000
-				  function-code
-				  :symtab-lookup
-				  #'(lambda (label)
-				      (case label
-					(:nil-value (image-nil-word *image*))))))
+	  (asm:assemble-proglist (translate-program resolved-code :muerte.cl :cl)
+				 :symtab (list (cons :nil-value (image-nil-word *image*)))))
       (values (make-movitz-vector (length code-vector)
 				  :element-type 'code
 				  :initial-contents code-vector)
@@ -1000,41 +991,34 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	(assemble-funobj funobj combined-code))))
   funobj)
 
-
 (defun assemble-funobj (funobj combined-code)
   (multiple-value-bind (code-vector code-symtab)
-      (let ((ia-x86:*instruction-compute-extra-prefix-map*
+      (let ((asm:*instruction-compute-extra-prefix-map*
 	     '((:call . compute-call-extra-prefix))))
-	(ia-x86:proglist-encode :octet-vector :32-bit #x00000000
-				(ia-x86:read-proglist combined-code)
-				:symtab-lookup
-				(lambda (label)
-				  (case label
-				    (:nil-value (image-nil-word *image*))
-				    (t (let ((set (cdr (assoc label
-							      (movitz-funobj-jumpers-map funobj)))))
-					 (when set
-					   (let ((pos (search set (movitz-funobj-const-list funobj)
-							      :end2 (movitz-funobj-num-jumpers funobj))))
-					     (assert pos ()
-					       "Couldn't find for ~s set ~S in ~S."
-					       label set (subseq (movitz-funobj-const-list funobj)
-								 0 (movitz-funobj-num-jumpers funobj)))
-					     (* 4 pos)))))))))
+	(asm:assemble-proglist combined-code
+			       :symtab (list* (cons :nil-value (image-nil-word *image*))
+					      (loop for (label . set) in (movitz-funobj-jumpers-map funobj)
+						 collect (cons label
+							       (* 4 (or (search set (movitz-funobj-const-list funobj)
+										:end2 (movitz-funobj-num-jumpers funobj))
+									(error "Jumper for ~S missing." label))))))))
     (setf (movitz-funobj-symtab funobj) code-symtab)
-    (let ((code-length (- (length code-vector) 3 -3)))
+    (let* ((code-length (- (length code-vector) 3 -3))
+	   (code-vector (make-array code-length
+				    :initial-contents code-vector
+				    :fill-pointer t)))
       (setf (fill-pointer code-vector) code-length)
       ;; debug info
       (setf (ldb (byte 1 5) (slot-value funobj 'debug-info))
-	1 #+ignore (if use-stack-frame-p 1 0))
+	    1 #+ignore (if use-stack-frame-p 1 0))
       (let ((x (cdr (assoc 'start-stack-frame-setup code-symtab))))
 	(cond
-	 ((not x)
-	  #+ignore (warn "No start-stack-frame-setup label for ~S." name))
-	 ((<= 0 x 30)
-	  (setf (ldb (byte 5 0) (slot-value funobj 'debug-info)) x))
-	 (t (warn "Can't encode start-stack-frame-setup label ~D into debug-info for ~S."
-		  x (movitz-funobj-name funobj)))))
+	  ((not x)
+	   #+ignore (warn "No start-stack-frame-setup label for ~S." name))
+	  ((<= 0 x 30)
+	   (setf (ldb (byte 5 0) (slot-value funobj 'debug-info)) x))
+	  (t (warn "Can't encode start-stack-frame-setup label ~D into debug-info for ~S."
+		   x (movitz-funobj-name funobj)))))
       (let* ((a (or (cdr (assoc 'entry%1op code-symtab)) 0))
 	     (b (or (cdr (assoc 'entry%2op code-symtab)) a))
 	     (c (or (cdr (assoc 'entry%3op code-symtab)) b)))
@@ -1046,20 +1030,13 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	  (break "entry%2: ~D" b))
 	(unless (<= 0 c 4095)
 	  (break "entry%3: ~D" c)))
-      (loop for ((entry-label slot-name)) on '((entry%1op code-vector%1op)
-					       (entry%2op code-vector%2op)
-					       (entry%3op code-vector%3op))
-	  do (cond
-	      ((assoc entry-label code-symtab)
-	       (let ((offset (cdr (assoc entry-label code-symtab))))
-		 (setf (slot-value funobj slot-name)
-		   (cons offset funobj))
-		 #+ignore (when (< offset #x100)
-			    (vector-push offset code-vector))))
-	      #+ignore
-	      ((some (lambda (label) (assoc label code-symtab))
-		     (mapcar #'car rest))
-	       (vector-push 0 code-vector))))
+      (loop for (entry-label slot-name) in '((entry%1op code-vector%1op)
+					     (entry%2op code-vector%2op)
+					     (entry%3op code-vector%3op))
+	 do (when (assoc entry-label code-symtab)
+	      (let ((offset (cdr (assoc entry-label code-symtab))))
+		(setf (slot-value funobj slot-name)
+		      (cons offset funobj)))))
       (check-locate-concistency code-vector)
       (setf (movitz-funobj-code-vector funobj)
 	    (make-movitz-vector (length code-vector)
@@ -1070,138 +1047,21 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 
 (defun check-locate-concistency (code-vector)
   (loop for x from 0 below (length code-vector) by 8
-      do (when (and (= (tag :basic-vector) (aref code-vector x))
-		    (= (enum-value 'movitz-vector-element-type :code) (aref code-vector (1+ x)))
-		    (or (<= #x4000 (length code-vector))
-			(and (= (ldb (byte 8 0) (length code-vector))
-				(aref code-vector (+ x 2)))
-			     (= (ldb (byte 8 8) (length code-vector))
-				(aref code-vector (+ x 3))))))
-	   (break "Code-vector (length #x~X) can break %find-code-vector at ~D: #x~2,'0X~2,'0X ~2,'0X~2,'0X."
-		  (length code-vector) x
-		  (aref code-vector (+ x 0))
-		  (aref code-vector (+ x 1))
-		  (aref code-vector (+ x 2))
-		  (aref code-vector (+ x 3)))))
+     do (when (and (= (tag :basic-vector) (aref code-vector x))
+		   (= (enum-value 'movitz-vector-element-type :code) (aref code-vector (1+ x)))
+		   (or (<= #x4000 (length code-vector))
+		       (and (= (ldb (byte 8 0) (length code-vector))
+			       (aref code-vector (+ x 2)))
+			    (= (ldb (byte 8 8) (length code-vector))
+			       (aref code-vector (+ x 3))))))
+	  (break "Code-vector (length #x~X) can break %find-code-vector at ~D: #x~2,'0X~2,'0X ~2,'0X~2,'0X."
+		 (length code-vector) x
+		 (aref code-vector (+ x 0))
+		 (aref code-vector (+ x 1))
+		 (aref code-vector (+ x 2))
+		 (aref code-vector (+ x 3)))))
   (values))
 
-#+ignore
-(defun make-compiled-function-body-default (form funobj env top-level-p)
-  (make-compiled-body-pass2 (make-compiled-function-pass1 form funobj env top-level-p)
-			    env))
-
-#+ignore
-(defun old-make-compiled-function-body-default (form funobj env top-level-p &key include-programs)
-  (multiple-value-bind (arg-init-code body-form need-normalized-ecx-p)
-      (make-function-arguments-init funobj env form)
-    (multiple-value-bind (resolved-code stack-frame-size use-stack-frame-p frame-map)
-	(make-compiled-body body-form funobj env top-level-p arg-init-code include-programs)
-      (multiple-value-bind (prelude-code have-normalized-ecx-p)
-	  (make-compiled-function-prelude stack-frame-size env use-stack-frame-p
-					  need-normalized-ecx-p frame-map)
-	(values (install-arg-cmp (append prelude-code
-					 resolved-code
-					 (make-compiled-function-postlude funobj env use-stack-frame-p))
-				 have-normalized-ecx-p)
-		use-stack-frame-p)))))
-
-#+ignore
-(defun make-compiled-function-body-without-prelude (form funobj env top-level-p)
-  (multiple-value-bind (code stack-frame-size use-stack-frame-p)
-      (make-compiled-body form funobj env top-level-p)
-    (if (not use-stack-frame-p)
-	(append code (make-compiled-function-postlude funobj env nil))
-      (values (append `((:pushl :ebp)
-			(:movl :esp :ebp)
-			(:pushl :esi)
-			start-stack-frame-setup)
-		      (case stack-frame-size
-			(0 nil)
-			(1 '((:pushl :edi)))
-			(2 '((:pushl :edi) (:pushl :edi)))
-			(t `((:subl ,(* 4 stack-frame-size) :esp))))
-		      (when (tree-search code '(:ecx))
-			`((:testb :cl :cl)
-			  (:js '(:sub-program (normalize-ecx)
-				 (:shrl 8 :ecx)
-				 (:jmp 'normalize-ecx-ok)))
-			  (:andl #x7f :ecx)
-			  normalize-ecx-ok))
-		      code
-		      (make-compiled-function-postlude funobj env t))
-	      use-stack-frame-p))))
-
-#+ignore
-(defun make-compiled-function-body-2req-1opt (form funobj env top-level-p)
-  (when (and (= 2 (length (required-vars env)))
-	     (= 1 (length (optional-vars env)))
-	     (= 0 (length (key-vars env)))
-	     (null (rest-var env)))
-    (let* ((opt-var (first (optional-vars env)))
-	   (opt-binding (movitz-binding opt-var env nil))
-	   (req1-binding (movitz-binding (first (required-vars env)) env nil))
-	   (req2-binding (movitz-binding (second (required-vars env)) env nil))
-	   (default-form (optional-function-argument-init-form opt-binding)))
-      (compiler-values-bind (&code push-default-code-uninstalled &producer default-code-producer)
-	  (compiler-call #'compile-form
-	    :form default-form
-	    :result-mode :push
-	    :env env
-	    :funobj funobj)
-	(cond
-	 ((eq 'compile-self-evaluating default-code-producer)
-	  (multiple-value-bind (code stack-frame-size use-stack-frame-p frame-map)
-	      (make-compiled-body form funobj env top-level-p nil (list push-default-code-uninstalled))
-	    (when (and (new-binding-located-p req1-binding frame-map)
-		       (new-binding-located-p req2-binding frame-map)
-		       (new-binding-located-p opt-binding frame-map))
-	      (multiple-value-bind (eax-ebx-code eax-ebx-stack-offset)
-		  (make-2req req1-binding req2-binding frame-map)
-		(let ((stack-init-size (- stack-frame-size eax-ebx-stack-offset))
-		      (push-default-code
-		       (finalize-code push-default-code-uninstalled funobj env frame-map)))
-		  (values (append `((:jmp '(:sub-program ()
-					    (:cmpb 2 :cl)
-					    (:je 'entry%2op)
-					    (:cmpb 3 :cl)
-					    (:je 'entry%3op)
-					    (:int 100)))
-				    entry%3op
-				    (:pushl :ebp)
-				    (:movl :esp :ebp)
-				    (:pushl :esi)
-				    start-stack-frame-setup
-				    ,@(when (and (edx-var env) (new-binding-located-p (edx-var env) frame-map))
-					`((:movl :edx (:ebp ,(stack-frame-offset
-							      (new-binding-location (edx-var env) frame-map))))))
-				    ,@eax-ebx-code
-				    ,@(if (eql (1+ eax-ebx-stack-offset)
-					       (new-binding-location opt-binding frame-map))
-					  (append `((:pushl (:ebp ,(argument-stack-offset-shortcut 3 2))))
-						  (make-compiled-stack-frame-init (1- stack-init-size)))
-					(append (make-compiled-stack-frame-init stack-init-size)
-						`((:movl (:ebp ,(argument-stack-offset-shortcut 3 2)) :edx)
-						  (:movl :edx (:ebp ,(stack-frame-offset
-								      (new-binding-location opt-binding
-											    frame-map)))))))
-				    (:jmp 'arg-init-done)
-				    entry%2op
-				    (:pushl :ebp)
-				    (:movl :esp :ebp)
-				    (:pushl :esi)
-				    ,@eax-ebx-code
-				    ,@(if (eql (1+ eax-ebx-stack-offset)
-					       (new-binding-location opt-binding frame-map))
-					  (append push-default-code
-						  (make-compiled-stack-frame-init (1- stack-init-size)))
-					(append (make-compiled-stack-frame-init stack-init-size)
-						push-default-code
-						`((:popl (:ebp ,(stack-frame-offset (new-binding-location opt-binding frame-map)))))))
-				    arg-init-done)
-				  code
-				  (make-compiled-function-postlude funobj env t))
-			  use-stack-frame-p))))))
-	 (t nil))))))
 
 (defun make-2req (binding0 binding1 frame-map)
   (let ((location-0 (new-binding-location binding0 frame-map))
@@ -1660,8 +1520,10 @@ There is (propably) a bug in the peephole optimizer." recursive-count))
 	   "If i is a branch, return the label."
 	   (when jmp (push :jmp branch-types))
 	   (let ((i (ignore-instruction-prefixes i)))
-	     (or (and (listp i) (member (car i) branch-types)
-		      (listp (second i)) (member (car (second i)) '(quote muerte.cl::quote))
+	     (or (and (listp i)
+		      (listp (second i))
+		      (member (car (second i)) '(quote muerte.cl::quote))
+		      (member (car i) branch-types)
 		      (second (second i)))
 		 #+ignore
 		 (and (listp i)
@@ -3361,12 +3223,24 @@ the sub-program options (&optional label) as secondary value."
 	   (binding-eql x (forwarding-binding-target y)))))
 
 (defun tree-search (tree items)
-  (etypecase tree
-    (atom (if (atom items)
-	      (eql tree items)
-	    (member tree items)))
-    (cons (or (tree-search (car tree) items)
-	      (tree-search (cdr tree) items)))))
+  (if (and (atom items)			; make common case fast(er), hopefully.
+	   (not (numberp items)))
+      (labels ((tree-search* (tree item)
+		 (etypecase tree
+		   (null nil)
+		   (cons
+		    (or (tree-search* (car tree) item)
+			(tree-search* (cdr tree) item)))
+		   (t (eq tree item)))))
+	(tree-search* tree items))
+    (etypecase tree
+      (atom
+       (if (atom items)
+	   (eql tree items)
+	 (member tree items)))
+      (cons
+       (or (tree-search (car tree) items)
+	   (tree-search (cdr tree) items))))))
 
 (defun operator (x)
   (if (atom x) x (car x)))
