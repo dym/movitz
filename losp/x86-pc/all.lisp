@@ -28,5 +28,5 @@
 ;; (require :x86-pc/serial)
 (require :x86-pc/textmode-console)
 (require :x86-pc/debugger)
-
+(require :x86-pc/ata)
 (provide :x86-pc/all)

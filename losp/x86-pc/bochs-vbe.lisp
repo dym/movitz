@@ -92,10 +92,10 @@
 				  (logior +bochs-vbe-command-enable+
 						  +bochs-vbe-command-linear-framebuffer+))
   (setf *bochs-vbe-surface*
-		(make-graphics-surface :width width
-							   :height height
-							   :bit-depth bits-per-pixel
-							   :memory-pointer #xe0000000)))
+		(muerte.graphics:make-graphics-surface :width width
+											   :height height
+											   :bit-depth bits-per-pixel
+											   :memory-pointer #xe0000000)))
 
 (defun get-surface ()
   "Returns the framebuffer surface."
