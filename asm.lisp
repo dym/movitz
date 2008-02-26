@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.15 2008/02/23 22:35:08 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.16 2008/02/25 23:34:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -19,6 +19,9 @@
 	   #:immediate-operand
 	   #:indirect-operand-p
 	   #:indirect-operand
+	   #:indirect-operand-offset
+	   #:instruction-operands
+	   #:instruction-operator
 	   #:register-operand
 	   #:resolve-operand
 	   #:unresolved-symbol
@@ -111,6 +114,12 @@
 
 (defun indirect-operand-p (operand)
   (typep operand 'indirect-operand))
+
+(defun indirect-operand-offset (operand)
+  (check-type operand indirect-operand)
+  (reduce #'+ operand
+	  :key (lambda (x)
+		 (if (integerp x) x 0))))
 
 (deftype pc-relative-operand ()
   '(cons (eql :pc+)))

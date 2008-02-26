@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <ffjeld@common-lisp.net>
 ;;;; Created at:    Thu Jan 15 18:40:58 2004
 ;;;;                
-;;;; $Id: movitz.asd,v 1.1 2008/02/25 20:11:01 ffjeld Exp $
+;;;; $Id: movitz.asd,v 1.3 2008/02/25 23:43:45 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,6 +28,8 @@
   :license "BSD-like, see accopanying file COPYING."
   :description "An (dis-)assembler framework, with support for x86 in 16, 32, and 64-bit modes."
   :serial t
+  :perform (load-op :after (op c)
+		    (provide 'movitz-asm))
   :components ((:file "asm")
 	       (:file "asm-x86")))
 
@@ -42,7 +44,9 @@
   :description "A compiler, run-time, and libraries for Common Lisp on the x86."
   :default-component-class movitz-source-file
   :serial t
-  :depends-on (binary-types)
+  :depends-on (binary-types movitz-asm)
+  :perform (load-op :after (op c)
+		    (provide 'movitz))
   :components ((:file "packages")
 	       (:file "movitz")
 	       (:file "parse")

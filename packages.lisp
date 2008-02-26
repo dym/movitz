@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.56 2007/03/01 17:49:44 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.57 2008/02/25 23:34:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1276,6 +1276,11 @@
 	   #:vector-read-more-p
 	   ))
 
+(print '(muerte::un-backquote ; make asdf/sbcl realize that these symbols exists..
+	 muerte::backquote-comma
+	 muerte::backquote-comma-at
+	 muerte::backquote-comma-dot)
+       (make-broadcast-stream))
 
 (defpackage #:movitz
   (:use :common-lisp :binary-types)
