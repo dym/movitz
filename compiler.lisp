@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.193 2008/02/23 22:36:21 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.194 2008/03/06 21:14:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -143,7 +143,8 @@ which enables tracing of recursive functions.")
 	 (resolved-code (finalize-code body-code nil nil)))
 
     (multiple-value-bind (code-vector symtab)
-	(let ((asm:*instruction-compute-extra-prefix-map*
+	(let ((asm-x86:*cpu-mode* :32-bit)
+	      (asm:*instruction-compute-extra-prefix-map*
 	       '((:call . compute-call-extra-prefix))))
 	  (asm:assemble-proglist (translate-program resolved-code :muerte.cl :cl)
 				 :symtab (list (cons :nil-value (image-nil-word *image*)))))
@@ -993,7 +994,8 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 
 (defun assemble-funobj (funobj combined-code)
   (multiple-value-bind (code-vector code-symtab)
-      (let ((asm:*instruction-compute-extra-prefix-map*
+      (let ((asm-x86:*cpu-mode* :32-bit)
+	    (asm:*instruction-compute-extra-prefix-map*
 	     '((:call . compute-call-extra-prefix))))
 	(asm:assemble-proglist combined-code
 			       :symtab (list* (cons :nil-value (image-nil-word *image*))

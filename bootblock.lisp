@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Oct  9 20:47:19 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: bootblock.lisp,v 1.15 2008/02/18 22:30:21 ffjeld Exp $
+;;;; $Id: bootblock.lisp,v 1.16 2008/03/03 22:40:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -96,19 +96,19 @@
       (:movw #xfffc :bp)
       (:leaw (:bp ,(- +stack-frame-size+)) :sp)
       (:movw 'welcome :si)		; Print welcome message)
-      (:call 'print)
+      (:callw 'print)
        
       ;;
       ;; Enable the A20 gate
       ;;
-      (:call 'empty-8042)
+      (:callw 'empty-8042)
       (:movb #xd1 :al)
       (:outb :al #x64)
 
-      (:call 'empty-8042)
+      (:callw 'empty-8042)
       (:movb #xdf :al)
       (:outb :al #x60)
-      (:call 'empty-8042)
+      (:callw 'empty-8042)
 
       ;; Poll the floppy's sectors per track
 
@@ -140,7 +140,7 @@
       (:jg 'read-done)
   
       (:movw 'track-start-msg :si) ; Print '(' to screen for each track
-      (:call 'print)
+      (:callw 'print)
        
       (:movw (:bp ,+linear-sector+) :ax)
       (:movb (:bp ,+sectors-per-track+) :cl)
@@ -205,7 +205,7 @@
       (:jnz 'copy-loop)
 
       (:movw 'track-end-msg :si) ; Print ')' to screen after each track
-      (:call 'print)
+      (:callw 'print)
        
       (:jmp 'read-loop)
        
@@ -216,7 +216,7 @@
       (:jc 'motor-loop)
        
       (:movw 'entering :si)		; Print welcome message
-      (:call 'print)
+      (:callw 'print)
        
       ;; Read the cursor position into DH (row) and DL (column).
       (:movb 3 :ah)
@@ -261,7 +261,7 @@
       ;;
       read-error
       (:movw 'error :si)		; Print error message
-      (:call 'print)
+      (:callw 'print)
       halt-cpu
       (:halt)
       (:jmp 'halt-cpu)			; Infinite loop
@@ -270,11 +270,11 @@
       ;; Empty the 8042 Keyboard controller
       ;;
       empty-8042
-      (:call 'delay)
+      (:callw 'delay)
       (:inb #x64 :al)			; 8042 status port
       (:testb 1 :al)		     ; if ( no information available )
       (:jz 'no-output)			;   goto no_output
-      (:call 'delay)
+      (:callw 'delay)
       (:inb #x60 :al)			; read it
       (:jmp 'empty-8042)
       no-output
@@ -405,7 +405,8 @@
 	(asm:assemble-proglist (mkasm16-bios-bootloader image-size load-address skip-sectors)
 			       :start-pc #x7c00))
     (multiple-value-bind (protected-loader protected-symtab)
-	(let ((asm-x86:*position-independent-p* nil))
+	(let ((asm-x86:*position-independent-p* nil)
+	      (asm-x86:*cpu-mode* :32-bit))
 	  (asm:assemble-proglist (mkasm-loader image-size load-address call-address)
 				 :start-pc (cdr (or (assoc 'new-world bb-symtab)
 						    (error "No new-world defined in bios-loader.")))))

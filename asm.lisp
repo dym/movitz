@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.16 2008/02/25 23:34:11 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.17 2008/03/06 19:18:51 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -259,6 +259,9 @@
       nil))
 
 (defun disassemble-proglist (code &key (cpu-package '#:asm-x86) (pc (or *pc* 0)) (symtab *symtab*) collect-data collect-labels)
+  "Return a proglist (i.e. a list of instructions), or a list of (cons instruction data) if collect-data is true,
+data being the octets corresponding to that instruction. Labels will be included in the proglist if collect-labels is true.
+Secondarily, return the symtab."
   (let* ((instruction-disassembler (find-symbol (string '#:disassemble-instruction)
 						cpu-package))
 	 (proglist0 (loop while code
@@ -272,7 +275,6 @@
 						 do (incf pc)
 						 collect (pop code)))
 					(operands (instruction-operands instruction)))
-				   ;; (format *debug-io* "~D: ~X ~S~%" pc data instruction)
 				   (cons data
 					 (if (notany #'pc-relative-operand-p operands)
 					     instruction
@@ -298,3 +300,18 @@
 			   instruction
 			   data-instruction))
 	    symtab)))
+
+(defun disassemble-proglist* (code &key (cpu-package '#:asm-x86) (pc 0))
+  "Print a human-readable disassembly of code."
+  (multiple-value-bind (proglist symtab)
+      (disassemble-proglist code
+			    :cpu-package cpu-package
+			    :collect-data t)
+    (format t "~&~:{~4X: ~20<~{ ~2,'0X~}~;~> ~A~%~}"
+	    (loop with pc = pc
+	       for (data . instruction) in proglist
+	       when (let ((x (find pc symtab :key #'cdr)))
+		      (when x (list pc (list (format nil "      ~A" (car x))) "")))
+	       collect it
+	       collect (list pc data instruction)
+	       do (incf pc (length data))))))
