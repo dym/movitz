@@ -256,7 +256,7 @@
 		      ,@body)))
 
 
-(defmacro loop-collect-rplacd (&environment env
+(defmacro/cross-compilation loop-collect-rplacd (&environment env
 			       (head-var tail-var &optional user-head-var) form)
   (declare
     #+LISPM (ignore head-var user-head-var)	;use locatives, unconditionally update through the tail.
@@ -2050,13 +2050,13 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
 )
 
 ;;;INTERFACE: ANSI
-(defmacro loop (&rest keywords-and-forms)
+(defmacro/cross-compilation loop (&rest keywords-and-forms)
   #+Genera (declare (compiler:do-not-record-macroexpansions)
 		    (zwei:indentation . zwei:indent-loop))
   (loop-standard-expansion keywords-and-forms nil *loop-ansi-universe*))
 
 ;;;INTERFACE: Traditional, ANSI, Lucid.
-(defmacro loop-finish () 
+(defmacro/cross-compilation loop-finish () 
   "Causes the iteration to terminate \"normally\", the same as implicit
 termination by an iteration driving clause, or by use of WHILE or
 UNTIL -- the epilogue code (if any) will be run, and any implicitly
@@ -2064,12 +2064,12 @@ collected result will be returned as the value of the LOOP."
   '(go end-loop))
 
 
-(defmacro loop-body (prologue
-		     before-loop
-		     main-body
-		     after-loop
-		     epilogue
-		     &aux (env nil) rbefore rafter flagvar)
+(defmacro/cross-compilation loop-body (prologue
+				       before-loop
+				       main-body
+				       after-loop
+				       epilogue
+				       &aux (env nil) rbefore rafter flagvar)
   (unless (= (length before-loop) (length after-loop))
     (error "LOOP-BODY called with non-synched before- and after-loop lists."))
   ;;All our work is done from these copies, working backwards from the end:
@@ -2085,11 +2085,11 @@ collected result will be returned as the value of the LOOP."
 	   (pify (l) (if (null (cdr l)) (car l) `(progn ,@l)))
 	   (makebody ()
 	     (let ((form `(tagbody
-			    ,@(psimp (append prologue (nreverse rbefore)))
-			 next-loop
-			    ,@(psimp (append main-body (nreconc rafter `((go next-loop)))))
-			 end-loop
-			    ,@(psimp epilogue))))
+			     ,@(psimp (append prologue (nreverse rbefore)))
+			   next-loop
+			     ,@(psimp (append main-body (nreconc rafter `((go next-loop)))))
+			   end-loop
+			     ,@(psimp epilogue))))
 	       (if flagvar `(let ((,flagvar nil)) ,form) form))))
     (when (or *loop-duplicate-code* (not rbefore))
       (return-from loop-body (makebody)))
@@ -2115,7 +2115,7 @@ collected result will be returned as the value of the LOOP."
       ;; What chronologically precedes the non-duplicatable form will
       ;; be handled the next time around the outer loop.
       (do ((bb rbefore (cdr bb)) (aa rafter (cdr aa)) (lastdiff nil) (count 0) (inc nil))
-	  ((null bb) (return-from loop-body (makebody)))	;Did it.
+	  ((null bb) (return-from loop-body (makebody))) ;Did it.
 	(cond ((not (equal (car bb) (car aa))) (setq lastdiff bb count 0))
 	      ((or (not (setq inc (estimate-code-size (car bb) env)))
 		   (> (incf count inc) threshold))
@@ -2141,7 +2141,7 @@ collected result will be returned as the value of the LOOP."
 	       (return)))))))
 
 
-(defmacro loop-really-desetq (&rest var-val-pairs &aux (env nil))
+(defmacro/cross-compilation loop-really-desetq (&rest var-val-pairs &aux (env nil))
   (labels ((find-non-null (var)
 	     ;; see if there's any non-null thing here
 	     ;; recurse if the list element is itself a list

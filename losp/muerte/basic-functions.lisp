@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.22 2007/02/19 20:24:51 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.24 2008-03-15 20:57:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -48,16 +48,49 @@
     (:movl :ecx :eax)))
     
 
-(defmacro numargs ()
-  `(with-inline-assembly (:returns :ecx)
-     (:movzxb :cl :ecx)
-     (:shll ,movitz::+movitz-fixnum-shift+ :ecx)))
+(defun d-bind-veryfy-keys (args keys)
+  (do ((allow-allow-p t)
+       (mismatches nil))
+      ((null args)
+       (when mismatches
+	 (error "Unexpected destructuring keys ~{~S~^, ~}, expected ~{~S~^, ~}."
+		mismatches keys)))
+    (let ((a (pop args))
+	  (v (pop args)))
+      (cond
+	((eq a :allow-other-keys)
+	 (when (and v allow-allow-p)
+	   (return))
+	 (setf allow-allow-p nil))
+	((not (member a keys))
+	 (pushnew a mismatches))))))
 
-(defmacro call-function-from-lexical (lexical)
-  `(with-inline-assembly (:returns :multiple-values)
-     (:compile-form (:result-mode :esi) ,lexical)
-     (:xorb :cl :cl)
-     (:call (:esi ,(movitz::slot-offset 'movitz::movitz-funobj 'movitz::code-vector)))))
+(defun d-bind-lookup-key (key list)
+  (do ()
+      ((endp list)
+       nil)
+    (unless (cdr list)
+      (error "Odd number of keyword arguments."))
+    (when (eq key (pop list))
+      (return list))
+    (setf list (cdr list))))
+
+(defun verify-macroexpand-call (key name)
+  "Used by macro-expander functions to separate bona fide macro-expansions
+from regular function-calls."
+  (when (eq key name)
+    (error 'undefined-function-call
+	   :name name
+	   :arguments :unknown)))
+
+(defun call-macroexpander (form env expander)
+  "Call a macro-expander for a bona fide macro-expansion."
+  (with-inline-assembly (:returns :multiple-values)
+    (:compile-form (:result-mode :edx) 'verify-macroexpand-call)
+    (:load-lexical (:lexical-binding expander) :esi)
+    (:load-lexical (:lexical-binding form) :eax)
+    (:load-lexical (:lexical-binding env) :ebx)
+    (:call (:esi (:offset movitz-funobj code-vector%2op)))))
 
 (defun funcall%0ops (function)
   (with-inline-assembly (:returns :multiple-values)

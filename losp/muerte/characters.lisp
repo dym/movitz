@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb  5 19:05:01 2001
 ;;;;                
-;;;; $Id: characters.lisp,v 1.4 2004/07/20 08:54:00 ffjeld Exp $
+;;;; $Id: characters.lisp,v 1.5 2008-03-15 20:57:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -70,7 +70,7 @@
 	    (return-from char/= nil)))))))
 
 
-(defmacro define-char-cmp (name mode not-branch)
+(defmacro/cross-compilation define-char-cmp (name mode not-branch)
   `(defun ,name (first-character &rest more-characters)
      (numargs-case
       (1 (x) (declare (ignore x)) t)

@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.56 2007/02/26 18:25:21 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.57 2008-03-15 20:57:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -250,7 +250,7 @@ and the correspondig returns mode (secondary value)."
       :forward all)))
 	     
 (define-special-operator make-named-function (&form form &env env)
-  (destructuring-bind (name formals declarations docstring body)
+  (destructuring-bind (name formals declarations docstring body &key (type :standard-function))
       (cdr form)
     (declare (ignore docstring))
     (handler-bind (#+ignore ((or error warning) (lambda (c)
@@ -258,6 +258,7 @@ and the correspondig returns mode (secondary value)."
 					 (format *error-output* "~&;; In function ~S:~&" name))))
       (let* ((*compiling-function-name* name)
 	     (funobj (make-compiled-funobj name formals declarations body env nil)))
+	(setf (movitz-funobj-type funobj) type)
 	(setf (movitz-funobj-symbolic-name funobj) name)
 	(setf (movitz-env-named-function name) funobj))))
   (compiler-values ()))
@@ -362,13 +363,12 @@ The valid parameters are~{ ~S~}."
 					       :muerte.cl :cl))
 	    (cl-macro-body (translate-program macro-body :muerte.cl :cl)))
 	(when (member name (image-called-functions *image*) :key #'first)
-	  #+ignore (warn "Macro ~S defined after being called as function (first in ~S)."
-			 name
-			 (cdr (find name (image-called-functions *image*) :key #'first))))
+	  (warn "Macro ~S defined after being called as function (first in ~S)."
+		name
+		(cdr (find name (image-called-functions *image*) :key #'first))))
 	(multiple-value-bind (cl-body declarations doc-string)
 	    (parse-docstring-declarations-and-body cl-macro-body 'cl:declare)
 	  (declare (ignore doc-string))
-;;;	(warn "defmacro ~S: ~S" name cl-body)
 	  (let ((expander-lambda
 		 (let ((form-formal (or wholevar (gensym)))
 		       (env-formal (or envvar (gensym))))
@@ -384,9 +384,9 @@ The valid parameters are~{ ~S~}."
 			  (declare ,@declarations)
 			  (translate-program  (block ,name ,@cl-body) :cl :muerte.cl)))))))
 	    (setf (movitz-macro-function name)
-	      (movitz-macro-expander-make-function expander-lambda
-						   :name expander-name
-						   :type :defmacro)))))))
+		  (movitz-macro-expander-make-function expander-lambda
+						       :name expander-name
+						       :type :defmacro)))))))
   (compiler-values ()))
 
 (define-special-operator muerte::define-compiler-macro-compile-time (&form form)

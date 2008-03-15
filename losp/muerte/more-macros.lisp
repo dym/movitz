@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.36 2006/05/06 20:31:23 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.40 2008-03-15 20:58:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -130,6 +130,146 @@
        (let ((,var (pop ,cons-var)))
 	 ,@declarations-and-body))))
 
+
+(defmacro destructuring-bind (lambda-list expression &body declarations-and-body)
+  (let ((bindings (list (list (gensym)
+			      expression)))
+	(ignores nil))
+    (macrolet ((pop* (place)
+		 "Like pop, but err if place is already NIL."
+		 `(let ((x ,place))
+		    (assert x () "Syntax error in destructuring lambda-list: ~S" lambda-list)
+		    (setf ,place (cdr x))
+		    (car x)))
+	       (pop-match (item place)
+		 "Pop place if (car place) is eq to item."
+		 `(let ((item ,item)
+			(x ,place))
+		    (when (eq (car x) item)
+		      (setf ,place (cdr x))
+		      (car x)))))
+      (labels
+	  ((gen-end (var)
+	     (let ((dummy-var (gensym)))
+	       (push (list dummy-var (list 'when var '(error "Too many elements in expression for lambda-list.")))
+		     bindings)
+	       (push dummy-var ignores)))
+	   (gen-lambda-list (var sub-lambda-list)
+	     (when (pop-match '&whole sub-lambda-list)
+	       (push (list (pop* sub-lambda-list) var)
+		     bindings))
+	     (gen-reqvars var sub-lambda-list))
+	   (gen-reqvars (var sub-lambda-list)
+	     (cond
+	       ((null sub-lambda-list)
+		(gen-end var))
+	       ((symbolp sub-lambda-list) ; dotted lambda-list?
+		(push (list sub-lambda-list var)
+		      bindings))
+	       ((pop-match '&optional sub-lambda-list)
+		(gen-optvars var sub-lambda-list))
+	       ((or (pop-match '&rest sub-lambda-list)
+		    (pop-match '&body sub-lambda-list))
+		(gen-restvar var sub-lambda-list))
+	       ((pop-match '&key sub-lambda-list)
+		(gen-keyvars var sub-lambda-list))
+	       ((pop-match '&aux sub-lambda-list)
+		(dolist (b sub-lambda-list)
+		  (push b bindings)))
+	       ((consp (car sub-lambda-list)) ; recursive lambda-list?
+		(let ((sub-var (gensym)))
+		  (push (list sub-var `(pop ,var))
+			bindings)
+		  (gen-lambda-list sub-var (pop sub-lambda-list)))
+		(gen-reqvars var sub-lambda-list))
+	       (t (push (let ((b (pop* sub-lambda-list)))
+			  (list b
+				`(if (null ,var)
+				     (error "Value for required argument ~S is missing." ',b)
+				     (pop ,var))))
+			bindings)
+		  (gen-reqvars var sub-lambda-list))))
+	   (gen-optvars (var sub-lambda-list)
+	     (cond
+	       ((null sub-lambda-list)
+		(gen-end var))
+	       ((symbolp sub-lambda-list) ; dotted lambda-list?
+		(push (list sub-lambda-list var)
+		      bindings))
+	       ((or (pop-match '&rest sub-lambda-list)
+		    (pop-match '&body sub-lambda-list))
+		(gen-restvar var sub-lambda-list))
+	       ((pop-match '&key sub-lambda-list)
+		(gen-keyvars var sub-lambda-list))
+	       ((pop-match '&aux sub-lambda-list)
+		(dolist (b sub-lambda-list)
+		  (push b bindings)))
+	       (t (multiple-value-bind (opt-var init-form supplied-var)
+		      (let ((b (pop sub-lambda-list)))
+			(if (atom b)
+			    (values b nil nil)
+			    (values (pop b) (pop b) (pop b))))
+		    (when supplied-var
+		      (push (list supplied-var `(if ,var t nil))
+			    bindings))
+		    (push (list opt-var
+				(if (not init-form)
+				    `(pop ,var)
+				    `(if ,var (pop ,var) ,init-form)))
+			  bindings))
+		  (gen-optvars var sub-lambda-list))))
+	   (gen-restvar (var sub-lambda-list)
+	     (let ((rest-var (pop* sub-lambda-list)))
+	       (push (list rest-var var)
+		     bindings))
+	     (cond
+	       ((pop-match '&key sub-lambda-list)
+		(gen-keyvars var sub-lambda-list))
+	       ((pop-match '&aux sub-lambda-list)
+		(dolist (b sub-lambda-list)
+		  (push b bindings)))))
+	   (gen-keyvars (var sub-lambda-list &optional keys)
+	     (cond
+	       ((endp sub-lambda-list)
+		(push (list (gensym)
+			    `(d-bind-veryfy-keys ,var ',keys))
+		      bindings)
+		(push (caar bindings)
+		      ignores))
+	       ((pop-match '&allow-other-keys sub-lambda-list)
+		(when sub-lambda-list
+		  (error "Bad destructuring lambda-list; junk after ~S." '&allow-other-keys)))
+	       ((pop-match '&aux sub-lambda-list)
+		(dolist (b sub-lambda-list)
+		  (push b bindings)))
+	       (t (multiple-value-bind (key-var key-name init-form supplied-var)
+		      (let ((b (pop sub-lambda-list)))
+			(cond
+			  ((atom b)
+			   (values b (intern (string b) :keyword) nil nil))
+			  ((atom (car b))
+			   (values (car b) (intern (string (car b)) :keyword) nil nil))
+			  (t (let ((bn (pop b)))
+			       (values (cadr bn) (car bn) (pop b) (pop b))))))
+		    (when supplied-var
+		      (push supplied-var bindings))
+		    (push (list key-var
+				`(let ((x (d-bind-lookup-key ',key-name ,var)))
+				   ,@(when supplied-var
+					   `((setf ,supplied-var (if x t nil))))
+				   ,(if (not init-form)
+					'(car x)
+					(if x
+					    (car x)
+					    ,init-form))))
+			  bindings)
+		    (gen-keyvars var sub-lambda-list (cons key-name keys)))))))
+	(gen-lambda-list (caar bindings)
+			 lambda-list)
+	`(let* ,(nreverse bindings)
+	   (declare (ignore ,@ignores))
+	   ,@declarations-and-body)))))
+
 (define-compiler-macro member (&whole form item list &key (key ''identity) (test ''eql)
 			       &environment env)
   (let* ((test (or (and (movitz:movitz-constantp test env)
@@ -155,47 +295,6 @@
 	 (when (,test (,key item) (,key (car p)))
 	   (return p))))
      (t form))))
-
-(defmacro letf* (bindings &body body &environment env)
-  "Does what one might expect, saving the old values and setting the generalized
-  variables to the new values in sequence.  Unwind-protects and get-setf-method
-  are used to preserve the semantics one might expect in analogy to let*,
-  and the once-only evaluation of subforms."
-  (labels ((do-bindings
-            (bindings)
-            (cond ((null bindings) body)
-                  (t (multiple-value-bind (dummies vals newval setter getter)
-			 (get-setf-expansion (caar bindings) env)
-                       (let ((save (gensym)))
-                         `((let* (,@(mapcar #'list dummies vals)
-                                  (,(car newval) ,(cadar bindings))
-                                  (,save ,getter))
-                             (unwind-protect
-                               (progn ,setter
-                                      ,@(do-bindings (cdr bindings)))
-                               (setq ,(car newval) ,save)
-                               ,setter)))))))))
-    (car (do-bindings bindings))))
-
-(defmacro with-letf (clauses &body body)
-  "Each clause is (<place> &optional <value-form> <prev-var>).
-Execute <body> with alternative values for each <place>.
-Note that this scheme does not work well with respect to multiple threads.
-XXX This should actually be using get-setf-expansion etc. to deal with
-proper evaluation of the places' subforms."
-  (let ((place-value-save (loop for (place . value-save) in clauses
-			      if value-save
-			      collect (list place `(progn ,(first value-save))
-					    (or (second value-save) (gensym)))
-			      else collect (list place nil (gensym)))))
-    `(let (,@(loop for (place nil save-var) in place-value-save
-		 collect `(,save-var ,place)))
-       (unwind-protect
-	   (progn (setf ,@(loop for (place value) in place-value-save
-			      append `(,place ,value)))
-		  ,@body)
-	 (setf ,@(loop for (place nil save) in place-value-save
-		     append `(,place ,save)))))))
 
 (defmacro with-alternative-fdefinitions (clauses &body body)
   "Each clause is (<name> <definition>). Execute <body> with alternative

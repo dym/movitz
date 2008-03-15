@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.37 2007/04/07 20:14:45 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.38 2008-03-15 20:58:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -46,11 +46,13 @@
 (defmacro sequence-double-dispatch ((seq0 seq1) &rest clauses)
   `(case (logior (if (typep ,seq0 'list) 2 0)
 		 (if (typep ,seq1 'list) 1 0))
-     ,@(loop for ((type0 type1) . forms) in clauses
-	   as index = (logior (ecase type0 (list 2) (vector 0))
-			      (ecase type1 (list 1) (vector 0)))
-	   collect
-	     `(,index ,@forms))
+     ,@(mapcar (lambda (clause)
+		 (destructuring-bind ((type0 type1) . forms)
+		     clause
+		   (list* (logior (ecase type0 (list 2) (vector 0))
+				  (ecase type1 (list 1) (vector 0)))
+			  forms)))
+	       clauses)
      (t (sequence-double-dispatch-error ,seq0 ,seq1))))
 
 (defun length (sequence)

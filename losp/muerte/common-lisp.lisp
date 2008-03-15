@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:41:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: common-lisp.lisp,v 1.14 2006/04/07 21:48:41 ffjeld Exp $
+;;;; $Id: common-lisp.lisp,v 1.15 2008-03-15 20:57:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -21,6 +21,7 @@
 (require :muerte/integers)
 (require :muerte/basic-functions)
 (require :muerte/variables)
+(require :muerte/runtime-defmacro)
 (require :muerte/primitive-functions)
 (require :muerte/equalp)
 (require :muerte/typep)

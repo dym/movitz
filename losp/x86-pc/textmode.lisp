@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  9 15:38:56 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: textmode.lisp,v 1.17 2007/04/09 16:05:25 ffjeld Exp $
+;;;; $Id: textmode.lisp,v 1.18 2008-03-15 20:58:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -196,7 +196,7 @@
 (defun write-word-bottom3 (word)
   (write-word-lowlevel word #.(cl:+ 140 #xb8000 (cl:* 24 160))))
 
-(defmacro write-word-lowlevel-macro (word dest)
+(define-compiler-macro write-word-lowlevel-macro (word dest)
   (let ((loop-label (make-symbol "write-word-loop"))
 	(l1 (make-symbol "write-word-l1"))
 	(l2 (make-symbol "write-word-l2"))

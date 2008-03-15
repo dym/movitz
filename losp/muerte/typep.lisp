@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.54 2006/05/06 20:29:10 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.55 2008-03-15 20:58:24 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -265,6 +265,8 @@
 		(std-instance 
 		 (make-other-typep :std-instance)
 		 #+ignore (make-tag-typep :std-instance))
+		(macro-function
+		 (make-function-typep :macro-function))
 		(standard-gf-instance
 		 (make-function-typep :generic-function))
 		(list
@@ -647,6 +649,9 @@
 
 (define-simple-typep (function functionp) (x)
   (typep x 'function))
+
+(define-simple-typep (macro-function macro-function-p) (x)
+  (typep x 'macro-function))
 
 (define-simple-typep (hash-table hash-table-p))
 (define-simple-typep (package packagep))

@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.17 2006/04/03 21:22:39 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.18 2008-03-15 20:57:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -133,13 +133,13 @@ Parameters: struct-name."
 (defun (setf list-struct-accessor-prototype) (value s)
   (setf (nth 'slot-number s) value))
 
-(defmacro defstruct (name-and-options &optional documentation &rest slot-descriptions)
+(defmacro/cross-compilation defstruct (name-and-options &optional documentation &rest slot-descriptions)
   (unless (stringp documentation)
     (push documentation slot-descriptions)
     (setf documentation nil))
   (let ((struct-name (if (symbolp name-and-options)
 			 name-and-options
-		       (car name-and-options))))
+			 (car name-and-options))))
     (flet ((parse-option (option collector)
 	     (etypecase option
 	       (symbol
@@ -154,7 +154,7 @@ Parameters: struct-name."
 		(ecase (car option)
 		  (:conc-name (push "" (getf collector :conc-name)))
 		  (:constructor (push (intern (concatenate 'string
-						(string 'make-) (string struct-name)))
+							   (string 'make-) (string struct-name)))
 				      (getf collector :constructor)))
 		  (:copier)		; do default
 		  (:predicate)		; do default
@@ -184,13 +184,13 @@ Parameters: struct-name."
 	     collector))
       (let ((options nil))
 	(when (listp name-and-options)
-	  (loop for option in (cdr name-and-options)
-	      do (setf options (parse-option option options))))
+	  (dolist (option (cdr name-and-options))
+	    (setf options (parse-option option options))))
 	(macrolet ((default ((option &optional (max-values 1000000)) default-form)
-		       `(if (not (getf options ,option))
-			    (push ,default-form (getf options ,option))
+		     `(if (not (getf options ,option))
+			  (push ,default-form (getf options ,option))
 			  (assert (<= 1 (length (getf options ,option)) ,max-values) ()
-			    "Option ~S given too many times." ,option))))
+				  "Option ~S given too many times." ,option))))
 	  (default (:type 1) 'class-struct)
 	  (default (:superclass 1) 'structure-object)
 	  (default (:named 1) nil)
@@ -209,17 +209,17 @@ Parameters: struct-name."
 	       (predicate-name (first (getf options :predicate)))
 	       (standard-name-and-options (if (not (consp name-and-options))
 					      name-and-options
-					    (remove :superclass name-and-options
-						    :key (lambda (x)
-							   (when (consp x) (car x))))))
+					      (remove :superclass name-and-options
+						      :key (lambda (x)
+							     (when (consp x) (car x))))))
 	       (canonical-slot-descriptions
 		(mapcar #'(lambda (d)
 			    "(<slot-name> <init-form> <type> <read-only-p> <initarg>)"
 			    (if (symbolp d)
 				(list d nil nil nil (intern (symbol-name d) :keyword))
-			      (destructuring-bind (n &optional i &key type read-only)
-				  d
-				(list n i type read-only (intern (symbol-name n) :keyword)))))
+				(destructuring-bind (n &optional i &key type read-only)
+				    d
+				  (list n i type read-only (intern (symbol-name n) :keyword)))))
 			slot-descriptions))
 	       (slot-names (mapcar #'car canonical-slot-descriptions))
 	       (key-lambda (mapcar #'(lambda (d) (list (first d) (second d)))
@@ -230,111 +230,107 @@ Parameters: struct-name."
 		(eval-when (:compile-toplevel)
 		  (setf (gethash '(:translate-when :eval ,struct-name :cl :muerte.cl)
 				 (movitz::image-struct-slot-descriptions movitz:*image*))
-		    '(:translate-when :eval ,slot-descriptions :cl :muerte.cl))
+			'(:translate-when :eval ,slot-descriptions :cl :muerte.cl))
 		  (defstruct (:translate-when :eval ,standard-name-and-options :cl :muerte.cl)
 		    . (:translate-when :eval ,slot-names :cl :muerte.cl)))
 		(defclass ,struct-name (,superclass) ()
-			  (:metaclass structure-class)
-			  (:slots ,(loop for (name init-form type read-only init-arg)
-				       in canonical-slot-descriptions
-				       as location upfrom 0
-				       collect (movitz-make-instance 'structure-slot-definition
-								     :name name
-								     :initarg init-arg
-								     :initform init-form
-								     :type type
-								     :readonly read-only
-								     :location location))))
+		  (:metaclass structure-class)
+		  (:slots ,(loop for (name init-form type read-only init-arg) in canonical-slot-descriptions
+			      as location upfrom 0
+			      collect (movitz-make-instance 'structure-slot-definition
+							    :name name
+							    :initarg init-arg
+							    :initform init-form
+							    :type type
+							    :readonly read-only
+							    :location location))))
 		,@(loop for copier in (getf options :copier)
-		      if (and copier (symbolp copier))
-		      collect
-			`(defun ,copier (x)
-			   (copy-structure x)))
+		     if (and copier (symbolp copier))
+		     collect
+		     `(defun ,copier (x)
+			(copy-structure x)))
 		,@(loop for constructor in (getf options :constructor)
-		      if (and constructor (symbolp constructor))
-		      collect
-			`(defun ,constructor (&rest args) ; &key ,@key-lambda)
-			   (declare (dynamic-extent args))
-			   (apply 'make-structure ',struct-name args))
-		      else if (and constructor (listp constructor))
-		      collect
-			(let* ((boa-constructor (car constructor))
-			       (boa-lambda-list (cdr constructor))
-			       (boa-variables (movitz::list-normal-lambda-list-variables boa-lambda-list)))
-			  `(defun ,boa-constructor ,boa-lambda-list
-			     (let ((class (compile-time-find-class ,struct-name)))
-			       (with-allocation-assembly (,(+ 2 (length slot-names))
-							  :fixed-size-p t
-							  :object-register :eax)
-				 (:movl ,(dpb (length slot-names)
-					      (byte 18 14)
-					      (movitz:tag :defstruct))
-					(:eax (:offset movitz-struct type)))
-				 (:load-lexical (:lexical-binding class) :ebx)
-				 (:movl :ebx (:eax (:offset movitz-struct class)))
-				 ,@(loop for slot-name in slot-names as i upfrom 0
-				       if (member slot-name boa-variables)
-				       append
-					 `((:load-lexical (:lexical-binding ,slot-name) :ebx)
-					   (:movl :ebx (:eax (:offset movitz-struct slot0)
-							     ,(* 4 i))))
-				       else append
-					    `((:movl :edi (:eax (:offset movitz-struct slot0)
-								,(* 4 i)))))
-				 ,@(when (oddp (length slot-names))
-				     `((:movl :edi (:eax (:offset movitz-struct slot0)
-							 ,(* 4 (length slot-names))))))))))
-		      else if constructor
-		      do (error "Don't know how to make class-struct constructor: ~S" constructor))
+		     if (and constructor (symbolp constructor))
+		     collect
+		     `(defun ,constructor (&rest args) ; &key ,@key-lambda)
+			(declare (dynamic-extent args))
+			(apply 'make-structure ',struct-name args))
+		     else if (and constructor (listp constructor))
+		     collect
+		     (let* ((boa-constructor (car constructor))
+			    (boa-lambda-list (cdr constructor))
+			    (boa-variables (movitz::list-normal-lambda-list-variables boa-lambda-list)))
+		       `(defun ,boa-constructor ,boa-lambda-list
+			  (let ((class (compile-time-find-class ,struct-name)))
+			    (with-allocation-assembly (,(+ 2 (length slot-names))
+							:fixed-size-p t
+							:object-register :eax)
+			      (:movl ,(dpb (length slot-names)
+					   (byte 18 14)
+					   (movitz:tag :defstruct))
+				     (:eax (:offset movitz-struct type)))
+			      (:load-lexical (:lexical-binding class) :ebx)
+			      (:movl :ebx (:eax (:offset movitz-struct class)))
+			      ,@(loop for slot-name in slot-names as i upfrom 0
+				   if (member slot-name boa-variables)
+				   append
+				   `((:load-lexical (:lexical-binding ,slot-name) :ebx)
+				     (:movl :ebx (:eax (:offset movitz-struct slot0)
+						       ,(* 4 i))))
+				   else append
+				   `((:movl :edi (:eax (:offset movitz-struct slot0)
+						       ,(* 4 i)))))
+			      ,@(when (oddp (length slot-names))
+				      `((:movl :edi (:eax (:offset movitz-struct slot0)
+							  ,(* 4 (length slot-names))))))))))
+		     else if constructor
+		     do (error "Don't know how to make class-struct constructor: ~S" constructor))
 		,(when predicate-name
-		   `(defun-by-proto ,predicate-name struct-predicate-prototype
-		      (struct-class (:movitz-find-class ,struct-name))))
+		       `(defun-by-proto ,predicate-name struct-predicate-prototype
+			  (struct-class (:movitz-find-class ,struct-name))))
 		,@(loop for (slot-name nil nil read-only-p) in canonical-slot-descriptions
-		      as accessor-name = (intern (concatenate 'string conc-name (string slot-name))
-						 (movitz::symbol-package-fix-cl struct-name))
-		      as slot-number upfrom 0
-		      unless read-only-p
-		      collect
-			`(defun-by-proto (setf ,accessor-name) (setf struct-accessor-prototype)
-			   (struct-name ,struct-name)
-			   (slot-number ,slot-number))
-		      collect
-			`(defun-by-proto ,accessor-name struct-accessor-prototype
-			   (struct-name ,struct-name)
-			   (slot-number ,slot-number)))
+		     as accessor-name = (intern (concatenate 'string conc-name (string slot-name))
+						(movitz::symbol-package-fix-cl struct-name))
+		     as slot-number upfrom 0
+		     unless read-only-p
+		     collect
+		     `(defun-by-proto (setf ,accessor-name) (setf struct-accessor-prototype)
+			(struct-name ,struct-name)
+			(slot-number ,slot-number))
+		     collect
+		     `(defun-by-proto ,accessor-name struct-accessor-prototype
+			(struct-name ,struct-name)
+			(slot-number ,slot-number)))
 		',struct-name))
 	    (list
 	     `(progn
 		,@(if struct-named
 		      (append
 		       (loop for constructor in (getf options :constructor)
-			   if (symbolp constructor)
-			   collect
-			     `(defun ,constructor (&key ,@key-lambda)
-				(list ',struct-name ,@(mapcar #'car key-lambda)))
-			   else do (error "don't know how to make constructor: ~S" constructor))
+			  if (symbolp constructor)
+			  collect
+			  `(defun ,constructor (&key ,@key-lambda)
+			     (list ',struct-name ,@(mapcar #'car key-lambda)))
+			  else do (error "don't know how to make constructor: ~S" constructor))
 		       (when predicate-name
 			 `((defun ,predicate-name (x)
 			     (and (consp x) (eq ',struct-name (car x)))))))
-		    (loop for constructor in (getf options :constructor)
-			if (symbolp constructor)
-			collect
-			  `(defun ,constructor (&key ,@key-lambda)
-			     (list ,@(mapcar #'car key-lambda)))
-			else do (error "don't know how to make constructor: ~S" constructor)))
+		      (loop for constructor in (getf options :constructor)
+			 if (symbolp constructor)
+			 collect
+			 `(defun ,constructor (&key ,@key-lambda)
+			    (list ,@(mapcar #'car key-lambda)))
+			 else do (error "don't know how to make constructor: ~S" constructor)))
 		,@(loop for (slot-name nil nil read-only-p) in canonical-slot-descriptions
-		      as accessor-name = (intern (concatenate 'string conc-name (string slot-name))
-						 (movitz::symbol-package-fix-cl struct-name))
-		      as slot-number upfrom (if struct-named 1 0)
-		      unless read-only-p
-		      collect
-			`(defun-by-proto (setf ,accessor-name) (setf list-struct-accessor-prototype)
-			   (slot-number ,slot-number))
-		      collect
-			`(defun-by-proto ,accessor-name list-struct-accessor-prototype
-			   (slot-number ,slot-number)))
+		     as accessor-name = (intern (concatenate 'string conc-name (string slot-name))
+						(movitz::symbol-package-fix-cl struct-name))
+		     as slot-number upfrom (if struct-named 1 0)
+		     unless read-only-p
+		     collect
+		     `(defun-by-proto (setf ,accessor-name) (setf list-struct-accessor-prototype)
+			(slot-number ,slot-number))
+		     collect
+		     `(defun-by-proto ,accessor-name list-struct-accessor-prototype
+			(slot-number ,slot-number)))
 		',struct-name))
 	    ))))))
-
-
-

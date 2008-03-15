@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.59 2007/02/06 20:03:53 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.60 2008-03-15 20:57:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -673,7 +673,8 @@ integer (native lisp) value."
     :binary-type (define-enum movitz-funobj-type (u8)
 		   :standard-function 0
 		   :generic-function 1
-		   :method-function 2)
+		   :method-function 2
+		   :macro-function 3)
     :initform :standard-function
     :accessor movitz-funobj-type)
    (debug-info

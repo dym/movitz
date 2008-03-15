@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.70 2007/03/26 21:11:40 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.71 2008-03-15 20:57:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,29 +28,59 @@
 
 (in-package muerte)
 
-(defmacro defmacro (name lambda-list &body macro-body)
+(defmacro defmacro/cross-compilation (name lambda-list &body body)
   `(progn
-     (defmacro-compile-time ,name ,lambda-list ,macro-body)
-     #+ignore
-     (eval-when (:compile-toplevel)
-       (let ((name (intern (symbol-name ',name))))
-	 (when (eq (symbol-package name)
-		   (find-package 'muerte.common-lisp))
-	   ;; (warn "setting ~S" name)
-	   (setf (movitz:movitz-env-get name 'macro-expansion)
-	     (list* 'lambda ',lambda-list
-		    ',macro-body)))))
+     (defmacro-compile-time ,name ,lambda-list ,body)
      ',name))
+
+(defmacro defmacro (name lambda-list &body body)
+  `(defmacro/cross-compilation ,name ,lambda-list ,@body))
+
+(defmacro defmacro/runtime (name lambda-list &body body)
+  (multiple-value-bind (real-body declarations docstring)
+      (movitz::parse-docstring-declarations-and-body body 'cl:declare)
+    (let* ((block-name (compute-function-block-name name))
+	   (ignore-var (gensym))
+	   (form-var (gensym "form-"))
+	   (env-var nil)
+	   (operator-var (gensym))
+	   (destructuring-lambda-list
+	    (do ((l lambda-list)
+		 (r nil))
+		((atom l)
+		 (cons operator-var
+		       (nreconc r l)))
+	      (let ((x (pop l)))
+		(if (eq x '&environment)
+		    (setf env-var (pop l))
+		    (push x r))))))
+      (multiple-value-bind (env-var ignore-env)
+	  (if env-var
+	      (values env-var nil)
+	      (let ((e (gensym)))
+		(values e (list e))))
+	`(make-named-function ,name
+			      (&edx edx &optional ,form-var ,env-var &rest ,ignore-var)
+			      ((ignore ,ignore-var ,@ignore-env))
+			      ,docstring
+			      (block ,block-name
+				(verify-macroexpand-call edx ',name)
+				(destructuring-bind ,destructuring-lambda-list
+				    ,form-var
+				  (declare (ignore ,operator-var) ,@declarations)
+				  ,@real-body))
+			      :type :macro-function)))))
 
 (defmacro defun (function-name lambda-list &body body)
   "Define a function."
-;;;  (warn "defun ~S.." function-name)
   (multiple-value-bind (real-body declarations docstring)
       (movitz::parse-docstring-declarations-and-body body 'cl:declare)
     (let ((block-name (compute-function-block-name function-name)))
       `(progn
-	 (make-named-function ,function-name ,lambda-list
-			      ,declarations ,docstring
+	 (make-named-function ,function-name
+			      ,lambda-list
+			      ,declarations
+			      ,docstring
 			      (block ,block-name ,@real-body))
 	 ',function-name))))
 
@@ -1078,7 +1108,7 @@ busy-waiting loop on P4."
        (:halt)
        (:jmp ',infinite-loop-label))))
 
-(defmacro function-name-or-nil ()
+(define-compiler-macro function-name-or-nil ()
   (let ((function-name-not-found-label (gensym)))
     `(with-inline-assembly (:returns :eax)
        (:movl :edi :eax)
