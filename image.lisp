@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.116 2008/02/24 12:13:06 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.117 2008-03-15 20:45:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -894,14 +894,13 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	  (unless (typep (movitz-env-named-function (car cf) nil)
 			 'movitz-funobj)
 	    (warn "Function ~S is called (in ~S) but not defined." (car cf) (cdr cf))))
-	(maphash #'(lambda (symbol function-value)
-		     (let ((movitz-symbol (movitz-read symbol)))
-		       (if (typep function-value 'movitz-object)
-			   ;; (warn "SETTING ~A's funval to ~A"
-			 ;; movitz-symbol function-value)
-			   (setf (movitz-symbol-function-value movitz-symbol)
-			     function-value)
-			 #+ignore (warn "fv: ~W" (movitz-macro-expander-function function-value)))))
+	(maphash (lambda (symbol function-value)
+		   (let ((movitz-symbol (movitz-read symbol)))
+		     (etypecase function-value
+		       (movitz-funobj
+			(setf (movitz-symbol-function-value movitz-symbol) function-value))
+		       (movitz-macro
+			#+ignore (warn "fv: ~S ~S ~S" symbol function-value (movitz-env-get symbol :macro-expansion))))))
 		 (movitz-environment-function-cells (image-global-environment *image*)))
 	(let ((run-time-context (image-run-time-context *image*)))
 	  ;; pull in functions in run-time-context
@@ -1169,12 +1168,18 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 				  name symbol)
 		   name)))
 	     (ensure-package (package-name lisp-package &optional context)
-	       (assert (not (member (package-name lisp-package)
-				    #+allegro '(excl common-lisp sys aclmop)
-				    #-allegro '(common-lisp)
-				    :test #'string=)) ()
-		 "I don't think you really want to dump the package ~A ~@[for symbol ~S~] with Movitz."
-		 lisp-package context)
+	       (restart-case (assert (not (member (package-name lisp-package)
+						  '(common-lisp movitz
+						    #+allegro excl
+						    #+allegro sys
+						    #+allegro aclmop
+						    #+sbcl sb-ext)
+						  :test #'string=)) ()
+						  "I don't think you really want to dump the package ~A ~@[for symbol ~S~] with Movitz."
+						  lisp-package context)
+		 (use-muerte ()
+		   :report "Substitute the muerte pacakge."
+		   (return-from ensure-package (ensure-package :muerte (find-package :muerte)))))
 	       (setf (gethash lisp-package lisp-to-movitz-package)
 		 (or (gethash package-name packages-hash nil)
 		     (let* ((nicks (mapcar #'movitz-package-name (package-nicknames lisp-package)))
@@ -1460,8 +1465,10 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 	      (length (movitz-funobj-const-list funobj))
 	      (movitz-funobj-const-list funobj)
 	      (loop with pc = 0
-		 for (data . instruction) in (asm:disassemble-proglist code :symtab (movitz-funobj-symtab funobj)
-									    :collect-data t)
+		 for (data . instruction) in (let ((asm-x86:*cpu-mode* :32-bit))
+					       (asm:disassemble-proglist code
+									 :symtab (movitz-funobj-symtab funobj)
+									 :collect-data t))
 		 when (assoc pc entry-points)
 		 collect (list pc nil
 			       (format nil "  => Entry-point for ~D arguments <=" (cdr (assoc pc entry-points)))
