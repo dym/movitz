@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.194 2008/03/06 21:14:22 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.195 2008-03-15 00:21:38 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -5769,6 +5769,15 @@ compile-time types of each argument. Fifth: The combined functional-p."
 	   (operands instruction)
 	 (values binding destination))))
 
+(defun program-is-load-constant (prg)
+  (and (not (cdr prg))
+       (let ((i (car prg)))
+	 (when (and (listp i)
+		    (eq :load-constant (car i)))
+	   (values (third i)
+		   (second i))))))
+
+
 (defun make-compiled-two-forms-into-registers (form0 reg0 form1 reg1 funobj env)
   "Returns first: code that does form0 into reg0, form1 into reg1.
 second: whether code is functional-p,
@@ -5791,44 +5800,48 @@ fifth:  all compiler-values for form1, as a list."
 	  :env env
 	  :result-mode reg1)
       (values (cond
-	       ((and (typep final0 'binding)
-		     (not (code-uses-binding-p code1 final0 :load nil :store t)))
-		(append (compiler-call #'compile-form-unprotected
-			  :form form0
-			  :result-mode :ignore
-			  :funobj funobj
-			  :env env)
-			code1
-			`((:load-lexical ,final0 ,reg0 :protect-registers (,reg1)))))
-	       ((program-is-load-lexical-of-binding code1)
-		(destructuring-bind (src dst &key protect-registers shared-reference-p)
-		    (cdar code1)
-		  (assert (eq reg1 dst))
-		  (append code0
-			  `((:load-lexical ,src ,reg1
-					   :protect-registers ,(union protect-registers
-								      (list reg0))
-					   :shared-reference-p ,shared-reference-p)))))
-	       ;; XXX if we knew that code1 didn't mess up reg0, we could do more..
-	       (t #+ignore (when (and (not (tree-search code1 reg0))
-				      (not (tree-search code1 :call)))
-			     (warn "got b: ~S ~S for ~S: ~{~&~A~}" form0 form1 reg0 code1))
-		  (let ((binding (make-instance 'temporary-name :name (gensym "tmp-")))
-			(xenv (make-local-movitz-environment env funobj)))
-		    (movitz-env-add-binding xenv binding)
-		    (append (compiler-call #'compile-form
-			      :form form0
-			      :funobj funobj
-			      :env env
-			      :result-mode reg0)
-			    `((:init-lexvar ,binding :init-with-register ,reg0
-					    :init-with-type ,(type-specifier-primary type0)))
-			    (compiler-call #'compile-form
-			      :form form1
-			      :funobj funobj
-			      :env xenv
-			      :result-mode reg1)
-			    `((:load-lexical ,binding ,reg0))))))
+		((and (typep final0 'binding)
+		      (not (code-uses-binding-p code1 final0 :load nil :store t)))
+		 (append (compiler-call #'compile-form-unprotected
+					:form form0
+					:result-mode :ignore
+					:funobj funobj
+					:env env)
+			 code1
+			 `((:load-lexical ,final0 ,reg0 :protect-registers (,reg1)))))
+		((program-is-load-lexical-of-binding code1)
+		 (destructuring-bind (src dst &key protect-registers shared-reference-p)
+		     (cdar code1)
+		   (assert (eq reg1 dst))
+		   (append code0
+			   `((:load-lexical ,src ,reg1
+					    :protect-registers ,(union protect-registers
+								       (list reg0))
+					    :shared-reference-p ,shared-reference-p)))))
+		((eq reg1 (program-is-load-constant code1))
+		 (append code0
+			 code1))
+		;; XXX if we knew that code1 didn't mess up reg0, we could do more..
+		(t
+;; 		 (when (and (not (tree-search code1 reg0))
+;; 			    (not (tree-search code1 :call)))
+;; 		   (warn "got b: ~S ~S for ~S: ~{~&~A~}" form0 form1 reg0 code1))
+		 (let ((binding (make-instance 'temporary-name :name (gensym "tmp-")))
+		       (xenv (make-local-movitz-environment env funobj)))
+		   (movitz-env-add-binding xenv binding)
+		   (append (compiler-call #'compile-form
+					  :form form0
+					  :funobj funobj
+					  :env env
+					  :result-mode reg0)
+			   `((:init-lexvar ,binding :init-with-register ,reg0
+						    :init-with-type ,(type-specifier-primary type0)))
+			   (compiler-call #'compile-form
+					  :form form1
+					  :funobj funobj
+					  :env xenv
+					  :result-mode reg1)
+			   `((:load-lexical ,binding ,reg0))))))
 	      (and functional0 functional1)
 	      t
 	      (compiler-values-list (all0))
