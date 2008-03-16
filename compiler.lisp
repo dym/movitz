@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.195 2008-03-15 00:21:38 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.196 2008-03-16 22:27:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3160,16 +3160,37 @@ the sub-program options (&optional label) as secondary value."
 
 (defun code-uses-binding-p (code binding &key (load t) store call)
   "Does extended <code> potentially read/write/call <binding>?"
-  (labels ((search-funobj (funobj binding load store call)
+  (labels ((search-funobj (funobj binding load store call path)
 	     ;; If this is a recursive lexical call (i.e. labels),
 	     ;; the function-envs might not be bound, but then this
 	     ;; code is searched already.
-	     (when (slot-boundp funobj 'function-envs)
-	       (some (lambda (function-env-spec)
-		       (code-search (extended-code (cdr function-env-spec)) binding
-				    load store call))
-		     (function-envs funobj))))
-	   (code-search (code binding load store call)
+	     (if (member funobj path)
+		 nil
+		 (when (slot-boundp funobj 'function-envs)
+		   (some (lambda (function-env-spec)
+			   (or (not (slot-boundp (cdr function-env-spec) 'extended-code)) ; Don't know yet, assume yes.
+			       (code-search (extended-code (cdr function-env-spec)) binding
+					    load store call
+					    (cons funobj path))))
+			 (function-envs funobj))))
+	     #+ignore
+	     (if (member funobj path)
+		 nil
+		 (let* ((memo (assoc funobj memos))
+			(x (cdr (or memo
+				    (car (push (cons funobj
+						     (when (slot-boundp funobj 'function-envs)
+						       (some (lambda (function-env-spec)
+							       (or (not (slot-boundp (cdr function-env-spec) 'extended-code)) ; Don't know yet, assume yes.
+								   (code-search (extended-code (cdr function-env-spec))
+										binding
+										load store call
+										(cons funobj path))))
+							     (function-envs funobj))))
+					       memos))))))
+		   (warn "search ~S ~S: ~S" funobj binding x)
+		   x)))
+	   (code-search (code binding load store call path)
 	     (dolist (instruction code)
 	       (when (consp instruction)
 		 (let ((x (or (when load
@@ -3183,7 +3204,9 @@ the sub-program options (&optional label) as secondary value."
 			      (case (car instruction)
 				(:local-function-init
 				 (search-funobj (function-binding-funobj (second instruction))
-						binding load store call))
+						binding
+						load store call
+						path))
 				(:load-lambda
 				 (or (when load
 				       (binding-eql binding (second instruction)))
@@ -3193,16 +3216,22 @@ the sub-program options (&optional label) as secondary value."
 						  (typep allocation 'with-dynamic-extent-scope-env))
 					 (binding-eql binding (base-binding allocation))))
 				     (search-funobj (function-binding-funobj (second instruction))
-						    binding load store call)))
+						    binding
+						    load store call
+						    path)))
 				(:call-lexical
 				 (or (when call
 				       (binding-eql binding (second instruction)))
 				     (search-funobj (function-binding-funobj (second instruction))
-						    binding load store call))))
+						    binding
+						    load store call
+						    path))))
 			      (code-search (instruction-sub-program instruction)
-					   binding load store call))))
+					   binding
+					   load store call
+					   path))))
 		   (when x (return t)))))))
-    (code-search code binding load store call)))
+    (code-search code binding load store call nil)))
 
 (defun bindingp (x)
   (typep x 'binding))
