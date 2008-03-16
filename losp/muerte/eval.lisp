@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.19 2008-03-15 20:57:39 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.20 2008-03-16 22:28:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -92,9 +92,10 @@
 	  (setf (eval-setf form env))
 	  ((defvar) (eval-defvar form env))
 	  (let (eval-let (cadr form) (cddr form) env))
-	  (time (eval-time (cadr form) env))
 	  ((defun) (eval-defun (cadr form) (caddr form) (cdddr form) env))
 	  ((lambda) (eval-function form env)) ; the lambda macro..
+	  ((multiple-value-bind)
+	   (eval-m-v-bind form env))
 	  ((multiple-value-prog1)
 	   (multiple-value-prog1 (eval-form (cadr form) env)
 	     (eval-progn (cddr form) env)))
@@ -139,18 +140,6 @@
 		     (apply f a0 a1 evaluated-args)))
 		 f env a0 a1 form))))))
 
-(defun eval-time (form env)
-  "Supposed to be the time macro."
-  (cond
-   ((cpu-featurep :tsc)
-    (time (eval-form form env)))
-   (t (let ((start-mem (malloc-cons-pointer)))
-	(multiple-value-prog1
-	    (eval-form form env)
-	  (let ((clumps (- (malloc-cons-pointer) start-mem)))
-	    (format t ";; Space used: ~D clumps = ~/muerte:pprint-clumps/.~%"
-		    clumps clumps)))))))
-    
 (defun parse-declarations-and-body (forms)
   "From the list of FORMS, return first the list of non-declaration forms, ~
 second the list of declaration-specifiers."
@@ -321,6 +310,15 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 	  (eval-progn body local-env)
 	(progv special-vars special-values
 	  (eval-progn body local-env))))))
+
+(defun eval-m-v-bind (form env)
+  (destructuring-bind (variables values-form &body body)
+      (cdr form)
+    (let ((values (multiple-value-list (eval-form values-form env))))
+      (dolist (variable variables)
+	(push (cons variable (pop values))
+	      env))
+      (eval-progn body env))))
 
 (defun eval-function (function-name env)
   (etypecase function-name

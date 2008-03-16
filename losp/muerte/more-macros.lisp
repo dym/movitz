@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.40 2008-03-15 20:58:06 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.41 2008-03-16 22:28:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -255,13 +255,13 @@
 		      (push supplied-var bindings))
 		    (push (list key-var
 				`(let ((x (d-bind-lookup-key ',key-name ,var)))
-				   ,@(when supplied-var
-					   `((setf ,supplied-var (if x t nil))))
+ 				   ,@(when supplied-var
+ 					   `((setf ,supplied-var (if x t nil))))
 				   ,(if (not init-form)
 					'(car x)
-					(if x
-					    (car x)
-					    ,init-form))))
+					`(if x
+					     (car x)
+					     ,init-form))))
 			  bindings)
 		    (gen-keyvars var sub-lambda-list (cons key-name keys)))))))
 	(gen-lambda-list (caar bindings)
@@ -300,20 +300,30 @@
   "Each clause is (<name> <definition>). Execute <body> with alternative
 fdefinitions for each <name>. Note that this scheme does not work well with
 respect to multiple threads."
-  (let ((tmp-name-def (loop for (name def) in clauses
-			  collect (list (gensym) name def))))
-    `(let (,@(loop for (tmp name) in tmp-name-def collect `(,tmp (fdefinition ',name))))
+  (let ((tmp-name-def (mapcar (lambda (clause)
+				(destructuring-bind (name def)
+				    clause
+				  (list (gensym) name def)))
+			      clauses)))
+    `(let (,@(mapcar (lambda (tnd)
+		       `(,(car tnd) (fdefinition ',(cadr tnd))))
+		     tmp-name-def))
        (macrolet ((previous-fdefinition (&whole form name)
 		    (case name
-		      ,@(loop for (tmp name) in tmp-name-def
-			    collect `(,name ',tmp))
+		      ,@(mapcar (lambda (tnd)
+				`(,(car tnd) ',(cadr tnd)))
+			      tmp-name-def)
 		      (t form))))
 	 (unwind-protect
-	     (progn (setf ,@(loop for (nil name def) in tmp-name-def
-				append `((fdefinition ',name) ,def)))
-		    ,@body)
-	   (setf ,@(loop for (tmp name) in tmp-name-def
-		       append `((fdefinition ',name) ,tmp))))))))
+	      (progn (setf ,@(mapcan (lambda (tnd)
+				       (list `(fdefinition ',(cadr tnd))
+					     (caddr tnd)))
+				     tmp-name-def))
+		     ,@body)
+	   (setf ,@(mapcan (lambda (tnd)
+			     (list `(fdefinition ',(cadr tnd))
+				   (car tnd)))
+			   tmp-name-def)))))))
 
 (defmacro eof-or-lose (stream eof-errorp eof-value)
   `(if ,eof-errorp
@@ -336,12 +346,14 @@ respect to multiple threads."
 	     ,@forms))))))
 
 (defmacro handler-case (expression &rest clauses)
-  (multiple-value-bind (normal-clauses no-error-clauses)
-      (loop for clause in clauses
-	  if (eq :no-error (car clause))
-	  collect clause into no-error-clauses
-	  else collect clause into normal-clauses
-	  finally (return (values normal-clauses no-error-clauses)))
+  (let ((normal-clauses (mapcan (lambda (clause)
+				  (when (not (eq :no-error (car clause)))
+				    (list clause)))
+				clauses))
+	(no-error-clauses (mapcan (lambda (clause)
+				    (when (eq :no-error (car clause))
+				      (list clause)))
+				  clauses)))
     (case (length no-error-clauses)
       (0 (let ((block-name (gensym "handler-case-block-"))
 	       (var-name (gensym "handler-case-var-"))
@@ -383,8 +395,11 @@ respect to multiple threads."
   (let ((instance-variable (gensym "with-accessors-instance-")))
     `(let ((,instance-variable ,instance-form))
        (declare (ignorable ,instance-variable))
-       (symbol-macrolet ,(loop for (variable-name accessor-name) in slot-entries
-			     collecting `(,variable-name (,accessor-name ,instance-variable)))
+       (symbol-macrolet ,(mapcar (lambda (slot-entry)
+				   (destructuring-bind (variable-name accessor-name)
+				       slot-entry
+				     `(,variable-name (,accessor-name ,instance-variable))))
+				 slot-entries)
 	 ,@declarations-and-forms))))
 
 (defmacro with-slots (slot-entries instance-form &body declarations-and-forms)
@@ -525,10 +540,8 @@ respect to multiple threads."
 (define-unimplemented-macro with-open-file)
 (define-unimplemented-macro restart-case)
 
-(defmacro load (filespec &key verbose print if-does-not-exist external-format)
+(defmacro/cross-compilation load (filespec &key verbose print if-does-not-exist external-format)
   "hm..."
-  (assert (movitz:movitz-constantp filespec) (filespec)
-    "Can't load a non-constant filename: ~S" filespec)
   (warn "load-compile: ~S" filespec)
   `(funcall ',(movitz:movitz-compile-file (format nil "losp/ansi-tests/~A" filespec))))
 
