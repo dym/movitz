@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.73 2008-03-17 17:24:45 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.74 2008-03-17 23:24:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -203,6 +203,42 @@
       `(return-from nil ,result-form)
     `(return-from nil)))
 
+(defmacro do (var-specs (end-test-form &rest result-forms) &body declarations-and-body)
+  (flet ((var-spec-let-spec (var-spec)
+	   (cond
+	     ((symbolp var-spec)
+	      var-spec)
+	     ((cddr var-spec)
+	      (subseq var-spec 0 2))
+	     (t var-spec)))
+	 (var-spec-var (spec)
+	   (if (symbolp spec) spec (car spec)))
+	 (var-spec-step-form (var-spec)
+	   (and (listp var-spec)
+		(= 3 (list-length var-spec))
+		(or (third var-spec)
+		    '(quote nil)))))
+    (multiple-value-bind (body declarations)
+	(parse-declarations-and-body declarations-and-body)
+      (let* ((loop-tag (gensym "do-loop"))
+	     (start-tag (gensym "do-start")))
+	`(block nil
+	   (let ,(mapcar #'var-spec-let-spec var-specs)
+	     (declare ,@declarations)
+	     (tagbody
+		(go ,start-tag)
+		,loop-tag
+		,@body
+		(psetq ,@(mapcan (lambda (var-spec)
+				   (let ((step-form (var-spec-step-form var-spec)))
+				     (when step-form
+				       (list (var-spec-var var-spec)
+					     step-form))))
+				 var-specs))
+		,start-tag
+		(unless ,end-test-form (go ,loop-tag)))
+	     ,@result-forms))))))
+
 (define-compiler-macro do (var-specs (end-test-form &rest result-forms) &body declarations-and-body)
   (flet ((var-spec-let-spec (var-spec)
 	   (cond
@@ -219,16 +255,16 @@
 		(or (third var-spec)
 		    '(quote nil)))))
     (multiple-value-bind (body declarations)
-	(movitz::parse-declarations-and-body declarations-and-body 'cl:declare)
+	(parse-declarations-and-body declarations-and-body 'cl:declare)
       (let* ((loop-tag (gensym "do-loop"))
 	     (start-tag (gensym "do-start")))
 	`(block nil
 	   (let ,(mapcar #'var-spec-let-spec var-specs)
 	     (declare ,@declarations (loop-tag ,loop-tag))
 	     (tagbody
-	       ,(unless (and (movitz:movitz-constantp end-test-form)
-			     (not (movitz::movitz-eval end-test-form)))
-		  `(go ,start-tag))
+		,(unless (and (movitz:movitz-constantp end-test-form)
+			      (not (movitz::movitz-eval end-test-form)))
+			 `(go ,start-tag))
 	       ,loop-tag
 	       ,@body
 	       (psetq ,@(loop for var-spec in var-specs
