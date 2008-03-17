@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.20 2008-03-16 22:28:12 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.21 2008-03-17 23:25:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -72,7 +72,7 @@
   (let ((macro-function (macro-function (car form))))
     (if macro-function
 	(eval-form (funcall macro-function form nil)
-		   nil)
+		   env)
 	(case (car form)
 	  (quote (cadr form))
 	  (function (eval-function (second form) env))
