@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.22 2007/03/21 20:17:48 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.23 2008-03-17 23:25:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -311,6 +311,18 @@
       (push (funcall function (car p1) (car p2) (car p3))
 	    result)))
    (t (error "mapcar not fully implemented."))))
+
+
+(defun mapcan (function first-list &rest more-lists)
+  (declare (dynamic-extent more-lists))
+  (cond
+   ((null more-lists)
+    ;; 1 list
+    (do ((result nil)
+	 (p first-list (cdr p)))
+	((endp p) result)
+      (setf result (nconc result (funcall function (car p))))))
+   (t (error "~S not implemented." 'mapcan))))
 
 (defun mapc (function first-list &rest more-lists)
   (numargs-case
