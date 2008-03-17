@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:41:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: common-lisp.lisp,v 1.16 2008-03-16 22:28:09 ffjeld Exp $
+;;;; $Id: common-lisp.lisp,v 1.17 2008-03-17 17:24:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,8 +20,9 @@
 (require :muerte/arithmetic-macros)
 
 (require :muerte/defmacro-runtime)
-;; (include :muerte/basic-macros)
+(include :muerte/basic-macros)
 (include :muerte/more-macros)
+(include :muerte/arithmetic-macros)
 
 (require :muerte/memref)
 (require :muerte/integers)
