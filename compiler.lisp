@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.196 2008-03-16 22:27:54 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.197 2008-03-17 23:23:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -613,14 +613,19 @@ of all function-bindings seen."
     (labels ((process-binding (funobj binding usages)
 	       (cond
                  ((typep binding 'constant-object-binding))
+		 ((and (typep binding 'function-binding)
+		       (equal usages '(:call)))
+		  (pushnew :call (getf (sub-function-binding-usage (function-binding-parent binding))
+				       binding))
+		  (pushnew :call (getf function-binding-usage binding)))
                  ((not (eq funobj (binding-funobj binding)))
                   (let ((borrowing-binding
                          (or (find binding (borrowed-bindings funobj)
-                              :key #'borrowed-binding-target)
+				   :key #'borrowed-binding-target)
                              (car (push (movitz-env-add-binding (funobj-env funobj)
                                                                 (make-instance 'borrowed-binding
-                                                                 :name (binding-name binding)
-                                                                 :target-binding binding))
+									       :name (binding-name binding)
+									       :target-binding binding))
                                         (borrowed-bindings funobj))))))
                     ;; We don't want to borrow a forwarding-binding..
                     (when (typep (borrowed-binding-target borrowing-binding)
@@ -2521,7 +2526,7 @@ the sub-program options (&optional label) as secondary value."
 		    (incf (getf constants funobj 0))))
 		 (closure-binding)
 		 (function-binding
-		  (error "No function-binding now..: ~S" binding))))
+		  (warn "No function-binding now..: ~S" binding))))
 	     (process (sub-code)
 	       "This local function side-effects the variables jumper-sets and constants."
 	       (loop for instruction in sub-code
@@ -3785,8 +3790,9 @@ loading borrowed bindings."
 		     (mapcar #'movitz-funobj-extent
 			     (mapcar #'binding-funobj 
 				     (getf (binding-lending lended-binding) :lended-to))))
-	       (append (make-load-lexical lended-binding :eax funobj t frame-map)
-		       (unless (or (typep lended-binding 'borrowed-binding)
+	       (when (typep lended-binding 'funobj-binding)
+		 (break "Lending ~S ?" lended-binding))
+	       (append (unless (or (typep lended-binding 'borrowed-binding)
 				   (getf (binding-lending lended-binding) :dynamic-extent-p)
 				   (every (lambda (borrower)
 					    (member (movitz-funobj-extent (binding-funobj borrower))
