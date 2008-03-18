@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.21 2008-03-17 23:25:26 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.22 2008-03-18 16:24:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -45,6 +45,7 @@
 ;; named by integers.
 (defconstant +eval-binding-type-flet+ 0)
 (defconstant +eval-binding-type-go-tag+ 1)
+(defconstant +eval-binding-type-block+ 2)
 
 (defun eval-symbol (form env)
   "3.1.2.1.1 Symbols as Forms"
@@ -76,10 +77,6 @@
 	(case (car form)
 	  (quote (cadr form))
 	  (function (eval-function (second form) env))
-	  (when (when (eval-form (second form) env)
-		  (eval-progn (cddr form) env)))
-	  (unless (unless (eval-form (second form) env)
-		    (eval-progn (cddr form) env)))
 	  (if (if (eval-form (second form) env)
 		  (eval-form (third form) env)
 		  (eval-form (fourth form) env)))
@@ -87,6 +84,18 @@
 	  (prog1 (prog1 (eval-form (cadr form) env)
 		   (eval-progn (cddr form) env)))
 	  (tagbody (eval-tagbody form env))
+	  ((block)
+	   (catch form
+	     (eval-progn (cddr form)
+			 (cons (list* +eval-binding-type-block+
+				      (cadr form)
+				      form)
+			       env))))
+	  ((return-from)
+	   (let ((b (op-env-binding +eval-binding-type-block+ env  (cadr form))))
+	     (unless b (error "Block ~S is not visible." (cadr form)))
+	     (throw (cdr b)
+	       (eval-form (caddr form) env))))
 	  (go (eval-go form env))
 	  (setq (eval-setq form env))
 	  (setf (eval-setf form env))
@@ -111,7 +120,8 @@
 	   (throw (eval-form (second form) env)
 	     (eval-form (third form) env)))
 	  ((unwind-protect)
-	   (unwind-protect (eval-form (second form) env)
+	   (unwind-protect
+		(eval-form (second form) env)
 	     (eval-progn (cddr form) env)))
 	  ((macrolet symbol-macrolet)
 	   (error "Special operator ~S not implemented in ~S." (car form) 'eval))
