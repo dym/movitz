@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.23 2008-03-17 23:25:05 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.24 2008-03-18 16:24:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -284,45 +284,73 @@
       (return (values (car p) (cadr p) p)))))
 
 (defun mapcar (function first-list &rest more-lists)
-  (declare (dynamic-extent more-lists))
-  (cond
-   ((null more-lists)
-    ;; 1 list
-    (do ((result nil)
-	 (p first-list (cdr p)))
-	((endp p) (nreverse result))
-      (push (funcall function (car p))
-	    result)))
-   ((null (cdr more-lists))
-    ;; two lists
-    (do ((result nil)
-	 (p1 first-list (cdr p1))
-	 (p2 (car more-lists) (cdr p2)))
-	((or (endp p1) (endp p2)) (nreverse result))
-      (push (funcall function (car p1) (car p2))
-	    result)))
-   ((null (cddr more-lists))
-    ;; three lists
-    (do ((result nil)
-	 (p1 first-list (cdr p1))
-	 (p2 (car more-lists) (cdr p2))
-	 (p3 (cadr more-lists) (cdr p2)))
-	((or (endp p1) (endp p2) (endp p3)) (nreverse result))
-      (push (funcall function (car p1) (car p2) (car p3))
-	    result)))
-   (t (error "mapcar not fully implemented."))))
+  (numargs-case
+   (2 (function first-list)
+      (do ((result nil)
+	   (p first-list (cdr p)))
+	  ((endp p)
+	   (nreverse result))
+	(push (funcall function (car p))
+	      result)))
+   (3 (function first-list second-list)
+      (do ((result nil)
+	   (p1 first-list (cdr p1))
+	   (p2 second-list (cdr p2)))
+	  ((or (endp p1) (endp p2))
+	   (nreverse result))
+	(push (funcall function (car p1) (car p2))
+	      result)))
+   (t (function first-list &rest more-lists)
+      (declare (dynamic-extent more-lists))
+      (do ((result nil))
+	  ((or (endp first-list)
+	       (some #'endp more-lists))
+	   (nreverse result))
+	(push (apply function (pop first-list) (mapcar #'car more-lists))
+	      result)
+	(setf more-lists
+	      (map-into more-lists #'cdr more-lists))))))
 
 
 (defun mapcan (function first-list &rest more-lists)
-  (declare (dynamic-extent more-lists))
-  (cond
-   ((null more-lists)
-    ;; 1 list
-    (do ((result nil)
-	 (p first-list (cdr p)))
-	((endp p) result)
-      (setf result (nconc result (funcall function (car p))))))
-   (t (error "~S not implemented." 'mapcan))))
+  (numargs-case
+   (2 (function first-list)
+      (do ((result nil)
+	   (tail nil)
+	   (p first-list (cdr p)))
+	  ((endp p) result)
+	(let ((m (funcall function (car p))))
+	  (if tail
+	      (setf (cdr tail) m)
+	      (setf result m))
+	  (setf tail (last m)))))
+   (3 (function first-list second-list)
+      (do ((result nil)
+	   (tail nil)
+	   (p first-list (cdr p))
+	   (q second-list (cdr q)))
+	  ((or (endp p)
+	       (endp q))
+	   result)
+	(let ((m (funcall function (car p) (car q))))
+	  (if tail
+	      (setf (cdr tail) m)
+	      (setf result m))
+	  (setf tail (last m)))))
+   (t (function first-list &rest more-lists)
+      (declare (dynamic-extent more-lists))
+      (do ((result nil)
+	   (tail nil))
+	  ((or (endp first-list)
+	       (some #'endp more-lists))
+	   result)
+	(let ((m (apply function (pop first-list) (mapcar #'car more-lists))))
+	  (if tail
+	      (setf (cdr tail) m)
+	      (setf result m))
+	  (setf tail (last m)))
+	(setf more-lists
+	      (map-into more-lists #'cdr more-lists))))))
 
 (defun mapc (function first-list &rest more-lists)
   (numargs-case
