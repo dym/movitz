@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.22 2008-03-18 16:24:30 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.23 2008-03-19 12:37:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -25,11 +25,15 @@
 (defun eval-form (form env)
   "3.1.2.1 Form Evaluation."
   (check-stack-limit)
-  (typecase form
-    (null nil)
-    (symbol (eval-symbol form env))
-    (cons (eval-cons form env))
-    (t form)))
+  (multiple-value-bind (macro-expansion expanded-p)
+      (macroexpand form env)
+    (if expanded-p
+	(eval-form macro-expansion env)
+	(typecase form
+	  (null nil)
+	  (symbol (eval-symbol form env))
+	  (cons (eval-cons form env))
+	  (t form)))))
 
 (defun env-binding (env var)
   ;; (warn "env: ~S in ~S" var env)
@@ -70,62 +74,58 @@
 
 (defun eval-cons (form env)
   "3.1.2.1.2 Conses as Forms"
-  (let ((macro-function (macro-function (car form))))
-    (if macro-function
-	(eval-form (funcall macro-function form nil)
-		   env)
-	(case (car form)
-	  (quote (cadr form))
-	  (function (eval-function (second form) env))
-	  (if (if (eval-form (second form) env)
-		  (eval-form (third form) env)
-		  (eval-form (fourth form) env)))
-	  (progn (eval-progn (cdr form) env))
-	  (prog1 (prog1 (eval-form (cadr form) env)
-		   (eval-progn (cddr form) env)))
-	  (tagbody (eval-tagbody form env))
-	  ((block)
-	   (catch form
-	     (eval-progn (cddr form)
-			 (cons (list* +eval-binding-type-block+
-				      (cadr form)
-				      form)
-			       env))))
-	  ((return-from)
-	   (let ((b (op-env-binding +eval-binding-type-block+ env  (cadr form))))
-	     (unless b (error "Block ~S is not visible." (cadr form)))
-	     (throw (cdr b)
-	       (eval-form (caddr form) env))))
-	  (go (eval-go form env))
-	  (setq (eval-setq form env))
-	  (setf (eval-setf form env))
-	  ((defvar) (eval-defvar form env))
-	  (let (eval-let (cadr form) (cddr form) env))
-	  ((defun) (eval-defun (cadr form) (caddr form) (cdddr form) env))
-	  ((lambda) (eval-function form env)) ; the lambda macro..
-	  ((multiple-value-bind)
-	   (eval-m-v-bind form env))
-	  ((multiple-value-prog1)
-	   (multiple-value-prog1 (eval-form (cadr form) env)
+  (case (car form)
+    (quote (cadr form))
+    (function (eval-function (second form) env))
+    (if (if (eval-form (second form) env)
+	    (eval-form (third form) env)
+	    (eval-form (fourth form) env)))
+    (progn (eval-progn (cdr form) env))
+    (prog1 (prog1 (eval-form (cadr form) env)
 	     (eval-progn (cddr form) env)))
-	  ((destructuring-bind)
-	   (eval-progn (cdddr form)
-		       (make-destructuring-env (cadr form)
-					       (eval-form (caddr form) env)
-					       env)))
-	  ((catch)
-	   (catch (eval-form (second form) env)
-	     (eval-progn (cddr form) env)))
-	  ((throw)
-	   (throw (eval-form (second form) env)
-	     (eval-form (third form) env)))
-	  ((unwind-protect)
-	   (unwind-protect
-		(eval-form (second form) env)
-	     (eval-progn (cddr form) env)))
-	  ((macrolet symbol-macrolet)
-	   (error "Special operator ~S not implemented in ~S." (car form) 'eval))
-	  (t (eval-funcall form env))))))
+    (tagbody (eval-tagbody form env))
+    ((block)
+     (catch form
+       (eval-progn (cddr form)
+		   (cons (list* +eval-binding-type-block+
+				(cadr form)
+				form)
+			 env))))
+    ((return-from)
+     (let ((b (op-env-binding +eval-binding-type-block+ env  (cadr form))))
+       (unless b (error "Block ~S is not visible." (cadr form)))
+       (throw (cdr b)
+	 (eval-form (caddr form) env))))
+    (go (eval-go form env))
+    (setq (eval-setq form env))
+    (setf (eval-setf form env))
+    ((defvar) (eval-defvar form env))
+    (let (eval-let (cadr form) (cddr form) env))
+    ((defun) (eval-defun (cadr form) (caddr form) (cdddr form) env))
+    ((lambda) (eval-function form env)) ; the lambda macro..
+    ((multiple-value-bind)
+     (eval-m-v-bind form env))
+    ((multiple-value-prog1)
+     (multiple-value-prog1 (eval-form (cadr form) env)
+       (eval-progn (cddr form) env)))
+    ((destructuring-bind)
+     (eval-progn (cdddr form)
+		 (make-destructuring-env (cadr form)
+					 (eval-form (caddr form) env)
+					 env)))
+    ((catch)
+     (catch (eval-form (second form) env)
+       (eval-progn (cddr form) env)))
+    ((throw)
+     (throw (eval-form (second form) env)
+       (eval-form (third form) env)))
+    ((unwind-protect)
+     (unwind-protect
+	  (eval-form (second form) env)
+       (eval-progn (cddr form) env)))
+    ((macrolet symbol-macrolet)
+     (error "Special operator ~S not implemented in ~S." (car form) 'eval))
+    (t (eval-funcall form env))))
 
 (defun eval-progn (forms env)
   (do ((p forms (cdr p)))
@@ -453,6 +453,24 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 	      (setf (symbol-function name) function))
 	    t nil)))
 
+(defun macroexpand-1 (form &optional env)
+  (if (atom form)
+      (values form nil)
+      (let ((macro-function (macro-function (car form))))
+	(if macro-function
+	    (values (funcall *macroexpand-hook* macro-function form env)
+		    t)
+	    (values form
+		    nil)))))
+
+(defun macroexpand (form &optional env)
+  (do ((expanded-at-all-p nil)) (nil)
+    (multiple-value-bind (expansion expanded-p)
+	(macroexpand-1 form env)
+      (when (not expanded-p)
+	(return (values expansion expanded-at-all-p)))
+      (setf form expansion
+	    expanded-at-all-p t))))
 
 (defun proclaim (declaration)
   ;; What do do?

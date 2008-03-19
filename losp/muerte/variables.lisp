@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov  5 21:53:34 2003
 ;;;;                
-;;;; $Id: variables.lisp,v 1.10 2006/04/10 11:58:27 ffjeld Exp $
+;;;; $Id: variables.lisp,v 1.11 2008-03-19 12:37:29 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -37,6 +37,7 @@
 (defvar *read-base* 10)
 (defvar *package* nil)
 
+(defvar *macroexpand-hook* 'funcall)
 (defparameter *debugger-hook* nil)
 (defvar *active-condition-handlers* nil)
 (defvar *multiboot-data* nil)
