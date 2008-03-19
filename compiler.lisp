@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.197 2008-03-17 23:23:30 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.198 2008-03-19 15:06:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -611,13 +611,14 @@ of all function-bindings seen."
   (check-type toplevel-funobj movitz-funobj)
   (let ((function-binding-usage ()))
     (labels ((process-binding (funobj binding usages)
+	       (when (typep binding 'function-binding)
+		 (dolist (usage usages)
+		   (pushnew usage
+			    (getf (sub-function-binding-usage (function-binding-parent binding))
+				  binding))
+		   (pushnew usage (getf function-binding-usage binding))))
 	       (cond
                  ((typep binding 'constant-object-binding))
-		 ((and (typep binding 'function-binding)
-		       (equal usages '(:call)))
-		  (pushnew :call (getf (sub-function-binding-usage (function-binding-parent binding))
-				       binding))
-		  (pushnew :call (getf function-binding-usage binding)))
                  ((not (eq funobj (binding-funobj binding)))
                   (let ((borrowing-binding
                          (or (find binding (borrowed-bindings funobj)
@@ -643,17 +644,7 @@ of all function-bindings seen."
                  (t ; Binding is local to this funobj
                   (typecase binding
                     (forwarding-binding
-                     (process-binding funobj (forwarding-binding-target binding) usages)
-                     #+ignore
-                     (setf (forwarding-binding-target binding)
-                           (process-binding funobj (forwarding-binding-target binding) usages)))
-                    (function-binding
-                     (dolist (usage usages)
-                       (pushnew usage
-                                (getf (sub-function-binding-usage (function-binding-parent binding))
-                                      binding))
-                       (pushnew usage (getf function-binding-usage binding)))
-                     binding)
+                     (process-binding funobj (forwarding-binding-target binding) usages))
                     (t binding)))))
 	     (resolve-sub-funobj (funobj sub-funobj)
 	       (dolist (binding-we-lend (borrowed-bindings (resolve-funobj-borrowing sub-funobj)))
@@ -760,6 +751,22 @@ of all function-bindings seen."
 	      (t (change-class function-binding 'closure-binding)
 		 (setf (movitz-funobj-extent sub-funobj)
 		   :indefinite-extent))))))
+  ;; Each time we change a function-binding to funobj-binding, that binding
+  ;; no longer needs to be borrowed (because it doesn't share lexical bindings),
+  ;; and therefore should be removed from any borrowed-binding list, which in
+  ;; turn can cause the borrowing funobj to become a funobj-binding, and so on.
+  (loop for modified-p = nil
+     do (loop for function-binding in function-binding-usage by #'cddr
+	   do (let ((sub-funobj (function-binding-funobj function-binding)))
+		(when (not (null (borrowed-bindings sub-funobj)))
+		  (check-type function-binding closure-binding)
+		  (when (null (setf (borrowed-bindings sub-funobj)
+				    (delete-if (lambda (b)
+						 (when (typep (borrowed-binding-target b) 'funobj-binding)
+						   (setf modified-p t)))
+					       (borrowed-bindings sub-funobj))))
+		    (change-class function-binding 'funobj-binding)))))
+     while modified-p)
   (loop for function-binding in function-binding-usage by #'cddr
       do (finalize-funobj (function-binding-funobj function-binding)))
   (finalize-funobj toplevel-funobj))
@@ -2526,7 +2533,7 @@ the sub-program options (&optional label) as secondary value."
 		    (incf (getf constants funobj 0))))
 		 (closure-binding)
 		 (function-binding
-		  (warn "No function-binding now..: ~S" binding))))
+		  (error "No function-binding now..: ~S" binding))))
 	     (process (sub-code)
 	       "This local function side-effects the variables jumper-sets and constants."
 	       (loop for instruction in sub-code
@@ -3791,8 +3798,9 @@ loading borrowed bindings."
 			     (mapcar #'binding-funobj 
 				     (getf (binding-lending lended-binding) :lended-to))))
 	       (when (typep lended-binding 'funobj-binding)
-		 (break "Lending ~S ?" lended-binding))
-	       (append (unless (or (typep lended-binding 'borrowed-binding)
+		 (break "Lending ~S from ~S: ~S" lended-binding funobj (binding-lending lended-binding)))
+	       (append (make-load-lexical lended-binding :eax funobj t frame-map)
+		       (unless (or (typep lended-binding 'borrowed-binding)
 				   (getf (binding-lending lended-binding) :dynamic-extent-p)
 				   (every (lambda (borrower)
 					    (member (movitz-funobj-extent (binding-funobj borrower))
@@ -3811,7 +3819,7 @@ loading borrowed bindings."
 		 binding
 	       (or (find binding (borrowed-bindings funobj)
 			 :key #'borrowed-binding-target)
-		   (error "Can't install non-local binding ~W." binding)))))
+		   (error "Can't install non-local binding ~S for ~S." binding funobj)))))
     (labels ((fix-edi-offset (tree)
 	       (cond
 		((atom tree)
@@ -3896,14 +3904,15 @@ loading borrowed bindings."
 				    no-alignment-needed)
 				  (make-load-constant sub-funobj :eax funobj frame-map)
 				  )))
-		       (t (assert (not (null (borrowed-bindings sub-funobj))))
+		       (t (assert (not (null (borrowed-bindings sub-funobj))) ()
+				  "Binding ~S with ~S borrows no nothing, which makes no sense." function-binding sub-funobj)
 			  (append (make-load-constant sub-funobj :eax funobj frame-map)
 				  `((:movl (:edi ,(global-constant-offset 'copy-funobj)) :esi)
 				    (:call (:esi ,(bt:slot-offset 'movitz-funobj 'code-vector%1op)))
 				    (:movl :eax :edx))
 				  (make-store-lexical function-binding :eax nil funobj frame-map)
 				  (loop for bb in (borrowed-bindings sub-funobj)
-				      append (make-lend-lexical bb :edx nil))))))
+				     append (make-lend-lexical bb :edx nil))))))
 		    funobj frame-map)))
 		(:load-lambda
 		 (destructuring-bind (function-binding register capture-env)
@@ -3912,7 +3921,7 @@ loading borrowed bindings."
 		   (finalize-code
 		    (let* ((sub-funobj (function-binding-funobj function-binding))
 			   (lend-code (loop for bb in (borrowed-bindings sub-funobj)
-					  appending
+					 appending
 					    (make-lend-lexical bb :edx nil))))
 		      (cond
 		       ((null lend-code)
