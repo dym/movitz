@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.23 2008-03-19 12:37:22 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.24 2008-03-19 15:00:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -123,7 +123,7 @@
      (unwind-protect
 	  (eval-form (second form) env)
        (eval-progn (cddr form) env)))
-    ((macrolet symbol-macrolet)
+    ((macrolet symbol-macrolet let*)
      (error "Special operator ~S not implemented in ~S." (car form) 'eval))
     (t (eval-funcall form env))))
 
