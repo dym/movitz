@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.24 2008-03-18 16:24:49 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.25 2008-03-20 22:21:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -200,10 +200,12 @@
 (defun copy-list (list)
   (if (null list)
       nil
-    (let ((new-list (cons (pop list) list)))
-      (do ((new-tail new-list (cdr new-tail)))
-	  ((atom list) new-list)
-	(setf (cdr new-tail) (cons (pop list) list))))))
+    (let* ((new-list (cons (pop list) nil))
+	   (new-tail new-list))
+      (do () ((atom list) new-list)
+	(setf new-tail
+	      (setf (cdr new-tail)
+		    (cons (pop list) nil)))))))
 
 (defun list (&rest objects)
   (numargs-case
@@ -390,6 +392,33 @@
 		(setf (car p) x)))))
 	first-list))))
 
+(defun maplist (function first-list &rest more-lists)
+  (numargs-case
+   (2 (function first-list)
+      (do ((result nil)
+	   (p first-list (cdr p)))
+	  ((endp p)
+	   (nreverse result))
+	(push (funcall function p)
+	      result)))
+   (3 (function first-list second-list)
+      (do ((result nil)
+	   (p1 first-list (cdr p1))
+	   (p2 second-list (cdr p2)))
+	  ((or (endp p1) (endp p2))
+	   (nreverse result))
+	(push (funcall function p1 p2)
+	      result)))
+   (t (function first-list &rest more-lists)
+      (declare (dynamic-extent more-lists))
+      (do ((result nil))
+	  ((or (endp first-list)
+	       (some #'endp more-lists))
+	   (nreverse result))
+	(push (apply function first-list more-lists)
+	      result)
+	(setf first-list (cdr first-list)
+	      more-lists (map-into more-lists #'cdr more-lists))))))
 
 (defun nbutlast (list &optional (n 1))
   (let ((start-right (nthcdr n list)))
