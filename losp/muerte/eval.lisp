@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.24 2008-03-19 15:00:31 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.25 2008-03-20 22:49:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -101,6 +101,9 @@
     (setf (eval-setf form env))
     ((defvar) (eval-defvar form env))
     (let (eval-let (cadr form) (cddr form) env))
+    (let* (multiple-value-bind (body declarations)
+	      (parse-declarations-and-body (cddr form))
+	    (eval-let* (cadr form) declarations body env)))
     ((defun) (eval-defun (cadr form) (caddr form) (cdddr form) env))
     ((lambda) (eval-function form env)) ; the lambda macro..
     ((multiple-value-bind)
@@ -320,6 +323,30 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 	  (eval-progn body local-env)
 	(progv special-vars special-values
 	  (eval-progn body local-env))))))
+
+(defun eval-let* (var-specs declarations body env)
+  (if (null var-specs)
+      (eval-progn body env)
+      (multiple-value-bind (var init-form)
+	  (let ((var-spec (pop var-specs)))
+	    (if (atom var-spec)
+		(values var-spec nil)
+		(destructuring-bind (var init-form)
+		    var-spec
+		  (values var init-form))))
+	(if (or (symbol-special-variable-p var)
+		(declared-special-p var declarations))
+	    (progv (list var) (list (eval-form init-form env))
+	      (eval-let* var-specs
+			 declarations
+			 body
+			 env))
+	    (eval-let* var-specs
+		       declarations
+		       body
+		       (cons (cons var
+				   (eval-form init-form env))
+			     env))))))
 
 (defun eval-m-v-bind (form env)
   (destructuring-bind (variables values-form &body body)
