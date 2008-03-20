@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.117 2008-03-15 20:45:21 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.118 2008-03-20 22:24:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1201,6 +1201,8 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 					       (find-package :muerte.common-lisp))))
 	(setf (gethash "NIL" (funcall 'muerte:package-object-external-symbols movitz-cl-package))
 	  nil))
+      (ensure-package (symbol-name :common-lisp-user)
+		      (find-package :muerte.common-lisp-user))
       (loop for symbol being the hash-key of (image-oblist *image*)
 	  as lisp-package = (symbol-package symbol)
 	  as package-name = (and lisp-package
@@ -1668,6 +1670,17 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 				       (movitz-read (cdr expr)))))))
 	    (hash-table
 	     (make-movitz-hash-table expr))
+	    (pathname
+	     (make-instance 'movitz-struct
+			    :class (muerte::movitz-find-class 'muerte::pathname)
+			    :length 1
+			    :slot-values (list (movitz-read (namestring expr)))))
+	    (complex
+	     (make-instance 'movitz-struct
+			    :class (muerte::movitz-find-class 'muerte::complex)
+			    :length 2
+			    :slot-values (list (movitz-read (realpart expr))
+					       (movitz-read (imagpart expr)))))
 	    (ratio
 	     (make-instance 'movitz-ratio
 	       :value expr))
@@ -1687,7 +1700,10 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 			   slot-descriptions))
 		 movitz-object)))
 	    (float			; XXX
-	     (movitz-read (rationalize expr))))))))
+	     (movitz-read (rationalize expr)))
+	    (class
+	     (muerte::movitz-find-class (translate-program (class-name expr)
+							   :cl :muerte.cl))))))))
 
 ;;;
 
