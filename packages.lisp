@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.57 2008/02/25 23:34:46 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.58 2008-03-20 22:23:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1084,6 +1084,11 @@
 	   yes-or-no-p
 	   zerop))
 
+(defpackage muerte.common-lisp-user
+  (:nicknames muerte.cl-user)
+  (:use muerte.common-lisp))
+
+
 (defpackage muerte
   (:use muerte.mop muerte.common-lisp)
   (:import-from common-lisp cl:nil)
@@ -1100,6 +1105,8 @@
 	   #:newline
 	   #:check-the
 	   #:index
+	   
+	   #:defmacro/cross-compilation
 	   
 	   #:*print-safely*
 	   
