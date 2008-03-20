@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.55 2008-03-15 20:58:24 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.56 2008-03-20 22:22:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -697,6 +697,9 @@
 
 (deftype bit ()
   '(integer 0 1))
+
+(deftype float ()
+  'real)
 
 (defun type-of (x)
   (class-name (class-of x)))
