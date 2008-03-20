@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.74 2008-03-17 23:24:44 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.75 2008-03-20 22:50:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -275,14 +275,14 @@
 	       (unless ,end-test-form (go ,loop-tag)))
 	     ,@result-forms))))))
 
-(defmacro/cross-compilation do* (var-specs (end-test-form &rest result-forms) &body declarations-and-body)
+(defmacro do* (var-specs (end-test-form &rest result-forms) &body declarations-and-body)
   (flet ((var-spec-let-spec (var-spec)
 	   (cond
-	    ((symbolp var-spec)
-	     var-spec)
-	    ((cddr var-spec)
-	     (subseq var-spec 0 2))
-	    (t var-spec)))
+	     ((symbolp var-spec)
+	      var-spec)
+	     ((cddr var-spec)
+	      (subseq var-spec 0 2))
+	     (t var-spec)))
 	 (var-spec-var (var-spec)
 	   (if (symbolp var-spec) var-spec (car var-spec)))
 	 (var-spec-step-form (var-spec)
@@ -291,22 +291,24 @@
 		(or (third var-spec)
 		    '(quote nil)))))
     (multiple-value-bind (body declarations)
-	(movitz::parse-declarations-and-body declarations-and-body 'cl:declare)
+	(parse-declarations-and-body declarations-and-body)
       (let* ((loop-tag (gensym "do*-loop"))
 	     (start-tag (gensym "do*-start")))
 	`(block nil
 	   (let* ,(mapcar #'var-spec-let-spec var-specs)
 	     (declare ,@declarations)
 	     (tagbody
-	       (go ,start-tag)
-	       ,loop-tag
-	       ,@body
-	       (setq ,@(loop for var-spec in var-specs
-			   as step-form = (var-spec-step-form var-spec)
-			   when step-form
-			   append (list (var-spec-var var-spec) step-form)))
-	       ,start-tag
-	       (unless ,end-test-form (go ,loop-tag)))
+		(go ,start-tag)
+		,loop-tag
+		,@body
+		(setq ,@(mapcan (lambda (var-spec)
+				  (let ((step-form (var-spec-step-form var-spec)))
+				    (when step-form
+				      (list (var-spec-var var-spec)
+					    step-form))))
+				var-specs))
+		,start-tag
+		(unless ,end-test-form (go ,loop-tag)))
 	     ,@result-forms))))))
 
 (define-compiler-macro do* (var-specs (end-test-form &rest result-forms) &body declarations-and-body)
