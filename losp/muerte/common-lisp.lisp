@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:41:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: common-lisp.lisp,v 1.17 2008-03-17 17:24:52 ffjeld Exp $
+;;;; $Id: common-lisp.lisp,v 1.18 2008-03-20 22:21:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -44,6 +44,8 @@
 (require :muerte/run-time-context)
 (require :muerte/defstruct)
 (require :muerte/hash-tables)
+(require :muerte/pathnames)
+(require :muerte/complexes)
 (require :muerte/ratios)
 (require :muerte/packages)
 (require :muerte/format)
