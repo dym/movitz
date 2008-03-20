@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.60 2008-03-15 20:57:06 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.61 2008-03-20 22:24:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1216,6 +1216,9 @@ integer (native lisp) value."
 	(write-char #\space stream)
 	(write (aref (movitz-print (slot-value object 'slots)) 0)
 	       :stream stream))))
+  object)
+
+(defmethod update-movitz-object ((object movitz-std-instance) lisp-object)
   object)
 
 ;;;;
