@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov  5 21:53:34 2003
 ;;;;                
-;;;; $Id: variables.lisp,v 1.11 2008-03-19 12:37:29 ffjeld Exp $
+;;;; $Id: variables.lisp,v 1.12 2008-03-21 22:30:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -65,8 +65,8 @@
 (defvar long-float-negative-epsilon -1/1000)
 
 
-(defconstant call-arguments-limit #xffff0)
-(defconstant lambda-parameters-limit #x1000) ; ?
+(defconstant call-arguments-limit 512)
+(defconstant lambda-parameters-limit 512) ; ?
 
 (defvar *print-pprint-dispatch* nil)
 
