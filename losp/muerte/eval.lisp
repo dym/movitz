@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.25 2008-03-20 22:49:28 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.26 2008-03-21 00:06:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -39,24 +39,29 @@
   ;; (warn "env: ~S in ~S" var env)
   (find var env :key #'car))
 
-(defun op-env-binding (type env var)
+(defun op-env-binding (env var &rest types)
+  (declare (dynamic-extent types))
   (dolist (binding env)
-    (when (and (eq type (car binding))
-	       (eq var (cadr binding)))
-      (return (cdr binding)))))
+    (when (and (consp (cdr binding))
+	       (eq var (cadr binding))
+	       (or (null types)
+		   (member (car binding) types)))
+      (return binding))))
 
 ;; These are integers because regular (lexical) bindings are never
 ;; named by integers.
 (defconstant +eval-binding-type-flet+ 0)
 (defconstant +eval-binding-type-go-tag+ 1)
 (defconstant +eval-binding-type-block+ 2)
+(defconstant +eval-binding-type-macrolet+ 3)
 
 (defun eval-symbol (form env)
   "3.1.2.1.1 Symbols as Forms"
   (if (symbol-constant-variable-p form)
       (symbol-value form)
     (let ((binding (env-binding env form)))
-      (or (and binding (cdr binding))
+      (if binding
+	  (cdr binding)
 	  (symbol-value form)))))
 
 ;;;  block      let*                  return-from      
@@ -91,8 +96,20 @@
 				(cadr form)
 				form)
 			 env))))
+    ((macrolet)
+     (dolist (macrolet (cadr form))
+       (destructuring-bind (name lambda &body body)
+	   macrolet
+	 (check-type name symbol)
+	 (check-type lambda list)
+	 (push (list* +eval-binding-type-macrolet+
+		      name
+		      (cdr macrolet))
+	       env)))
+     (eval-progn (cddr form)
+		 env))
     ((return-from)
-     (let ((b (op-env-binding +eval-binding-type-block+ env  (cadr form))))
+     (let ((b (cdr (op-env-binding env (cadr form) +eval-binding-type-block+))))
        (unless b (error "Block ~S is not visible." (cadr form)))
        (throw (cdr b)
 	 (eval-form (caddr form) env))))
@@ -126,7 +143,7 @@
      (unwind-protect
 	  (eval-form (second form) env)
        (eval-progn (cddr form) env)))
-    ((macrolet symbol-macrolet let*)
+    ((symbol-macrolet let*)
      (error "Special operator ~S not implemented in ~S." (car form) 'eval))
     (t (eval-funcall form env))))
 
@@ -360,7 +377,7 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 (defun eval-function (function-name env)
   (etypecase function-name
     (symbol
-     (let ((binding (op-env-binding +eval-binding-type-flet+ env function-name)))
+     (let ((binding (cdr (op-env-binding env function-name +eval-binding-type-flet+))))
        (or (and binding (cdr binding))
 	   (symbol-function function-name))))
     (list
@@ -420,7 +437,7 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 (defun eval-go (form env)
   (declare (ignore))
   (let* ((tag (cadr form))
-	 (b (op-env-binding +eval-binding-type-go-tag+ env tag)))
+	 (b (cdr (op-env-binding env tag +eval-binding-type-go-tag+))))
     (unless b (error "Go-tag ~S is not visible." tag))
     (throw (cdr b) (values tag))))
 
@@ -482,13 +499,26 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 
 (defun macroexpand-1 (form &optional env)
   (if (atom form)
-      (values form nil)
-      (let ((macro-function (macro-function (car form))))
-	(if macro-function
-	    (values (funcall *macroexpand-hook* macro-function form env)
-		    t)
-	    (values form
-		    nil)))))
+      (values form nil) ; no symbol-macros yet
+      (let* ((operator (car form))
+	     (macrolet-binding (op-env-binding env operator +eval-binding-type-macrolet+)))
+	(if macrolet-binding
+	    (destructuring-bind (lambda-list &body body)
+		(cddr macrolet-binding)
+	      (let ((expander (lambda (form env)
+				(eval-form `(destructuring-bind (ignore-operator ,@lambda-list)
+						',form
+					      (declare (ignore ignore-operator))
+					      ,@body)
+					   env))))
+		(values (funcall *macroexpand-hook* expander form env)
+			t)))
+	    (let ((macro-function (macro-function operator)))
+	      (if macro-function
+		  (values (funcall *macroexpand-hook* macro-function form env)
+			  t)
+		  (values form
+			  nil)))))))
 
 (defun macroexpand (form &optional env)
   (do ((expanded-at-all-p nil)) (nil)
