@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.70 2008-03-15 20:58:08 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.71 2008-03-21 22:28:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -138,7 +138,7 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
     
    search-loop
     (:jecxz '(:sub-program () (:int 63)))
-    (:locally (:bound (:edi (:edi-offset stack-bottom)) :ecx))
+    ;; (:locally (:bound (:edi (:edi-offset stack-bottom)) :ecx))
 
     (:cmpl :ecx :eax)
     (:je 'found-dynamic-env)
