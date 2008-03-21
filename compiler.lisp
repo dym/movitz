@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.198 2008-03-19 15:06:10 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.199 2008-03-21 22:29:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -4951,7 +4951,9 @@ or when there's a non-dynamic-extent &rest binding."
        (:boolean-zf=1          :boolean-zf=0)
        (:boolean-zf=0          :boolean-zf=1)
        (:boolean-cf=1          :boolean-cf=0)
-       (:boolean-cf=0          :boolean-cf=1)))
+       (:boolean-cf=0          :boolean-cf=1)
+       (:boolean-overflow      :boolean-no-overflow)
+       (:boolean-no-overflow   :boolean-overflow)))
     (cons
      (let ((args (cdr mode)))
        (ecase (car mode)
@@ -4976,7 +4978,9 @@ or when there's a non-dynamic-extent &rest binding."
 	  (:boolean-zf=0          :jnz)
 	  (:boolean-cf=1          :jc)
 	  (:boolean-cf=0          :jnc)
-	  (:boolean-true          :jmp))
+	  (:boolean-true          :jmp)
+	  (:boolean-overflow      :jo)
+	  (:boolean-no-overflow   :jno))
 	(list 'quote label)))
 
 

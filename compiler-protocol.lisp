@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Oct 10 13:02:03 2001
 ;;;;                
-;;;; $Id: compiler-protocol.lisp,v 1.4 2005/08/20 20:30:03 ffjeld Exp $
+;;;; $Id: compiler-protocol.lisp,v 1.5 2008-03-21 22:30:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -30,7 +30,9 @@
 	:boolean-zf=0
 	:boolean-cf=1
 	:boolean-cf=0
-	:boolean-ecx))
+	:boolean-ecx
+	:boolean-overflow
+	:boolean-no-overflow))
   
   (defconstant +multiple-value-result-modes+
       '(:multiple-values
