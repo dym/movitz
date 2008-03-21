@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.24 2008-03-15 20:58:15 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.25 2008-03-21 22:31:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -216,6 +216,8 @@
      (t (let ((do-escape-p (or *print-escape* *print-readably*))
 	      (*print-level* (minus-if *print-level* 1)))
 	  (typecase object
+	    (unbound-value
+	     (write-string "#<unbound!>" stream))
 	    (character
 	     (if (not do-escape-p)
 		 (write-char object stream)
