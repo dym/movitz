@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.27 2008-03-21 00:20:48 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.28 2008-03-21 22:27:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -117,12 +117,19 @@
     (setq (eval-setq form env))
     (setf (eval-setf form env))
     ((defvar) (eval-defvar form env))
-    (let (eval-let (cadr form) (cddr form) env))
-    (let* (multiple-value-bind (body declarations)
-	      (parse-declarations-and-body (cddr form))
-	    (eval-let* (cadr form) declarations body env)))
+    ((let)
+     (eval-let (cadr form) (cddr form) env))
+    ((let*)
+     (multiple-value-bind (body declarations)
+	 (parse-declarations-and-body (cddr form))
+       (eval-let* (cadr form) declarations body env)))
     ((defun) (eval-defun (cadr form) (caddr form) (cdddr form) env))
     ((lambda) (eval-function form env)) ; the lambda macro..
+    ((multiple-value-call)
+     (apply (eval-form (cadr form) env)
+	    (mapcan (lambda (args-form)
+		      (multiple-value-list (eval-form args-form env)))
+		    (cddr form))))
     ((multiple-value-bind)
      (eval-m-v-bind form env))
     ((multiple-value-prog1)
