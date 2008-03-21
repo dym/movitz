@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.26 2008-03-21 00:06:07 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.27 2008-03-21 00:20:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -366,13 +366,25 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 			     env))))))
 
 (defun eval-m-v-bind (form env)
-  (destructuring-bind (variables values-form &body body)
+  (destructuring-bind (variables values-form &body declarations-and-body)
       (cdr form)
-    (let ((values (multiple-value-list (eval-form values-form env))))
-      (dolist (variable variables)
-	(push (cons variable (pop values))
-	      env))
-      (eval-progn body env))))
+    (multiple-value-bind (body declarations)
+	(parse-declarations-and-body declarations-and-body)
+      (let ((values (multiple-value-list (eval-form values-form env)))
+	    special-vars
+	    special-values)
+	(dolist (var variables)
+	  (let ((value (pop values)))
+	    (cond
+	      ((or (symbol-special-variable-p var)
+		   (declared-special-p var declarations))
+	       ;; special
+	       (push var special-vars)
+	       (push value special-values))
+	      (t ;; lexical
+	       (push (cons var value)
+		     env)))))
+	(eval-progn body env)))))
 
 (defun eval-function (function-name env)
   (etypecase function-name
