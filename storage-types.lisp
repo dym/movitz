@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.61 2008-03-20 22:24:27 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.62 2008-03-23 12:19:19 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -417,15 +417,26 @@ integer (native lisp) value."
 	     (:character (write-binary 'char8 stream data))
 	     (:any-t     (write-binary 'word stream (movitz-read-and-intern data 'word))))))
     (+ (call-next-method)		; header
-       (etypecase (movitz-vector-symbolic-data obj)
-	 (list 
-	  (loop for data in (movitz-vector-symbolic-data obj)
-	      with type = (movitz-vector-element-type obj)
-	      summing (write-element type stream data)))
-	 (vector
-	  (loop for data across (movitz-vector-symbolic-data obj)
-	      with type = (movitz-vector-element-type obj)
-	      summing (write-element type stream data)))))))
+       (multiple-value-bind (data type)
+	   (case (movitz-vector-element-type obj)
+	     (:bit (let ((data (movitz-vector-symbolic-data obj)))
+		     (values (loop for byte upfrom 0 below (ceiling (length data) 8)
+				collect (loop for bit from 0 to 7
+					   sum (* (let ((b (+ (* byte 8) bit)))
+						    (if (< b (length data))
+							(bit data b)
+							0))
+						  (expt 2 bit))))
+			     :u8)))
+	     (t (values (movitz-vector-symbolic-data obj)
+			(movitz-vector-element-type obj))))
+	 (etypecase data
+	   (list 
+	    (loop for datum in data
+	       sum (write-element type stream datum)))
+	   (vector
+	    (loop for datum across data
+	       sum (write-element type stream datum))))))))
 
 (defmethod read-binary-record ((type-name (eql 'movitz-basic-vector)) stream &key &allow-other-keys)
   (let ((object (call-next-method)))
@@ -452,6 +463,8 @@ integer (native lisp) value."
   (cond
    ((eq type 'code)
     (values :code 0))
+   ((subtypep type 'bit)
+    (values :bit 0))
    ((subtypep type '(unsigned-byte 8))
     (values :u8 0))
    ((subtypep type '(unsigned-byte 16))
@@ -502,7 +515,7 @@ integer (native lisp) value."
       (setf initial-contents
 	(make-array size :initial-element (or (and initial-element-p initial-element)
 					      default-element))))
-    (assert (member et '(:any-t :character :u8 :u32 :code)))
+    (assert (member et '(:any-t :bit :character :u8 :u32 :code)))
     (when flags (break "flags: ~S" flags))
     (when (and alignment-offset (plusp alignment-offset))
       (break "alignment: ~S" alignment-offset))
