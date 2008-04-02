@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.118 2008-03-20 22:24:06 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.119 2008-04-02 20:49:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -957,7 +957,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 				 :num-elements #x3ffe
 				 :fill-pointer 0
 				 :symbolic-data nil
-				 :element-type :u32))
+				 :element-type :stack))
 		 (image-start (file-position stream)))
 	    (dump-image-core *image* stream) ; dump the kernel proper.
 	    ;; make a stack-vector for the root run-time-context

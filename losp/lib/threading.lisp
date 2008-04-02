@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Apr 28 08:30:01 2005
 ;;;;                
-;;;; $Id: threading.lisp,v 1.9 2007/03/12 22:50:34 ffjeld Exp $
+;;;; $Id: threading.lisp,v 1.10 2008-04-02 20:49:35 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -89,8 +89,7 @@
     (setf (segment-descriptor-base-location (segment-descriptor-table *segment-descriptor-table-manager*)
 					    segment-selector)
       (+ (object-location thread) (location-physical-offset)))
-    (let ((stack (control-stack-init-for-yield (make-array stack-size
-							   :element-type '(unsigned-byte 32))
+    (let ((stack (control-stack-init-for-yield (make-stack-vector stack-size)
 					       function args)))
       (multiple-value-bind (ebp esp)
 	  (control-stack-fixate stack)
@@ -178,9 +177,8 @@
       (assert (eq (muerte::stack-frame-funobj nil ebp)
 		  (muerte::asm-register :esi)) ()
 	"Will not yield to a non-yield frame.")
-      ;; Push eflags (with IF enabled) for later. Make sure interrupt
-      ;; interrupt flag in on.
-      (setf (memref (decf esp) 0 :type :unsigned-byte32) (logior 512 (eflags)))
+      ;; Push eflags for later..
+      (setf (memref (decf esp) 0 :type :unsigned-byte32) (eflags))
       ;; Store EBP and ESP so we can get to them after the switch
       (setf (%run-time-context-slot target-rtc 'muerte::scratch1) ebp
 	    (%run-time-context-slot target-rtc 'muerte::scratch2) esp)

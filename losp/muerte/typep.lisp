@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.56 2008-03-20 22:22:40 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.57 2008-04-02 20:49:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -287,6 +287,8 @@
 		 (make-other-typep :funobj))
 		((vector)
 		 (make-other-typep :basic-vector))
+		(stack-vector
+		 (make-basic-vector-typep :stack))
 		(indirect-vector
 		 (make-basic-vector-typep :indirects))
 		(simple-vector

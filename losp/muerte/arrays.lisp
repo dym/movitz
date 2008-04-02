@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.65 2008-03-15 20:57:12 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.66 2008-04-02 20:49:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -194,11 +194,12 @@
       ((#.(bt:enum-value 'movitz::movitz-vector-element-type :any-t)
 	#.(bt:enum-value 'movitz::movitz-vector-element-type :indirects))
        (%shallow-copy-object vector (+ 2 length)))
-      ((#.(bt:enum-value 'movitz::movitz-vector-element-type :u32))
+      ((#.(bt:enum-value 'movitz::movitz-vector-element-type :u32)
+	  #.(bt:enum-value 'movitz::movitz-vector-element-type :stack))
        (%shallow-copy-non-pointer-object vector (+ 2 length)))
       ((#.(bt:enum-value 'movitz::movitz-vector-element-type :character)
-	#.(bt:enum-value 'movitz::movitz-vector-element-type :u8)
-	#.(bt:enum-value 'movitz::movitz-vector-element-type :code))
+	  #.(bt:enum-value 'movitz::movitz-vector-element-type :u8)
+	  #.(bt:enum-value 'movitz::movitz-vector-element-type :code))
        (%shallow-copy-non-pointer-object vector	(+ 2 (truncate (+ 3 length) 4))))
       ((#.(bt:enum-value 'movitz::movitz-vector-element-type :u16))
        (%shallow-copy-non-pointer-object vector (+ 2 (truncate (+ 1 length) 2))))
@@ -321,9 +322,9 @@
 		`(with-inline-assembly (:returns :eax)
 		   (:declare-label-set
 		    basic-vector-dispatcher
-		    ,(loop with x = (make-list 8 :initial-element 'unknown)
-			 for et in '(:any-t :character :u8 :u32 :code :bit)
-			 do (setf (elt x (bt:enum-value
+		    ,(loop with x = (make-list 9 :initial-element 'unknown)
+			for et in '(:any-t :character :u8 :u32 :stack :code :bit)
+			do (setf (elt x (bt:enum-value
 					  'movitz::movitz-vector-element-type
 					  et))
 			      et)
@@ -350,6 +351,7 @@
 		   (:jnever '(:sub-program (unknown)
 			      (:int 100)))
 		  :u32
+		  :stack
 		   (:movl (:eax :ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))
 			  :ecx)
 		   (:call-local-pf box-u32-ecx)
@@ -949,12 +951,22 @@ and return basic-vector and accessors for that subsequence."
       (setf (fill-pointer array) length)))
     (cond
      (initial-element
-      ;; (check-type initial-element (unsigned-byte 32))
+      (check-type initial-element (unsigned-byte 32))
       (dotimes (i length)
 	(setf (u32ref%unsafe array i) initial-element)))
      (initial-contents
       (replace array initial-contents)))
     array))
+
+(defun make-stack-vector (length)
+  (let ((vector (make-basic-vector%u32 length nil nil nil)))
+    (with-inline-assembly (:returns :nothing)
+      (:load-lexical (:lexical-binding vector) :eax)
+      (:movl #.(movitz:basic-vector-type-tag :stack)
+	     (:eax (:offset movitz-basic-vector type))))
+    (when (%basic-vector-has-fill-pointer-p vector)
+      (setf (fill-pointer vector) length))
+    vector))
 
 (defun make-basic-vector%u8 (length fill-pointer initial-element initial-contents)
   (check-type length (and fixnum (integer 0 *)))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.58 2008-03-20 22:23:28 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.59 2008-04-02 20:49:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1105,6 +1105,8 @@
 	   #:newline
 	   #:check-the
 	   #:index
+	   #:make-stack-vector
+	   #:stack-vector
 	   
 	   #:defmacro/cross-compilation
 	   
