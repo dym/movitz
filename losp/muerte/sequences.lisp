@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.39 2008-03-21 22:17:06 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.40 2008-04-08 20:20:07 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1013,7 +1013,7 @@
 
 (defun find-if-not (predicate sequence &rest key-args)
   (declare (dynamic-extent key-args))
-  (apply (complement predicate) sequence key-args))
+  (apply #'find-if (complement predicate) sequence key-args))
   
 (defun count (item sequence &key (start 0) end (test 'eql) (key 'identity) test-not from-end)
   (declare (ignore test-not))
