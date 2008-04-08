@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.24 2008-03-15 20:57:14 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.25 2008-04-08 21:40:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -287,7 +287,8 @@ from regular function-calls."
       ;; spread out args.
       (cond
        ((null args)
-	(error "Too few arguments to APPLY."))
+	(error 'program-error
+	       :format-control "Too few arguments to APPLY."))
        ((null (cdr args))
 	(apply function (car args)))
        (t (let* ((second-last-cons (last args 2))
