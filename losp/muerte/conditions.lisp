@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.24 2007/03/12 21:53:40 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.25 2008-04-08 21:42:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -187,6 +187,18 @@
   (:report (lambda (c s)
 	     (declare (ignore c))
 	     (format s "Division by zero."))))
+
+(define-condition package-error (error)
+  ((package
+    :initarg :package
+    :initform nil
+    :reader package-error-package)))
+
+(define-condition file-error (error)
+  ((pathname
+    :initarg :pathname
+    :initform nil
+    :reader file-error-pathname)))
 
 (defun make-condition (type &rest slot-initializations)
   (declare (dynamic-extent slot-initializations))
