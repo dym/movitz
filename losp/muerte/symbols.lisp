@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.29 2007/04/07 08:02:35 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.30 2008-04-09 18:02:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -139,10 +139,10 @@
 	   (load-global-constant movitz::unbound-function))))
 
 (defun %create-symbol (name &optional (package nil)
-				      (plist nil)
-				      (value (load-global-constant new-unbound-value))
-				      (function (load-global-constant movitz::unbound-function))
-				      (flags 0))
+		       (value (load-global-constant new-unbound-value))
+		       (flags 0)
+		       (plist nil)
+		       (function (load-global-constant movitz::unbound-function)))
   (eval-when (:compile-toplevel)
     (assert (= 1 (- (movitz:tag :symbol) (movitz:tag :other)))))
   (let ((sxhash (sxhash name)))
@@ -179,31 +179,29 @@
   "copy-symbol returns a fresh, uninterned symbol, the name of which
   is string= to and possibly the same as the name of the given
   symbol."
-  (if (or (eq nil symbol)
-	  (not copy-properties))
-      (%create-symbol (symbol-name symbol))
-    (with-non-header-allocation-assembly
-	(6 :object-register :eax :fixed-size-p t)
-      (:addl 1 :eax)
-      (:load-lexical (:lexical-binding symbol) :ebx)
-      ;; 0
-      (:movl (:ebx #.(cl:- (movitz:tag :symbol)) 0) :ecx)
-      (:movl :ecx (:eax #.(cl:- (movitz:tag :symbol)) 0))
-      ;; 1
-      (:movl (:ebx #.(cl:- (movitz:tag :symbol)) 4) :ecx)
-      (:movl :ecx (:eax #.(cl:- (movitz:tag :symbol)) 4))
-      ;; 2
-      (:movl (:ebx #.(cl:- (movitz:tag :symbol)) 8) :ecx)
-      (:movl :ecx (:eax #.(cl:- (movitz:tag :symbol)) 8))
-      ;; 3
-      (:movl (:ebx #.(cl:- (movitz:tag :symbol)) 12) :ecx)
-      (:movl :ecx (:eax #.(cl:- (movitz:tag :symbol)) 12))
-      ;; 4
-      (:movl (:ebx #.(cl:- (movitz:tag :symbol)) 16) :ecx)
-      (:movl :ecx (:eax #.(cl:- (movitz:tag :symbol)) 16))
-      ;; 5
-      (:movl (:ebx #.(cl:- (movitz:tag :symbol)) 20) :ecx)
-      (:movl :ecx (:eax #.(cl:- (movitz:tag :symbol)) 20)))))
+  (cond
+    ((not copy-properties)
+     (%create-symbol (symbol-name symbol)))
+    ((eq symbol nil)
+     (%create-symbol (symbol-name symbol)
+		     nil
+		     nil
+		     (symbol-flags nil)))
+    (t (with-non-header-allocation-assembly
+	   (6 :object-register :eax :fixed-size-p t)
+	 (:addl 1 :eax)
+	 (:load-lexical (:lexical-binding symbol) :ebx)
+	 (:movl (:ebx (:offset movitz-symbol function-value)) :ecx)
+	 (:movl :ecx (:eax (:offset movitz-symbol function-value) 0))
+	 (:movl (:ebx (:offset movitz-symbol value)) :ecx)
+	 (:movl :ecx (:eax (:offset movitz-symbol value)))
+	 (:movl (:ebx (:offset movitz-symbol plist)) :ecx)
+	 (:movl :ecx (:eax (:offset movitz-symbol plist)))
+	 (:movl (:ebx (:offset movitz-symbol name)) :ecx)
+	 (:movl :ecx (:eax (:offset movitz-symbol name)))
+	 (:movl :edi (:eax (:offset movitz-symbol package))) ; no package
+	 (:movl (:ebx (:offset movitz-symbol flags)) :ecx)
+	 (:movl :ecx (:eax (:offset movitz-symbol flags)))))))
 
 (defun symbol-flags (symbol)
   (etypecase symbol
