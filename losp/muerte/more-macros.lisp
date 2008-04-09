@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.41 2008-03-16 22:28:18 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.42 2008-04-09 18:33:41 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -248,7 +248,10 @@
 			  ((atom b)
 			   (values b (intern (string b) :keyword) nil nil))
 			  ((atom (car b))
-			   (values (car b) (intern (string (car b)) :keyword) nil nil))
+			   (values (car b)
+				   (intern (string (pop b)) :keyword)
+				   (pop b)
+				   (pop b)))
 			  (t (let ((bn (pop b)))
 			       (values (cadr bn) (car bn) (pop b) (pop b))))))
 		    (when supplied-var
@@ -543,7 +546,9 @@ respect to multiple threads."
 (defmacro/cross-compilation load (filespec &key verbose print if-does-not-exist external-format)
   "hm..."
   (warn "load-compile: ~S" filespec)
-  `(funcall ',(movitz:movitz-compile-file (format nil "losp/ansi-tests/~A" filespec))))
+  `(progn
+     (format t "~&Loading ~S.." ',filespec)
+     (funcall ',(movitz:movitz-compile-file (format nil "losp/ansi-tests/~A" filespec)))))
 
 (defmacro locally (&body body)
   `(let () ,@body))
@@ -571,3 +576,6 @@ respect to multiple threads."
 	 (*read-suppress* nil)
 	 #+ignore (*readtable* nil))
      ,@body))
+
+(defmacro/run-time loop (&rest clauses)
+  (error "Loop not implemented."))
