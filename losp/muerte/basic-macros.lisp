@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.75 2008-03-20 22:50:01 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.76 2008-04-09 18:01:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -375,10 +375,17 @@
     (t `(compiled-case ,keyform ,@clauses))))
 
 (defmacro ecase (keyform &rest clauses)
-  ;; "Not quite implemented.."
-  `(case ,keyform ,@clauses (t (error "~S fell through an ecase where the legal cases were ~S"
-				      ,keyform
-				      ',(mapcar #'first clauses)))))
+  (let ((ecase-var (gensym)))
+    `(let ((,ecase-var ,keyform))
+       (case ,ecase-var
+	 ,@clauses
+	 (t (ecase-error ,ecase-var
+			 ',(mapcan (lambda (clause)
+				     (let ((x (car clause)))
+				       (if (atom x)
+					   (list x)
+					   (copy-list x))))
+				   clauses)))))))
 
 (define-compiler-macro asm-register (register-name)
   (if (member register-name '(:eax :ebx :ecx :untagged-fixnum-ecx :edx))
@@ -1117,11 +1124,17 @@ busy-waiting loop on P4."
 
 (define-compiler-macro boundp (symbol)
   `(with-inline-assembly-case ()
-     (do-case (t :boolean-zf=0 :labels (boundp-done))
+     (do-case (t :boolean-zf=0 :labels (boundp-done boundp-restart))
        (:compile-form (:result-mode :ebx) ,symbol)
+       boundp-restart
        (:leal (:ebx ,(- (movitz:tag :null))) :ecx)
        (:testb 5 :cl)
-       (:jne '(:sub-program () (:int 66)))
+       (:jne '(:sub-program ()
+	       (:movl :ebx :eax)
+	       (:load-constant symbol :edx)
+	       (:int 60)
+	       (:movl :eax :ebx)
+	       (:jmp 'boundp-restart)))
        (:call-local-pf dynamic-variable-lookup)
        (:globally (:cmpl (:edi (:edi-offset new-unbound-value)) :eax)))))
 
