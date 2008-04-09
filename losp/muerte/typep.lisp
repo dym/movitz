@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.57 2008-04-02 20:49:47 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.58 2008-04-09 18:02:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -651,6 +651,9 @@
 
 (define-simple-typep (function functionp) (x)
   (typep x 'function))
+
+(define-simple-typep (compiled-function compiled-function-p) (x)
+  (typep x 'compiled-function))
 
 (define-simple-typep (macro-function macro-function-p) (x)
   (typep x 'macro-function))
