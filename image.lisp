@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.119 2008-04-02 20:49:30 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.120 2008-04-09 18:00:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1015,7 +1015,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		  (set-file-position stream (global-slot-position 'stack-vector) 'stack-vector)
 		  (write-binary 'word stream stack-vector-word)
 		  (set-file-position stream (global-slot-position 'stack-bottom) 'stack-bottom)
-		  (write-binary 'lu32 stream (+ 8 (* 4 4096) ; cushion
+		  (write-binary 'lu32 stream (+ 8 (* 6 4096) ; cushion
 						(- stack-vector-word (tag :other))))
 		  (set-file-position stream (global-slot-position 'stack-top) 'stack-top)
 		  (write-binary 'lu32 stream (+ 8 (- stack-vector-word (tag :other))
