@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.57 2008/02/18 22:31:13 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.58 2008-04-09 18:02:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -381,7 +381,7 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 			   (- old-bottom new-bottom)
 			   new-bottom)
 		   (backtrace :length 5 :spartan t)
-		   (break "Stack overload exception ~D at EIP=~@Z, ESP=~@Z, bottom=#x~X, ENV=#x~X."
+		   (error "Stack overload exception ~D at EIP=~@Z, ESP=~@Z, bottom=#x~X, ENV=#x~X."
 			  vector $eip
 			  (dit-frame-esp nil dit-frame)
 			  old-bottom
