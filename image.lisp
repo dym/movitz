@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.120 2008-04-09 18:00:56 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.121 2008-04-12 16:43:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1287,6 +1287,7 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
      when (and funobj
 	       (typep operand 'asm:indirect-operand)
 	       (member :esi operand)
+	       (= 2 (length operand))
 	       (<= 12 (asm:indirect-operand-offset operand)))
      collect (format nil "~A"
 		     (nth (truncate (- (+ (asm:indirect-operand-offset operand)
@@ -1703,7 +1704,9 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 	     (movitz-read (rationalize expr)))
 	    (class
 	     (muerte::movitz-find-class (translate-program (class-name expr)
-							   :cl :muerte.cl))))))))
+							   :cl :muerte.cl)))
+	    (array ; XXX
+	     (movitz-read nil)))))))
 
 ;;;
 
