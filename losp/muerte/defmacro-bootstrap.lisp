@@ -7,7 +7,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defmacro-bootstrap.lisp,v 1.2 2008-04-12 16:23:28 ffjeld Exp $
+;;;; $Id: defmacro-bootstrap.lisp,v 1.3 2008-04-12 17:11:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -36,6 +36,9 @@
       (movitz::parse-docstring-declarations-and-body body 'cl:declare)
     (let* ((block-name (compute-function-block-name name))
 	   (ignore-var (gensym))
+	   (whole-var (when (eq '&whole (car lambda-list))
+			(list (pop lambda-list)
+			      (pop lambda-list))))
 	   (form-var (gensym "form-"))
 	   (env-var nil)
 	   (operator-var (gensym))
@@ -54,14 +57,27 @@
 	      (values env-var nil)
 	      (let ((e (gensym)))
 		(values e (list e))))
-	`(make-named-function ,name
-			      (&edx edx &optional ,form-var ,env-var &rest ,ignore-var)
-			      ((ignore ,ignore-var ,@ignore-env))
-			      ,docstring
-			      (block ,block-name
-				(verify-macroexpand-call edx ',name)
-				(destructuring-bind ,destructuring-lambda-list
-				    ,form-var
-				  (declare (ignore ,operator-var) ,@declarations)
-				  ,@real-body))
-			      :type :macro-function)))))
+	(cond
+	  ((and whole-var
+		(null lambda-list))
+	   `(make-named-function ,name
+				 (&edx edx &optional ,form-var ,env-var &rest ,ignore-var)
+				 ((ignore ,ignore-var ,@ignore-env))
+				 ,docstring
+				 (block ,block-name
+				   (verify-macroexpand-call edx ',name)
+				   (let ((,(second whole-var) ,form-var))
+				     (declare ,@declarations)
+				     ,@real-body))
+				 :type :macro-function))
+	  (t `(make-named-function ,name
+				   (&edx edx &optional ,form-var ,env-var &rest ,ignore-var)
+				   ((ignore ,ignore-var ,@ignore-env))
+				   ,docstring
+				   (block ,block-name
+				     (verify-macroexpand-call edx ',name)
+				     (destructuring-bind ,(append whole-var destructuring-lambda-list)
+					 ,form-var
+				       (declare (ignore ,operator-var) ,@declarations)
+				       ,@real-body))
+				   :type :macro-function)))))))
