@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.199 2008-03-21 22:29:57 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.200 2008-04-12 16:46:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1004,11 +1004,12 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 	(assemble-funobj funobj combined-code))))
   funobj)
 
-(defun assemble-funobj (funobj combined-code)
-  (multiple-value-bind (code-vector code-symtab)
+(defun assemble-funobj (funobj combined-code &key extra-prefix-computers)
+  (multiple-value-bind (code code-symtab)
       (let ((asm-x86:*cpu-mode* :32-bit)
 	    (asm:*instruction-compute-extra-prefix-map*
-	     '((:call . compute-call-extra-prefix))))
+	     (append extra-prefix-computers
+		     '((:call . compute-call-extra-prefix)))))
 	(asm:assemble-proglist combined-code
 			       :symtab (list* (cons :nil-value (image-nil-word *image*))
 					      (loop for (label . set) in (movitz-funobj-jumpers-map funobj)
@@ -1016,50 +1017,66 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 							       (* 4 (or (search set (movitz-funobj-const-list funobj)
 										:end2 (movitz-funobj-num-jumpers funobj))
 									(error "Jumper for ~S missing." label))))))))
-    (setf (movitz-funobj-symtab funobj) code-symtab)
-    (let* ((code-length (- (length code-vector) 3 -3))
-	   (code-vector (make-array code-length
-				    :initial-contents code-vector
-				    :fill-pointer t)))
-      (setf (fill-pointer code-vector) code-length)
-      ;; debug info
-      (setf (ldb (byte 1 5) (slot-value funobj 'debug-info))
-	    1 #+ignore (if use-stack-frame-p 1 0))
-      (let ((x (cdr (assoc 'start-stack-frame-setup code-symtab))))
-	(cond
-	  ((not x)
-	   #+ignore (warn "No start-stack-frame-setup label for ~S." name))
-	  ((<= 0 x 30)
-	   (setf (ldb (byte 5 0) (slot-value funobj 'debug-info)) x))
-	  (t (warn "Can't encode start-stack-frame-setup label ~D into debug-info for ~S."
-		   x (movitz-funobj-name funobj)))))
-      (let* ((a (or (cdr (assoc 'entry%1op code-symtab)) 0))
-	     (b (or (cdr (assoc 'entry%2op code-symtab)) a))
-	     (c (or (cdr (assoc 'entry%3op code-symtab)) b)))
-	(unless (<= a b c)
-	  (warn "Weird code-entries: ~D, ~D, ~D." a b c))
-	(unless (<= 0 a 255)
-	  (break "entry%1: ~D" a))
-	(unless (<= 0 b 2047)
-	  (break "entry%2: ~D" b))
-	(unless (<= 0 c 4095)
-	  (break "entry%3: ~D" c)))
-      (loop for (entry-label slot-name) in '((entry%1op code-vector%1op)
-					     (entry%2op code-vector%2op)
-					     (entry%3op code-vector%3op))
-	 do (when (assoc entry-label code-symtab)
-	      (let ((offset (cdr (assoc entry-label code-symtab))))
-		(setf (slot-value funobj slot-name)
-		      (cons offset funobj)))))
-      (check-locate-concistency code-vector)
-      (setf (movitz-funobj-code-vector funobj)
-	    (make-movitz-vector (length code-vector)
-				:fill-pointer code-length
-				:element-type 'code
-				:initial-contents code-vector))))
+    (let ((code-length (- (length code) 3 -3)))
+      (let ((locate-inconsistencies (check-locate-concistency code code-length)))
+	(when locate-inconsistencies
+	  (when (rassoc 'compute-extra-prefix-locate-inconsistencies
+			extra-prefix-computers)
+	    (error "~S failed to fix locate-inconsistencies. This should not happen."
+		   'compute-extra-prefix-locate-inconsistencies))
+	  (return-from assemble-funobj
+	    (assemble-funobj funobj combined-code
+			     :extra-prefix-computers (list (cons t (lambda (pc size)
+								     (loop for bad-pc in locate-inconsistencies
+									when (<= pc bad-pc (+ pc size))
+									return '(#x90)))))))
+			     
+	  (break "locate-inconsistencies: ~S" locate-inconsistencies)))
+      (setf (movitz-funobj-symtab funobj) code-symtab)
+      (let ((code-vector (make-array code-length
+				     :initial-contents code
+				     :fill-pointer t)))
+	(setf (fill-pointer code-vector) code-length)
+	;; debug info
+	(setf (ldb (byte 1 5) (slot-value funobj 'debug-info))
+	      1 #+ignore (if use-stack-frame-p 1 0))
+	(let ((x (cdr (assoc 'start-stack-frame-setup code-symtab))))
+	  (cond
+	    ((not x)
+	     #+ignore (warn "No start-stack-frame-setup label for ~S." name))
+	    ((<= 0 x 30)
+	     (setf (ldb (byte 5 0) (slot-value funobj 'debug-info)) x))
+	    (t (warn "Can't encode start-stack-frame-setup label ~D into debug-info for ~S."
+		     x (movitz-funobj-name funobj)))))
+	(let* ((a (or (cdr (assoc 'entry%1op code-symtab)) 0))
+	       (b (or (cdr (assoc 'entry%2op code-symtab)) a))
+	       (c (or (cdr (assoc 'entry%3op code-symtab)) b)))
+	  (unless (<= a b c)
+	    (warn "Weird code-entries: ~D, ~D, ~D." a b c))
+	  (unless (<= 0 a 255)
+	    (break "entry%1: ~D" a))
+	  (unless (<= 0 b 2047)
+	    (break "entry%2: ~D" b))
+	  (unless (<= 0 c 4095)
+	    (break "entry%3: ~D" c)))
+	(loop for (entry-label slot-name) in '((entry%1op code-vector%1op)
+					       (entry%2op code-vector%2op)
+					       (entry%3op code-vector%3op))
+	   do (when (assoc entry-label code-symtab)
+		(let ((offset (cdr (assoc entry-label code-symtab))))
+		  (setf (slot-value funobj slot-name)
+			(cons offset funobj)))))
+	(setf (movitz-funobj-code-vector funobj)
+	      (make-movitz-vector (length code-vector)
+				  :fill-pointer code-length
+				  :element-type 'code
+				  :initial-contents code-vector)))))
   funobj)
 
 (defun check-locate-concistency (code-vector)
+  "The run-time function muerte::%find-code-vector sometimes needs to find a code-vector by
+searching through the machine-code for an object header signature. This function is to
+make sure that no machine code accidentally forms such a header signature."
   (loop for x from 0 below (length code-vector) by 8
      do (when (and (= (tag :basic-vector) (aref code-vector x))
 		   (= (enum-value 'movitz-vector-element-type :code) (aref code-vector (1+ x)))
@@ -1068,13 +1085,29 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 			       (aref code-vector (+ x 2)))
 			    (= (ldb (byte 8 8) (length code-vector))
 			       (aref code-vector (+ x 3))))))
-	  (break "Code-vector (length #x~X) can break %find-code-vector at ~D: #x~2,'0X~2,'0X ~2,'0X~2,'0X."
+	  (break "Code-vector (length ~D) can break %find-code-vector at ~D: #x~2,'0X~2,'0X ~2,'0X~2,'0X."
 		 (length code-vector) x
 		 (aref code-vector (+ x 0))
 		 (aref code-vector (+ x 1))
 		 (aref code-vector (+ x 2))
 		 (aref code-vector (+ x 3)))))
   (values))
+
+(defun check-locate-concistency (code code-vector-length)
+  "The run-time function muerte::%find-code-vector sometimes needs to find a code-vector by
+searching through the machine-code for an object header signature. This function is to
+make sure that no machine code accidentally forms such a header signature."
+  (loop for (x0 x1 x2 x3) on code by (lambda (l) (nthcdr 8 l))
+     for pc upfrom 0 by 8
+     when (and (= x0 (tag :basic-vector))
+	       (= x1 (enum-value 'movitz-vector-element-type :code))
+	       (or (<= #x4000 code-vector-length)
+		   (and (= x2 (ldb (byte 8 0) code-vector-length))
+			(= x3 (ldb (byte 8 8) code-vector-length)))))
+     collect pc
+     and do (warn "Code-vector (length ~D) can break %find-code-vector at ~D: #x~2,'0X~2,'0X ~2,'0X~2,'0X."
+		  code-vector-length
+		  pc x0 x1 x2 x3)))
 
 
 (defun make-2req (binding0 binding1 frame-map)
@@ -2730,9 +2763,9 @@ the sub-program options (&optional label) as secondary value."
 	   init-pc)
       (assert (instruction-is (first init-pc) :init-lexvar))
       (destructuring-bind (init-binding &key init-with-register init-with-type
-					     protect-registers protect-carry)
+					protect-registers protect-carry shared-reference-p)
 	  (cdr (first init-pc))
-	(declare (ignore protect-registers protect-carry init-with-type))
+	(declare (ignore protect-registers protect-carry init-with-type shared-reference-p))
 	(assert (eq binding init-binding))
 	(multiple-value-bind (load-instruction binding-destination distance)
 	    (loop for i in (cdr init-pc) as distance upfrom 0
@@ -3372,7 +3405,7 @@ loading borrowed bindings."
 				 'integer))
       (warn "ecx from ~S" binding)))
   (when (movitz-env-get (binding-name binding) 'ignore nil (binding-env binding))
-    (break "The variable ~S is used even if it was declared ignored."
+    (warn "The variable ~S is used even if it was declared ignored."
 	  (binding-name binding)))
   (let ((binding (ensure-local-binding binding funobj))
 	(protect-registers (cons :edx protect-registers)))
@@ -5938,7 +5971,8 @@ fifth:  all compiler-values for form1, as a list."
       (cond
        ((not binding)
 	(unless (movitz-env-get form 'special nil env)
-	  (cerror "Compile like a special." "Undeclared variable: ~S." form))
+	  #+ignore (cerror "Compile like a special." "Undeclared variable: ~S." form)
+	  (warn "Undeclared variable: ~S." form))
 	(compiler-values ()
 	  :returns :eax
 	  :functional-p t
