@@ -7,14 +7,14 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defmacro-bootstrap.lisp,v 1.1 2008-03-17 08:00:21 ffjeld Exp $
+;;;; $Id: defmacro-bootstrap.lisp,v 1.2 2008-04-12 16:23:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (provide :muerte/defmacro-bootstrap)
 
-(muerte::defmacro-compile-time muerte.cl:defmacro (name lambda-list &body macro-body)
-  (`(muerte::defmacro-compile-time ,name ,lambda-list ,macro-body)))
+(muerte::defmacro/compile-time muerte.cl:defmacro (name lambda-list &body macro-body)
+  (`(muerte::defmacro/compile-time ,name ,lambda-list ,macro-body)))
 
 (muerte.cl:defmacro muerte.cl:in-package (name)
   `(progn
@@ -25,13 +25,13 @@
 
 (defmacro defmacro/cross-compilation (name lambda-list &body body)
   `(progn
-     (defmacro-compile-time ,name ,lambda-list ,body)
+     (defmacro/compile-time ,name ,lambda-list ,body)
      ',name))
 
 (defmacro defmacro (name lambda-list &body body)
   `(defmacro/cross-compilation ,name ,lambda-list ,@body))
 
-(defmacro defmacro/runtime (name lambda-list &body body)
+(defmacro defmacro/run-time (name lambda-list &body body)
   (multiple-value-bind (real-body declarations docstring)
       (movitz::parse-docstring-declarations-and-body body 'cl:declare)
     (let* ((block-name (compute-function-block-name name))

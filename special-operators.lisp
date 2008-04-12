@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.57 2008-03-15 20:57:03 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.58 2008-04-12 16:23:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -348,7 +348,7 @@ The valid parameters are~{ ~S~}."
 	      (movitz-macro-expander-make-function expander :type :setf :name access-fn)))))))
   (compiler-values ()))
 
-(define-special-operator muerte::defmacro-compile-time (&form form)
+(define-special-operator muerte::defmacro/compile-time (&form form)
   (destructuring-bind (name lambda-list macro-body)
       (cdr form)
     (check-type name symbol "a macro name")

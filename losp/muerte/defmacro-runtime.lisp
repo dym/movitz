@@ -7,7 +7,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defmacro-runtime.lisp,v 1.2 2008-03-19 15:00:13 ffjeld Exp $
+;;;; $Id: defmacro-runtime.lisp,v 1.3 2008-04-12 16:23:31 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -17,6 +17,6 @@
 
 (defmacro defmacro (name lambda-list &body macro-body)
   `(progn
-     (defmacro/runtime ,name ,lambda-list ,@macro-body)
-     (defmacro-compile-time ,name ,lambda-list ,macro-body)
+     (defmacro/run-time ,name ,lambda-list ,@macro-body)
+     (defmacro/compile-time ,name ,lambda-list ,macro-body)
      ',name))
