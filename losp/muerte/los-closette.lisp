@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.38 2008-03-15 20:57:57 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.39 2008-04-12 16:47:21 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -32,10 +32,15 @@
 		     ,@(canonicalize-defclass-options options env name)))))
 
 (defmacro defgeneric (function-name lambda-list &rest options)
-  `(eval-when (:compile-toplevel)
-     (movitz-ensure-generic-function ',function-name 
-				  :lambda-list ',lambda-list
-				  ,@(canonicalize-defgeneric-options options))))
+  `(progn
+     (eval-when (:compile-toplevel)
+       (movitz-ensure-generic-function ',function-name 
+				       :lambda-list ',lambda-list
+				       ,@(canonicalize-defgeneric-options options)))
+     ,@(mapcan (lambda (option)
+		 (when (eq :method (car option))
+		   (list `(defmethod ,function-name ,@(cdr option)))))
+	       options)))
 
 (defmacro defmethod (&rest args &environment env)
   (multiple-value-bind (name qualifiers lambda-list specializers body declarations documentation)

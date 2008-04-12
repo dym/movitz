@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.21 2007/03/13 20:42:42 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.22 2008-04-12 16:47:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1009,6 +1009,7 @@
       (:method-class
        (list ':method-class
 	     `(movitz-find-class ',(cadr option))))
+      (:method nil)
       (t (list `',(car option) `',(cadr option)))))
 
 ;;; ensure-generic-function
