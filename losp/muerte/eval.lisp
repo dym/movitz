@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.29 2008-04-08 21:39:52 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.30 2008-04-13 20:12:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -279,17 +279,17 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
       (setf env-var (cadr pattern)
 	    pattern (cddr pattern)))
     (loop with next-states = '(&optional &rest &key &aux)
-	with state = 'requireds
-	for pp on pattern as p = (car pp)
-	if (member p next-states)
-	do (setf next-states (member p next-states)
-		 state p)
-	else do (cond
+       with state = 'requireds
+       for pp on pattern as p = (car pp)
+       if (member p next-states)
+       do (setf next-states (member p next-states)
+		state p)
+       else do (cond
 		 ((and (eq state 'requireds)
 		       recursive-p
 		       (consp p))
 		  (unless (listp (car values))
-		    (error "Pattern mismatch."))
+		    (simple-program-error "Lambda-list pattern mismatch."))
 		  (setf env (make-destructuring-env p (pop values) env
 						    :recursive-p nil
 						    :environment-p nil)))
@@ -302,7 +302,8 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 		  (case state
 		    (requireds
 		     (when (null values)
-		       (error "Too few values provided. [~S:~S:~S]" state next-states env))
+		       (simple-program-error "Too few values provided. [~S:~S:~S]"
+					     state next-states env))
 		     (push (cons p (pop values))
 			   env))
 		    (&optional
@@ -314,7 +315,7 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 			       env))
 		       (push (cons var (if values
 					   (pop values)
-					 (eval-form init-form env)))
+					   (eval-form init-form env)))
 			     env)))
 		    (&rest
 		     (push (cons p values)
@@ -326,7 +327,7 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 			      (present-p (not (null x)))
 			      (value (if present-p
 					 (cadr x)
-				       (eval-form init-form env))))
+					 (eval-form init-form env))))
 			 (when supplied-p-parameter
 			   (push (cons supplied-p-parameter
 				       present-p)
@@ -341,9 +342,12 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 		       (push (cons var (eval-form init-form env))
 			     env)))))
 		 (t (error "Illegal destructuring pattern: ~S" pattern)))
-	     (when (not (listp (cdr pp)))
-	       (push (cons (cdr pp) values)
-		     env)))
+       (when (not (listp (cdr pp)))
+	 (push (cons (cdr pp) values)
+	       env))
+       finally
+	 (when (and values (member state '(requireds optionals)))
+	   (simple-program-error "Too many arguments.")))
     (if (and environment-p env-var)
 	(cons (cons env-var env)
 	      env)
