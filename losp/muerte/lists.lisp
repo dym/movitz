@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.25 2008-03-20 22:21:31 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.26 2008-04-14 21:06:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -196,6 +196,13 @@
 	     (setf previous-copy copy)
 	     (unless copied-result
 	       (setf copied-result copy))))))))
+
+(defun revappend (list tail)
+  "=> result-list"
+  (do () ((null list)
+	  tail)
+    (push (pop list)
+	  tail)))
 
 (defun copy-list (list)
   (if (null list)
