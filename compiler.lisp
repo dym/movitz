@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.201 2008-04-14 20:39:42 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.202 2008-04-15 23:04:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -3639,168 +3639,171 @@ loading borrowed bindings."
 		     (install-for-single-value binding binding-location :eax nil)))
 		 )))))))))
 
+
 (defun make-store-lexical (binding source shared-reference-p funobj frame-map
 			   &key protect-registers)
   (let ((binding (ensure-local-binding binding funobj)))
     (assert (not (and shared-reference-p
 		      (not (binding-lended-p binding))))
-	(binding)
-      "funny binding: ~W" binding)
+	    (binding)
+	    "funny binding: ~W" binding)
     (if (and nil (typep source 'constant-object-binding))
 	(make-load-constant (constant-object source) binding funobj frame-map)
-      (let ((protect-registers (cons source protect-registers)))
-	(cond
-	 ((eq :untagged-fixnum-ecx source)
-	  (if (eq :untagged-fixnum-ecx
-		  (new-binding-location binding frame-map))
-	      nil
-	    (append (make-result-and-returns-glue :ecx :untagged-fixnum-ecx)
-		    (make-store-lexical binding :ecx shared-reference-p funobj frame-map
-					:protect-registers protect-registers))))
-	 ((typep binding 'borrowed-binding)
-	  (let ((slot (borrowed-binding-reference-slot binding)))
-	    (if (not shared-reference-p)
-		(let ((tmp-reg (chose-free-register protect-registers)
-			       #+ignore(if (eq source :eax) :ebx :eax)))
-		  (when (eq :ecx source)
-		    (break "loading a word from ECX?"))
-		  `((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
-			   ,tmp-reg)
-		    (:movl ,source (-1 ,tmp-reg))))
-	      `((:movl ,source (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot))))))))
-	 ((typep binding 'forwarding-binding)
-	  (assert (not (binding-lended-p binding)) (binding))
-	  (make-store-lexical (forwarding-binding-target binding)
-			      source shared-reference-p funobj frame-map))
-	 ((not (new-binding-located-p binding frame-map))
-	  ;; (warn "Can't store to unlocated binding ~S." binding)
-	  nil)
-	 ((and (binding-lended-p binding)
-	       (not shared-reference-p))
-	  (let ((tmp-reg (chose-free-register protect-registers)
-			 #+ignore (if (eq source :eax) :ebx :eax))
-		(location (new-binding-location binding frame-map)))
-	    (if (integerp location)
-		`((:movl (:ebp ,(stack-frame-offset location)) ,tmp-reg)
-		  (:movl ,source (,tmp-reg -1)))
-	      (ecase (operator location)
-		(:argument-stack
-		 (assert (<= 2 (function-argument-argnum binding)) ()
-		   "store-lexical argnum can't be ~A." (function-argument-argnum binding))
-		 `((:movl (:ebp ,(argument-stack-offset binding)) ,tmp-reg)
-		   (:movl ,source (,tmp-reg -1))))))))
-	 (t (let ((location (new-binding-location binding frame-map)))
-	      (cond
-	       ((member source '(:eax :ebx :ecx :edx :edi :esp))
-		(if (integerp location)
-		    `((:movl ,source (:ebp ,(stack-frame-offset location))))
-		  (ecase (operator location)
-		    ((:push)
-		     `((:pushl ,source)))
-		    ((:eax :ebx :ecx :edx)
-		     (unless (eq source location)
-		       `((:movl ,source ,location))))
-		    (:argument-stack
-		     (assert (<= 2 (function-argument-argnum binding)) ()
-		       "store-lexical argnum can't be ~A." (function-argument-argnum binding))
-		     `((:movl ,source (:ebp ,(argument-stack-offset binding)))))
-		    (:untagged-fixnum-ecx
-		     (assert (not (eq source :edi)))
-		     (cond
-		      ((eq source :untagged-fixnum-ecx)
-		       nil)
-		      ((eq source :eax)
-		       `((,*compiler-global-segment-prefix*
-			  :call (:edi ,(global-constant-offset 'unbox-u32)))))
-		      (t `((:movl ,source :eax)
-			   (,*compiler-global-segment-prefix*
-			    :call (:edi ,(global-constant-offset 'unbox-u32))))))))))
-	       ((eq source :boolean-cf=1)
-		(let ((tmp (chose-free-register protect-registers)))
-		  `((:sbbl :ecx :ecx)
-		    (,*compiler-local-segment-prefix*
-		     :movl (:edi (:ecx 4) ,(global-constant-offset 'not-not-nil)) ,tmp)
-		    ,@(make-store-lexical binding tmp shared-reference-p funobj frame-map
-					  :protect-registers protect-registers))))
-	       ((eq source :boolean-cf=0)
-		(let ((tmp (chose-free-register protect-registers)))
-		  `((:sbbl :ecx :ecx)
-		    (,*compiler-local-segment-prefix*
-		     :movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-zero)) ,tmp)
-		    ,@(make-store-lexical binding tmp shared-reference-p funobj frame-map
-					  :protect-registers protect-registers))))
-	       ((and *compiler-use-cmov-p*
-		     (member source +boolean-modes+))
-		(let ((tmp (chose-free-register protect-registers)))
-		  (append `((:movl :edi ,tmp))
-			  (list (cons *compiler-local-segment-prefix*
-				      (make-cmov-on-boolean source
-							    `(:edi ,(global-constant-offset 't-symbol))
-							    tmp)))
-			  (make-store-lexical binding tmp shared-reference-p funobj frame-map
+	(let ((protect-registers (list* source protect-registers)))
+	  (unless (or (eq source :untagged-fixnum-ecx)) ; test binding type!
+	    (push :ecx protect-registers))
+	  (cond
+	    ((eq :untagged-fixnum-ecx source)
+	     (if (eq :untagged-fixnum-ecx
+		     (new-binding-location binding frame-map))
+		 nil
+		 (append (make-result-and-returns-glue :ecx :untagged-fixnum-ecx)
+			 (make-store-lexical binding :ecx shared-reference-p funobj frame-map
+					     :protect-registers protect-registers))))
+	    ((typep binding 'borrowed-binding)
+	     (let ((slot (borrowed-binding-reference-slot binding)))
+	       (if (not shared-reference-p)
+		   (let ((tmp-reg (chose-free-register protect-registers)
+			   #+ignore(if (eq source :eax) :ebx :eax)))
+		     (when (eq :ecx source)
+		       (break "loading a word from ECX?"))
+		     `((:movl (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot)))
+			      ,tmp-reg)
+		       (:movl ,source (-1 ,tmp-reg))))
+		   `((:movl ,source (:esi ,(+ (slot-offset 'movitz-funobj 'constant0) (* 4 slot))))))))
+	    ((typep binding 'forwarding-binding)
+	     (assert (not (binding-lended-p binding)) (binding))
+	     (make-store-lexical (forwarding-binding-target binding)
+				 source shared-reference-p funobj frame-map))
+	    ((not (new-binding-located-p binding frame-map))
+	     ;; (warn "Can't store to unlocated binding ~S." binding)
+	     nil)
+	    ((and (binding-lended-p binding)
+		  (not shared-reference-p))
+	     (let ((tmp-reg (chose-free-register protect-registers)
+		     #+ignore (if (eq source :eax) :ebx :eax))
+		   (location (new-binding-location binding frame-map)))
+	       (if (integerp location)
+		   `((:movl (:ebp ,(stack-frame-offset location)) ,tmp-reg)
+		     (:movl ,source (,tmp-reg -1)))
+		   (ecase (operator location)
+		     (:argument-stack
+		      (assert (<= 2 (function-argument-argnum binding)) ()
+			      "store-lexical argnum can't be ~A." (function-argument-argnum binding))
+		      `((:movl (:ebp ,(argument-stack-offset binding)) ,tmp-reg)
+			(:movl ,source (,tmp-reg -1))))))))
+	    (t (let ((location (new-binding-location binding frame-map)))
+		 (cond
+		   ((member source '(:eax :ebx :ecx :edx :edi :esp))
+		    (if (integerp location)
+			`((:movl ,source (:ebp ,(stack-frame-offset location))))
+			(ecase (operator location)
+			  ((:push)
+			   `((:pushl ,source)))
+			  ((:eax :ebx :ecx :edx)
+			   (unless (eq source location)
+			     `((:movl ,source ,location))))
+			  (:argument-stack
+			   (assert (<= 2 (function-argument-argnum binding)) ()
+				   "store-lexical argnum can't be ~A." (function-argument-argnum binding))
+			   `((:movl ,source (:ebp ,(argument-stack-offset binding)))))
+			  (:untagged-fixnum-ecx
+			   (assert (not (eq source :edi)))
+			   (cond
+			     ((eq source :untagged-fixnum-ecx)
+			      nil)
+			     ((eq source :eax)
+			      `((,*compiler-global-segment-prefix*
+				 :call (:edi ,(global-constant-offset 'unbox-u32)))))
+			     (t `((:movl ,source :eax)
+				  (,*compiler-global-segment-prefix*
+				   :call (:edi ,(global-constant-offset 'unbox-u32))))))))))
+		   ((eq source :boolean-cf=1)
+		    (let ((tmp (chose-free-register protect-registers)))
+		      `((:sbbl :ecx :ecx)
+			(,*compiler-local-segment-prefix*
+			 :movl (:edi (:ecx 4) ,(global-constant-offset 'not-not-nil)) ,tmp)
+			,@(make-store-lexical binding tmp shared-reference-p funobj frame-map
 					      :protect-registers protect-registers))))
-	       ((member source +boolean-modes+)
-		(let ((tmp (chose-free-register protect-registers))
-		      (label (gensym "store-lexical-bool-")))
-		  (append `((:movl :edi ,tmp))
-			  (list (make-branch-on-boolean source label :invert t))
-			  `((,*compiler-local-segment-prefix*
-			     :movl (:edi ,(global-constant-offset 't-symbol)) ,tmp))
-			  (list label)
-			  (make-store-lexical binding tmp shared-reference-p funobj frame-map
+		   ((eq source :boolean-cf=0)
+		    (let ((tmp (chose-free-register protect-registers)))
+		      `((:sbbl :ecx :ecx)
+			(,*compiler-local-segment-prefix*
+			 :movl (:edi (:ecx 4) ,(global-constant-offset 'boolean-zero)) ,tmp)
+			,@(make-store-lexical binding tmp shared-reference-p funobj frame-map
 					      :protect-registers protect-registers))))
-	       ((not (bindingp source))
-		(error "Unknown source for store-lexical: ~S" source))
-	       ((binding-singleton source)
-		(assert (not shared-reference-p))
-		(let ((value (car (binding-singleton source))))
-		  (etypecase value
-		    (movitz-fixnum
-		     (let ((immediate (movitz-immediate-value value)))
-		       (if (integerp location)
-			   (let ((tmp (chose-free-register protect-registers)))
-			     (append (make-immediate-move immediate tmp)
-				     `((:movl ,tmp (:ebp ,(stack-frame-offset location))))))
-			 #+ignore (if (= 0 immediate)
-				      (let ((tmp (chose-free-register protect-registers)))
-					`((:xorl ,tmp ,tmp)
-					  (:movl ,tmp (:ebp ,(stack-frame-offset location)))))
-				    `((:movl ,immediate (:ebp ,(stack-frame-offset location)))))
-			 (ecase (operator location)
-			   ((:argument-stack)
-			    `((:movl ,immediate (:ebp ,(argument-stack-offset binding)))))
-			   ((:eax :ebx :ecx :edx)
-			    (make-immediate-move immediate location))
-			   ((:untagged-fixnum-ecx)
-			    (make-immediate-move (movitz-fixnum-value value) :ecx))))))
-		    (movitz-character
-		     (let ((immediate (movitz-immediate-value value)))
-		       (if (integerp location)
-			   (let ((tmp (chose-free-register protect-registers)))
-			     (append (make-immediate-move immediate tmp)
-				     `((:movl ,tmp (:ebp ,(stack-frame-offset location))))))
-			 (ecase (operator location)
-			   ((:argument-stack)
-			    `((:movl ,immediate (:ebp ,(argument-stack-offset binding)))))
-			   ((:eax :ebx :ecx :edx)
-			    (make-immediate-move immediate location))))))
-		    (movitz-heap-object
-		     (etypecase location
-		       ((member :eax :ebx :edx)
-			(make-load-constant value location funobj frame-map))
-		       (integer
-			(let ((tmp (chose-free-register protect-registers)))
-			  (append (make-load-constant value tmp funobj frame-map)
-				  (make-store-lexical binding tmp shared-reference-p
-						      funobj frame-map
-						      :protect-registers protect-registers))))
-		       ((eql :untagged-fixnum-ecx)
-			(check-type value movitz-bignum)
-			(let ((immediate (movitz-bignum-value value)))
-			  (check-type immediate (unsigned-byte 32))
-			  (make-immediate-move immediate :ecx)))
-		       )))))	       
-	       (t (error "Generalized lexb source for store-lexical not implemented: ~S" source))))))))))
+		   ((and *compiler-use-cmov-p*
+			 (member source +boolean-modes+))
+		    (let ((tmp (chose-free-register protect-registers)))
+		      (append `((:movl :edi ,tmp))
+			      (list (cons *compiler-local-segment-prefix*
+					  (make-cmov-on-boolean source
+								`(:edi ,(global-constant-offset 't-symbol))
+								tmp)))
+			      (make-store-lexical binding tmp shared-reference-p funobj frame-map
+						  :protect-registers protect-registers))))
+		   ((member source +boolean-modes+)
+		    (let ((tmp (chose-free-register protect-registers))
+			  (label (gensym "store-lexical-bool-")))
+		      (append `((:movl :edi ,tmp))
+			      (list (make-branch-on-boolean source label :invert t))
+			      `((,*compiler-local-segment-prefix*
+				 :movl (:edi ,(global-constant-offset 't-symbol)) ,tmp))
+			      (list label)
+			      (make-store-lexical binding tmp shared-reference-p funobj frame-map
+						  :protect-registers protect-registers))))
+		   ((not (bindingp source))
+		    (error "Unknown source for store-lexical: ~S" source))
+		   ((binding-singleton source)
+		    (assert (not shared-reference-p))
+		    (let ((value (car (binding-singleton source))))
+		      (etypecase value
+			(movitz-fixnum
+			 (let ((immediate (movitz-immediate-value value)))
+			   (if (integerp location)
+			       (let ((tmp (chose-free-register protect-registers)))
+				 (append (make-immediate-move immediate tmp)
+					 `((:movl ,tmp (:ebp ,(stack-frame-offset location))))))
+			       #+ignore (if (= 0 immediate)
+					    (let ((tmp (chose-free-register protect-registers)))
+					      `((:xorl ,tmp ,tmp)
+						(:movl ,tmp (:ebp ,(stack-frame-offset location)))))
+					    `((:movl ,immediate (:ebp ,(stack-frame-offset location)))))
+			       (ecase (operator location)
+				 ((:argument-stack)
+				  `((:movl ,immediate (:ebp ,(argument-stack-offset binding)))))
+				 ((:eax :ebx :ecx :edx)
+				  (make-immediate-move immediate location))
+				 ((:untagged-fixnum-ecx)
+				  (make-immediate-move (movitz-fixnum-value value) :ecx))))))
+			(movitz-character
+			 (let ((immediate (movitz-immediate-value value)))
+			   (if (integerp location)
+			       (let ((tmp (chose-free-register protect-registers)))
+				 (append (make-immediate-move immediate tmp)
+					 `((:movl ,tmp (:ebp ,(stack-frame-offset location))))))
+			       (ecase (operator location)
+				 ((:argument-stack)
+				  `((:movl ,immediate (:ebp ,(argument-stack-offset binding)))))
+				 ((:eax :ebx :ecx :edx)
+				  (make-immediate-move immediate location))))))
+			(movitz-heap-object
+			 (etypecase location
+			   ((member :eax :ebx :edx)
+			    (make-load-constant value location funobj frame-map))
+			   (integer
+			    (let ((tmp (chose-free-register protect-registers)))
+			      (append (make-load-constant value tmp funobj frame-map)
+				      (make-store-lexical binding tmp shared-reference-p
+							  funobj frame-map
+							  :protect-registers protect-registers))))
+			   ((eql :untagged-fixnum-ecx)
+			    (check-type value movitz-bignum)
+			    (let ((immediate (movitz-bignum-value value)))
+			      (check-type immediate (unsigned-byte 32))
+			      (make-immediate-move immediate :ecx)))
+			   )))))	       
+		   (t (error "Generalized lexb source for store-lexical not implemented: ~S" source))))))))))
 
 (defun finalize-code (code funobj frame-map)
   ;; (print-code 'to-be-finalized code)
