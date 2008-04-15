@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.42 2008-04-09 18:33:41 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.43 2008-04-15 23:06:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -38,10 +38,7 @@
       `(with-inline-assembly (:returns :ebx)
 	 (:compile-form (:result-mode :eax) ,place)
 	 (:globally (:call (:edi (:edi-offset fast-cdr-car))))
-	 (:lexical-store ,place :eax))
-      #+ignore
-      `(prog1 (car ,place)
-	 (setq ,place (cdr ,place)))
+	 (:lexical-store ,place :eax :protect-registers (:ebx)))      
     form))
 
 (defmacro push (&environment env item place)
@@ -55,13 +52,6 @@
 	     ,@(mapcar #'list tmp-vars tmp-var-init-forms))
 	 (let ((,store-var (cons ,item-var ,getter-form)))
 	   ,setter-form)))))
-
-#+ignore
-(define-compiler-macro push (&whole form &environment env item place)
-  (if (and (symbolp place)
-	   (not (typep (movitz::movitz-binding place env) 'movitz::symbol-macro-binding)))
-      `(setq ,place (cons ,item ,place))
-    form))
 
 (defmacro pushnew (&environment env item place &rest key-test-args)
   (multiple-value-bind (tmp-vars tmp-var-init-forms store-vars setter-form getter-form)
@@ -333,6 +323,14 @@ respect to multiple threads."
        (error 'end-of-file :stream ,stream)
        ,eof-value))
 
+(defmacro/run-time with-dynamic-extent-scope ((tag) &body body)
+  (declare (ignore tag))
+  `(progn ,@body))
+
+(defmacro/run-time with-dynamic-extent-allocation ((tag) &body body)
+  (declare (ignore tag))
+  `(progn ,@body))
+
 (defmacro handler-bind (bindings &body forms)
   (if (null bindings)
       `(progn ,@forms)
@@ -542,6 +540,7 @@ respect to multiple threads."
 
 (define-unimplemented-macro with-open-file)
 (define-unimplemented-macro restart-case)
+(define-unimplemented-macro with-condition-restarts)
 
 (defmacro/cross-compilation load (filespec &key verbose print if-does-not-exist external-format)
   "hm..."
