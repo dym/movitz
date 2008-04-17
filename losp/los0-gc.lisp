@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Feb 21 17:48:32 2004
 ;;;;                
-;;;; $Id: los0-gc.lisp,v 1.62 2007/04/09 17:30:09 ffjeld Exp $
+;;;; $Id: los0-gc.lisp,v 1.63 2008-04-17 19:37:01 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -429,8 +429,6 @@ duo-space where each space is KB-SIZE kilobytes."
                                           new)))))
 		  ((not (object-in-space-p oldspace x))
 		   x)
-		  #+ignore ((when (typep x 'run-time-context)
-                              (warn "Scavenging ~S" x)))
 		  (t (or (and (eq (object-tag x)
 				  (ldb (byte 3 0)
 				       (memref (object-location x) 0 :type :unsigned-byte8)))
@@ -438,6 +436,8 @@ duo-space where each space is KB-SIZE kilobytes."
 				(and (object-in-space-p newspace forwarded-x)
 				     forwarded-x)))
 			 (let ((forward-x (shallow-copy x)))
+			   (when (typep x 'run-time-context)
+			     (break "Evac RTC ~Z -> ~Z" x forward-x))
 			   (when (and *gc-consistency-check*
 				      (typep x 'muerte::pointer))
 			     (let ((a *x*))
@@ -533,6 +533,8 @@ oldspace: ~Z, newspace: ~Z, i: ~D"
       (unless *gc-quiet*
 	(let ((old-size (truncate (- (space-fresh-pointer oldspace) 2) 2))
 	      (new-size (truncate (- (space-fresh-pointer newspace) 2) 2)))
+	  (when (= old-size new-size)
+	    (break "No memory freed by GC."))
 	  (format t "Old space: ~/muerte:pprint-clumps/, new space: ~
 ~/muerte:pprint-clumps/, freed: ~/muerte:pprint-clumps/.~%"
 		  old-size new-size (- old-size new-size))))
