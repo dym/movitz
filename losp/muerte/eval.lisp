@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.30 2008-04-13 20:12:37 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.31 2008-04-17 19:33:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -487,7 +487,7 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
   (declare (ignore))
   (let* ((tag (cadr form))
 	 (b (cdr (op-env-binding env tag +eval-binding-type-go-tag+))))
-    (unless b (error "Go-tag ~S is not visible." tag))
+    (assert b () "Go-tag ~S is not visible." tag)
     (throw (cdr b) (values tag))))
 
 (defun eval-set-variable (variable-name value env)
