@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.18 2008-03-15 20:57:34 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.19 2008-04-17 19:33:11 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -168,7 +168,7 @@ Parameters: struct-name."
 		    (:conc-name (push (string (or parameter ""))
 				      (getf collector :conc-name)))
 		    (:constructor (push parameter (getf collector :constructor)))
-		    (:copier (push parameter (getf collector :constructor)))
+		    (:copier (push parameter (getf collector :copier)))
 		    (:predicate (push parameter (getf collector :predicate)))
 		    (:type (push parameter (getf collector :type)))
 		    (:initial-offset (push parameter (getf collector :initial-offset)))
