@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Mar 29 14:54:08 2004
 ;;;;                
-;;;; $Id: scavenge.lisp,v 1.61 2007/04/07 20:50:38 ffjeld Exp $
+;;;; $Id: scavenge.lisp,v 1.62 2008-04-17 19:35:49 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -56,11 +56,17 @@ start-location and end-location."
 				(byte 8 8)
 				(movitz:tag primary))))
 		 `(= ,code ,x)))
-	     (record-scan (x)
+	     (record-scan (&optional (tag :other))
 	       (declare (ignorable x))
-	       #+ignore `(setf *scan-last* ,x)))
+	       `(let ((x (%word-offset scan ,(movitz:tag tag))))
+		  #+ignore (when (and (los0::object-in-space-p (%run-time-context-slot nil 'nursery-space) x)
+			     (not (typep x 'vector))
+			     (not (typep x 'function)))
+			     (format t "~&Scan: ~S: ~Z ~A~%" scan x (type-of x)))
+		  ;; `(format t "~&Scan: ~S: ~Z" scan x)
+		  (setf *scan-last* x))))
     (do ((verbose *map-header-vals-verbose*)
-	 #+ignore (*scan-last* nil)		; Last scanned object, for debugging.
+	 #+ignore (*scan-last* nil) ; Last scanned object, for debugging.
 	 (scan start-location (1+ scan)))
 	((>= scan end-location))
       (declare (fixnum scan))
@@ -74,41 +80,53 @@ start-location and end-location."
                  (= tag #.(movitz:tag :even-fixnum))
                  (= tag #.(movitz:tag :odd-fixnum))
                  (scavenge-typep x :character))))
-          ((or (and (= 0 x2) (= 2 x))
-               (and (= #xffff x2) (= #xfffe x))
-               (and (= #x7fff x2) (= #xffff x))))
+          ((or (and (= 0 x2)
+		    (= 2 x))
+               (and (= #xffff x2)
+		    (= #xfffe x))
+               (and (= #x7fff x2)
+		    (= #xffff x))))
           ((scavenge-typep x :illegal)
            (error "Illegal word #x~4,'0X at #x~X." x scan))
           ((scavenge-typep x :bignum)
            (assert (evenp scan) ()
                    "Scanned bignum-header #x~4,'0X at odd location #x~X." x scan)
            ;; Just skip the bigits
+	   (record-scan :other)
            (let* ((bigits (memref scan 0 :index 1 :type :unsigned-byte14))
                   (delta (logior bigits 1)))
-             (record-scan (%word-offset scan #.(movitz:tag :other)))
              (incf scan delta)))
           ((scavenge-typep x :defstruct)
            (assert (evenp scan) ()
                    "Scanned struct-header #x~4,'0X at odd location #x~X." x scan)
-           (record-scan (%word-offset scan #.(movitz:tag :other))))
+           (record-scan :other))
           ((scavenge-typep x :run-time-context)
            (assert (evenp scan) ()
                    "Scanned run-time-context-header #x~4,'0X at odd location #x~X." 
                    (memref scan 0 :type :unsigned-byte32) scan)
-           (incf scan)
-           (let ((non-lispvals #.(cl:truncate (cl:+ -4 (bt:slot-offset 'movitz::movitz-run-time-context
-                                                                       'movitz::pointer-start)
-                                                    (movitz::image-nil-word movitz:*image*))
-                                              4))
-                 (end (+ scan #.(movitz::movitz-type-word-size 'movitz::movitz-run-time-context))))
-             (incf scan non-lispvals)
-             (map-lisp-vals function scan (1+ end))
-             (setf scan end)))
+	   (record-scan :other)
+	   (let ((rtc (%word-offset scan #.(movitz:tag :other))))
+	     (incf scan)
+	     (let ((non-lispvals #.(cl:truncate (cl:+ -4 (bt:slot-offset 'movitz::movitz-run-time-context
+									 'movitz::pointer-start)
+						      (movitz::image-nil-word movitz:*image*))
+						4))
+		   (end (+ scan #.(movitz::movitz-type-word-size 'movitz::movitz-run-time-context))))
+	       (incf scan non-lispvals)
+	       (check-type rtc run-time-context)
+	       (let ((old-stack (%run-time-context-slot rtc 'stack-vector)))
+		 ;; (warn "old-stack: ~Z" old-stack)
+		 (map-lisp-vals function scan (1+ end))
+		 (let ((new-stack (%run-time-context-slot rtc 'stack-vector)))
+		   ;; (warn "new-stack: ~Z" new-stack)
+		   (when (not (eq old-stack new-stack))
+		     (error "Stack-vector for ~S moved from ~Z to ~Z." rtc old-stack new-stack))))
+	       (setf scan end))))
           ((scavenge-typep x :funobj)
            (assert (evenp scan) ()
                    "Scanned funobj-header #x~4,'0X at odd location #x~X." 
                    (memref scan 0 :type :unsigned-byte32) scan)
-           (record-scan (%word-offset scan #.(movitz:tag :other)))
+           (record-scan :other)
            ;; Process code-vector pointers specially..
            (let* ((old-code-vector (memref (incf scan) 0 :type :code-vector))
                   (new-code-vector (if (eq 0 old-code-vector)
@@ -170,34 +188,37 @@ start-location and end-location."
                   (scavenge-wide-typep x :basic-vector
                                        #.(bt:enum-value 'movitz:movitz-vector-element-type :code)))
               (let ((len (memref scan 4)))
-                (record-scan (%word-offset scan #.(movitz:tag :other)))
+                (record-scan :other)
                 (incf scan (1+ (* 2 (truncate (+ 7 len) 8))))))
              ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u16))
               (let ((len (memref scan 0 :index 1)))
-                (record-scan (%word-offset scan #.(movitz:tag :other)))
+                (record-scan :other)
                 (incf scan (1+ (* 2 (truncate (+ 3 len) 4))))))
-             ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :u32))
+             ((or (scavenge-wide-typep x :basic-vector
+				       #.(bt:enum-value 'movitz:movitz-vector-element-type :u32))
+		  (scavenge-wide-typep x :basic-vector
+				       #.(bt:enum-value 'movitz:movitz-vector-element-type :stack)))
               (let ((len (memref scan 4)))
-                (record-scan (%word-offset scan #.(movitz:tag :other)))
+                (record-scan :other)
                 (incf scan (1+ (logand (1+ len) -2)))))
              ((scavenge-wide-typep x :basic-vector #.(bt:enum-value 'movitz:movitz-vector-element-type :bit))
               (let ((len (memref scan 4)))
-                (record-scan (%word-offset scan #.(movitz:tag :other)))
+                (record-scan :other)
                 (incf scan (1+ (* 2 (truncate (+ 63 len) 64))))))
              ((or (scavenge-wide-typep x :basic-vector
                                        #.(bt:enum-value 'movitz:movitz-vector-element-type
-                                          :any-t))
+							:any-t))
                   (scavenge-wide-typep x :basic-vector
                                        #.(bt:enum-value 'movitz:movitz-vector-element-type
-                                          :indirects)))
-              (record-scan (%word-offset scan #.(movitz:tag :other))))
+							:indirects)))
+              (record-scan :other))
              (t (error "Scanned unknown basic-vector-header #x~4,'0X at location #x~X." x scan))))
           ((and (eq x 3) (eq x2 0))
-           (record-scan scan)
+           ;; (record-scan scan)
            (incf scan)
            (let ((delta (memref scan 0)))
              (check-type delta positive-fixnum)
-             ;; (warn "at ~S skipping ~S to ~S." scan delta (+ scan delta))
+	     (format t "at ~S skipping ~S to ~S." scan delta (+ scan delta))
              (incf scan delta)))
           (t ;; (typep x 'pointer)
            (let* ((old (memref scan 0))
@@ -439,5 +460,3 @@ assuming the pointer refers to old-code-vector."
 	       (* location-offset 4)
 	       lowbits))))
       new-code-vector)))
-
-
