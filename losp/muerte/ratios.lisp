@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 20 00:39:59 2004
 ;;;;                
-;;;; $Id: ratios.lisp,v 1.10 2007/04/08 13:44:44 ffjeld Exp $
+;;;; $Id: ratios.lisp,v 1.11 2008-04-17 19:35:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -76,16 +76,57 @@
     (integer 1)
     (ratio (%ratio-denominator x))))
 
-(defconstant least-positive-short-float 1/1000)
-(defconstant least-positive-single-float 1/1000)
-(defconstant least-positive-double-float 1/1000)
-(defconstant least-positive-long-float 1/1000)
+;;; "Floats"
+
+(defconstant most-negative-short-float most-negative-fixnum)
+(defconstant most-negative-single-float most-negative-fixnum)
+(defconstant most-negative-long-float most-negative-fixnum)
+(defconstant most-negative-double-float most-negative-fixnum)
+
+(defconstant least-positive-short-float 1/100000)
+(defconstant least-positive-single-float 1/100000)
+(defconstant least-positive-double-float 1/100000)
+(defconstant least-positive-long-float 1/100000)
 
 ;;;
 
 (defconstant pi #xea7632a/4aa1a8b)
 
 (defvar long-float-epsilon 1/10000)
+
+(defun float (x &optional proto)
+  (declare (ignore proto))
+  (check-type x float)
+  x)
+
+(defun float-radix (x)
+  (if (integerp x)
+      2
+      (denominator x)))
+
+(defun integer-decode-float (x)
+  (if (integerp x)
+      (if (minusp x)
+	  (values x 0 -1)
+	  (values x 0 1))
+      (let ((n (numerator x)))
+	(if (minusp x)
+	    (values n -1 -1)
+	    (values n -1 1)))))
+
+(defun decode-float (x)
+  (multiple-value-bind (n sign)
+      (let ((n (numerator x)))
+	(if (minusp n)
+	    (values (- n) -1)
+	    (values n 1)))
+    (let* ((r (float-radix x))
+	   (d (denominator x))
+	   (e (if (= 1 d) 0 -1)))
+      (do () ((< n 1)
+	      (values n e sign))
+	(setf n (/ n r))
+	(incf e)))))
 
 (defun cos (x)
   "http://mathworld.wolfram.com/Cosine.html"
