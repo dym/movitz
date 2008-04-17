@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.202 2008-04-15 23:04:39 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.203 2008-04-17 19:09:28 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1072,26 +1072,6 @@ a (lexical-extent) sub-function might care about its parent frame-map."
 				  :element-type 'code
 				  :initial-contents code-vector)))))
   funobj)
-
-(defun check-locate-concistency (code-vector)
-  "The run-time function muerte::%find-code-vector sometimes needs to find a code-vector by
-searching through the machine-code for an object header signature. This function is to
-make sure that no machine code accidentally forms such a header signature."
-  (loop for x from 0 below (length code-vector) by 8
-     do (when (and (= (tag :basic-vector) (aref code-vector x))
-		   (= (enum-value 'movitz-vector-element-type :code) (aref code-vector (1+ x)))
-		   (or (<= #x4000 (length code-vector))
-		       (and (= (ldb (byte 8 0) (length code-vector))
-			       (aref code-vector (+ x 2)))
-			    (= (ldb (byte 8 8) (length code-vector))
-			       (aref code-vector (+ x 3))))))
-	  (break "Code-vector (length ~D) can break %find-code-vector at ~D: #x~2,'0X~2,'0X ~2,'0X~2,'0X."
-		 (length code-vector) x
-		 (aref code-vector (+ x 0))
-		 (aref code-vector (+ x 1))
-		 (aref code-vector (+ x 2))
-		 (aref code-vector (+ x 3)))))
-  (values))
 
 (defun check-locate-concistency (code code-vector-length)
   "The run-time function muerte::%find-code-vector sometimes needs to find a code-vector by
@@ -3650,7 +3630,11 @@ loading borrowed bindings."
     (if (and nil (typep source 'constant-object-binding))
 	(make-load-constant (constant-object source) binding funobj frame-map)
 	(let ((protect-registers (list* source protect-registers)))
-	  (unless (or (eq source :untagged-fixnum-ecx)) ; test binding type!
+	  (unless (or (eq source :untagged-fixnum-ecx)
+		      (and (binding-store-type binding)
+			   (multiple-value-call #'encoded-subtypep
+			     (values-list (binding-store-type binding))
+			     (type-specifier-encode '(or integer character)))))
 	    (push :ecx protect-registers))
 	  (cond
 	    ((eq :untagged-fixnum-ecx source)
