@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.26 2008-04-09 18:01:36 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.27 2008-04-17 19:32:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -101,6 +101,11 @@
 		     (cell-error-name c)))))
 
 (define-condition program-error (error) ())
+
+(defun simple-program-error (format-control &rest format-arguments)
+  (error 'program-error
+	 :format-control format-control
+	 :format-argumetns format-arguments))
 
 (define-condition type-error (error)
   ((expected-type
