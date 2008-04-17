@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb 19 19:09:05 2001
 ;;;;                
-;;;; $Id: hash-tables.lisp,v 1.13 2007/02/06 20:03:57 ffjeld Exp $
+;;;; $Id: hash-tables.lisp,v 1.14 2008-04-17 19:34:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -246,8 +246,9 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
       ((>= i bucket-length) nil)
     (declare ((index 2) i index2))
     (let ((x (svref bucket index2)))
-      (when (or (eq x '--no-hash-key--)
-		(funcall (hash-table-test hash-table) x key))
+      (when (eq x '--no-hash-key--)
+	(return nil))
+      (when (funcall (hash-table-test hash-table) x key)
 	(setf (svref bucket index2) '--no-hash-key--)
 	(decf (hash-table-count hash-table))
 	;; Now we must rehash any entries that might have been
@@ -257,10 +258,11 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 	    ((= i index2))
 	  (declare ((index 2) i))
 	  (let ((k (svref bucket i)))
-	    (when (eq x '--no-hash-key--)
+	    (when (eq k '--no-hash-key--)
 	      (return))
 	    (let ((v (svref bucket (1+ i))))
 	      (setf (svref bucket i) '--no-hash-key--) ; remove
+	      (decf (hash-table-count hash-table))
 	      (setf (gethash k hash-table) v)))) ; insert (hopefully this is safe..)
 	(return t)))))
 
@@ -282,5 +284,5 @@ look up key0 and key1 as if they were in a doubleton list (key0 key1)."
 	    (get-next-entry)
 	  (if (not entry-p)
 	      (return nil)
-	    (map key value)))))))
+	      (map key value)))))))
 	
