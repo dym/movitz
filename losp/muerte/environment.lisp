@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.15 2006/04/07 21:53:47 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.16 2008-04-17 19:33:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -86,7 +86,7 @@
 				(fresh-line *trace-output*)
 				(dotimes (i *trace-level*)
 				  (write-string "  " *trace-output*))
-				(format *trace-output* "~D: (~S~{ ~S~})~%"
+				(format *trace-output* "~&~D: (~S~{ ~S~})~%"
 					*trace-level* function-name args))
 			      (multiple-value-call
 				  (lambda (&rest results)
@@ -95,7 +95,7 @@
 				      (fresh-line *trace-output*)
 				      (dotimes (i (min *trace-level* 10))
 					(write-string "  " *trace-output*))
-				      (format *trace-output* "~D: =>~{ ~W~^,~}.~%"
+				      (format *trace-output* "~&~D: =>~{ ~W~^,~}.~%"
 					      *trace-level* results)
 				      (values-list results)))
 				(let ((*trace-level* (1+ *trace-level*))
