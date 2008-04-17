@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.43 2008-04-15 23:06:47 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.44 2008-04-17 19:35:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -575,6 +575,3 @@ respect to multiple threads."
 	 (*read-suppress* nil)
 	 #+ignore (*readtable* nil))
      ,@body))
-
-(defmacro/run-time loop (&rest clauses)
-  (error "Loop not implemented."))
