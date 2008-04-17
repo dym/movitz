@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.125 2008-04-13 08:21:40 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.126 2008-04-17 19:34:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2299,14 +2299,6 @@
 (defun boole-2 (integer-1 integer-2)
   (declare (ignore integer-1))
   integer-2)
-
-(defun logandc1 (integer-1 integer-2)
-  (logand (lognot integer-1)
-	  integer-2))
-
-(defun logandc2 (integer-1 integer-2)
-  (logand integer-1
-	  (lognot integer-2)))
 
 (defun boole-c1 (integer-1 integer-2)
   (declare (ignore integer-2))
