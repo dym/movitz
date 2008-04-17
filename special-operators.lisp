@@ -8,7 +8,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Nov 24 16:22:59 2000
 ;;;;                
-;;;; $Id: special-operators.lisp,v 1.58 2008-04-12 16:23:26 ffjeld Exp $
+;;;; $Id: special-operators.lisp,v 1.59 2008-04-17 19:28:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -564,9 +564,11 @@ The valid parameters are~{ ~S~}."
 			     nil))
 		       (setf (assembly-macro-expander :lexical-store amenv)
 			 (lambda (expr)
-			   (destructuring-bind (var reg &key (type t))
+			   (destructuring-bind (var reg &key (type t) protect-registers)
 			       (cdr expr)
-			     `((:store-lexical ,(movitz-binding var env) ,reg :type ,type)))))
+			     `((:store-lexical ,(movitz-binding var env) ,reg
+					       :type ,type
+					       :protect-registers ,protect-registers)))))
 		       (setf (assembly-macro-expander :lexical-binding amenv)
 			 (lambda (expr)
 			   (destructuring-bind (var)
