@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.66 2008-04-02 20:49:37 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.67 2008-04-18 09:55:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1169,8 +1169,8 @@ and return basic-vector and accessors for that subsequence."
                      dimensions)
                     ((and (consp dimensions) (null (cdr dimensions)))
                      (car dimensions))
-                    (t
-                     (error "Multi-dimensional arrays not supported.")))))
+                    (t (warn "Array of rank ~D not supported." (length dimensions))
+		       (return-from make-array nil))))) ; XXX
     (cond
      (displaced-to
       (make-indirect-vector displaced-to displaced-index-offset fill-pointer size))
