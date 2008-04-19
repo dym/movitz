@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.19 2008-04-17 19:33:11 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.20 2008-04-19 12:43:50 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -334,3 +334,7 @@ Parameters: struct-name."
 			(slot-number ,slot-number)))
 		',struct-name))
 	    ))))))
+
+(defmacro/run-time defstruct (&rest ignore)
+  (identity 'structure); just to reference the symbol.
+  (error "Defstruct not implemented."))
