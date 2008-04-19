@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 20 00:39:59 2004
 ;;;;                
-;;;; $Id: ratios.lisp,v 1.11 2008-04-17 19:35:20 ffjeld Exp $
+;;;; $Id: ratios.lisp,v 1.12 2008-04-19 12:45:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -142,3 +142,15 @@
 
 (defun sin (x)
   (cos (- x (/ pi 2))))
+
+(defun ffloor (number &optional (divisor 1))
+  (floor number divisor))
+
+(defun ftruncate (number &optional (divisor 1))
+  (truncate number divisor))
+
+(defun fround (number &optional (divisor 1))
+  (round number divisor))
+
+(defun fceiling (number &optional (divisor 1))
+  (ceiling number divisor))
