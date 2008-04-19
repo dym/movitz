@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.25 2008-03-21 22:31:07 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.26 2008-04-19 15:21:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -33,6 +33,8 @@
 (defvar *print-pretty* t)
 (defvar *print-circle* nil)
 (defvar *print-case* :upcase)
+(defvar *print-lines* nil)
+(defvar *print-miser-width* nil)
 
 (defvar *print-safely* nil)
 
