@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.26 2008-04-14 21:06:47 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.27 2008-04-19 12:44:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -321,6 +321,7 @@
 	      (map-into more-lists #'cdr more-lists))))))
 
 
+
 (defun mapcan (function first-list &rest more-lists)
   (numargs-case
    (2 (function first-list)
@@ -424,6 +425,29 @@
 	   (nreverse result))
 	(push (apply function first-list more-lists)
 	      result)
+	(setf first-list (cdr first-list)
+	      more-lists (map-into more-lists #'cdr more-lists))))))
+
+(defun mapl (function first-list &rest more-lists)
+  (numargs-case
+   (2 (function first-list)
+      (do ((p first-list (cdr p)))
+	  ((endp p)
+	   first-list)
+	(funcall function p)))
+   (3 (function first-list second-list)
+      (do ((p1 first-list (cdr p1))
+	   (p2 second-list (cdr p2)))
+	  ((or (endp p1) (endp p2))
+	   first-list)
+	(funcall function p1 p2)))
+   (t (function first-list &rest more-lists)
+      (declare (dynamic-extent more-lists))
+      (do ()
+	  ((or (endp first-list)
+	       (some #'endp more-lists))
+	   first-list)
+	(apply function first-list more-lists)
 	(setf first-list (cdr first-list)
 	      more-lists (map-into more-lists #'cdr more-lists))))))
 
