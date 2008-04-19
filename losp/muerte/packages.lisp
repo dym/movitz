@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 30 15:19:43 2001
 ;;;;                
-;;;; $Id: packages.lisp,v 1.13 2006/04/28 21:19:08 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.14 2008-04-19 12:45:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -100,7 +100,7 @@
 	  (when (eq package (find-package :keyword))
 	    (setf (symbol-flags symbol)
 	      #.(bt:enum-value 'movitz::movitz-symbol-flags '(:constant-variable)))
-	    (setf (symbol-value symbol)
+	    (setf (%symbol-global-value symbol)
 	      symbol))))
       (unless (symbol-package symbol)
 	(setf (memref symbol (movitz-type-slot-offset 'movitz-symbol 'package)) package))
