@@ -7,7 +7,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defmacro-bootstrap.lisp,v 1.3 2008-04-12 17:11:23 ffjeld Exp $
+;;;; $Id: defmacro-bootstrap.lisp,v 1.4 2008-04-21 19:38:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -33,51 +33,44 @@
 
 (defmacro defmacro/run-time (name lambda-list &body body)
   (multiple-value-bind (real-body declarations docstring)
-      (movitz::parse-docstring-declarations-and-body body 'cl:declare)
-    (let* ((block-name (compute-function-block-name name))
-	   (ignore-var (gensym))
-	   (whole-var (when (eq '&whole (car lambda-list))
-			(list (pop lambda-list)
-			      (pop lambda-list))))
-	   (form-var (gensym "form-"))
-	   (env-var nil)
-	   (operator-var (gensym))
-	   (destructuring-lambda-list
-	    (do ((l lambda-list)
-		 (r nil))
-		((atom l)
-		 (cons operator-var
-		       (nreconc r l)))
-	      (let ((x (pop l)))
-		(if (eq x '&environment)
-		    (setf env-var (pop l))
-		    (push x r))))))
-      (multiple-value-bind (env-var ignore-env)
-	  (if env-var
-	      (values env-var nil)
-	      (let ((e (gensym)))
-		(values e (list e))))
-	(cond
-	  ((and whole-var
-		(null lambda-list))
-	   `(make-named-function ,name
-				 (&edx edx &optional ,form-var ,env-var &rest ,ignore-var)
-				 ((ignore ,ignore-var ,@ignore-env))
-				 ,docstring
-				 (block ,block-name
-				   (verify-macroexpand-call edx ',name)
-				   (let ((,(second whole-var) ,form-var))
-				     (declare ,@declarations)
-				     ,@real-body))
-				 :type :macro-function))
-	  (t `(make-named-function ,name
-				   (&edx edx &optional ,form-var ,env-var &rest ,ignore-var)
-				   ((ignore ,ignore-var ,@ignore-env))
-				   ,docstring
-				   (block ,block-name
-				     (verify-macroexpand-call edx ',name)
-				     (destructuring-bind ,(append whole-var destructuring-lambda-list)
-					 ,form-var
-				       (declare (ignore ,operator-var) ,@declarations)
-				       ,@real-body))
-				   :type :macro-function)))))))
+      (parse-docstring-declarations-and-body body 'cl:declare)
+    (multiple-value-bind (destructuring-lambda-list whole-var env-var ignore-env ignore-operator)
+        (parse-macro-lambda-list lambda-list)
+      (let* ((block-name (compute-function-block-name name))
+             (extras (gensym))
+             (form-var (or whole-var
+                           (gensym "form-"))))
+        (cond
+          ((and (eq whole-var form-var)
+                (null (cdr destructuring-lambda-list)))
+           `(make-named-function ,name
+                                 (&edx edx &optional ,form-var ,env-var &rest ,extras)
+                                 ((ignore ,@ignore-env))
+                                 ,docstring
+                                 (block ,block-name
+                                   (numargs-case
+                                    (2 (&edx edx &optional ,form-var ,env-var)
+                                       (verify-macroexpand-call edx ',name)
+                                       (let ()
+                                         (declare ,@declarations)
+                                         ,@real-body))
+                                    (t (&edx edx &optional ,form-var ,env-var &rest ,extras)
+                                       (declare (ignore ,form-var ,extras))
+                                       (verify-macroexpand-call edx ',name t))))
+                                 :type :macro-function))
+          (t `(make-named-function ,name
+                                   (&edx edx &optional ,form-var ,env-var &rest ,extras)
+                                   ((ignore ,@ignore-env ,extras))
+                                   ,docstring
+                                   (block ,block-name
+                                     (numargs-case
+                                      (2 (&edx edx ,form-var ,env-var)
+                                         (verify-macroexpand-call edx ',name)
+                                         (destructuring-bind ,destructuring-lambda-list
+                                             ,form-var
+                                           (declare (ignore ,@ignore-operator) ,@declarations)
+                                           ,@real-body))
+                                      (t (&edx edx &optional ,form-var ,env-var &rest ,extras)
+                                         (declare (ignore ,form-var ,extras))
+                                         (verify-macroexpand-call edx ',name t))))
+                                   :type :macro-function)))))))
