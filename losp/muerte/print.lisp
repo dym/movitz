@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep  3 11:48:19 2001
 ;;;;                
-;;;; $Id: print.lisp,v 1.26 2008-04-19 15:21:57 ffjeld Exp $
+;;;; $Id: print.lisp,v 1.27 2008-04-21 19:42:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -241,6 +241,19 @@
 		 ((and (eq 'quote (car object))
 		       (not (cddr object)))
 		  (write-char #\' stream)
+		  (write (cadr object)))
+                 ((and (eq 'backquote (car object))
+		       (not (cddr object)))
+		  (write-char #\` stream)
+		  (write (cadr object)))
+                 ((and (eq 'backquote-comma (car object))
+		       (not (cddr object)))
+		  (write-char #\, stream)
+		  (write (cadr object)))
+                 ((and (eq 'function (car object))
+		       (not (cddr object)))
+		  (write-char #\# stream)
+                  (write-char #\' stream)
 		  (write (cadr object)))
 		 (t (labels ((write-cons (c stream length)
 			       (cond
