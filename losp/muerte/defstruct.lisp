@@ -9,7 +9,7 @@
 ;;;; Created at:    Mon Jan 22 13:10:59 2001
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: defstruct.lisp,v 1.20 2008-04-19 12:43:50 ffjeld Exp $
+;;;; $Id: defstruct.lisp,v 1.21 2008-04-21 19:39:08 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -95,10 +95,12 @@ Parameters: struct-name."
     (:compile-form (:result-mode :eax) object)
     (:leal (:eax #.(cl:- (movitz:tag :other))) :ecx)
     (:testb 7 :cl)
-    (:jne '(:sub-program (type-error) (:int 66)))
+    (:jne '(:sub-program (type-error)
+            (:load-constant struct-name :edx)
+            (:int 59)))
     (:cmpb #.(movitz:tag :defstruct) (:eax #.movitz:+other-type-offset+))
-    (:jne '(:sub-program (type-error) (:int 66)))
-    (:load-constant struct-name :ebx)
+    (:jne 'type-error)
+;;     (:load-constant struct-name :ebx)
 ;;;    (:cmpl :ebx (:eax #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)))
 ;;;    (:jne '(:sub-program (type-error) (:int 66)))
     ;; type test passed, read slot
@@ -115,12 +117,14 @@ Parameters: struct-name."
     ;; type test
     (:leal (:ebx #.(cl:- (movitz:tag :other))) :ecx)
     (:testb 7 :cl)
-    (:jnz '(:sub-program (type-error) (:int 66)))
+    (:jnz '(:sub-program (type-error)
+            (:load-constant struct-name :edx)
+            (:movl :ebx :eax)
+            (:int 59)))
     (:cmpb #.(movitz:tag :defstruct) (:ebx #.movitz:+other-type-offset+))
-    (:jne '(:sub-program (type-error) (:int 66)))
-    (:load-constant struct-name :ecx)
-;;;    (:cmpl :ecx (:ebx #.(bt:slot-offset 'movitz::movitz-struct 'movitz::name)))
-;;;    (:jne '(:sub-program (type-error) (:int 66)))
+    (:jne 'type-error)
+;;     (:cmpl :edx (:ebx (:offset movitz-struct name)))
+;;     (:jne 'type-error)
     ;; type test passed, write slot
     (:load-constant slot-number :ecx)
 ;;;    (:shrl #.movitz::+movitz-fixnum-shift+ :ecx)
@@ -173,7 +177,8 @@ Parameters: struct-name."
 		    (:type (push parameter (getf collector :type)))
 		    (:initial-offset (push parameter (getf collector :initial-offset)))
 		    (:print-object (push parameter (getf collector :print-object)))
-		    (:print-function (push parameter (getf collector :print-function))))))
+		    (:print-function (push parameter (getf collector :print-function)))
+                    (:include (push (cdr option) (getf collector :include))))))
 	       ((cons symbol (cons * cons))
 		(ecase (car option)
 		  (:include (push (cdr option) (getf collector :include)))
