@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 23:55:41 2001
 ;;;;                
-;;;; $Id: symbols.lisp,v 1.30 2008-04-09 18:02:31 ffjeld Exp $
+;;;; $Id: symbols.lisp,v 1.31 2008-04-21 19:43:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -247,6 +247,7 @@
 (defvar *gentemp-counter* 0)
 
 (defun gentemp (&optional (prefix "T") (package *package*))
+  (check-type prefix string)
   (intern (do ((name #0=(format nil "~A~D" prefix *gentemp-counter*) #0#))
               ((not (find-symbol name package)) name)
             (incf *gentemp-counter*))
