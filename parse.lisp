@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:49:17 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: parse.lisp,v 1.8 2008-04-21 19:46:12 ffjeld Exp $
+;;;; $Id: parse.lisp,v 1.9 2008-04-21 21:09:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -25,18 +25,20 @@
    second the list of declaration-specifiers."
   (loop for declaration-form = (when (declare-form-p (car forms) declare-symbol)
 				 (pop forms))
-     while declaration-form
-     append (cdr declaration-form) into declarations
-     finally (return (values forms declarations))))
+     if (declare-form-p (car forms) declare-symbol)
+     append (cdr (pop forms)) into declarations
+     else return (values forms declarations)))
 
 (defun parse-docstring-declarations-and-body (forms &optional (declare-symbol 'muerte.cl::declare))
   "From the list of FORMS, return first the non-declarations forms, second the declarations, ~
    and third the documentation string."
-  (let ((docstring (when (and (cdr forms) (stringp (car forms)))
-		     (pop forms))))
-    (multiple-value-bind (body declarations)
-	(parse-declarations-and-body forms declare-symbol)
-      (values body declarations docstring))))
+  (loop with docstring = nil
+     if (declare-form-p (car forms) declare-symbol)
+     append (cdr (pop forms)) into declarations
+     else if (and (stringp (car forms))
+		  (cdr forms))
+     do (setf docstring (pop forms))
+     else return (values forms declarations docstring)))
 
 (defun parse-macro-lambda-list (lambda-list)
   (let* ((whole-var (when (eq '&whole (car lambda-list))
@@ -153,6 +155,7 @@ Doubly quoted forms are copied verbatim (sans the quotes)."
   (defun muerte::host-program (program)
     (translate-program program :muerte.cl :common-lisp)))
 
+
 (defun decode-normal-lambda-list (lambda-list &optional host-symbols-p)
   "3.4.1 Ordinary Lambda Lists.
 Returns the requireds, &optionals, &rests, &keys, and &aux formal variables,
@@ -210,7 +213,9 @@ Finally, whether &key was present or not."
 				  (not allow-other-keys-p)
 				  (+ (length requireds)
 				     (length optionals))))
-		    (minargs (length requireds)))
+		    (minargs (length requireds))
+		    (keys-p (not (eq :missing
+				     (getf results (key) :missing)))))
 		(return (values requireds
 				optionals
 				(first rests)
@@ -218,7 +223,8 @@ Finally, whether &key was present or not."
 				auxes
 				allow-other-keys-p
 				minargs
-				maxargs
+				(unless keys-p
+				  maxargs)
 				edx-var
 				(cond
 				 ((or (eql maxargs minargs)
@@ -228,8 +234,7 @@ Finally, whether &key was present or not."
 				 ((evenp (+ (length requireds) (length optionals)))
 				  :even)
 				 (t :odd))
-				(not (eq :missing
-					 (getf results (key) :missing)))))))))))
+				keys-p))))))))
 
 (defun decode-optional-formal (formal)
   "3.4.1.2 Specifiers for optional parameters.
