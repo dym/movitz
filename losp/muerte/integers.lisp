@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.126 2008-04-17 19:34:39 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.127 2008-04-21 19:40:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2170,7 +2170,8 @@
       (abs (* (truncate (max n m) (gcd n m)) (min n m))))
    (t (&rest numbers)
       (declare (dynamic-extent numbers))
-      (reduce #'lcm numbers))))
+      (reduce #'lcm numbers
+              :initial-value 1))))
 
 (defun floor (n &optional (divisor 1))
   "This is floor written in terms of truncate."
