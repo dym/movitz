@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 30 15:19:43 2001
 ;;;;                
-;;;; $Id: packages.lisp,v 1.14 2008-04-19 12:45:03 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.15 2008-04-21 19:41:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -25,13 +25,49 @@
 	    (:constructor make-package-object)
 	    (:conc-name package-object-))
   name
-  external-symbols
-  internal-symbols
+  (external-symbols (make-hash-table :test #'equal))
+  (internal-symbols (make-hash-table :test #'equal))
   shadowing-symbols-list
   use-list
   nicknames)
 
 (defvar *packages*)			; Set by dump-image.
+
+(deftype package-designator ()
+  '(or package string-designator))
+
+(defun make-package (name &key nicknames use)
+  (let ((name* (string name))
+        (nicknames* (mapcar #'string nicknames))
+        (use* (mapcar #'find-package use)))
+    (when (some #'null use*)
+      (warn "Cannot use nonexisting package ~S."
+            (find-if-not #'find-package use))
+      (setf use* (remove nil use*)))
+    (let ((existing-packages (remove-if-not #'find-package (cons name* nicknames*))))
+      (when existing-packages
+        (cerror "Create the package anyway."
+                "There already exist package~P by the name~:P ~{~A~^ ~}."
+                (length existing-packages)
+                existing-packages)))
+    (let ((package (make-package-object :name name*
+                                        :use-list use*
+                                        :nicknames nicknames*)))
+      (dolist (nickname nicknames*)
+        (setf (gethash nickname *packages*) package))
+      (setf (gethash name* *packages*) package))))
+
+(defun delete-package (package)
+  (let ((package (find-package package)))
+    (when (and (package-name package)
+               (eq package (find-package (package-name package))))
+      (dolist (nickname (package-nicknames package))
+        (when (eq package (gethash nickname *packages*))
+          (setf (gethash nickname *packages*) nil)))
+      (setf (gethash (package-name package) *packages*)
+            nil)
+      (setf (package-object-name package) nil)
+      t)))
 
 (defun package-name (object)
   (package-object-name (find-package object)))
@@ -45,9 +81,13 @@
 (defun find-package (name)
   (typecase name
     (package name)
-    (null (find-package 'common-lisp))	; This can be practical..
-    ((or symbol string) (find-package-string (string name)))
-    (t (error "Not a package name: ~S" name))))
+    (null
+     (find-package 'common-lisp))	; This can be practical..
+    (string-designator
+     (find-package-string (string name)))
+    (t (error 'type-error
+        :datum name
+        :expected-type 'package-designator))))
 
 (defun find-package-string (name &optional (start 0) (end (length name)) (key 'identity))
   (values (gethash-string name start end *packages* nil key)))
