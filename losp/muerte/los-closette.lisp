@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.39 2008-04-12 16:47:21 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.40 2008-04-21 19:41:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -986,6 +986,7 @@ next-emf as its target for call-next-method."
 (defclass unbound-value (t) () (:metaclass built-in-class))
 
 (defclass stream () ())
+(defclass readtable () ())
 
 ;;;
 
