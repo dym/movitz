@@ -6,16 +6,19 @@
 ;;;; Author:        Frode Vatvedt Fjeld
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: pathnames.lisp,v 1.1 2008-03-20 22:21:05 ffjeld Exp $
+;;;; $Id: pathnames.lisp,v 1.2 2008-04-21 19:42:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (require :muerte/basic-macros)
-(require :muerte/defstruct)
+(require :muerte/los-closette)
 
 (in-package muerte)
 
 (provide :muerte/pathnames)
 
-(defstruct (pathname (:constructor make-pathname-object))
-  name)
+(defclass pathname ()
+  ((name)))
+
+(defclass logical-pathname (pathname)
+  ())
