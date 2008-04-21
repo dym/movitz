@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.58 2008-04-09 18:02:47 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.59 2008-04-21 19:43:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -601,7 +601,9 @@
 			   (or (eq xdim '*) (eql xdim adim)))
 			 dimension-spec
 			 (array-dimensions x)))))))
-      
+
+(defun arrayp (x)
+  (typep x 'array))      
 
 (define-simple-typep (atom atom) (x)
   (typep x 'atom))
@@ -704,6 +706,18 @@
   '(integer 0 1))
 
 (deftype float ()
+  'real)
+
+(deftype short-float ()
+  'real)
+
+(deftype long-float ()
+  'real)
+
+(deftype single-float ()
+  'real)
+
+(deftype double-float ()
   'real)
 
 (defun type-of (x)
