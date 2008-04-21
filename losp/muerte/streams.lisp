@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Jun 30 14:33:15 2003
 ;;;;                
-;;;; $Id: streams.lisp,v 1.5 2006/04/10 11:57:24 ffjeld Exp $
+;;;; $Id: streams.lisp,v 1.6 2008-04-21 19:42:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -128,4 +128,47 @@ destination, and then returns."
       (function)			; NOP
       (simple-stream
        (%finish-output stream)))))
+
+(defclass string-stream (stream) ())
+
+(defun make-string-input-stream (string &optional (start 0) (end nil))
+  )
+
+(defun make-string-output-stream ())
+
+
+(defclass broadcast-stream (stream)
+  ((streams
+    :reader concatenated-stream-streams
+    :initarg :streams)))
+
+(defclass concatenated-stream (stream)
+  ((streams
+    :reader concatenated-stream-streams
+    :initarg :streams)))
+
+(defclass echo-stream (stream)
+  ((input-stream
+    :reader echo-stream-input-stream
+    :initarg :input-stream)
+   (output-stream
+    :reader echo-stream-output-stream
+    :initarg :output-stream)))
+
+(defclass file-stream (stream)
+  ())
+
+(defclass synonym-stream (stream)
+  ((symbol
+    :initarg :symbol
+    :reader synonym-stream-symbol)))
+
+(defclass two-way-stream (stream)
+  ((input
+    :initarg :input
+    :reader two-way-stream-input-stream)
+   (output
+    :initarg :output
+    :reader two-way-stream-output-stream)))
+
 
