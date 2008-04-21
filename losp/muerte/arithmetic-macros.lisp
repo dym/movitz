@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.21 2008-03-17 17:24:42 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.22 2008-04-21 19:29:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,6 +22,17 @@
 
 ;;;
 
+(defun number-double-dispatch-error (x y)
+  (when (not (typep x 'number))
+    (error 'type-error
+           :datum x
+           :expected-type 'number))
+  (when (not (typep y 'number))
+    (error 'type-error
+           :datum y
+           :expected-type 'number))
+  (error "Operation not implemented for numbers ~S and ~S." x y))
+
 (defmacro number-double-dispatch ((x y) &rest clauses)
   `(let ((x ,x) (y ,y))
      (cond ,@(mapcar (lambda (clause)
@@ -30,7 +41,7 @@
 			 `((and (typep x ',x-type) (typep y ',y-type))
 			   ,@then-body)))
 		     clauses)
-	   (t (error "Not numbers or not implemented: ~S or ~S." x y)))))
+	   (t (number-double-dispatch-error x y)))))
 
 
 (define-compiler-macro evenp (x)
