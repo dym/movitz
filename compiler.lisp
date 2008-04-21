@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.203 2008-04-17 19:09:28 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.204 2008-04-21 19:45:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -7248,7 +7248,7 @@ but it's requested to be in ~S."
 		(:boolean-branch-on-false
 		 (when (not eql)
 		   `((:jmp ',(operands return-mode)))))
-		(t (break "Constant EQL: ~S ~S" (car x-singleton) (car y-singleton))))))
+		(t (warn "Constant EQL: ~S ~S" (car x-singleton) (car y-singleton))))))
 	   ((and x-singleton
 		 (eq :untagged-fixnum-ecx y-loc))
 	    (let ((value (etypecase (car x-singleton)
