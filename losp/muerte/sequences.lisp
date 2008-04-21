@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.40 2008-04-08 20:20:07 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.41 2008-04-21 19:28:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -23,7 +23,7 @@
   (or (typep x 'vector)
       (typep x 'cons)))
 
-(defmacro sequence-dispatch (sequence-var (type0 &body forms0) (type1 &body forms1))
+(defmacro do-sequence-dispatch (sequence-var (type0 &body forms0) (type1 &body forms1))
   (cond
    ((and (eq 'list type0) (eq 'vector type1))
     `(if (typep ,sequence-var 'list)
@@ -35,8 +35,32 @@
 	 (progn (check-type ,sequence-var vector)
 		,@forms0)
        (progn ,@forms1)))
-   (t (error "sequence-dispatch only understands list and vector types, not ~W and ~W."
+   (t (error "do-sequence-dispatch only understands list and vector types, not ~W and ~W."
 	     type0 type1))))
+
+(defmacro with-tester ((test test-not) &body body)
+  (let ((function (gensym "with-test-"))
+        (notter (gensym "with-test-notter-")))
+    `(multiple-value-bind (,function ,notter)
+         (progn ;; the (values function boolean)
+           (ensure-tester ,test ,test-not))
+       (macrolet ((,test (&rest args)
+                    `(xor (funcall%unsafe ,',function ,@args)
+                          ,',notter)))
+	 ,@body))))
+
+(defun ensure-tester (test test-not)
+  (cond
+    (test-not
+     (when test
+       (error "Both test and test-not specified."))
+     (values (ensure-funcallable test-not)
+             t))
+    (test
+     (values (ensure-funcallable test)
+             nil))
+    (t (values #'eql
+               nil))))
 
 (defun sequence-double-dispatch-error (seq0 seq1)
   (error "The type-set (~A, ~A) has not been implemented in this sequence-double-dispatch."
@@ -86,12 +110,12 @@
     (declare (type index length))))
 
 (defun elt (sequence index)
-  (sequence-dispatch sequence
+  (do-sequence-dispatch sequence
     (vector (aref sequence index))
     (list (nth index sequence))))
 
 (defun (setf elt) (value sequence index)
-  (sequence-dispatch sequence
+  (do-sequence-dispatch sequence
     (vector (setf (aref sequence index) value))
     (list (setf (nth index sequence) value))))
 
@@ -101,7 +125,7 @@
   (numargs-case
    (2 (function sequence)
       (with-funcallable (funcall-function function)
-	(sequence-dispatch sequence
+	(do-sequence-dispatch sequence
 	  (list
 	   (cond
 	    ((null sequence)
@@ -131,7 +155,7 @@
       (let ((start (check-the index start)))
 	(with-funcallable (funcall-function function)
 	  (with-funcallable (key)
-	    (sequence-dispatch sequence
+	    (do-sequence-dispatch sequence
               (list
                (let ((list (nthcdr start sequence)))
                  (cond
@@ -197,7 +221,7 @@
                           (declare (index index)))))))))))))))
 
 (defun subseq (sequence start &optional end)
-  (sequence-dispatch sequence
+  (do-sequence-dispatch sequence
     (vector
      (unless end
        (setf end (length sequence)))
@@ -236,10 +260,10 @@
 (defun copy-seq (sequence)
   (subseq sequence 0))
 
-(defun position (item sequence &key from-end (test #'eql) test-not (start 0) end (key 'identity))
+(defun position (item sequence &key from-end test test-not (start 0) end (key 'identity))
   (numargs-case
    (2 (item sequence)
-      (sequence-dispatch sequence
+      (do-sequence-dispatch sequence
 	(vector
 	 (with-subvector-accessor (sequence-ref sequence)
 	   (do ((end (length sequence))
@@ -254,10 +278,10 @@
 	   (declare (index i))
 	   (when (eql (pop sequence) item)
 	     (return i))))))
-   (t (item sequence &key from-end (test #'eql) test-not (start 0) end  (key 'identity))
+   (t (item sequence &key from-end test test-not (start 0) end  (key 'identity))
       (with-funcallable (key)
-	(with-funcallable (test)
-	  (sequence-dispatch sequence
+	(with-tester (test test-not)
+	  (do-sequence-dispatch sequence
 	    (vector
 	     (unless end
 	       (setf end (length sequence)))
@@ -301,7 +325,7 @@
   (numargs-case
    (2 (predicate sequence)
       (with-funcallable (predicate)
-	(sequence-dispatch sequence
+	(do-sequence-dispatch sequence
 	  (vector
 	   (with-subvector-accessor (sequence-ref sequence)
 	     (do ((end (length sequence))
@@ -320,7 +344,7 @@
    (t (predicate sequence &key (start 0) end (key 'identity) from-end)
       (with-funcallable (predicate)
 	(with-funcallable (key)
-	  (sequence-dispatch sequence
+	  (do-sequence-dispatch sequence
 	    (vector
 	     (setf end (or end (length sequence)))
 	     (with-subvector-accessor (sequence-ref sequence start end)
@@ -362,7 +386,7 @@
   (apply #'position-if (complement predicate) sequence key-args))
 
 (defun nreverse (sequence)
-  (sequence-dispatch sequence
+  (do-sequence-dispatch sequence
     (list
      (do ((prev-cons nil current-cons)
 	  (next-cons (cdr sequence) (cdr next-cons))
@@ -381,7 +405,7 @@
      sequence)))
 
 (defun reverse (sequence)
-  (sequence-dispatch sequence
+  (do-sequence-dispatch sequence
     (list
      (let ((result nil))
        (dolist (x sequence)
@@ -391,11 +415,11 @@
      (nreverse (copy-seq sequence)))))
 
 (defun mismatch-eql-identity (sequence-1 sequence-2 start1 start2 end1 end2)
-  (sequence-dispatch sequence-1
+  (do-sequence-dispatch sequence-1
     (vector
      (unless end1 (setf end1 (length sequence-1)))
      (with-subvector-accessor (seq1-ref sequence-1 start1 end1)
-       (sequence-dispatch sequence-2
+       (do-sequence-dispatch sequence-2
 	 (vector
 	  (unless end2 (setf end2 (length sequence-2)))
 	  (with-subvector-accessor (seq2-ref sequence-2 start2 end2)
@@ -457,7 +481,7 @@
 		  (unless (eql (seq1-ref i1) (car p2))
 		    (return i1))))))))))
     (list
-     (sequence-dispatch sequence-2
+     (do-sequence-dispatch sequence-2
        (vector
 	(let ((mismatch-2 (mismatch-eql-identity sequence-2 sequence-1 start2 start1 end2 end1)))
 	  (if (not mismatch-2)
@@ -499,21 +523,21 @@
    (t form)))
 
 (defun mismatch (sequence-1 sequence-2 &key (start1 0) (start2 0) end1 end2
-					    (test 'eql) (key 'identity) from-end)
+                 test test-not (key 'identity) from-end)
   (numargs-case
    (2 (s1 s2)
       (mismatch-eql-identity s1 s2 0 0 nil nil))
    (t (sequence-1 sequence-2 &key (start1 0) (start2 0) end1 end2
-		  (test 'eql) (key 'identity) from-end)
+		  test test-not (key 'identity) from-end)
       (assert (not from-end) ()
-	"Mismatch :from-end not implemented.")
-      (with-funcallable (test)
+              "Mismatch :from-end not implemented.")
+      (with-tester (test test-not)
 	(with-funcallable (key)
-	  (sequence-dispatch sequence-1
+	  (do-sequence-dispatch sequence-1
 	    (vector
 	     (unless end1 (setf end1 (length sequence-1)))
 	     (with-subvector-accessor (sequence-1-ref sequence-1 start1 end1)
-	       (sequence-dispatch sequence-2
+	       (do-sequence-dispatch sequence-2
 		 (vector
 		  (let ((end2 (check-the index (or end2 (length sequence-2)))))
 		    (with-subvector-accessor (sequence-2-ref sequence-2 start2 end2)
@@ -524,88 +548,88 @@
 			(let ((length1 (- end1 start1))
 			      (length2 (- end2 start2)))
 			  (cond
-			   ((< length1 length2)
-			    (dotimes (i length1)
-			      (declare (index i))
-			      (test-return (+ start1 i) (+ start2 i)))
-			    end1)
-			   ((> length1 length2)
-			    (dotimes (i length2)
-			      (declare (index i))
-			      (test-return (+ start1 i) (+ start2 i)))
-			    (+ start1 length2))
-			   (t (dotimes (i length1)
-				(declare (index i))
-				(test-return (+ start1 i) (+ start2 i)))
-			      nil)))))))
+                            ((< length1 length2)
+                             (dotimes (i length1)
+                               (declare (index i))
+                               (test-return (+ start1 i) (+ start2 i)))
+                             end1)
+                            ((> length1 length2)
+                             (dotimes (i length2)
+                               (declare (index i))
+                               (test-return (+ start1 i) (+ start2 i)))
+                             (+ start1 length2))
+                            (t (dotimes (i length1)
+                                 (declare (index i))
+                                 (test-return (+ start1 i) (+ start2 i)))
+                               nil)))))))
 		 (list
 		  (let ((length1 (- end1 start1))
 			(start-cons2 (nthcdr start2 sequence-2)))
 		    (cond
-		     ((and (zerop length1) (null start-cons2))
-		      (if (and end2 (> end2 start2)) start1 nil))
-		     ((not end2)
-		      (do ((i1 start1 (1+ i1))
-			   (p2 start-cons2 (cdr p2)))
-			  ((>= i1 end1) (if (null p2) nil i1))
-			(declare (index i1))
-			(unless (and p2 (test (key (sequence-1-ref i1)) (key (car p2))))
-			  (return-from mismatch i1))))
-		     ((< length1 (- end2 start2))
-		      (do ((i1 start1 (1+ i1))
-			   (p2 start-cons2 (cdr p2)))
-			  ((>= i1 end1) end1)
-			(declare (index i1))
-			(unless (test (key (sequence-1-ref i1)) (key (car p2)))
-			  (return-from mismatch i1))))
-		     ((> length1 (- end2 start2))
-		      (do ((i1 start1 (1+ i1))
-			   (p2 start-cons2 (cdr p2)))
-			  ((null p2) end1)
-			(declare (index i1))
-			(unless (test (key (sequence-1-ref i1)) (key (car p2)))
-			  (return-from mismatch i1))))
-		     (t (do ((i1 start1 (1+ i1))
-			     (p2 start-cons2 (cdr p2)))
-			    ((null p2) nil)
-			  (declare (index i1))
-			  (unless (test (key (sequence-1-ref i1)) (key (car p2)))
-			    (return-from mismatch i1))))))))))
+                      ((and (zerop length1) (null start-cons2))
+                       (if (and end2 (> end2 start2)) start1 nil))
+                      ((not end2)
+                       (do ((i1 start1 (1+ i1))
+                            (p2 start-cons2 (cdr p2)))
+                           ((>= i1 end1) (if (null p2) nil i1))
+                         (declare (index i1))
+                         (unless (and p2 (test (key (sequence-1-ref i1)) (key (car p2))))
+                           (return-from mismatch i1))))
+                      ((< length1 (- end2 start2))
+                       (do ((i1 start1 (1+ i1))
+                            (p2 start-cons2 (cdr p2)))
+                           ((>= i1 end1) end1)
+                         (declare (index i1))
+                         (unless (test (key (sequence-1-ref i1)) (key (car p2)))
+                           (return-from mismatch i1))))
+                      ((> length1 (- end2 start2))
+                       (do ((i1 start1 (1+ i1))
+                            (p2 start-cons2 (cdr p2)))
+                           ((null p2) end1)
+                         (declare (index i1))
+                         (unless (test (key (sequence-1-ref i1)) (key (car p2)))
+                           (return-from mismatch i1))))
+                      (t (do ((i1 start1 (1+ i1))
+                              (p2 start-cons2 (cdr p2)))
+                             ((null p2) nil)
+                           (declare (index i1))
+                           (unless (test (key (sequence-1-ref i1)) (key (car p2)))
+                             (return-from mismatch i1))))))))))
 	    (list
-	     (sequence-dispatch sequence-2
+	     (do-sequence-dispatch sequence-2
 	       (vector
 		(let ((mismatch-2 (mismatch sequence-2 sequence-1 :from-end from-end :test test :key key
-					    :start1 start2 :end1 end2 :start2 start1 :end2 end1)))
+                                                                                                :start1 start2 :end1 end2 :start2 start1 :end2 end1)))
 		  (if (not mismatch-2)
 		      nil
-		    (+ start1 (- mismatch-2 start2)))))
+                      (+ start1 (- mismatch-2 start2)))))
 	       (list
 		(let ((start-cons1 (nthcdr start1 sequence-1))
 		      (start-cons2 (nthcdr start2 sequence-2)))
 		  (assert (and start-cons1 start-cons2) (start1 start2) "Illegal bounding indexes.")
 		  (cond
-		   ((and (not end1) (not end2))
-		    (do ((p1 start-cons1 (cdr p1))
-			 (p2 start-cons2 (cdr p2))
-			 (i1 start1 (1+ i1)))
-			((null p1) (if (null p2) nil i1))
-		      (declare (index i1))
-		      (unless (and p2 (test (key (car p1)) (key (car p2))))
-			(return i1))))
-		   (t (do ((p1 start-cons1 (cdr p1))
-			   (p2 start-cons2 (cdr p2))
-			   (i1 start1 (1+ i1))
-			   (i2 start2 (1+ i2)))
-			  ((if end1 (>= i1 end1) (null p1))
-			   (if (if end2 (>= i2 end2) (null p2)) nil i1))
-			(declare (index i1 i2))
-			(unless p2
-			  (if end2
-			      (error "Illegal end2 bounding index.")
-			    (return i1)))
-			(unless (and (or (not end2) (< i1 end2))
-				     (test (key (car p1)) (key (car p2))))
-			  (return i1)))))))))))))))
+                    ((and (not end1) (not end2))
+                     (do ((p1 start-cons1 (cdr p1))
+                          (p2 start-cons2 (cdr p2))
+                          (i1 start1 (1+ i1)))
+                         ((null p1) (if (null p2) nil i1))
+                       (declare (index i1))
+                       (unless (and p2 (test (key (car p1)) (key (car p2))))
+                         (return i1))))
+                    (t (do ((p1 start-cons1 (cdr p1))
+                            (p2 start-cons2 (cdr p2))
+                            (i1 start1 (1+ i1))
+                            (i2 start2 (1+ i2)))
+                           ((if end1 (>= i1 end1) (null p1))
+                            (if (if end2 (>= i2 end2) (null p2)) nil i1))
+                         (declare (index i1 i2))
+                         (unless p2
+                           (if end2
+                               (error "Illegal end2 bounding index.")
+                               (return i1)))
+                         (unless (and (or (not end2) (< i1 end2))
+                                      (test (key (car p1)) (key (car p2))))
+                           (return i1)))))))))))))))
 
 (defun map-into (result-sequence function first-sequence &rest more-sequences)
   (declare (dynamic-extent more-sequences))
@@ -648,7 +672,7 @@
   (numargs-case
    (2 (function first-sequence)
       (with-funcallable (mapf function)
-	(sequence-dispatch first-sequence
+	(do-sequence-dispatch first-sequence
 	  (list
 	   (dolist (x first-sequence)
 	     (mapf x)))
@@ -684,7 +708,7 @@
   (numargs-case
    (2 (function first-sequence)
       (with-funcallable (mapf function)
-	(sequence-dispatch first-sequence
+	(do-sequence-dispatch first-sequence
 	  (list
 	   (mapcar function first-sequence))
 	  (vector
@@ -746,7 +770,7 @@
   (numargs-case
    (3 (result function first-sequence)
       (with-funcallable (mapf function)
-	(sequence-dispatch first-sequence
+	(do-sequence-dispatch first-sequence
 	  (vector
 	   (do ((i 0 (1+ i)))
 	       ((>= i (length result)) result)
@@ -820,7 +844,7 @@
       (if (= start1 start2)
 	  sequence-1			; no need to copy anything
 	;; must copy in reverse direction
-	(sequence-dispatch sequence-1
+	(do-sequence-dispatch sequence-1
 	  (vector
 	   (let ((l (length sequence-1)))
 	     (setf end1 (or end1 l)
@@ -845,10 +869,10 @@
 	       (declare (index i))
 	       (setf (car p) (car q))))))))
      ;; (not (eq sequence-1 sequence-2)) ..
-     (t (sequence-dispatch sequence-1
+     (t (do-sequence-dispatch sequence-1
 	  (vector
 	   (setf end1 (or end1 (length sequence-1)))
-	   (sequence-dispatch sequence-2
+	   (do-sequence-dispatch sequence-2
 	     (vector
 	      (setf end2 (or end2 (length sequence-2)))
 	      (with-subvector-accessor (sequence-1-ref sequence-1 start1 end1)
@@ -880,7 +904,7 @@
 		    (declare (index i j))
 		    (setf (sequence-1-ref i) (car p))))))))
 	  (list
-	   (sequence-dispatch sequence-2
+	   (do-sequence-dispatch sequence-2
 	     (vector
 	      (setf end2 (or end2 (length sequence-2)))
 	      (with-subvector-accessor (sequence-2-ref sequence-2 start2 end2)
@@ -904,10 +928,10 @@
 		(setf (car p) (car q)))))))
 	sequence-1))))
 
-(defun find (item sequence &key from-end (test 'eql) (start 0) end (key 'identity))
+(defun find (item sequence &key from-end (start 0) end (key 'identity) test test-not)
   (numargs-case
    (2 (item sequence)
-      (sequence-dispatch sequence
+      (do-sequence-dispatch sequence
 	(vector
 	 (with-subvector-accessor (sequence-ref sequence)
 	   (dotimes (i (length sequence))
@@ -917,11 +941,11 @@
 	 (dolist (x sequence)
 	   (when (eql item x)
 	     (return x))))))
-   (t (item sequence &key from-end (test 'eql) (start 0) end (key 'identity))
+   (t (item sequence &key from-end (start 0) end (key 'identity) test test-not)
       (let ((start (check-the index start)))
-	(with-funcallable (test)
+	(with-tester (test test-not)
 	  (with-funcallable (key)
-	    (sequence-dispatch sequence
+	    (do-sequence-dispatch sequence
 	      (vector
 	       (setf end (or end (length sequence)))
 	       (with-subvector-accessor (sequence-ref sequence start end)
@@ -931,11 +955,11 @@
 		       (declare (index i))
 		       (when (test item (key (aref sequence i)))
 			 (return (sequence-ref i))))
-		   (do ((i (1- end) (1- i)))
-		       ((< i start) nil)
-		     (declare (index i))
-		     (when (test item (key (sequence-ref i)))
-		       (return (sequence-ref i)))))))
+                     (do ((i (1- end) (1- i)))
+                         ((< i start) nil)
+                       (declare (index i))
+                       (when (test item (key (sequence-ref i)))
+                         (return (sequence-ref i)))))))
 	      (list
 	       (if end
 		   (do ((p (nthcdr start sequence) (cdr p))
@@ -945,21 +969,21 @@
 		     (when (test item (key (car p)))
 		       (return (or (and from-end
 					(find item (cdr p)
-					      :from-end t :test test
-					      :key key :end (- end i 1)))
+                                         :from-end t :test test
+                                         :key key :end (- end i 1)))
 				   (car p)))))
-		 (do ((p (nthcdr start sequence) (cdr p)))
-		     ((endp p) nil)
-		   (when (test item (key (car p)))
-		     (return (or (and from-end (find item (cdr p) :from-end t :test test :key key))
-				 (car p))))))))))))))
+                   (do ((p (nthcdr start sequence) (cdr p)))
+                       ((endp p) nil)
+                     (when (test item (key (car p)))
+                       (return (or (and from-end (find item (cdr p) :from-end t :test test :key key))
+                                   (car p))))))))))))))
   
 
 (defun find-if (predicate sequence &key from-end (start 0) end (key 'identity))
   (numargs-case
    (2 (predicate sequence)
       (with-funcallable (predicate)
-	(sequence-dispatch sequence
+	(do-sequence-dispatch sequence
 	  (vector
 	   (let ((end (length sequence)))
 	     (with-subvector-accessor (sequence-ref sequence 0 end)
@@ -977,7 +1001,7 @@
       (let ((start (check-the index start)))
 	(with-funcallable (predicate)
 	  (with-funcallable (key)
-	    (sequence-dispatch sequence
+	    (do-sequence-dispatch sequence
 	      (vector
 	       (setf end (or end (length sequence)))
 	       (with-subvector-accessor (sequence-ref sequence start end)
@@ -1015,51 +1039,50 @@
   (declare (dynamic-extent key-args))
   (apply #'find-if (complement predicate) sequence key-args))
   
-(defun count (item sequence &key (start 0) end (test 'eql) (key 'identity) test-not from-end)
-  (declare (ignore test-not))
+(defun count (item sequence &key (start 0) end (key 'identity) test test-not from-end)
   (let ((start (check-the index start)))
-    (with-funcallable (test)
+    (with-tester (test test-not)
       (with-funcallable (key)
-	(sequence-dispatch sequence
+	(do-sequence-dispatch sequence
 	  (vector
 	   (let ((end (check-the index (or end (length sequence)))))
 	     (with-subvector-accessor (sequence-ref sequence start end)
 	       (cond
-		((not from-end)
-		 (do ((i start (1+ i))
-		      (n 0))
-		     ((>= i end) n)
-		   (declare (index i n))
-		   (when (test item (key (sequence-ref i)))
-		     (incf n))))
-		(t (do ((i (1- end) (1- i))
-			(n 0))
-		       ((< i start) n)
-		     (declare (index i n))
-		     (when (test item (key (sequence-ref i)))
-		       (incf n))))))))
+                 ((not from-end)
+                  (do ((i start (1+ i))
+                       (n 0))
+                      ((>= i end) n)
+                    (declare (index i n))
+                    (when (test item (key (sequence-ref i)))
+                      (incf n))))
+                 (t (do ((i (1- end) (1- i))
+                         (n 0))
+                        ((< i start) n)
+                      (declare (index i n))
+                      (when (test item (key (sequence-ref i)))
+                        (incf n))))))))
 	  (list
 	   (cond
-	    ((not end)
-	     (do ((p (nthcdr start sequence) (cdr p))
-		  (n 0))
-		 ((endp p) n)
-	       (declare (index n))
-	       (when (test item (key (car p)))
-		 (incf n))))
-	    (t (do ((p (nthcdr start sequence) (cdr p))
-		    (i start (1+ i))
-		    (n 0))
-		   ((or (endp p) (>= i end)) n)
-		 (declare (index i n))
-		 (when (test item (key (car p)))
-		   (incf n)))))))))))
+             ((not end)
+              (do ((p (nthcdr start sequence) (cdr p))
+                   (n 0))
+                  ((endp p) n)
+                (declare (index n))
+                (when (test item (key (car p)))
+                  (incf n))))
+             (t (do ((p (nthcdr start sequence) (cdr p))
+                     (i start (1+ i))
+                     (n 0))
+                    ((or (endp p) (>= i end)) n)
+                  (declare (index i n))
+                  (when (test item (key (car p)))
+                    (incf n)))))))))))
 
 (defun count-if (predicate sequence &key (start 0) end (key 'identity) #+ignore from-end)
   (numargs-case
    (2 (predicate sequence)
       (with-funcallable (predicate)
-	(sequence-dispatch sequence
+	(do-sequence-dispatch sequence
 	  (list
 	   (let ((count 0))
 	     (declare (index count))
@@ -1079,7 +1102,7 @@
       (let ((start (check-the index start)))
 	(with-funcallable (predicate)
 	  (with-funcallable (key)
-	    (sequence-dispatch sequence
+	    (do-sequence-dispatch sequence
 	      (list
 	       (if (not end)
 		   (do ((n 0)
@@ -1105,7 +1128,7 @@
 	     `(with-funcallable (predicate)
 		(cond
 		 ((null more-sequences)	; 1 sequence case
-		  (sequence-dispatch first-sequence
+		  (do-sequence-dispatch first-sequence
 		    (list
 		     (do ((p first-sequence (cdr p)))
 			 ((null p) (default-value))
@@ -1146,15 +1169,15 @@
 			 (declare (index i))
 			 (test-return (predicate (aref first-sequence i) (car p))))))))
 		 (t (flet ((next (p)
-			     (sequence-dispatch p
+			     (do-sequence-dispatch p
 			       (list (cdr p))
 			       (vector p)))
 			   (seqend (p i)
-			     (sequence-dispatch p
+			     (do-sequence-dispatch p
 			       (list (null p))
 			       (vector (>= i (length p)))))
 			   (seqelt (p i)
-			     (sequence-dispatch p
+			     (do-sequence-dispatch p
 			       (list (car p))
 			       (vector (aref p i)))))
 		      (do* ((i 0 (1+ i)) ; 3 or more sequences, conses at 4 or more.
@@ -1194,17 +1217,21 @@
   (declare (dynamic-extent more-sequences))
   (not (apply 'some predicate first-sequence more-sequences)))
 
-(defun list-remove (item list test key end count)
+(defun notevery (predicate first-sequence &rest more-sequences)
+  (declare (dynamic-extent more-sequences))
+  (not (apply 'every predicate first-sequence more-sequences)))
+
+(defun list-remove (item list test test-not key end count)
   "Implements remove for lists. Assumes (not from-end)."
   (cond
    ((endp list)
     nil)
    ((eq 0 count)
     list)
-   (t (with-funcallable (test)
+   (t (with-tester (test test-not)
 	(with-funcallable (key)
 	  (if (test item (key (car list)))
-	      (list-remove item (cdr list) test key
+	      (list-remove item (cdr list) test test-not key
 			   (when end (1- end))
 			   (when count (1- count)))
 	    (do ((i 1 (1+ i))
@@ -1220,7 +1247,7 @@
 			(x (cdr list) (cdr x))
 			(new-x new-list))
 		      ((eq x p1)
-		       (setf (cdr new-x) (list-remove item (cdr p1) test key
+		       (setf (cdr new-x) (list-remove item (cdr p1) test test-not key
 						      (when end (- end i 1))
 						      (when count (1- count))))
 		       new-list)
@@ -1254,10 +1281,10 @@
 		(setf (cdr new-x)
 		  (cons (car x) nil))))))))))
 
-(defun remove (item sequence &key (test 'eql) (start 0) end count (key 'identity) test-not from-end)
+(defun remove (item sequence &key test test-not (start 0) end count (key 'identity) from-end)
   (when test-not
     (setf test (complement test-not)))
-  (sequence-dispatch sequence
+  (do-sequence-dispatch sequence
     (list
      (setf sequence (nthcdr start sequence))
      (when end (decf end start))
@@ -1270,19 +1297,19 @@
 		(not count)
 		(eq key 'identity))
 	   (list-remove-simple item sequence)
-	 (list-remove item sequence test key end count)))
+           (list-remove item sequence test test-not key end count)))
       (t (error "from-end not implemented."))))
     (vector
      (error "vector remove not implemented."))))
 
-(defun list-remove-if (test list key end count)
+(defun list-remove-if (test test-not list key end count)
   "Implements remove-if for lists. Assumes (not from-end)."
   (cond
    ((endp list)
     nil)
    ((eq 0 count)
     list)
-   (t (with-funcallable (test)
+   (t (with-tester (test test-not)
 	(with-funcallable (key)
 	  (and (do () ((or (endp list)
 			   (and end (<= end 0))
@@ -1304,7 +1331,7 @@
 			   (x (cdr list) (cdr x))
 			   (new-x new-list))
 			 ((eq x p1)
-			  (setf (cdr new-x) (list-remove-if test (cdr p1) key
+			  (setf (cdr new-x) (list-remove-if test test-not (cdr p1) key
 							    (when end (- end i 1))
 							    (when count (1- count))))
 			  new-list)
@@ -1313,7 +1340,7 @@
 			   (cons (car x) nil)))))))))))))
 
 (defun remove-if (test sequence &key from-end (start 0) end count (key 'identity))
-  (sequence-dispatch sequence
+  (do-sequence-dispatch sequence
     (list
      (setf sequence (nthcdr start sequence))
      (when end (decf end start))
@@ -1321,7 +1348,7 @@
       ((endp sequence)
        nil)
       ((not from-end)
-       (list-remove-if test sequence key end count))
+       (list-remove-if test nil sequence key end count))
       (t (error "from-end not implemented."))))
     (vector
      (error "vector remove not implemented."))))
@@ -1330,7 +1357,7 @@
   (declare (dynamic-extent args))
   (apply 'remove-if (complement test) sequence args))
 
-(defun list-delete (item list test key start end count)
+(defun list-delete (item list test test-not key start end count)
   "Implements delete-if for lists. Assumes (not from-end)."
   (cond
    ((null list)
@@ -1339,7 +1366,7 @@
     list)
    ((eq start end)
     list)
-   (t (with-funcallable (test)
+   (t (with-tester (test test-not)
 	(with-funcallable (key)
 	  (let ((i 0)			; for end checking
 		(c 0))			; for count checking
@@ -1411,17 +1438,17 @@
 	       (t (setf p q
 			q (cdr q)))))))))))
 
-(defun delete (item sequence &key (test 'eql) from-end (start 0) end count (key 'identity))
-  (sequence-dispatch sequence
+(defun delete (item sequence &key test test-not from-end (start 0) end count (key 'identity))
+  (do-sequence-dispatch sequence
     (list
      (when from-end
        (error "from-end not implemented."))
-     (list-delete item  sequence test key start end count))
+     (list-delete item sequence test test-not key start end count))
     (vector
      (error "vector delete not implemented."))))
 
 (defun delete-if (test sequence &key from-end (start 0) end count (key 'identity))
-  (sequence-dispatch sequence
+  (do-sequence-dispatch sequence
     (list
      (when from-end
        (error "from-end not implemented."))
@@ -1436,7 +1463,7 @@
 (defun remove-duplicates (sequence &key (test 'eql) (key 'identity) (start 0) end test-not from-end)
   (when test-not
     (setf test (complement test-not)))
-  (sequence-dispatch sequence
+  (do-sequence-dispatch sequence
     (list
      (let ((list (nthcdr start sequence)))
        (cond
@@ -1456,7 +1483,7 @@
   (let ((test (if test-not
 		  (complement test-not)
 		test)))
-    (sequence-dispatch sequence
+    (do-sequence-dispatch sequence
       (list
        (cond
 	(from-end
@@ -1495,7 +1522,7 @@
     (declare (dynamic-extent test))
     (let ((start1 (check-the index start1))
 	  (start2 (check-the index start2)))
-      (sequence-dispatch sequence-2
+      (do-sequence-dispatch sequence-2
 	(vector
 	 (let ((end1 (check-the index (or end1 (length sequence-1))))
 	       (end2 (check-the index (or end2 (length sequence-2)))))
@@ -1632,7 +1659,7 @@ quick-sort with cut-off greater than 1."
   vector)
 
 (defun sort (sequence predicate &key (key 'identity))
-  (sequence-dispatch sequence
+  (do-sequence-dispatch sequence
     (list
      (sort-list sequence predicate key))
     (vector
@@ -1640,7 +1667,7 @@ quick-sort with cut-off greater than 1."
      (insertion-sort sequence predicate key 0 (length sequence)))))
 
 (defun stable-sort (sequence predicate &key key)
-  (sequence-dispatch sequence
+  (do-sequence-dispatch sequence
     (list
      (error "Stable-sort not implemented for lists."))
     (vector
@@ -1832,7 +1859,7 @@ quick-sort with cut-off greater than 1."
   (declare (dynamic-extent args))
   (with-funcallable (predicate)
     (with-funcallable (key)
-      (sequence-dispatch sequence
+      (do-sequence-dispatch sequence
 	(vector
 	 (apply 'nsubstitute-if newitem predicate (copy-seq sequence) args))
 	(list
@@ -1894,7 +1921,7 @@ quick-sort with cut-off greater than 1."
       sequence
       (with-funcallable (predicate)
         (with-funcallable (key)
-          (sequence-dispatch sequence
+          (do-sequence-dispatch sequence
             (vector
              (let ((end (or end (length sequence))))
                (with-subvector-accessor (ref sequence start end)
