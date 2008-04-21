@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.26 2008-04-19 12:42:56 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.27 2008-04-21 19:31:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -75,13 +75,17 @@
       (return list))
     (setf list (cdr list))))
 
-(defun verify-macroexpand-call (key name)
+(defun verify-macroexpand-call (key name &optional extras-p)
   "Used by macro-expander functions to separate bona fide macro-expansions
 from regular function-calls."
   (when (eq key name)
     (error 'undefined-function-call
 	   :name name
-	   :arguments :unknown)))
+	   :arguments :unknown))
+  (when extras-p
+    (error 'wrong-argument-count
+     :function (symbol-function name)
+     :argument-count nil)))
 
 (defun call-macroexpander (form env expander)
   "Call a macro-expander for a bona fide macro-expansion."
@@ -466,3 +470,11 @@ interpreted as a lispval, and consequently a fixnum."
 	    (setf (memref object offset :index i :type :character)
 	      (char value j))))))))
   value)
+
+(defun xor (a b)
+  "Iff b is true, complement a."
+  (if b (not a) a))
+
+(define-compiler-macro xor (a b)
+  `(let ((a ,a))
+     (if ,b (not a) a)))
