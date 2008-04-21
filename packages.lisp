@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.59 2008-04-02 20:49:33 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.60 2008-04-21 19:46:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1234,6 +1234,7 @@
 	   #:decode-keyword-formal
 	   #:parse-declarations-and-body
 	   #:parse-docstring-declarations-and-body
+           #:parse-macro-lambda-list
 	   #:compute-function-block-name
 	   
 	   #:movitz-accessor
@@ -1391,6 +1392,7 @@
 		muerte::decode-keyword-formal
 		muerte::parse-declarations-and-body
 		muerte::parse-docstring-declarations-and-body
+                muerte::parse-macro-lambda-list
 		muerte::unfold-circular-list
 		muerte::compute-function-block-name
 		))
