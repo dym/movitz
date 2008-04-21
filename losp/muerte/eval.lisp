@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.31 2008-04-17 19:33:48 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.32 2008-04-21 19:40:05 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -196,9 +196,37 @@
 			   (apply f a0 a1 evaluated-args)))
 		       f env a0 a1 form))))))
 
-(defun parse-declarations-and-body (forms)
+(defun parse-macro-lambda-list (lambda-list)
+  (let* ((whole-var (when (eq '&whole (car lambda-list))
+                      (pop lambda-list)
+                      (pop lambda-list)))
+         (env-var nil)
+         (operator-var (gensym))
+         (destructuring-lambda-list
+          (do ((l lambda-list)
+               (r nil))
+              ((atom l)
+               (cons operator-var
+                     (nreconc r l)))
+            (let ((x (pop l)))
+              (if (eq x '&environment)
+                  (setf env-var (pop l))
+                  (push x r)))))
+         (ignore-env-var
+          (when (not env-var)
+            (gensym))))
+    (values destructuring-lambda-list
+            whole-var
+            (or env-var
+                ignore-env-var)
+            (when ignore-env-var
+              (list ignore-env-var))
+            (list operator-var))))
+
+(defun parse-declarations-and-body (forms &optional (declare 'declare))
   "From the list of FORMS, return first the list of non-declaration forms, ~
 second the list of declaration-specifiers."
+  (assert (eq declare 'declare))
   (do (declarations
        (p forms (cdr p)))
       ((not (and (consp (car p)) (eq 'declare (caar p))))
@@ -206,15 +234,24 @@ second the list of declaration-specifiers."
     (dolist (d (cdar p))
       (push d declarations))))
 
-(defun parse-docstring-declarations-and-body (forms)
+(defun parse-docstring-declarations-and-body (forms &optional (declare 'declare))
   "From the list of FORMS, return first the list of non-declaration forms, ~
 second the list of declaration-specifiers, third any docstring."
+  (assert (eq declare 'declare))
   (if (or (not (cdr forms))
 	  (not (stringp (car forms))))
       (parse-declarations-and-body forms)
     (multiple-value-call #'values
       (parse-declarations-and-body (cdr forms))
       (car forms))))
+
+(defun compute-function-block-name (function-name)
+  (cond
+   ((symbolp function-name) function-name)
+   ((and (consp function-name)
+	 (symbolp (cadr function-name)))
+    (cadr function-name))
+   (t (error "Unknown kind of function-name: ~S" function-name))))
 
 (defun declared-special-p (var declarations)
   (dolist (d declarations nil)
@@ -552,23 +589,32 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
       (let ((operator (car form)))
 	(when (symbolp operator)
 	  (let ((macrolet-binding (op-env-binding env operator +eval-binding-type-macrolet+)))
-	    (if macrolet-binding
-		(destructuring-bind (lambda-list &body body)
-		    (cddr macrolet-binding)
-		  (let ((expander (lambda (form env)
-				    (eval-form `(destructuring-bind (ignore-operator ,@lambda-list)
-						    ',form
-						  (declare (ignore ignore-operator))
-						  ,@body)
-					       env))))
-		    (values (funcall *macroexpand-hook* expander form env)
-			    t)))
+	    (if (not macrolet-binding)
 		(let ((macro-function (macro-function operator)))
 		  (if macro-function
 		      (values (funcall *macroexpand-hook* macro-function form env)
 			      t)
 		      (values form
-			      nil)))))))))
+			      nil)))
+		(let ((lambda-list (caddr macrolet-binding)))
+                  (multiple-value-bind (body declarations docstring)
+                      (parse-docstring-declarations-and-body (cdddr macrolet-binding))
+                    (declare (ignore docstring))
+                    (multiple-value-bind (destructuring-lambda-list whole-var env-var ignore-env ignore-operator)
+                        (parse-macro-lambda-list lambda-list)
+                      (let* ((form-var (or whole-var (gensym)))
+                             (expander (lambda (form env)
+                                         (eval-form `(let ((,form-var ',form)
+                                                           (,env-var ',env))
+                                                       (declare (ignore ,@ignore-env))
+                                                       (destructuring-bind ,destructuring-lambda-list
+                                                           ,form-var
+                                                         (declare (ignore ,@ignore-operator)
+                                                                  ,@declarations)
+                                                         ,@body))
+                                                    env))))
+                        (values (funcall *macroexpand-hook* expander form env)
+                                t)))))))))))
 
 (defun macroexpand (form &optional env)
   (do ((expanded-at-all-p nil)) (nil)
@@ -589,8 +635,10 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
   (typecase form
     (boolean t)
     (keyword t)
-    (symbol nil)
-    (cons (eq 'quote (car form)))
+    (symbol
+     (symbol-constant-variable-p form))
+    (cons
+     (eq 'quote (car form)))
     (t t)))
 
 (defun macro-function (symbol &optional environment)
