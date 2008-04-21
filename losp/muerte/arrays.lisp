@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.67 2008-04-18 09:55:13 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.68 2008-04-21 19:30:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,6 +20,10 @@
 (provide :muerte/arrays)
 
 (in-package muerte)
+
+(defconstant array-total-size-limit most-positive-fixnum)
+(defconstant array-dimension-limit most-positive-fixnum)
+(defconstant array-rank-limit 1024)
 
 (defmacro/cross-compilation vector-double-dispatch ((s1 s2) &rest clauses)
   (flet ((make-double-dispatch-value (et1 et2)
@@ -85,42 +89,42 @@
   "=> upgraded-type-specifier"
   ;; We're in dire need of subtypep..
   (cond
-   ((symbolp type-specifier)
-    (case type-specifier
-      ((character base-char standard-char)
-       'character)
-      ((code)
-       'code)
-      (t (let ((deriver (gethash type-specifier *derived-typespecs*)))
-	   (if (not deriver)
-	       t
-	     (upgraded-array-element-type (funcall deriver)))))))
-   ((null type-specifier)
-    t)
-   ((consp type-specifier)
-    (case (car type-specifier)
-      ((integer)
-       (let* ((q (cdr type-specifier))
-	      (min (if q (pop q) '*))
-	      (max (if q (pop q) '*)))
-	 (let ((min (if (consp min) (1+ (car min)) min))
-	       (max (if (consp max) (1- (car max)) max)))
-	   (cond
-	    ((or (eq min '*) (eq max '*))
-	     t)
-	    ((<= 0 min max 1)
-	     'bit)
-	    ((<= 0 min max #xff)
-	     '(unsigned-byte 8))
-	    ((<= 0 min max #xffff)
-	     '(unsigned-byte 16))
-	    ((<= 0 min max #xffffffff)
-	     '(unsigned-byte 32))))))
-      (t (let ((deriver (gethash (car type-specifier) *derived-typespecs*)))
-	   (if (not deriver)
-	       t
-	     (upgraded-array-element-type (apply deriver (cdr type-specifier)) environment))))))
-   (t t)))
+    ((symbolp type-specifier)
+     (case type-specifier
+       ((nil character base-char standard-char)
+        'character)
+       ((code)
+        'code)
+       (t (let ((deriver (gethash type-specifier *derived-typespecs*)))
+            (if (not deriver)
+                t
+                (upgraded-array-element-type (funcall deriver)))))))
+    ((null type-specifier)
+     t)
+    ((consp type-specifier)
+     (case (car type-specifier)
+       ((integer)
+        (let* ((q (cdr type-specifier))
+               (min (if q (pop q) '*))
+               (max (if q (pop q) '*)))
+          (let ((min (if (consp min) (1+ (car min)) min))
+                (max (if (consp max) (1- (car max)) max)))
+            (cond
+              ((or (eq min '*) (eq max '*))
+               t)
+              ((<= 0 min max 1)
+               'bit)
+              ((<= 0 min max #xff)
+               '(unsigned-byte 8))
+              ((<= 0 min max #xffff)
+               '(unsigned-byte 16))
+              ((<= 0 min max #xffffffff)
+               '(unsigned-byte 32))))))
+       (t (let ((deriver (gethash (car type-specifier) *derived-typespecs*)))
+            (if (not deriver)
+                t
+                (upgraded-array-element-type (apply deriver (cdr type-specifier)) environment))))))
+    (t t)))
     
 
 (defun array-dimension (array axis-number)
@@ -407,14 +411,16 @@
 		   (:compile-form (:result-mode :edx) index)
 		   (:testb 7 :cl)
 		   (:jnz '(:sub-program (not-a-vector)
-			   (:compile-form (:result-mode :ignore)
-			    (error "Not a vector: ~S." vector))))
+                           (:movl :ebx :eax)
+                           (:load-constant vector :edx)
+                           (:int 59)))
 		   (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
 		   (:andl #xffff :ecx)
 		   (:testb ,movitz:+movitz-fixnum-zmask+ :dl)
 		   (:jnz '(:sub-program (not-an-index)
-			   (:compile-form (:result-mode :ignore)
-			    (error "Not a vector index: ~S." index))))
+                           (:movl :edx :eax)
+                           (:load-constant index :edx)
+			   (:int 59)))
 		   (:cmpl (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
 			  :edx)
 		   (:jnc '(:sub-program (illegal-index)
@@ -434,8 +440,8 @@
 		   (:jne 'not-character-vector)
 		   (:cmpb ,(movitz:tag :character) :al)
 		   (:jne '(:sub-program (not-a-character)
-			   (:compile-form (:result-mode :ignore)
-			    (error "Not a character: ~S" value))))
+                           (:load-constant character :edx)
+			   (:int 59)))
 		   (:movl :edx :ecx)
 		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 		   (:movb :ah (:ebx :ecx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
@@ -1163,7 +1169,7 @@ and return basic-vector and accessors for that subsequence."
       (make-basic-vector%code size fill-pointer initial-element initial-contents))
      (t (make-basic-vector%t size fill-pointer initial-element initial-contents)))))
 
-(defun make-array (dimensions &key element-type initial-element initial-contents adjustable
+(defun make-array (dimensions &key (element-type t) initial-element initial-contents adjustable
 				   fill-pointer displaced-to displaced-index-offset)
   (let ((size (cond ((integerp dimensions)
                      dimensions)
