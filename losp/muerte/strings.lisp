@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 17:05:25 2001
 ;;;;                
-;;;; $Id: strings.lisp,v 1.4 2008-04-17 19:36:09 ffjeld Exp $
+;;;; $Id: strings.lisp,v 1.5 2008-04-21 19:43:30 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,6 +20,9 @@
 (provide :muerte/strings)
 
 (in-package muerte)
+
+(deftype string-designator ()
+  '(or string symbol character))
 
 (defun string= (string1 string2 &key (start1 0) end1 (start2 0) end2)
   (setf string1 (string string1)
@@ -56,7 +59,9 @@
     (string name)
     (symbol (symbol-name name))
     (character (make-string 1 :initial-element name))
-    (t (error "Not a string designator: ~S" name))))
+    (t (error 'type-error
+              :datum name
+              :expected-type 'string-designator))))
 	    
 (defun make-string (size &key initial-element (element-type 'character))
   (if (not initial-element)
