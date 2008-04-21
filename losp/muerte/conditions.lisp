@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.27 2008-04-17 19:32:27 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.28 2008-04-21 19:31:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -38,10 +38,6 @@
 	       condition))))
      ',name))
 
-#+ignore
-(defmethod print-object ((c condition) s)
-  foo)
-
 (define-condition condition (standard-object)
   ((format-control
     :initarg :format-control
@@ -66,10 +62,12 @@
     :reader simple-condition-format-arguments)))
 (define-condition serious-condition () ())
 (define-condition error (serious-condition) ())
+(define-condition storage-condition (serious-condition) ())
 (define-condition warning () ())
 (define-condition style-warning () ())
 (define-condition simple-error (simple-condition error) ())
 (define-condition simple-warning (simple-condition warning) ())
+(define-condition parse-error (error) ())
 
 (define-condition cell-error (error)
   ((name
@@ -100,6 +98,24 @@
 	     (format s "Unbound variable ~S."
 		     (cell-error-name c)))))
 
+(define-condition unbound-slot (cell-error)
+  ((instance
+    :initarg :instance
+    :reader unbound-slot-instance))
+  (:report (lambda (c s)
+             (format s "The slot ~S is unbound in the object ~S."
+                     (cell-error-name c)
+                     (unbound-slot-instance c)))))
+
+
+(define-condition print-not-readable (error)
+  ((object
+    :initarg :object
+    :reader print-not-readable-object))
+  (:report (lambda (c s)
+             (format s "Cannot print ~S readably."
+                     (print-not-readable-object c)))))
+
 (define-condition program-error (error) ())
 
 (defun simple-program-error (format-control &rest format-arguments)
@@ -119,6 +135,8 @@
 		     (type-error-datum c)
 		     (type-error-datum c)
 		     (type-error-expected-type c)))))
+
+(define-condition simple-type-error (simple-condition type-error) ())
 
 (define-condition etypecase-error (type-error)
   ()
@@ -182,6 +200,8 @@
   ((stream
     :initarg :stream
     :reader stream-error-stream)))
+
+(define-condition reader-error (parse-error stream-error) ())
 
 (define-condition end-of-file (stream-error)
   ()
@@ -328,7 +348,7 @@ Return the condition object, if there was one."
   (cond
    ((not *debugger-function*)
     (let ((*never-use-print-object* t))
-      (backtrace :spartan t))
+      (backtrace :spartan t :conflate nil))
     (format t "~&No debugger in *debugger-function*...")
     (dotimes (i 100000)
       (write-string ""))
@@ -371,3 +391,8 @@ Return the condition object, if there was one."
   nil)
 
 (define-condition newline () ())
+
+(define-condition floating-point-inexact (arithmetic-error) ())
+(define-condition floating-point-invalid-operation (arithmetic-error) ())
+(define-condition floating-point-overflow (arithmetic-error) ())
+(define-condition floating-point-underflow (arithmetic-error) ())
