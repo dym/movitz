@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 30 15:19:43 2001
 ;;;;                
-;;;; $Id: packages.lisp,v 1.15 2008-04-21 19:41:52 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.16 2008-04-23 18:47:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -173,31 +173,33 @@
 	     (return ,result-form))
 	   (let ((,package-hash-var (package-object-external-symbols ,package-var)))
 	     (tagbody ,loop-tag
-	       (with-hash-table-iterator (,next-symbol ,package-hash-var)
-		 (tagbody ,loop-tag
-		   (multiple-value-bind (,more-symbols-var ,dummy ,symbol-var)
-		       (,next-symbol)
-		     (declare (ignore ,dummy))
-		     (unless ,more-symbols-var (go ,end-tag))
-		     (let ((,var ,symbol-var))
-		       ,@declarations-and-body))
-		   (go ,loop-tag)
-		   ,end-tag))
-	       (let ((internals (package-object-internal-symbols ,package-var)))
-		 (unless (eq ,package-hash-var internals)
-		   (setf ,package-hash-var internals)
-		   (go ,loop-tag))))))))))
+		(with-hash-table-iterator (,next-symbol ,package-hash-var)
+		  (tagbody ,loop-tag
+		     (multiple-value-bind (,more-symbols-var ,dummy ,symbol-var)
+			 (,next-symbol)
+		       (declare (ignore ,dummy))
+		       (unless ,more-symbols-var (go ,end-tag))
+		       (prog ((,var ,symbol-var))
+			  ,@declarations-and-body))
+		     (go ,loop-tag)
+		     ,end-tag))
+		(let ((internals (package-object-internal-symbols ,package-var)))
+		  (unless (eq ,package-hash-var internals)
+		    (setf ,package-hash-var internals)
+		    (go ,loop-tag))))))))))
 
 (defmacro do-external-symbols
-    ((var &optional (package *package*) result-form) &body declarations-and-body)
+    ((var &optional (package '*package*) result-form) &body declarations-and-body)
   (let ((next-var (gensym))
 	(more-var (gensym))
 	(key-var (gensym)))
     `(with-hash-table-iterator (,next-var (package-object-external-symbols (assert-package ,package)))
        (do () (nil)
 	 (multiple-value-bind (,more-var ,key-var ,var) (,next-var)
-	   (unless ,more-var (return ,result-form))
-	   (let () ,@declarations-and-body))))))
+	   (unless ,more-var
+	     (return ,result-form))
+	   (prog ()
+	      ,@declarations-and-body))))))
 
 (defmacro do-symbols ((var &optional (package '*package*) result-form) &body declarations-and-body)
   (let ((state-var (gensym))
@@ -215,35 +217,40 @@
 			      (1 (package-object-internal-symbols ,package-object-var))
 			      (t (let ((x (pop ,use-list-var)))
 				   (and x (package-object-external-symbols x)))))))
-	 ((not ,hash-table-var) ,result-form)
+	  ((not ,hash-table-var) ,result-form)
        (declare (index ,state-var))
        (with-hash-table-iterator (,next-var ,hash-table-var)
 	 (do () (nil)
 	   (multiple-value-bind (,more-var ,key-var ,var) (,next-var)
 	     (declare (ignore ,key-var))
 	     (if ,more-var
-		 (let () ,@declarations-and-body)
-	       (return))))))))
+		 (prog ()
+		    ,@declarations-and-body)
+		 (return))))))))
 
 (defun apropos (string &optional package)
   (flet ((apropos-symbol (symbol string)
 	   (when (search string (symbol-name symbol) :test #'char-equal)
 	     (cond
-	      ((keywordp symbol)
-	       (format t "~&~W == keyword~%" symbol))
-	      ((fboundp symbol)
-	       (format t "~&~W == function ~:A~%"
-		       symbol (funobj-lambda-list (symbol-function symbol))))
-	      ((boundp symbol)
-	       (format t "~&~W == variable ~S~%"
-		       symbol (symbol-value symbol)))
-	      (t (format t "~&~W~%" symbol))))))
+	       ((keywordp symbol)
+		(format t "~&~W == keyword~%" symbol))
+	       ((fboundp symbol)
+		(format t "~&~W == function ~:A~%"
+			symbol (funobj-lambda-list (symbol-function symbol))))
+	       ((boundp symbol)
+		(format t "~&~W == variable ~S~%"
+			symbol (symbol-value symbol)))
+	       (t (format t "~&~W~%" symbol))))))
     (let ((string (string string)))
       (if package
 	  (do-symbols (symbol package)
 	    (apropos-symbol symbol string))
-	(do-all-symbols (symbol)
-	  (apropos-symbol symbol string)))))
+	  (do-all-symbols (symbol)
+	    (apropos-symbol symbol string)))))
   (values))
 
-
+(defmacro with-package-iterator ((name package-list-form &rest symbol-types) &body body)
+  `(macrolet ((,name ()
+		'(warn "with-package-iterator not implemented."
+		  (values nil nil nil nil))))
+     ,@body))
