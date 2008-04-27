@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:49:17 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: parse.lisp,v 1.9 2008-04-21 21:09:47 ffjeld Exp $
+;;;; $Id: parse.lisp,v 1.10 2008-04-27 19:22:42 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -23,9 +23,7 @@
 (defun parse-declarations-and-body (forms &optional (declare-symbol 'muerte.cl::declare))
   "From the list of FORMS, return first the list of non-declaration forms, ~
    second the list of declaration-specifiers."
-  (loop for declaration-form = (when (declare-form-p (car forms) declare-symbol)
-				 (pop forms))
-     if (declare-form-p (car forms) declare-symbol)
+  (loop if (declare-form-p (car forms) declare-symbol)
      append (cdr (pop forms)) into declarations
      else return (values forms declarations)))
 
@@ -45,7 +43,7 @@
                       (pop lambda-list)
                       (pop lambda-list)))
          (env-var nil)
-         (operator-var (gensym))
+         (operator-var (gensym "operator-"))
          (destructuring-lambda-list
           (do ((l lambda-list)
                (r nil))
@@ -58,7 +56,7 @@
                   (push x r)))))
          (ignore-env-var
           (when (not env-var)
-            (gensym))))
+            (gensym "ignore-env-"))))
     (values destructuring-lambda-list
             whole-var
             (or env-var
@@ -208,14 +206,14 @@ Finally, whether &key was present or not."
 		  (auxes     (nreverse (getf results (aux)))))
 	      (when (> (length rests) 1)
 		(error "There can only be one &REST formal parameter."))
-	      (let ((maxargs (and (null rests) ; max num. of arguments, or nil.
-				  (null keys)
-				  (not allow-other-keys-p)
-				  (+ (length requireds)
-				     (length optionals))))
-		    (minargs (length requireds))
-		    (keys-p (not (eq :missing
-				     (getf results (key) :missing)))))
+	      (let* ((keys-p (not (eq :missing ; &key present?
+				      (getf results (key) :missing))))
+		     (maxargs (and (null rests) ; max num. of arguments, or nil.
+				   (not keys-p)
+				   (not allow-other-keys-p)
+				   (+ (length requireds)
+				      (length optionals))))
+		     (minargs (length requireds)))
 		(return (values requireds
 				optionals
 				(first rests)
@@ -223,14 +221,14 @@ Finally, whether &key was present or not."
 				auxes
 				allow-other-keys-p
 				minargs
-				(unless keys-p
-				  maxargs)
+				maxargs
 				edx-var
 				(cond
-				 ((or (eql maxargs minargs)
-				      (eq :no-key (getf results (key) :no-key)))
+				 ((or (not keys-p)
+				      (eql maxargs minargs))
 				  nil)
-				 ((assert (not maxargs)))
+				 ((assert (not maxargs) ()
+					  "Weird maxargs ~S for ~S." maxargs lambda-list))
 				 ((evenp (+ (length requireds) (length optionals)))
 				  :even)
 				 (t :odd))
