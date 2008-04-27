@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.123 2008-04-21 19:45:51 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.124 2008-04-27 19:18:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1240,15 +1240,13 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 			  'package)
 	  (movitz-read (ensure-package (string :common-lisp) :muerte.common-lisp)))
 	(loop for symbol being the hash-key of (image-oblist *image*)
-	    as lisp-package = (symbol-package symbol)
-	    as package-name = (and lisp-package
-				   (movitz-package-name (package-name lisp-package) symbol))
-;;;	    do (when (string= symbol :method)
-;;;		 (warn "XXXX ~S ~S ~S" symbol lisp-package package-name))
-	    when package-name
-	    do (let* ((movitz-package (ensure-package package-name lisp-package symbol)))
-		 (setf (movitz-symbol-package (movitz-read symbol))
-		   (movitz-read movitz-package))))
+	   as lisp-package = (symbol-package symbol)
+	   as package-name = (and lisp-package
+				  (movitz-package-name (package-name lisp-package) symbol))
+	   when package-name
+	   do (let* ((movitz-package (ensure-package package-name lisp-package symbol)))
+		(setf (movitz-symbol-package (movitz-read symbol))
+		      (movitz-read movitz-package))))
 	movitz-packages))))
 
 

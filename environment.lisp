@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov  3 11:40:15 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: environment.lisp,v 1.23 2008-03-15 20:44:53 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.24 2008-04-27 19:16:16 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -332,28 +332,28 @@ the function sets up itself. Its parent env. must be a funobj-env."))
        (let ((expander (movitz-macro-function (car movitz-form) env)))
 	 (if (not expander)
 	     (values movitz-form nil)
-	   (values (translate-program (funcall *movitz-macroexpand-hook* expander movitz-form env)
-				      :muerte.cl :cl)
-		   t))))
+	     (values (translate-program (funcall *movitz-macroexpand-hook* expander movitz-form env)
+					:muerte.cl :cl)
+		     t))))
       (symbol
        (let ((binding (movitz-binding movitz-form env)))
 	 (if (not (typep binding 'symbol-macro-binding))
 	     (values movitz-form nil)
-	   (values (translate-program (funcall *movitz-macroexpand-hook*
-					       (macro-binding-expander binding)
-					       movitz-form env)
-				      :muerte.cl :cl)
-		   t))))
+	     (values (translate-program (funcall *movitz-macroexpand-hook*
+						 (macro-binding-expander binding)
+						 movitz-form env)
+					:muerte.cl :cl)
+		     t))))
       (t (values movitz-form nil)))))
 
 (defun movitz-macroexpand (form &optional env)
   (let ((global-expanded-p nil))
     (loop while
-	  (multiple-value-bind (expansion expanded-p)
-	      (movitz-macroexpand-1 form env)
-	    (when expanded-p
-	      (setf form expansion)
-	      (setf global-expanded-p expanded-p))))
+	 (multiple-value-bind (expansion expanded-p)
+	     (movitz-macroexpand-1 form env)
+	   (when expanded-p
+	     (setf form expansion)
+	     (setf global-expanded-p expanded-p))))
     (values form global-expanded-p)))
 
 (define-symbol-macro *movitz-global-environment*
