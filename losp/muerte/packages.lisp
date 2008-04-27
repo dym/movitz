@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 30 15:19:43 2001
 ;;;;                
-;;;; $Id: packages.lisp,v 1.16 2008-04-23 18:47:46 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.17 2008-04-27 19:43:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -248,6 +248,30 @@
 	  (do-all-symbols (symbol)
 	    (apropos-symbol symbol string)))))
   (values))
+
+(defun package-used-by-list (package)
+  "Return a list of all packages that use package."
+  (let ((package (find-package package)))
+    (let ((used-by-list nil))
+      (maphash (lambda (name other-package)
+		 (declare (ignore name))
+		 (when (member package
+			       (package-object-use-list other-package)
+			       :test #'eq)
+		   (pushnew other-package used-by-list)))
+	       *packages*)
+      used-by-list)))
+
+(defun list-all-packages ()
+  (with-hash-table-iterator (p *packages*)
+    (do (packages) (nil)
+      (multiple-value-bind (more k v)
+	  (p)
+	(declare (ignore k))
+	(when (not more)
+	  (return packages))
+	(push v packages)))))
+
 
 (defmacro with-package-iterator ((name package-list-form &rest symbol-types) &body body)
   `(macrolet ((,name ()
