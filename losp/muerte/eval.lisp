@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.33 2008-04-27 08:38:01 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.34 2008-04-27 16:14:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -149,11 +149,6 @@
 	((multiple-value-prog1)
 	 (multiple-value-prog1 (eval-form (cadr form) env)
 	   (eval-progn (cddr form) env)))
-	((destructuring-bind)
-	 (eval-progn (cdddr form)
-		     (make-destructuring-env (cadr form)
-					     (eval-form (caddr form) env)
-					     env)))
 	((catch)
 	 (catch (eval-form (second form) env)
 	   (eval-progn (cddr form) env)))
@@ -234,6 +229,26 @@ second the list of declaration-specifiers."
     (dolist (d (cdar p))
       (push d declarations))))
 
+(defun parse-docstring-declarations-and-body (forms &optional (declare-symbol 'muerte.cl::declare))
+  "From the list of FORMS, return first the non-declarations forms, second the declarations, ~
+   and third the documentation string."
+  (let ((docstring nil))
+    (do (declarations docstring)
+	((endp forms)
+	 (values nil
+		 declarations
+		 docstring))
+      (cond
+	((typep (car forms)
+		'(cons (eql declare)))
+	 (setf declarations (append declarations (cdr (pop forms)))))
+	((and (stringp (car forms))
+	      (cdr forms))
+	 (setf docstring (pop forms)))
+	(t (return (values forms
+			   declarations
+			   docstring)))))))
+
 (defun parse-docstring-declarations-and-body (forms &optional (declare 'declare))
   "From the list of FORMS, return first the list of non-declaration forms, ~
 second the list of declaration-specifiers, third any docstring."
@@ -241,9 +256,9 @@ second the list of declaration-specifiers, third any docstring."
   (if (or (not (cdr forms))
 	  (not (stringp (car forms))))
       (parse-declarations-and-body forms)
-    (multiple-value-call #'values
-      (parse-declarations-and-body (cdr forms))
-      (car forms))))
+      (multiple-value-call #'values
+	(parse-declarations-and-body (cdr forms))
+	(car forms))))
 
 (defun compute-function-block-name (function-name)
   (cond
@@ -290,7 +305,9 @@ Parse {var | ({var | (keyword-name var)} [init-form [supplied-p-parameter]])}
 Return the variable, keyword, init-fom, and supplied-p-parameter."
   (cond
    ((symbolp formal)
-    (values formal formal nil nil))
+    (values formal
+	    (intern (symbol-name formal) :keyword)
+	    nil nil))
    ((symbolp (car formal))
     (values (car formal)
 	    (intern (symbol-name (car formal)) :keyword)
@@ -302,8 +319,8 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 	      (caddr formal)))))
 
 (defun make-destructuring-env (pattern values env &key (recursive-p t)
-							      (environment-p nil)
-							      (whole-p t))
+			       (environment-p nil)
+			       (whole-p t))
   (let (env-var)
     (when (and whole-p (eq '&whole (car pattern)))
       (push (cons (cadr pattern) values)
@@ -381,12 +398,12 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 	 (push (cons (cdr pp) values)
 	       env))
        finally
-	 (when (and values (member state '(requireds optionals)))
-	   (simple-program-error "Too many arguments.")))
+       (when (and values (member state '(requireds optionals)))
+	 (simple-program-error "Too many arguments.")))
     (if (and environment-p env-var)
 	(cons (cons env-var env)
 	      env)
-      env)))
+	env)))
 
 (defun eval-let (var-specs declarations-and-body env)
   (let (special-vars
@@ -579,7 +596,8 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
     (values (if (not name)
 		function
 	      (setf (symbol-function name) function))
-	    t nil)))
+	    nil
+	    nil)))
 
 (defun macroexpand-1 (form &optional env)
   (if (atom form)
