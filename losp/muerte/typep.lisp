@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.59 2008-04-21 19:43:57 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.60 2008-04-27 19:45:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -601,6 +601,8 @@
 			   (or (eq xdim '*) (eql xdim adim)))
 			 dimension-spec
 			 (array-dimensions x)))))))
+(defun bit-vector-p (x)
+  (typep x 'bit-vector))
 
 (defun arrayp (x)
   (typep x 'array))      
