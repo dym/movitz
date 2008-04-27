@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.127 2008-04-21 19:40:32 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.128 2008-04-27 19:41:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -309,14 +309,23 @@
 
 (define-number-relational /= /=%2op nil :defun-p nil)
 
-(defun /= (&rest numbers)
-  (declare (dynamic-extent numbers))
-  (do ((p (cdr numbers) (cdr p)))
-      ((null p) t)
-    (do ((v numbers (cdr v)))
-	((eq p v))
-      (when (= (car p) (car v))
-	(return-from /= nil)))))
+(defun /= (first-number &rest more-numbers)
+  (numargs-case
+   (1 (x)
+      (declare (ignore x))
+      t)
+   (2 (x y)
+      (/=%2op x y))
+   (t (first-number &rest more-numbers)
+      (declare (dynamic-extent more-numbers))
+      (dolist (y more-numbers)
+	(when (= first-number y)
+	  (return nil)))
+      (do ((p more-numbers (cdr p)))
+	  ((null p) t)
+	(dolist (q (cdr p))
+	  (when (= (car p) q)
+	    (return nil)))))))
 
 
 ;;;;
