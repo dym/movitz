@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 11 14:19:23 2001
 ;;;;                
-;;;; $Id: sequences.lisp,v 1.41 2008-04-21 19:28:46 ffjeld Exp $
+;;;; $Id: sequences.lisp,v 1.42 2008-04-27 19:44:55 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1078,7 +1078,7 @@
                   (when (test item (key (car p)))
                     (incf n)))))))))))
 
-(defun count-if (predicate sequence &key (start 0) end (key 'identity) #+ignore from-end)
+(defun count-if (predicate sequence &key (start 0) end (key 'identity) from-end)
   (numargs-case
    (2 (predicate sequence)
       (with-funcallable (predicate)
@@ -1098,7 +1098,9 @@
 		 (when (predicate (sequence-ref i))
 		   (incf count)))
 	       count))))))
-   (t (predicate sequence &key (start 0) end (key 'identity) #+ignore from-end)
+   (t (predicate sequence &key (start 0) end (key 'identity) from-end)
+      (when from-end
+	(error "count-if from-end not implemented."))
       (let ((start (check-the index start)))
 	(with-funcallable (predicate)
 	  (with-funcallable (key)
@@ -1121,6 +1123,32 @@
 		       (incf n))))))
 	      (vector
 	       (error "vector count-if not implemented.")))))))))
+
+(defun count-if-not (predicate sequence &key (start 0) end (key 'identity) from-end)
+  (numargs-case
+   (2 (predicate sequence)
+      (with-funcallable (predicate)
+	(do-sequence-dispatch sequence
+	  (list
+	   (let ((count 0))
+	     (declare (index count))
+	     (dolist (x sequence)
+	       (when (not (predicate x))
+		 (incf count)))
+	     count))
+	  (vector
+	   (with-subvector-accessor (sequence-ref sequence)
+	     (let ((count 0))
+	       (declare (index count))
+	       (dotimes (i (length sequence))
+		 (when (not (predicate (sequence-ref i)))
+		   (incf count)))
+	       count))))))
+   (t (predicate sequence &rest keys)
+      (apply #'count-if
+	     (complement predicate)
+	     sequence
+	     keys))))
 
 
 (macrolet ((every-some-body ()
@@ -2008,6 +2036,10 @@ quick-sort with cut-off greater than 1."
                       (when (>= (incf c) count)
                         (return sequence)))))
                  ((error 'program-error))))))))))
+
+(defun substitute-if-not (newitem predicate sequence &rest keyargs)
+  (declare (dynamic-extent keyargs))
+  (apply #'substitute-if newitem (complement predicate) sequence keyargs))
 
 (defun nsubstitute-if-not (newitem predicate sequence &rest keyargs)
   (declare (dynamic-extent keyargs))
