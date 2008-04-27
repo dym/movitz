@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.28 2008-04-27 09:28:40 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.29 2008-04-27 09:36:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -659,6 +659,33 @@
 		     :test (if test-not
 			       (complement test-not)
 			     test)))
+
+(defun set-exclusive-or (list-1 list-2 &key (key 'identity) (test 'eql) test-not)
+  (union (set-difference list-1 list-2
+			 :key key
+			 :test test
+			 :test-not test-not)
+	 (set-difference list-2 list-1
+			 :key key
+			 :test test
+			 :test-not test-not)
+	 :key key
+	 :test test
+	 :test-not test-not))
+
+(defun nset-exclusive-or (list-1 list-2 &key (key 'identity) (test 'eql) test-not)
+  (nunion (nset-difference list-1 list-2
+			   :key key
+			   :test test
+			   :test-not test-not)
+	  (nset-difference list-2 list-1
+			   :key key
+			   :test test
+			   :test-not test-not)
+	 :key key
+	 :test test
+	 :test-not test-not))
+
   
 (defun subsetp (list-1 list-2 &key (key 'identity) (test 'eql) test-not)
   "=> generalized-boolean"
