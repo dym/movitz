@@ -66,17 +66,17 @@
 
 (provide :muerte/loop :load-priority 1)
 
-#+movitz
-(progn
-  (defmacro movitz-macroexpand (&rest args)
-    `(macroexpand ,@args))
-  (defmacro movitz-macroexpand-1 (&rest args)
-    `(macroexpand-1 ,@args))
-  (eval-when (:compile-toplevel)
-    (defmacro movitz-macroexpand (&rest args)
-      `(movitz::movitz-macroexpand ,@args))
-    (defmacro movitz-macroexpand-1 (&rest args)
-      `(movitz::movitz-macroexpand-1 ,@args))))
+;; #+movitz
+;; (progn
+;;   (defmacro movitz-macroexpand (&rest args)
+;;     `(macroexpand ,@args))
+;;   (defmacro movitz-macroexpand-1 (&rest args)
+;;     `(macroexpand-1 ,@args))
+;;   (eval-when (:compile-toplevel)
+;;     (defmacro movitz-macroexpand (&rest args)
+;;       `(movitz::movitz-macroexpand ,@args))
+;;     (defmacro movitz-macroexpand-1 (&rest args)
+;;       `(movitz::movitz-macroexpand-1 ,@args))))
 
 ;;;This is the "current" loop context in use when we are expanding a
 ;;;loop.  It gets bound on each invocation of LOOP.
@@ -271,48 +271,48 @@
 			       (head-var tail-var &optional user-head-var) form)
   (declare
     #+LISPM (ignore head-var user-head-var))	;use locatives, unconditionally update through the tail.
-  (setq form (movitz-macroexpand form env))
-  (flet ((cdr-wrap (form n)
-	   (declare (fixnum n))
-	   (do () ((<= n 4) (setq form `(,(case n
-					    (1 'cdr)
-					    (2 'cddr)
-					    (3 'cdddr)
-					    (4 'cddddr))
-					 ,form)))
-	     (setq form `(cddddr ,form) n (- n 4)))))
-    (let ((tail-form form) (ncdrs nil))
-      ;;Determine if the form being constructed is a list of known length.
-      (when (consp form)
-	(cond ((eq (car form) 'list)
-	       (setq ncdrs (1- (length (cdr form))))
-	       ;;@@@@ Because the last element is going to be RPLACDed,
-	       ;; we don't want the cdr-coded implementations to use
-	       ;; cdr-nil at the end (which would just force copying
-	       ;; the whole list again).
-	       #+LISPM (setq tail-form `(list* ,@(cdr form) nil)))
-	      ((member (car form) '(list* cons))
-	       (when (and (cddr form) (member (car (last form)) '(nil 'nil)))
-		 (setq ncdrs (- (length (cdr form)) 2))))))
-      (let ((answer
-	      (cond ((null ncdrs)
-		     `(when (setf (cdr ,tail-var) ,tail-form)
-			(setq ,tail-var (last (cdr ,tail-var)))))
-		    ((< ncdrs 0) (return-from loop-collect-rplacd nil))
-		    ((= ncdrs 0)
-		     ;;@@@@ Here we have a choice of two idioms:
-		     ;; (rplacd tail (setq tail tail-form))
-		     ;; (setq tail (setf (cdr tail) tail-form)).
-		     ;;Genera and most others I have seen do better with the former.
-		     `(rplacd ,tail-var (setq ,tail-var ,tail-form)))
-		    (t `(setq ,tail-var ,(cdr-wrap `(setf (cdr ,tail-var) ,tail-form)
-						   ncdrs))))))
-	;;If not using locatives or something similar to update the user's
-	;; head variable, we've got to set it...  It's harmless to repeatedly set it
-	;; unconditionally, and probably faster than checking.
-	#-LISPM (when user-head-var
-		  (setq answer `(progn ,answer (setq ,user-head-var (cdr ,head-var)))))
-	answer))))
+  (let ((form (movitz-macroexpand form env)))
+    (flet ((cdr-wrap (form n)
+	     (declare (fixnum n))
+	     (do () ((<= n 4) (setq form `(,(case n
+						  (1 'cdr)
+						  (2 'cddr)
+						  (3 'cdddr)
+						  (4 'cddddr))
+					    ,form)))
+	       (setq form `(cddddr ,form) n (- n 4)))))
+      (let ((tail-form form) (ncdrs nil))
+	;;Determine if the form being constructed is a list of known length.
+	(when (consp form)
+	  (cond ((eq (car form) 'list)
+		 (setq ncdrs (1- (length (cdr form))))
+		 ;;@@@@ Because the last element is going to be RPLACDed,
+		 ;; we don't want the cdr-coded implementations to use
+		 ;; cdr-nil at the end (which would just force copying
+		 ;; the whole list again).
+		 #+LISPM (setq tail-form `(list* ,@(cdr form) nil)))
+		((member (car form) '(list* cons))
+		 (when (and (cddr form) (member (car (last form)) '(nil 'nil)))
+		   (setq ncdrs (- (length (cdr form)) 2))))))
+	(let ((answer
+	       (cond ((null ncdrs)
+		      `(when (setf (cdr ,tail-var) ,tail-form)
+			 (setq ,tail-var (last (cdr ,tail-var)))))
+		     ((< ncdrs 0) (return-from loop-collect-rplacd nil))
+		     ((= ncdrs 0)
+		      ;;@@@@ Here we have a choice of two idioms:
+		      ;; (rplacd tail (setq tail tail-form))
+		      ;; (setq tail (setf (cdr tail) tail-form)).
+		      ;;Genera and most others I have seen do better with the former.
+		      `(rplacd ,tail-var (setq ,tail-var ,tail-form)))
+		     (t `(setq ,tail-var ,(cdr-wrap `(setf (cdr ,tail-var) ,tail-form)
+						    ncdrs))))))
+	  ;;If not using locatives or something similar to update the user's
+	  ;; head variable, we've got to set it...  It's harmless to repeatedly set it
+	  ;; unconditionally, and probably faster than checking.
+	  #-LISPM (when user-head-var
+		    (setq answer `(progn ,answer (setq ,user-head-var (cdr ,head-var)))))
+	  answer)))))
 
 
 (defmacro loop-collect-answer (head-var &optional user-head-var)
