@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 15:25:45 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: cons.lisp,v 1.17 2007/02/22 21:23:04 ffjeld Exp $
+;;;; $Id: cons.lisp,v 1.18 2008-04-27 19:30:27 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -80,7 +80,7 @@ Cons cell is in EBX, which is preserved."
 
 (define-primitive-function fast-cdr-ebx ()
   "This is the actual CDR code.
-Cons cell is in EBX, which is preserved."
+Cons cell is in EBX, which is preserved. Result in EAX."
   (with-inline-assembly (:returns :eax)
     (:leal (:ebx -1) :ecx)
     (:testb 3 :cl)
