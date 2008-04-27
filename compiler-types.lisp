@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Sep 10 00:40:07 2003
 ;;;;                
-;;;; $Id: compiler-types.lisp,v 1.26 2006/11/08 08:57:05 ffjeld Exp $
+;;;; $Id: compiler-types.lisp,v 1.27 2008-04-27 19:14:54 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -233,15 +233,19 @@ and any element of range1."
 ;;;
 
 (defparameter *tb-bitmap*
-    '(hash-table character function cons keyword symbol vector array integer ratio :tail)
+  '(hash-table character function cons keyword symbol vector array integer ratio complex :tail)
   "The union of these types must be t.")
 
 (defun basic-typep (x type)
   (ecase type
     (hash-table
      (and (typep x 'movitz-struct)
-	  (eq (movitz-read 'muerte.cl:hash-table)
-	      (slot-value x 'name))))
+	  (eq (muerte::movitz-find-class 'muerte.cl:hash-table)
+	      (slot-value x 'class))))
+    (complex
+     (and (typep x 'movitz-struct)
+	  (eq (muerte::movitz-find-class 'muerte.cl:complex)
+	      (slot-value x 'class))))
     (character
      (typep x 'movitz-character))
     (function
@@ -366,7 +370,7 @@ and any element of range1."
 		 (or (type-code-p 'integer code)
 		     (and integer-range
 			  (numscope-memberp integer-range (movitz-bignum-value x)))))
-		(t (dolist (bt '(symbol character function cons hash-table vector ratio)
+		(t (dolist (bt '(symbol character function cons hash-table vector ratio complex)
 			     (error "Cant decide typep for ~S." x))
 		     (when (basic-typep x bt)
 		       (return (type-code-p bt code))))))
