@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.53 2007/04/11 22:09:39 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.54 2008-04-27 19:23:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -992,7 +992,8 @@ where zot is not in foo's scope, but _is_ in foo's extent."
 	      :top-level-p top-level-p
 	      :form body)
 	  (compiler-values ()))
-      (when (member :compile-toplevel situations)
+      (when (and (member :compile-toplevel situations)
+		 top-level-p)
 	(with-compilation-unit ()
 	  (dolist (toplevel-form (translate-program body :muerte.cl :cl
 						    :when :eval
