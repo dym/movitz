@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov  5 21:53:34 2003
 ;;;;                
-;;;; $Id: variables.lisp,v 1.13 2008-04-21 19:44:13 ffjeld Exp $
+;;;; $Id: variables.lisp,v 1.14 2008-04-27 08:34:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -30,6 +30,7 @@
 (defvar // nil)
 (defvar /// nil)
 
+(defvar - nil)
 (defvar + nil)
 (defvar ++ nil)
 (defvar +++ nil)
