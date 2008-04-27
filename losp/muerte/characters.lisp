@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb  5 19:05:01 2001
 ;;;;                
-;;;; $Id: characters.lisp,v 1.5 2008-03-15 20:57:27 ffjeld Exp $
+;;;; $Id: characters.lisp,v 1.6 2008-04-27 19:30:12 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,6 +28,9 @@
     (:cmpb #.(movitz::tag :character) :al)
     (:jne '(:sub-program (not-a-character) (:int 66)))
     (:shrl #.(cl:- 8 movitz::+movitz-fixnum-shift+) :eax)))
+
+(defun char-int (c)
+  (char-code c))
 
 (defun code-char (code)
   (with-inline-assembly (:returns :eax)
@@ -138,7 +141,9 @@
 
 (defun char-equal (first-character &rest more-characters)
   (numargs-case
-   (1 (x) (declare (ignore x)) t)
+   (1 (x)
+      (declare (ignore x))
+      t)
    (2 (x y)
       (char= (char-upcase x) (char-upcase y)))
    (t (first-character &rest more-characters)
@@ -147,6 +152,71 @@
 	(dolist (c more-characters t)
 	  (unless (char= f (char-upcase c))
 	    (return nil)))))))
+
+(defun char-not-equal (first-character &rest more-characters)
+  (numargs-case
+   (1 (x)
+      (declare (ignore x))
+      t)
+   (2 (x y)
+      (not (char= (char-upcase x) (char-upcase y))))
+   (t (first-character &rest more-characters)
+      (declare (dynamic-extent more-characters))
+      (not (apply #'char-equal first-character more-characters)))))
+
+(defun char-lessp (first-character &rest more-characters)
+  (numargs-case
+   (1 (x)
+      (declare (ignore x))
+      t)
+   (2 (x y)
+      (char< (char-upcase x)
+	     (char-upcase y)))
+   (t (first-character &rest more-characters)
+      (declare (dynamic-extent more-characters))
+      (let ((x (char-upcase first-character)))
+	(dolist (y more-characters t)
+	  (unless (char< x (setf x (char-upcase y)))
+	    (return nil)))))))
+
+(defun char-not-lessp (first-character &rest more-characters)
+  (numargs-case
+   (1 (x)
+      (declare (ignore x))
+      t)
+   (2 (x y)
+      (not (char< (char-upcase x)
+		  (char-upcase y))))
+   (t (first-character &rest more-characters)
+      (declare (dynamic-extent more-characters))
+      (not (apply #'char-lessp first-character more-characters)))))
+
+(defun char-greaterp (first-character &rest more-characters)
+  (numargs-case
+   (1 (x)
+      (declare (ignore x))
+      t)
+   (2 (x y)
+      (char> (char-upcase x)
+	     (char-upcase y)))
+   (t (first-character &rest more-characters)
+      (declare (dynamic-extent more-characters))
+      (let ((x (char-upcase first-character)))
+	(dolist (y more-characters t)
+	  (unless (char> x (setf x (char-upcase y)))
+	    (return nil)))))))
+
+(defun char-not-greaterp (first-character &rest more-characters)
+  (numargs-case
+   (1 (x)
+      (declare (ignore x))
+      t)
+   (2 (x y)
+      (not (char> (char-upcase x)
+		  (char-upcase y))))
+   (t (first-character &rest more-characters)
+      (declare (dynamic-extent more-characters))
+      (not (apply #'char-greaterp first-character more-characters)))))
 
 (defun standard-char-p (c)
   "CLHS 2.1.3 Standard Characters"
@@ -217,3 +287,13 @@
       (char= character #\Return)
       (char= character #\Tab)
       (char= character #\Linefeed)))
+
+(defun character (c)
+  (etypecase c
+    (character c)
+    ((string 1)
+     (char c 0))
+    (symbol
+     (character (symbol-name c)))))
+
+
