@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.17 2008-04-21 19:39:24 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.18 2008-04-27 19:40:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -108,6 +108,15 @@
 	wrapper)))
   (values))
 
+(defmacro trace (&rest names)
+  (if (null names)
+      `(mapcar #'car *trace-map*)
+      `(progn
+	 ,@(mapcar (lambda (name)
+		     `(do-trace ',name))
+		   names)
+	 (values))))
+
 (defun do-untrace (name)
   (let ((map (assoc name *trace-map*)))
     (assert map () "~S is not traced." name)
@@ -118,6 +127,16 @@
       (setf *trace-map*
 	(delete name *trace-map* :key 'car))))
   (values))
+
+(defmacro untrace (&rest names)
+  (if (null names)
+      '(do () ((null muerte::*trace-map*))
+	(do-untrace (caar muerte::*trace-map*)))
+      `(progn
+	 ,@(mapcar (lambda (name)
+		     `(do-untrace ',name))
+		   names)
+	 (values))))
 
 (defun time-skew-measure (mem x-lo x-hi)
   (declare (ignore mem))
