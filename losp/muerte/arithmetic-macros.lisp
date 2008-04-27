@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.22 2008-04-21 19:29:17 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.23 2008-04-27 19:26:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -305,22 +305,28 @@
 				      finally (return (if (= -1 folded-constant)
 							  non-constants
 							(cons folded-constant non-constants))))))
-    (case (length constant-folded-integers)
-      (0 0)
-      (1 (first constant-folded-integers))
-      (2 (cond
-	  ((typep (first constant-folded-integers)
-		  '(unsigned-byte 32))
-	   (let ((x (first constant-folded-integers)))
-	     `(with-inline-assembly (:returns :untagged-fixnum-ecx
-					      :type (unsigned-byte ,(integer-length x)))
-		(:compile-form (:result-mode :untagged-fixnum-ecx)
-			       ,(second constant-folded-integers))
-		(:andl ,x :ecx))))
-	  (t `(no-macro-call logand
-			     ,(first constant-folded-integers)
-			     ,(second constant-folded-integers)))))
-      (t `(logand (logand ,(first constant-folded-integers) ,(second constant-folded-integers))
+    (cond
+      ((null constant-folded-integers)
+       0)
+      ((null (rest constant-folded-integers))
+       (first constant-folded-integers))
+      ((eql 0 (first constant-folded-integers))
+       `(progn ,@(rest constant-folded-integers) 0))
+      ((null (cddr constant-folded-integers))
+       (cond
+	 ((typep (first constant-folded-integers)
+		 '(unsigned-byte 32))
+	  (let ((x (first constant-folded-integers)))
+	    `(with-inline-assembly (:returns :untagged-fixnum-ecx
+					     :type (unsigned-byte ,(integer-length x)))
+	       (:compile-form (:result-mode :untagged-fixnum-ecx)
+			      ,(second constant-folded-integers))
+	       (:andl ,x :ecx))))
+	 (t `(no-macro-call logand
+			    ,(first constant-folded-integers)
+			    ,(second constant-folded-integers)))))
+      (t `(logand (logand ,(first constant-folded-integers)
+			  ,(second constant-folded-integers))
 		  ,@(cddr constant-folded-integers))))))
 
 (define-compiler-macro logior (&whole form &rest integers &environment env)
@@ -410,7 +416,7 @@
    (t form)))
 
 (define-compiler-macro ldb (&whole form &environment env bytespec integer)
-  (let ((bytespec (movitz::movitz-macroexpand bytespec env)))
+  (let ((bytespec (movitz-macroexpand bytespec env)))
     (if (not (and (consp bytespec) (eq 'byte (car bytespec))))
 	form
       `(ldb%byte ,(second bytespec) ,(third bytespec) ,integer))))
