@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb 19 19:09:05 2001
 ;;;;                
-;;;; $Id: hash-tables.lisp,v 1.14 2008-04-17 19:34:08 ffjeld Exp $
+;;;; $Id: hash-tables.lisp,v 1.15 2008-04-27 09:10:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -49,6 +49,10 @@
      :bucket (make-array (* 2 size) :initial-element '--no-hash-key--)
      :sxhash sxhash
      :count 0)))
+
+(defun hash-table-size (hash-table)
+  (values (truncate (length (hash-table-bucket hash-table))
+		    2)))
 
 (defun hash-table-iterator (bucket index)
   (when index
