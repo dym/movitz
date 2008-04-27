@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.64 2008-04-12 16:26:56 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.65 2008-04-27 19:23:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -236,13 +236,6 @@ integer (native lisp) value."
 (defmethod print-object ((x movitz-character) stream)
   (print-unreadable-object (x stream)
     (format stream "MOVITZ-CHARACTER: ~S" (movitz-char x))))
-
-(defun movitz-eql (x y)
-  (if (and (typep x 'movitz-immediate-object)
-	   (typep y 'movitz-immediate-object))
-      (= (movitz-immediate-value x)
-	 (movitz-immediate-value y))
-    (eq x y)))
 
 ;;; Code element
 
