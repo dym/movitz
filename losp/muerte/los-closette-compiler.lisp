@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 29 13:15:11 2002
 ;;;;                
-;;;; $Id: los-closette-compiler.lisp,v 1.22 2008-04-12 16:47:18 ffjeld Exp $
+;;;; $Id: los-closette-compiler.lisp,v 1.23 2008-04-27 19:42:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1003,6 +1003,7 @@
 
   (defun canonicalize-defgeneric-option (option)
     (case (car option)
+      (declare nil)
       (:generic-function-class
        (list ':generic-function-class
 	     `(movitz-find-class ',(cadr option))))
@@ -1507,7 +1508,7 @@ and <method2> is more specific?"
   (defun compute-primary-emfun (methods)
     (if (null methods)
 	nil
-      (let ((next-emfun (compute-primary-emfun (cdr methods))))               
+      (let ((next-emfun (compute-primary-emfun (cdr methods))))
 	'(lambda (args)
 	  (funcall (method-function (car methods)) args next-emfun)))))
 
@@ -1526,8 +1527,10 @@ and <method2> is more specific?"
     (let* ((block-name (compute-function-block-name name))
 	   (analysis (analyze-lambda-list lambda-list))
 	   (lambda-variables (append (getf analysis :required-args)
-				     (getf analysis :optional-args)
-				     (getf analysis :key-args)
+				     (mapcar #'decode-optional-formal
+					     (getf analysis :optional-args))
+				     (mapcar #'decode-keyword-formal
+					     (getf analysis :key-args))
 				     (when (getf analysis :rest-var)
 				       (list (getf analysis :rest-var)))))
 	   (required-variables (subseq lambda-variables
