@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.27 2008-04-19 12:44:02 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.28 2008-04-27 09:28:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -82,6 +82,40 @@
 	    (when (test item (key (car a)))
 	      (return a))))))))
 
+(defun assoc-if (predicate alist &key (key 'identity))
+  "=> entry"
+  (numargs-case
+   (2 (predicate alist)
+      (with-funcallable (predicate)
+	(dolist (a alist)
+	  (when a
+	    (when (predicate (car a))
+	      (return a))))))
+   (t (predicate alist &key (key 'identity))
+      (with-funcallable (key)
+	(with-funcallable (predicate)
+	  (dolist (a alist)
+	    (when a
+	      (when (predicate (key (car a)))
+		(return a)))))))))
+
+(defun assoc-if-not (predicate alist &key (key 'identity))
+  "=> entry"
+  (numargs-case
+   (2 (predicate alist)
+      (with-funcallable (predicate)
+	(dolist (a alist)
+	  (when a
+	    (when (not (predicate (car a)))
+	      (return a))))))
+   (t (predicate alist &key (key 'identity))
+      (with-funcallable (key)
+	(with-funcallable (predicate)
+	  (dolist (a alist)
+	    (when a
+	      (when (not (predicate (key (car a))))
+		(return a)))))))))
+
 (defun rassoc (item alist &key (test 'eql) (key 'identity))
   (numargs-case
    (2 (item alist)
@@ -94,6 +128,24 @@
 	  (dolist (a alist)
 	    (when (test item (key (cdr a)))
 	      (return a))))))))
+
+(defun rassoc-if (predicate alist &key (key 'identity))
+  "=> entry"
+  (numargs-case
+   (2 (predicate alist)
+      (with-funcallable (predicate)
+	(dolist (a alist)
+	  (when a
+	    (when (predicate (cdr a))
+	      (return a))))))
+   (t (predicate alist &key (key 'identity))
+      (with-funcallable (key)
+	(with-funcallable (predicate)
+	  (dolist (a alist)
+	    (when a
+	      (when (predicate (key (cdr a)))
+		(return a)))))))))
+
 
 (defun list-length (x)
   (do ((n 0 (+ n 2))			;Counter.
@@ -127,6 +179,38 @@
 		((endp p) nil)
 	      (when (test (key item) (key (car p)))
 		(return p)))))))))
+
+(defun member-if (predicate list &key key)
+  (numargs-case
+   (2 (predicate list)
+      (with-funcallable (predicate)
+	(do ((p list (cdr p)))
+	    ((endp p) nil)
+	  (when (predicate (car p))
+	    (return p)))))
+   (t (predicate list &key (key 'identity))
+      (with-funcallable (predicate)
+	(with-funcallable (key)
+	  (do ((p list (cdr p)))
+	      ((endp p) nil)
+	    (when (predicate (key (car p)))
+	      (return p))))))))
+
+(defun member-if-not (predicate list &key key)
+  (numargs-case
+   (2 (predicate list)
+      (with-funcallable (predicate)
+	(do ((p list (cdr p)))
+	    ((endp p) nil)
+	  (when (not (predicate (car p)))
+	    (return p)))))
+   (t (predicate list &key (key 'identity))
+      (with-funcallable (predicate)
+	(with-funcallable (key)
+	  (do ((p list (cdr p)))
+	      ((endp p) nil)
+	    (when (not (predicate (key (car p))))
+	      (return p))))))))
 
 (defun last (list &optional (n 1))
   ;; from the hyperspec..
@@ -320,8 +404,6 @@
 	(setf more-lists
 	      (map-into more-lists #'cdr more-lists))))))
 
-
-
 (defun mapcan (function first-list &rest more-lists)
   (numargs-case
    (2 (function first-list)
@@ -359,6 +441,48 @@
 	      (setf (cdr tail) m)
 	      (setf result m))
 	  (setf tail (last m)))
+	(setf more-lists
+	      (map-into more-lists #'cdr more-lists))))))
+
+(defun mapcon (function first-list &rest more-lists)
+  (numargs-case
+   (2 (function first-list)
+      (do ((result nil)
+	   (tail nil)
+	   (p first-list (cdr p)))
+	  ((endp p) result)
+	(let ((m (funcall function p)))
+	  (if tail
+	      (setf (cdr tail) m)
+	      (setf result m))
+	  (setf tail (last m)))))
+   (3 (function first-list second-list)
+      (do ((result nil)
+	   (tail nil)
+	   (p first-list (cdr p))
+	   (q second-list (cdr q)))
+	  ((or (endp p)
+	       (endp q))
+	   result)
+	(let ((m (funcall function p q)))
+	  (if tail
+	      (setf (cdr tail) m)
+	      (setf result m))
+	  (setf tail (last m)))))
+   (t (function first-list &rest more-lists)
+      (declare (dynamic-extent more-lists))
+      (do ((result nil)
+	   (tail nil))
+	  ((or (endp first-list)
+	       (some #'endp more-lists))
+	   result)
+	(let ((m (apply function first-list more-lists)))
+	  (if tail
+	      (setf (cdr tail) m)
+	      (setf result m))
+	  (setf tail (last m)))
+	(setf first-list
+	      (cdr first-list))
 	(setf more-lists
 	      (map-into more-lists #'cdr more-lists))))))
 
