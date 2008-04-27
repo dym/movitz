@@ -8,7 +8,7 @@
 ;;;; Created at:    Wed Oct 25 12:30:49 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: compiler.lisp,v 1.204 2008-04-21 19:45:36 ffjeld Exp $
+;;;; $Id: compiler.lisp,v 1.205 2008-04-27 19:07:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -236,28 +236,32 @@ If funobj is provided, its identity will be kept, but its type (and values) migh
   ;; The ability to provide funobj's identity is important when a
   ;; function must be referenced before it can be compiled, e.g. for
   ;; mutually recursive (lexically bound) functions.
-  (with-retries-until-true (retry-pass1 "Retry first-pass compilation of ~S." name)
-    ;; First-pass is mostly functional, so it can safely be restarted.
-    (multiple-value-bind (required-vars optional-vars rest-var key-vars aux-vars allow-p min max edx-var)
-	(decode-normal-lambda-list lambda-list)
-      (declare (ignore aux-vars allow-p min max))
-      ;; There are several main branches through the function
-      ;; compiler, and this is where we decide which one to take.
-      (funcall (cond
-		((let ((sub-form (cddr form)))
-		   (and (consp (car sub-form))
-			(eq 'muerte::numargs-case (caar sub-form))))
-		 'make-compiled-function-pass1-numarg-case)
-		((and (= 1 (length required-vars)) ; (x &optional y)
-		      (= 1 (length optional-vars))
-		      (movitz-constantp (nth-value 1 (decode-optional-formal (first optional-vars)))
-					env)
-		      (null key-vars)
-		      (not rest-var)
-		      (not edx-var))
-		 'make-compiled-function-pass1-1req1opt)
-		(t 'make-compiled-function-pass1))
-	       name lambda-list declarations form env top-level-p funobj))))
+  (multiple-value-bind (required-vars optional-vars rest-var key-vars aux-vars allow-p min max edx-var)
+      (decode-normal-lambda-list lambda-list)
+    (declare (ignore aux-vars allow-p min max))
+    ;; There are several main branches through the function
+    ;; compiler, and this is where we decide which one to take.
+    (funcall (cond
+	       ((let ((sub-form (cddr form)))
+		  (and (consp (car sub-form))
+		       (eq 'muerte::numargs-case (caar sub-form))))
+		'make-compiled-function-pass1-numarg-case)
+	       ((and (= 1 (length required-vars)) ; (x &optional y)
+		     (= 1 (length optional-vars))
+		     (movitz-constantp (nth-value 1 (decode-optional-formal (first optional-vars)))
+				       env)
+		     (null key-vars)
+		     (not rest-var)
+		     (not edx-var))
+		'make-compiled-function-pass1-1req1opt)
+	       (t 'make-compiled-function-pass1))
+	     name
+	     lambda-list
+	     declarations
+	     form
+	     env
+	     top-level-p
+	     funobj)))
 
 (defun ensure-pass1-funobj (funobj class &rest init-args)
   "If funobj is nil, return a fresh funobj of class.
@@ -1880,14 +1884,14 @@ falling below the label."
 				  (case (instruction-is next-load)
 				    (:movl
 				     (let ((pos (position next-load pc)))
-				       (setq p (nconc (subseq pc 0 pos)
-						      (if (or (eq register (twop-dst next-load))
-							      (find-if (lambda (m)
-									 (and (eq (twop-dst next-load) (cdr m))
-									      (= (car m) (stack-frame-operand place))))
-								       map))
-							  nil
-							(list `(:movl ,register ,(twop-dst next-load)))))
+				       (setq p (append (subseq pc 0 pos)
+						       (if (or (eq register (twop-dst next-load))
+							       (find-if (lambda (m)
+									  (and (eq (twop-dst next-load) (cdr m))
+									       (= (car m) (stack-frame-operand place))))
+									map))
+							   nil
+							   (list `(:movl ,register ,(twop-dst next-load)))))
 					     next-pc (nthcdr (1+ pos) pc))
 				       (explain nil "preserved load/store .. load ~S of place ~S because ~S."
 						next-load place reason)))
@@ -2138,14 +2142,6 @@ falling below the label."
 		       (let ((newf (ecase (global-funcall-p i2 '(fast-car fast-cdr))
 				     (fast-car 'fast-car-ebx)
 				     (fast-cdr 'fast-cdr-ebx))))
-			 (setq p `((:call (:edi ,(global-constant-offset newf))))
-			       next-pc (nthcdr 2 pc))
-			 (explain nil "Changed [~S ~S] to ~S" i i2 newf)))
-		      ((and (equal i '(:movl :eax :ebx))
-			    (global-funcall-p i2 '(fast-car-ebx fast-cdr-ebx)))
-		       (let ((newf (ecase (global-funcall-p i2 '(fast-car-ebx fast-cdr-ebx))
-				     (fast-car-ebx 'fast-car)
-				     (fast-cdr-ebx 'fast-cdr))))
 			 (setq p `((:call (:edi ,(global-constant-offset newf))))
 			       next-pc (nthcdr 2 pc))
 			 (explain nil "Changed [~S ~S] to ~S" i i2 newf)))
@@ -4426,6 +4422,10 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 			       ((eql 1 location-1)
 				(decf stack-setup-size)
 				'((:pushl :ebx)))
+			       ((eql 2 location-1)
+				(decf stack-setup-size 2)
+				`((:pushl :edi)
+				  (:pushl :ebx)))
 			       (t (ecase location-1
 				    ((nil :ebx) nil)
 				    (:edx '((:movl :ebx :edx)))
@@ -4490,7 +4490,7 @@ as the lexical variable-name, and add a new shadowing dynamic binding for <forma
 	      (append (cond
 		       ;; normalize arg-count in ecx..
 		       ((and max-args (= min-args max-args))
-			(error "huh?"))
+			(error "huh? max: ~S, min: ~S" max-args min-args))
 		       ((and max-args (<= 0 min-args max-args #x7f))
 			`((:andl #x7f :ecx)))
 		       ((>= min-args #x80)
@@ -6967,7 +6967,9 @@ and a list of any intervening unwind-protect environment-slots."
 		  (make-store-lexical destination loc0 nil funobj frame-map))
 		 ((integerp loc0)
 		  (make-load-lexical term0 destination funobj nil frame-map))
-		 (t (break "Unknown Y zero-add: ~S" instruction))))
+		 ((type-specifier-singleton type0)
+		  (make-load-lexical term0 destination funobj nil frame-map))
+		 (t (break "Unknown Y zero-add: ~S for ~S/~S => ~S" instruction term0 loc0 destination))))
 	       ((and (movitz-subtypep type0 'fixnum)
 		     (movitz-subtypep type1 'fixnum)
 		     (movitz-subtypep result-type 'fixnum))
@@ -7203,6 +7205,29 @@ but it's requested to be in ~S."
 
 ;;;;;;;
 
+(defun movitz-eql (x y)
+  "Emulate EQL on movitz-objects."
+  (etypecase x
+    (movitz-immediate-object
+     (and (typep y 'movitz-immediate-object)
+	  (eql (movitz-immediate-value x)
+	       (movitz-immediate-value y))))
+    ((or movitz-symbol movitz-null movitz-cons movitz-basic-vector)
+     (eq x y))
+    (movitz-struct
+     (cond
+       ((not (typep y 'movitz-struct))
+	nil)
+       ((eq (movitz-struct-class x)
+	    (muerte::movitz-find-class 'muerte.cl:complex))
+	(and (eq (movitz-struct-class x)
+		 (muerte::movitz-find-class 'muerte.cl:complex))
+	     (movitz-eql (first (movitz-struct-slot-values x))
+			 (first (movitz-struct-slot-values y)))
+	     (movitz-eql (second (movitz-struct-slot-values x))
+			 (second (movitz-struct-slot-values y)))))
+       (t (error "movitz-eql unknown movitz-struct: ~S" x))))))
+
 (define-find-read-bindings :eql (x y mode)
   (declare (ignore mode))
   (list x y))
@@ -7239,11 +7264,8 @@ but it's requested to be in ~S."
 			   (make-load-lexical y :ebx funobj nil frame-map)))))
 	  (cond
 	   ((and x-singleton y-singleton)
-	    (let ((eql (etypecase (car x-singleton)
-			 (movitz-immediate-object
-			  (and (typep (car y-singleton) 'movitz-immediate-object)
-			       (eql (movitz-immediate-value (car x-singleton))
-				    (movitz-immediate-value (car y-singleton))))))))
+	    (let ((eql (movitz-eql (car x-singleton)
+				   (car y-singleton))))
 	      (case (operator return-mode)
 		(:boolean-branch-on-false
 		 (when (not eql)
