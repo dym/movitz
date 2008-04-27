@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.45 2008-04-19 12:44:40 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.46 2008-04-27 19:43:18 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -580,4 +580,9 @@ respect to multiple threads."
   (declare (ignore ignore))
   'compiler-macro
   name)
-  
+
+(defmacro movitz-macroexpand (&rest args)
+  `(macroexpand ,@args))
+
+(defmacro movitz-macroexpand-1 (&rest args)
+  `(macroexpand-1 ,@args))
