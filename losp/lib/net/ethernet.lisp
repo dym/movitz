@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep 17 15:25:31 2002
 ;;;;                
-;;;; $Id: ethernet.lisp,v 1.11 2005/08/31 22:35:10 ffjeld Exp $
+;;;; $Id: ethernet.lisp,v 1.12 2008-06-12 12:54:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -166,8 +166,8 @@
 
 (defun format-ethernet-packet (packet source destination type &key (start 0) (source-start 0)
 								   (destination-start 0))
-  (setf (ether-source packet start source-start) source
-	(ether-destination packet start destination-start) destination
+  (setf (ether-source packet start :source-start source-start) source
+	(ether-destination packet start :destination-start destination-start) destination
 	(ether-type packet start) type)
   packet)
 
