@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.124 2008-04-27 19:18:16 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.125 2008-07-09 19:54:56 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1139,7 +1139,13 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 		    sum)))))
 
 (defun intern-movitz-symbol (name)
-  (assert (not (eq (symbol-package name) (find-package :common-lisp)))
+  (assert (not (member (symbol-package name)
+		       '(:common-lisp :movitz)
+		       :key #'find-package))
+      (name)
+    "Trying to movitz-intern a symbol in the ~A package: ~S" (symbol-package name) name)
+  (assert (not (eq (symbol-package name)
+		   (find-package :movitz)))
       (name)
     "Trying to movitz-intern a symbol in the Common-Lisp package: ~S" name)
   (or (gethash name (image-oblist *image*))
