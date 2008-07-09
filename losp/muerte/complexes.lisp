@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: complexes.lisp,v 1.2 2008-04-21 19:31:32 ffjeld Exp $
+;;;; $Id: complexes.lisp,v 1.3 2008-07-09 20:17:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,7 +18,8 @@
 (provide :muerte/complexes)
 
 (defstruct (complex (:constructor make-complex-number)
-		    (:conc-name #:||))
+		    (:conc-name #:||)
+		    (:predicate complexp))
   realpart
   imagpart)
 
