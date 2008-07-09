@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:31:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: special-operators-cl.lisp,v 1.54 2008-04-27 19:23:14 ffjeld Exp $
+;;;; $Id: special-operators-cl.lisp,v 1.55 2008-07-09 19:57:02 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -641,54 +641,54 @@ where zot is not in foo's scope, but _is_ in foo's extent."
     (let* ((last-returns :nothing)
 	   (bindings ())
 	   (code (loop
-		     for (var value-form) on pairs by #'cddr
-		     as binding = (movitz-binding var env)
-		     as pos downfrom (- (length pairs) 2) by 2
-		     as sub-result-mode = (if (zerop pos) result-mode :ignore)
-		     do (pushnew binding bindings)
-		     append
-		       (typecase binding
-			 (symbol-macro-binding
-			  (compiler-values-bind (&code code &returns returns)
-			      (compiler-call #'compile-form-unprotected 
-				:defaults forward
-				:result-mode sub-result-mode
-				:form `(muerte.cl:setf ,var ,value-form))
-			    (setf last-returns returns)
-			    code))
-			 (lexical-binding
-			  (case (operator sub-result-mode)
-			    (t ;; :ignore
-			     ;; (setf last-returns :nothing)
-			     (compiler-values-bind (&code sub-code &returns sub-returns)
-				 (compiler-call #'compile-form
-				   :defaults forward
-				   :form value-form
-				   :result-mode binding)
-			       (setf last-returns sub-returns)
-			       ;; (warn "sub-returns: ~S" sub-returns)
-			       sub-code))
-			    #+ignore
-			    (t (let ((register (accept-register-mode sub-result-mode)))
-				 (compiler-values-bind (&code code &type type)
-				     (compiler-call #'compile-form
-				       :defaults forward
-				       :form value-form
-				       :result-mode register)
-				   (setf last-returns register)
-				   (append code
-					   `((:store-lexical ,binding ,register
-							     :type ,(type-specifier-primary type)))))))))
-			 (t (unless (movitz-env-get var 'special nil env)
-			      (warn "Assuming destination variable ~S with binding ~S is special."
-				    var binding))
-			    (setf last-returns :ebx)
-			    (append (compiler-call #'compile-form
-				      :defaults forward
-				      :form value-form
-				      :result-mode :ebx)
-				    `((:load-constant ,var :eax)
-				      (:locally (:call (:edi (:edi-offset dynamic-variable-store)))))))))))
+		    for (var value-form) on pairs by #'cddr
+		    as binding = (movitz-binding var env)
+		    as pos downfrom (- (length pairs) 2) by 2
+		    as sub-result-mode = (if (zerop pos) result-mode :ignore)
+		    do (pushnew binding bindings)
+		    append
+		    (typecase binding
+		      (symbol-macro-binding
+		       (compiler-values-bind (&code code &returns returns)
+			   (compiler-call #'compile-form-unprotected 
+					  :defaults forward
+					  :result-mode sub-result-mode
+					  :form `(muerte.cl:setf ,var ,value-form))
+			 (setf last-returns returns)
+			 code))
+		      (lexical-binding
+		       (case (operator sub-result-mode)
+			 (t  ;; :ignore
+			  ;; (setf last-returns :nothing)
+			  (compiler-values-bind (&code sub-code &returns sub-returns)
+			      (compiler-call #'compile-form
+					     :defaults forward
+					     :form value-form
+					     :result-mode binding)
+			    (setf last-returns sub-returns)
+			    ;; (warn "sub-returns: ~S" sub-returns)
+			    sub-code))
+			 #+ignore
+			 (t (let ((register (accept-register-mode sub-result-mode)))
+			      (compiler-values-bind (&code code &type type)
+				  (compiler-call #'compile-form
+						 :defaults forward
+						 :form value-form
+						 :result-mode register)
+				(setf last-returns register)
+				(append code
+					`((:store-lexical ,binding ,register
+							  :type ,(type-specifier-primary type)))))))))
+		      (t (unless (movitz-env-get var 'special nil env)
+			   (warn "Assuming destination variable ~S with binding ~S is special."
+				 var binding))
+			 (setf last-returns :ebx)
+			 (append (compiler-call #'compile-form
+						:defaults forward
+						:form value-form
+						:result-mode :ebx)
+				 `((:load-constant ,var :eax)
+				   (:locally (:call (:edi (:edi-offset dynamic-variable-store)))))))))))
       (compiler-values ()
 	:code code
 	:returns last-returns
