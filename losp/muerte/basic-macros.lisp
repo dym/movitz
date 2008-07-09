@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.76 2008-04-09 18:01:34 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.77 2008-07-09 20:08:52 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -90,7 +90,7 @@
       `(compiled-cond (,test-form ,then-form) (t ,else-form))
     `(compiled-cond (,test-form ,then-form))))
 
-(defmacro throw (tag result-form)
+(defmacro/cross-compilation throw (tag result-form)
   (let ((tag-var (gensym "throw-tag-")))
     `(let ((,tag-var ,tag))
        (exact-throw (find-catch-tag ,tag-var)
