@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.46 2008-04-27 19:43:18 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.47 2008-07-09 20:20:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -586,3 +586,8 @@ respect to multiple threads."
 
 (defmacro movitz-macroexpand-1 (&rest args)
   `(macroexpand-1 ,@args))
+
+(defmacro/run-time defun (name lambda-list &body body)
+  `(setf (symbol-function ',name)
+	 (install-funobj-name ',name
+			      (lambda ,lambda-list ,@body))))
