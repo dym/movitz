@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 20 00:39:59 2004
 ;;;;                
-;;;; $Id: ratios.lisp,v 1.13 2008-04-21 19:42:43 ffjeld Exp $
+;;;; $Id: ratios.lisp,v 1.14 2008-07-09 20:05:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -117,11 +117,12 @@
 
 (defun cos (x)
   "http://mathworld.wolfram.com/Cosine.html"
-  (do* ((rad (mod x 44/7))
-        (n2 0 (+ n2 2))
+  (do* ((rad2 (expt (mod x 44/7) 2))
+	(n2 0 (+ n2 2))
+	(rad-n2 1 (* rad-n2 rad2))
         (sign 1 (- sign))
         (denominator 1 (* denominator (1- n2) n2))
-        (term 1 (/ (expt rad n2)
+        (term 1 (/ rad-n2
                    denominator))
         (sum 1 (+ sum (* sign term))))
        ((<= term 1/100)
