@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 21:15:12 2001
 ;;;;                
-;;;; $Id: eval.lisp,v 1.34 2008-04-27 16:14:10 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.35 2008-07-09 20:11:23 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -18,6 +18,23 @@
 (provide :muerte/eval)
 
 (in-package muerte)
+
+(define-compile-time-variable *eval-special-operators*
+    (make-hash-table :test #'eq))
+
+(defmacro define-eval-special-operator (operator lambda-list &body body)
+  (let ((name (intern (format nil "~A-~A" 'eval-special-operator operator))))
+    `(progn
+       (eval-when (:compile-toplevel)
+	 (setf (gethash (find-symbol ,(symbol-name operator))
+			*eval-special-operators*)
+	       ',name))
+       (defun ,name ,lambda-list ,@body))))
+
+(defun special-operator-p (symbol)
+  (if (gethash symbol *eval-special-operators*)
+      t
+      nil))
 
 (defun eval (form)
   (eval-form form nil))
@@ -77,6 +94,130 @@
 ;;;
 ;;;Figure 3-2. Common Lisp Special Operators
 
+(define-eval-special-operator quote (form env)
+  (declare (ignore env))
+  (cadr form))
+
+(define-eval-special-operator progn (form env)
+  (eval-progn (cdr form) env))
+
+(define-eval-special-operator if (form env)
+  (if (eval-form (second form) env)
+      (eval-form (third form) env)
+      (eval-form (fourth form) env)))
+
+(define-eval-special-operator block (form env)
+  (catch form
+    (eval-progn (cddr form)
+		(cons (list* +eval-binding-type-block+
+			     (cadr form)
+			     form)
+		      env))))
+
+(define-eval-special-operator return-from (form env)
+  (let ((b (cdr (op-env-binding env (cadr form) +eval-binding-type-block+))))
+    (unless b (error "Block ~S is not visible." (cadr form)))
+    (throw (cdr b)
+      (eval-form (caddr form) env))))
+
+(define-eval-special-operator macrolet (form env)
+  (dolist (macrolet (cadr form))
+    (destructuring-bind (name lambda &body body)
+	macrolet
+      (check-type name symbol)
+      (check-type lambda list)
+      (push (list* +eval-binding-type-macrolet+
+		   name
+		   (cdr macrolet))
+	    env)))
+  (eval-progn (cddr form)
+	      env))
+
+(define-eval-special-operator let (form env)
+  (let ((var-specs (cadr form))
+	(declarations-and-body (cddr form)))
+    (let (special-vars
+	  special-values
+	  (local-env env))
+      (multiple-value-bind (body declarations)
+	  (parse-declarations-and-body declarations-and-body)
+	(dolist (var-spec var-specs)
+	  (multiple-value-bind (var init-form)
+	      (if (atom var-spec)
+		  (values var-spec nil)
+		  (values (car var-spec) (cadr var-spec)))
+	    (cond
+	      ((or (symbol-special-variable-p var)
+		   (declared-special-p var declarations))
+	       ;; special
+	       (push var special-vars)
+	       (push (eval-form init-form env) special-values))
+	      (t ;; lexical
+	       (push (cons var (eval-form init-form env))
+		     local-env)))))
+	(if (null special-vars)
+	    (eval-progn body local-env)
+	    (progv special-vars special-values
+	      (eval-progn body local-env)))))))
+
+(define-eval-special-operator let* (form env)
+  (let ((var-specs (cadr form))~)
+    (if (null var-specs)
+	(eval-progn body env)
+	(multiple-value-bind (body declarations)
+	    (parse-declarations-and-body (cddr form))
+	  (multiple-value-bind (var init-form)
+	      (let ((var-spec (pop var-specs)))
+		(if (atom var-spec)
+		    (values var-spec nil)
+		    (destructuring-bind (var init-form)
+			var-spec
+		      (values var init-form))))
+	    (if (or (symbol-special-variable-p var)
+		    (declared-special-p var declarations))
+		(progv (list var) (list (eval-form init-form env))
+		  (eval-let* var-specs
+			     declarations
+			     body
+			     env))
+		(eval-let* var-specs
+			   declarations
+			   body
+			   (cons (cons var
+				       (eval-form init-form env))
+				 env))))))))
+
+(define-eval-special-operator multiple-value-call (form env)
+  (apply (eval-form (cadr form) env)
+	 (mapcan (lambda (args-form)
+		   (multiple-value-list (eval-form args-form env)))
+		 (cddr form))))
+
+(define-eval-special-operator catch (form env)
+  (catch (eval-form (second form) env)
+    (eval-progn (cddr form) env)))
+
+(define-eval-special-operator throw (form env)
+  (throw (eval-form (second form) env)
+    (eval-form (third form) env)))
+
+(define-eval-special-operator unwind-protect (form env)
+  (unwind-protect
+       (eval-form (second form) env)
+    (eval-progn (cddr form) env)))
+
+(define-eval-special-operator the (form env)
+  (destructuring-bind (value-type form)
+      (cdr form)
+    (declare (ignore value-type))
+    (eval-form form env)))
+
+(define-eval-special-operator multiple-value-prog1 (form env)
+  (multiple-value-prog1 (eval-form (cadr form) env)
+    (eval-progn (cddr form) env)))
+
+(define-eval-special-operator symbol-macrolet (form env)
+  (error "Special operator ~S not implemented in ~S." (car form) 'eval))
 
 (defun eval-cons (form env)
   "3.1.2.1.2 Conses as Forms"
@@ -93,80 +234,16 @@
 								  :whole-p nil))))
 			  (cdr form))
 		    env)
-      (case (car form)
-	(quote (cadr form))
-	(function (eval-function (second form) env))
-	(if (if (eval-form (second form) env)
-		(eval-form (third form) env)
-		(eval-form (fourth form) env)))
-	(progn (eval-progn (cdr form) env))
-	(prog1 (prog1 (eval-form (cadr form) env)
-		 (eval-progn (cddr form) env)))
-	(tagbody (eval-tagbody form env))
-	((block)
-	 (catch form
-	   (eval-progn (cddr form)
-		       (cons (list* +eval-binding-type-block+
-				    (cadr form)
-				    form)
-			     env))))
-	((macrolet)
-	 (dolist (macrolet (cadr form))
-	   (destructuring-bind (name lambda &body body)
-	       macrolet
-	     (check-type name symbol)
-	     (check-type lambda list)
-	     (push (list* +eval-binding-type-macrolet+
-			  name
-			  (cdr macrolet))
-		   env)))
-	 (eval-progn (cddr form)
-		     env))
-	((return-from)
-	 (let ((b (cdr (op-env-binding env (cadr form) +eval-binding-type-block+))))
-	   (unless b (error "Block ~S is not visible." (cadr form)))
-	   (throw (cdr b)
-	     (eval-form (caddr form) env))))
-	(go (eval-go form env))
-	(setq (eval-setq form env))
-	(setf (eval-setf form env))
-	((defvar) (eval-defvar form env))
-	((let)
-	 (eval-let (cadr form) (cddr form) env))
-	((let*)
-	 (multiple-value-bind (body declarations)
-	     (parse-declarations-and-body (cddr form))
-	   (eval-let* (cadr form) declarations body env)))
-	((defun) (eval-defun (cadr form) (caddr form) (cdddr form) env))
-	;; ((lambda) (eval-function form env)) ; the lambda macro..
-	((multiple-value-call)
-	 (apply (eval-form (cadr form) env)
-		(mapcan (lambda (args-form)
-			  (multiple-value-list (eval-form args-form env)))
-			(cddr form))))
-	((multiple-value-bind)
-	 (eval-m-v-bind form env))
-	((multiple-value-prog1)
-	 (multiple-value-prog1 (eval-form (cadr form) env)
-	   (eval-progn (cddr form) env)))
-	((catch)
-	 (catch (eval-form (second form) env)
-	   (eval-progn (cddr form) env)))
-	((throw)
-	 (throw (eval-form (second form) env)
-	   (eval-form (third form) env)))
-	((unwind-protect)
-	 (unwind-protect
-	      (eval-form (second form) env)
-	   (eval-progn (cddr form) env)))
-	((symbol-macrolet)
-	 (error "Special operator ~S not implemented in ~S." (car form) 'eval))
-	((the)
-	 (destructuring-bind (value-type form)
-	     (cdr form)
-	   (declare (ignore value-type))
-	   (eval-form form env)))
-	(t (eval-funcall form env)))))
+      (let ((special-operator (gethash (car form) *eval-special-operators*)))
+	(if special-operator
+	    (funcall special-operator form env)
+	    (case (car form)
+	      (setq (eval-setq form env))
+	      (setf (eval-setf form env))
+;; 	      ((defvar) (eval-defvar form env))
+	      ((multiple-value-bind)
+	       (eval-m-v-bind form env))
+	      (t (eval-funcall form env)))))))
 
 (defun eval-progn (forms env)
   (do ((p forms (cdr p)))
@@ -249,17 +326,6 @@ second the list of declaration-specifiers."
 			   declarations
 			   docstring)))))))
 
-(defun parse-docstring-declarations-and-body (forms &optional (declare 'declare))
-  "From the list of FORMS, return first the list of non-declaration forms, ~
-second the list of declaration-specifiers, third any docstring."
-  (assert (eq declare 'declare))
-  (if (or (not (cdr forms))
-	  (not (stringp (car forms))))
-      (parse-declarations-and-body forms)
-      (multiple-value-call #'values
-	(parse-declarations-and-body (cdr forms))
-	(car forms))))
-
 (defun compute-function-block-name (function-name)
   (cond
    ((symbolp function-name) function-name)
@@ -274,22 +340,6 @@ second the list of declaration-specifiers, third any docstring."
 	       (eq 'special (car d))
 	       (member var (cdr d)))
       (return t))))
-
-(defun eval-defun (name lambda-list body env)
-  (with-simple-restart (continue "Defun ~S anyway." name)
-    (assert (not (eq (symbol-package name)
-		     (find-package 'common-lisp)))
-	() "Won't allow defun of the Common Lisp symbol ~S." name))
-  (setf (symbol-function name)
-    (install-funobj-name name
-			 (lambda (&rest args)
-			   (declare (dynamic-extent args))
-			   (eval-progn body (make-destructuring-env
-					     lambda-list args env
-					     :environment-p nil
-					     :recursive-p nil
-					     :whole-p nil)))))
-  name)
 
 (defun decode-optional-formal (formal)
   "3.4.1.2 Specifiers for optional parameters.
@@ -405,31 +455,6 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 	      env)
 	env)))
 
-(defun eval-let (var-specs declarations-and-body env)
-  (let (special-vars
-	special-values
-	(local-env env))
-    (multiple-value-bind (body declarations)
-	(parse-declarations-and-body declarations-and-body)
-      (dolist (var-spec var-specs)
-	(multiple-value-bind (var init-form)
-	    (if (atom var-spec)
-		(values var-spec nil)
-	      (values (car var-spec) (cadr var-spec)))
-	  (cond
-	   ((or (symbol-special-variable-p var)
-		(declared-special-p var declarations))
-	    ;; special
-	    (push var special-vars)
-	    (push (eval-form init-form env) special-values))
-	   (t ;; lexical
-	    (push (cons var (eval-form init-form env))
-		  local-env)))))
-      (if (null special-vars)
-	  (eval-progn body local-env)
-	(progv special-vars special-values
-	  (eval-progn body local-env))))))
-
 (defun eval-let* (var-specs declarations body env)
   (if (null var-specs)
       (eval-progn body env)
@@ -475,27 +500,28 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
 		     env)))))
 	(eval-progn body env)))))
 
-(defun eval-function (function-name env)
-  (etypecase function-name
-    (symbol
-     (let ((binding (cdr (op-env-binding env function-name +eval-binding-type-flet+))))
-       (or (and binding (cdr binding))
-	   (symbol-function function-name))))
-    (list
-     (ecase (car function-name)
-       ((setf)
-	(symbol-function (lookup-setf-function (second function-name))))
-       ((lambda)
-	(let ((lambda-list (cadr function-name))
-	      (lambda-body (parse-docstring-declarations-and-body (cddr function-name))))
-	  (install-funobj-name :anonymous-lambda
-			       (lambda (&rest args)
-				 (declare (dynamic-extent args))
-				 (eval-progn lambda-body
-					     (make-destructuring-env lambda-list args env
-								     :environment-p nil
-								     :recursive-p nil
-								     :whole-p nil))))))))))
+(define-eval-special-operator function (form env)
+  (let ((function-name (second form)))
+    (etypecase function-name
+      (symbol
+       (let ((binding (cdr (op-env-binding env function-name +eval-binding-type-flet+))))
+	 (or (and binding (cdr binding))
+	     (symbol-function function-name))))
+      (list
+       (ecase (car function-name)
+	 ((setf)
+	  (symbol-function (lookup-setf-function (second function-name))))
+	 ((lambda)
+	  (let ((lambda-list (cadr function-name))
+		(lambda-body (parse-docstring-declarations-and-body (cddr function-name))))
+	    (install-funobj-name :anonymous-lambda
+				 (lambda (&rest args)
+				   (declare (dynamic-extent args))
+				   (eval-progn lambda-body
+					       (make-destructuring-env lambda-list args env
+								       :environment-p nil
+								       :recursive-p nil
+								       :whole-p nil)))))))))))
 
 (defun lookup-setf-function (name)
   (let ((setf-name (gethash name *setf-namespace*)))
@@ -515,28 +541,27 @@ Return the variable, keyword, init-fom, and supplied-p-parameter."
     (cons (eval-form (car list) env)
 	  (eval-arglist (cdr list) env))))
 
-(defun eval-tagbody (form env)
+(define-eval-special-operator tagbody (form env)
   ;; build the..
   (do* ((pc (cdr form) (cdr pc))
 	(instruction (car pc) (car pc)))
-      ((endp pc))
+       ((endp pc))
     (when (typep instruction '(or integer symbol))
       (push (list* +eval-binding-type-go-tag+ instruction form)
 	    env)))
   ;; execute body..
   (prog ((pc (cdr form)))
    start
-    (let ((tag (catch form
-		 (do () ((endp pc) (go end))
-		   (let ((instruction (pop pc)))
-		     (unless (typep instruction '(or integer symbol))
-		       (eval-form instruction env)))))))
-      (setf pc (cdr (member tag (cdr form))))
-      (go start))
+   (let ((tag (catch form
+		(do () ((endp pc) (go end))
+		  (let ((instruction (pop pc)))
+		    (unless (typep instruction '(or integer symbol))
+		      (eval-form instruction env)))))))
+     (setf pc (cdr (member tag (cdr form))))
+     (go start))
    end))
 
-(defun eval-go (form env)
-  (declare (ignore))
+(define-eval-special-operator go (form env)
   (let* ((tag (cadr form))
 	 (b (cdr (op-env-binding env tag +eval-binding-type-go-tag+))))
     (assert b () "Go-tag ~S is not visible." tag)
