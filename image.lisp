@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.125 2008-07-09 19:54:56 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.126 2008-07-18 13:15:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1645,79 +1645,83 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
   (with-movitz-read-context ()
     (when (typep expr 'movitz-object)
       (return-from movitz-read expr))
-    (or (and (not re-read)
-	     (let ((old-object (image-lisp-to-movitz-object *image* expr)))
-	       (when (and old-object (not (gethash old-object *movitz-reader-clean-map*)))
-		 (update-movitz-object old-object expr)
-		 (setf (gethash old-object *movitz-reader-clean-map*) t))
-	       old-object))
+    (or (unless re-read
+	  (let ((old-object (image-lisp-to-movitz-object *image* expr)))
+	    (when (and old-object
+		       (not (gethash old-object *movitz-reader-clean-map*)))
+	      (setf (gethash old-object *movitz-reader-clean-map*) t)
+	      (update-movitz-object old-object expr))
+	    old-object))
 	(setf (image-lisp-to-movitz-object *image* expr)
-	  (etypecase expr
-	    (null *movitz-nil*)
-	    ((member t) (movitz-read 'muerte.cl:t))
-	    ((eql unbound) (make-instance 'movitz-unbound-value))
-	    (symbol (intern-movitz-symbol expr))
-	    (integer (make-movitz-integer expr))
-	    (character (make-movitz-character expr))
-	    (string (or (gethash expr (image-string-constants *image*))
-			(setf (gethash expr (image-string-constants *image*))
-			  (make-movitz-string expr))))
-	    (vector (make-movitz-vector (length expr)
-					:element-type (array-element-type expr)
-					:initial-contents expr))
-	    (cons
-	     (or (let ((old-cons (gethash expr (image-cons-constants *image*))))
-		   (when old-cons
-		     (update-movitz-object old-cons expr)
-		     old-cons))
-		 (setf (gethash expr (image-cons-constants *image*))
-		   (if (eq '#0=#:error (ignore-errors (when (not (list-length expr)) '#0#)))
-		       (multiple-value-bind (unfolded-expr cdr-index)
-			   (unfold-circular-list expr)
-			 (let ((result (movitz-read unfolded-expr)))
-			   (setf (movitz-last-cdr result)
-			     (movitz-nthcdr cdr-index result))
-			   result))
-		     (make-movitz-cons (movitz-read (car expr))
-				       (movitz-read (cdr expr)))))))
-	    (hash-table
-	     (make-movitz-hash-table expr))
-	    (pathname
-	     (make-instance 'movitz-struct
-			    :class (muerte::movitz-find-class 'muerte::pathname)
-			    :length 1
-			    :slot-values (list (movitz-read (namestring expr)))))
-	    (complex
-	     (make-instance 'movitz-struct
-			    :class (muerte::movitz-find-class 'muerte::complex)
-			    :length 2
-			    :slot-values (list (movitz-read (realpart expr))
-					       (movitz-read (imagpart expr)))))
-	    (ratio
-	     (make-instance 'movitz-ratio
-	       :value expr))
-	    (structure-object
-	     (let ((slot-descriptions (gethash (type-of expr)
-					       (image-struct-slot-descriptions *image*)
-					       nil)))
-	       (unless slot-descriptions
-		 (error "Don't know how to movitz-read struct: ~S" expr))
-	       (let ((movitz-object (make-instance 'movitz-struct
-				      :class (muerte::movitz-find-class (type-of expr))
-				      :length (length slot-descriptions))))
-		 (setf (image-lisp-to-movitz-object *image* expr) movitz-object)
-		 (setf (slot-value movitz-object 'slot-values)
-		   (mapcar #'(lambda (slot)
-			       (movitz-read (slot-value expr (if (consp slot) (car slot) slot))))
-			   slot-descriptions))
-		 movitz-object)))
-	    (float			; XXX
-	     (movitz-read (rationalize expr)))
-	    (class
-	     (muerte::movitz-find-class (translate-program (class-name expr)
-							   :cl :muerte.cl)))
-	    (array ; XXX
-	     (movitz-read nil)))))))
+	      (etypecase expr
+		(null *movitz-nil*)
+		((member t) (movitz-read 'muerte.cl:t))
+		((eql unbound) (make-instance 'movitz-unbound-value))
+		(symbol (intern-movitz-symbol expr))
+		(integer (make-movitz-integer expr))
+		(character (make-movitz-character expr))
+		(string (or (gethash expr (image-string-constants *image*))
+			    (setf (gethash expr (image-string-constants *image*))
+				  (make-movitz-string expr))))
+		(vector (make-movitz-vector (length expr)
+					    :element-type (array-element-type expr)
+					    :initial-contents expr))
+		(cons
+		 (or (let ((old-cons (gethash expr (image-cons-constants *image*))))
+		       (when old-cons
+			 (update-movitz-object old-cons expr)
+			 old-cons))
+		     (setf (gethash expr (image-cons-constants *image*))
+			   (if (eq '#0=#:error
+				   (ignore-errors
+				     (when (not (list-length expr))
+				       '#0#)))
+			       (multiple-value-bind (unfolded-expr cdr-index)
+				   (unfold-circular-list expr)
+				 (let ((result (movitz-read unfolded-expr)))
+				   (setf (movitz-last-cdr result)
+					 (movitz-nthcdr cdr-index result))
+				   result))
+			       (make-movitz-cons (movitz-read (car expr))
+						 (movitz-read (cdr expr)))))))
+		(hash-table
+		 (make-movitz-hash-table expr))
+		(pathname
+		 (make-instance 'movitz-struct
+				:class (muerte::movitz-find-class 'muerte::pathname)
+				:length 1
+				:slot-values (list (movitz-read (namestring expr)))))
+		(complex
+		 (make-instance 'movitz-struct
+				:class (muerte::movitz-find-class 'muerte::complex)
+				:length 2
+				:slot-values (list (movitz-read (realpart expr))
+						   (movitz-read (imagpart expr)))))
+		(ratio
+		 (make-instance 'movitz-ratio
+				:value expr))
+		(structure-object
+		 (let ((slot-descriptions (gethash (type-of expr)
+						   (image-struct-slot-descriptions *image*)
+						   nil)))
+		   (unless slot-descriptions
+		     (error "Don't know how to movitz-read struct: ~S" expr))
+		   (let ((movitz-object (make-instance 'movitz-struct
+						       :class (muerte::movitz-find-class (type-of expr))
+						       :length (length slot-descriptions))))
+		     (setf (image-lisp-to-movitz-object *image* expr) movitz-object)
+		     (setf (slot-value movitz-object 'slot-values)
+			   (mapcar #'(lambda (slot)
+				       (movitz-read (slot-value expr (if (consp slot) (car slot) slot))))
+				   slot-descriptions))
+		     movitz-object)))
+		(float			; XXX
+		 (movitz-read (rationalize expr)))
+		(class
+		 (muerte::movitz-find-class (translate-program (class-name expr)
+							       :cl :muerte.cl)))
+		(array			; XXX
+		 (movitz-read nil)))))))
 
 ;;;
 
