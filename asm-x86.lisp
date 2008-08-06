@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm-x86.lisp,v 1.38 2008-04-12 16:46:48 ffjeld Exp $
+;;;; $Id: asm-x86.lisp,v 1.39 2008-08-06 09:43:36 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -2028,6 +2028,11 @@
 
 (define-operator* (:16 :pushfw :32 :pushfl :64 :pushfr) ()
   (opcode #x9c))
+
+;;;;;;;;;;; RDMSR
+
+(define-operator/none :rdmsr ()
+  (opcode #x0f32))
 
 ;;;;;;;;;;; RDTSC
 
