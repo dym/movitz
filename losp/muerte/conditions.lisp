@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 20 15:47:04 2002
 ;;;;                
-;;;; $Id: conditions.lisp,v 1.28 2008-04-21 19:31:54 ffjeld Exp $
+;;;; $Id: conditions.lisp,v 1.29 2009-07-19 18:54:32 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -179,7 +179,7 @@
     :initarg :argument-count
     :reader condition-argument-count))
   (:report (lambda (c s)
-	     (format s "Function ~S ~:A received ~D arguments."
+	     (format s "Function ~S ~:A received ~:[an incorrect number of~;~:*~D~] arguments."
 		     (funobj-name (condition-function c))
 		     (funobj-lambda-list (condition-function c))
 		     (condition-argument-count c)))))
