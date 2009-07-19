@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.18 2008-04-27 19:40:25 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.19 2009-07-19 18:57:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -189,4 +189,7 @@
 
 (defstruct random-state state)
 
+(defvar *random-state* #s(random-state :state 0))
 
+(defmethod documentation (x doc-type)
+  nil)
