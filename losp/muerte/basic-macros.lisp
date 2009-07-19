@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.77 2008-07-09 20:08:52 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.78 2009-07-19 18:49:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -348,16 +348,17 @@
 	 ,@(mapcar (lambda (clause)
 		     (destructuring-bind (keys . forms)
 			 clause
-		       (cond
-			 ((or (eq keys 't)
-			      (eq keys 'otherwise))
-			  `(t ,@forms))
-			 ((atom keys)
-			  `((eql ,key-var ',keys) ,@forms))
-			 (t `((or ,@(mapcar (lambda (k)
-					      `(eql ,key-var ',k))
-					    keys))
-			      ,@forms)))))
+		       (let ((forms (or forms '(nil))))
+                         (cond
+                           ((or (eq keys 't)
+                                (eq keys 'otherwise))
+                            `(t ,@forms))
+                           ((not (listp keys))
+                            `((eql ,key-var ',keys) ,@forms))
+                           (t `((or ,@(mapcar (lambda (k)
+                                                `(eql ,key-var ',k))
+                                              keys))
+                                ,@forms))))))
 		   clauses)))))
 
 (define-compiler-macro case (keyform &rest clauses)
@@ -373,19 +374,6 @@
 		     ,@(cdr clause))
 		`(compiled-case ,keyform ,@clauses))))))
     (t `(compiled-case ,keyform ,@clauses))))
-
-(defmacro ecase (keyform &rest clauses)
-  (let ((ecase-var (gensym)))
-    `(let ((,ecase-var ,keyform))
-       (case ,ecase-var
-	 ,@clauses
-	 (t (ecase-error ,ecase-var
-			 ',(mapcan (lambda (clause)
-				     (let ((x (car clause)))
-				       (if (atom x)
-					   (list x)
-					   (copy-list x))))
-				   clauses)))))))
 
 (define-compiler-macro asm-register (register-name)
   (if (member register-name '(:eax :ebx :ecx :untagged-fixnum-ecx :edx))
@@ -549,16 +537,19 @@
 	       (symbol-value movitz-name) movitz-value)))
      (declaim (muerte::constant-variable ,name))))
 
+(define-compile-time-variable *symbol-macros* (make-hash-table :test #'eq))
+
 (defmacro/cross-compilation define-symbol-macro (symbol expansion)
   (check-type symbol symbol "a symbol-macro symbol")
   `(progn
      (eval-when (:compile-toplevel)
        (movitz::movitz-env-add-binding nil (make-instance 'movitz::symbol-macro-binding
-					:name ',symbol
-					:expander (lambda (form env)
-						    (declare (ignore form env))
-						    (movitz::translate-program ',expansion
-									     :cl :muerte.cl)))))
+                                            :name ',symbol
+                                            :expander (lambda (form env)
+                                                        (declare (ignore form env))
+                                                        (movitz::translate-program ',expansion
+                                                         :cl :muerte.cl)))))
+     (setf (gethash ',symbol *symbol-macros*) ',expansion)
      ',symbol))
 
 (defmacro check-type (place type &optional type-string)
