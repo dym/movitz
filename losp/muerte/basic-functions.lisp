@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Sep  4 18:41:57 2001
 ;;;;                
-;;;; $Id: basic-functions.lisp,v 1.27 2008-04-21 19:31:10 ffjeld Exp $
+;;;; $Id: basic-functions.lisp,v 1.28 2009-07-19 18:32:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -270,8 +270,8 @@ from regular function-calls."
 	  (:subl :esp :ecx)
 	  (:shrl 2 :ecx)
 	  ;; Encode ECX
-	  (:testb :cl :cl)
-	  (:jns 'ecx-ok)
+          (:testl #xffffff80 :ecx)
+	  (:jz 'ecx-ok)
 	  (:shll 8 :ecx)
 	  (:movb #xff :cl)
 	 ecx-ok
