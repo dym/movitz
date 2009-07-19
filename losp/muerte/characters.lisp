@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb  5 19:05:01 2001
 ;;;;                
-;;;; $Id: characters.lisp,v 1.6 2008-04-27 19:30:12 ffjeld Exp $
+;;;; $Id: characters.lisp,v 1.7 2009-07-19 18:51:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -53,25 +53,23 @@
 (defun char= (first-character &rest characters)
   (numargs-case
    (2 (x y)
-      (and (eql x y) 'pinglo))
+      (eql x y))
    (t (first-character &rest characters)
       (declare (dynamic-extent characters))
-      (dolist (c characters 'dumbolo)
+      (dolist (c characters t)
 	(unless (char= c first-character)
 	  (return nil))))))
 
 (defun char/= (first-character &rest characters)
   (numargs-case
+   (1 (x) (declare (ignore x)) t)
    (2 (x y) (not (eql x y)))
-   (t (&rest characters)
-      (declare (dynamic-extent characters))
-      (do ((p (cdr characters) (cdr p)))
-	  ((null p) t)
-	(do ((v characters (cdr v)))
-	    ((eq p v))
-	  (when (eql (car p) (car v))
-	    (return-from char/= nil)))))))
-
+   (t (first-character &rest more-characters)
+      (declare (dynamic-extent more-characters))
+      (do ((c first-character (pop more-characters)))
+          ((null more-characters) t)
+        (when (member c more-characters)
+          (return nil))))))
 
 (defmacro/cross-compilation define-char-cmp (name mode not-branch)
   `(defun ,name (first-character &rest more-characters)
