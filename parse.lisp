@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:49:17 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: parse.lisp,v 1.10 2008-04-27 19:22:42 ffjeld Exp $
+;;;; $Id: parse.lisp,v 1.11 2009-12-03 21:48:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -73,7 +73,7 @@
     (loop for x on list as i upfrom 0
 	as cdr-index = (find-cdr list (cdr x) i)
 	until cdr-index
-	finally (return (values (subseq list 0 (1+ i))
+	finally (return (values (loop repeat (1+ i) collect (pop list))
 				cdr-index)))))
 
 (defun symbol-package-fix-cl (symbol)
