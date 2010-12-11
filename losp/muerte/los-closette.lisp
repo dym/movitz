@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Jul 23 14:29:10 2002
 ;;;;                
-;;;; $Id: los-closette.lisp,v 1.37 2007/03/11 22:43:14 ffjeld Exp $
+;;;; $Id: los-closette.lisp,v 1.40 2008-04-21 19:41:15 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -32,10 +32,15 @@
 		     ,@(canonicalize-defclass-options options env name)))))
 
 (defmacro defgeneric (function-name lambda-list &rest options)
-  `(eval-when (:compile-toplevel)
-     (movitz-ensure-generic-function ',function-name 
-				  :lambda-list ',lambda-list
-				  ,@(canonicalize-defgeneric-options options))))
+  `(progn
+     (eval-when (:compile-toplevel)
+       (movitz-ensure-generic-function ',function-name 
+				       :lambda-list ',lambda-list
+				       ,@(canonicalize-defgeneric-options options)))
+     ,@(mapcan (lambda (option)
+		 (when (eq :method (car option))
+		   (list `(defmethod ,function-name ,@(cdr option)))))
+	       options)))
 
 (defmacro defmethod (&rest args &environment env)
   (multiple-value-bind (name qualifiers lambda-list specializers body declarations documentation)
@@ -873,7 +878,7 @@ is no unspecialized method was called."))
   (equal '(:around) (method-qualifiers method)))
 
 
-(defmacro define-effective-slot-reader (name location)
+(defmacro/cross-compilation define-effective-slot-reader (name location)
   (if movitz::*compiler-use-into-unbound-protocol*
       `(defun ,name (instance)
 	 (with-inline-assembly (:returns :multiple-values)
@@ -981,6 +986,7 @@ next-emf as its target for call-next-method."
 (defclass unbound-value (t) () (:metaclass built-in-class))
 
 (defclass stream () ())
+(defclass readtable () ())
 
 ;;;
 
@@ -1002,6 +1008,7 @@ next-emf as its target for call-next-method."
 (defclass funcallable-standard-class (std-slotted-class) ())
 
 (defclass function (t) () (:metaclass built-in-class))
+(defclass macro-function (function) () (:metaclass built-in-class))
 (defclass funcallable-standard-object (standard-object function) ())
 (defclass generic-function (metaobject funcallable-standard-object) ())
 (defclass standard-generic-function (generic-function)

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Aug 29 13:39:43 2003
 ;;;;                
-;;;; $Id: simple-streams.lisp,v 1.8 2005/06/10 18:35:44 ffjeld Exp $
+;;;; $Id: simple-streams.lisp,v 1.9 2008-03-15 20:58:20 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -60,7 +60,7 @@
 		  ,@(cdr dual-clause))
 		 (t ,@(cdr string-clause))))))))
 
-(defmacro with-stream-class ((class-name &optional stream) &body body)
+(defmacro/cross-compilation with-stream-class ((class-name &optional stream) &body body)
   (if stream
       (let ((stream-var (gensym "stream-"))
 	    (slots-var (gensym "stream-slots-")))

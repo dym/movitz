@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Nov 24 16:49:17 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: parse.lisp,v 1.7 2007/02/01 19:37:41 ffjeld Exp $
+;;;; $Id: parse.lisp,v 1.11 2009-12-03 21:48:34 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -23,20 +23,47 @@
 (defun parse-declarations-and-body (forms &optional (declare-symbol 'muerte.cl::declare))
   "From the list of FORMS, return first the list of non-declaration forms, ~
    second the list of declaration-specifiers."
-  (loop for declaration-form = (when (declare-form-p (car forms) declare-symbol)
-				 (pop forms))
-     while declaration-form
-     append (cdr declaration-form) into declarations
-     finally (return (values forms declarations))))
+  (loop if (declare-form-p (car forms) declare-symbol)
+     append (cdr (pop forms)) into declarations
+     else return (values forms declarations)))
 
 (defun parse-docstring-declarations-and-body (forms &optional (declare-symbol 'muerte.cl::declare))
   "From the list of FORMS, return first the non-declarations forms, second the declarations, ~
    and third the documentation string."
-  (let ((docstring (when (and (cdr forms) (stringp (car forms)))
-		     (pop forms))))
-    (multiple-value-bind (body declarations)
-	(parse-declarations-and-body forms declare-symbol)
-      (values body declarations docstring))))
+  (loop with docstring = nil
+     if (declare-form-p (car forms) declare-symbol)
+     append (cdr (pop forms)) into declarations
+     else if (and (stringp (car forms))
+		  (cdr forms))
+     do (setf docstring (pop forms))
+     else return (values forms declarations docstring)))
+
+(defun parse-macro-lambda-list (lambda-list)
+  (let* ((whole-var (when (eq '&whole (car lambda-list))
+                      (pop lambda-list)
+                      (pop lambda-list)))
+         (env-var nil)
+         (operator-var (gensym "operator-"))
+         (destructuring-lambda-list
+          (do ((l lambda-list)
+               (r nil))
+              ((atom l)
+               (cons operator-var
+                     (nreconc r l)))
+            (let ((x (pop l)))
+              (if (eq x '&environment)
+                  (setf env-var (pop l))
+                  (push x r)))))
+         (ignore-env-var
+          (when (not env-var)
+            (gensym "ignore-env-"))))
+    (values destructuring-lambda-list
+            whole-var
+            (or env-var
+                ignore-env-var)
+            (when ignore-env-var
+              (list ignore-env-var))
+            (list operator-var))))
 
 (defun unfold-circular-list (list)
   "If LIST is circular (through cdr), return (a copy of) the non-circular portion of LIST, and the index (in LIST) of the cons-cell pointed to by (cdr (last LIST))."
@@ -46,7 +73,7 @@
     (loop for x on list as i upfrom 0
 	as cdr-index = (find-cdr list (cdr x) i)
 	until cdr-index
-	finally (return (values (subseq list 0 (1+ i))
+	finally (return (values (loop repeat (1+ i) collect (pop list))
 				cdr-index)))))
 
 (defun symbol-package-fix-cl (symbol)
@@ -126,6 +153,7 @@ Doubly quoted forms are copied verbatim (sans the quotes)."
   (defun muerte::host-program (program)
     (translate-program program :muerte.cl :common-lisp)))
 
+
 (defun decode-normal-lambda-list (lambda-list &optional host-symbols-p)
   "3.4.1 Ordinary Lambda Lists.
 Returns the requireds, &optionals, &rests, &keys, and &aux formal variables,
@@ -178,12 +206,14 @@ Finally, whether &key was present or not."
 		  (auxes     (nreverse (getf results (aux)))))
 	      (when (> (length rests) 1)
 		(error "There can only be one &REST formal parameter."))
-	      (let ((maxargs (and (null rests) ; max num. of arguments, or nil.
-				  (null keys)
-				  (not allow-other-keys-p)
-				  (+ (length requireds)
-				     (length optionals))))
-		    (minargs (length requireds)))
+	      (let* ((keys-p (not (eq :missing ; &key present?
+				      (getf results (key) :missing))))
+		     (maxargs (and (null rests) ; max num. of arguments, or nil.
+				   (not keys-p)
+				   (not allow-other-keys-p)
+				   (+ (length requireds)
+				      (length optionals))))
+		     (minargs (length requireds)))
 		(return (values requireds
 				optionals
 				(first rests)
@@ -194,15 +224,15 @@ Finally, whether &key was present or not."
 				maxargs
 				edx-var
 				(cond
-				 ((or (eql maxargs minargs)
-				      (eq :no-key (getf results (key) :no-key)))
+				 ((or (not keys-p)
+				      (eql maxargs minargs))
 				  nil)
-				 ((assert (not maxargs)))
+				 ((assert (not maxargs) ()
+					  "Weird maxargs ~S for ~S." maxargs lambda-list))
 				 ((evenp (+ (length requireds) (length optionals)))
 				  :even)
 				 (t :odd))
-				(not (eq :missing
-					 (getf results (key) :missing)))))))))))
+				keys-p))))))))
 
 (defun decode-optional-formal (formal)
   "3.4.1.2 Specifiers for optional parameters.

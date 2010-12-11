@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sun Feb 11 23:14:04 2001
 ;;;;                
-;;;; $Id: arrays.lisp,v 1.64 2007/04/08 16:03:53 ffjeld Exp $
+;;;; $Id: arrays.lisp,v 1.68 2008-04-21 19:30:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -21,22 +21,24 @@
 
 (in-package muerte)
 
-(defmacro vector-double-dispatch ((s1 s2) &rest clauses)
+(defconstant array-total-size-limit most-positive-fixnum)
+(defconstant array-dimension-limit most-positive-fixnum)
+(defconstant array-rank-limit 1024)
+
+(defmacro/cross-compilation vector-double-dispatch ((s1 s2) &rest clauses)
   (flet ((make-double-dispatch-value (et1 et2)
 	   (+ (* #x100 (bt:enum-value 'movitz::movitz-vector-element-type et1))
 	      (bt:enum-value 'movitz::movitz-vector-element-type et2))))
-    `(progn
-       #+ignore
-       (warn "vdd: ~X" (+ (* #x100 (vector-element-type ,s1))
-	      (vector-element-type ,s2)))
-       (case (+ (ash (vector-element-type-code ,s1) 8)
-		(vector-element-type-code ,s2))
-	 ,@(loop for (keys . forms) in clauses
-	       if (atom keys)
-	       collect (cons keys forms)
-	       else
-	       collect (cons (make-double-dispatch-value (first keys) (second keys))
-			     forms))))))
+    `(case (+ (ash (vector-element-type-code ,s1) 8)
+	      (vector-element-type-code ,s2))
+       ,@(mapcar (lambda (clause)
+		   (destructuring-bind (keys . forms)
+		       clause
+		     (if (atom keys)
+			 (cons keys forms)
+			 (cons (make-double-dispatch-value (first keys) (second keys))
+			       forms))))
+		 clauses))))
 
 (defmacro with-indirect-vector ((var form &key (check-type t)) &body body)
   `(let ((,var ,form))
@@ -87,42 +89,42 @@
   "=> upgraded-type-specifier"
   ;; We're in dire need of subtypep..
   (cond
-   ((symbolp type-specifier)
-    (case type-specifier
-      ((character base-char standard-char)
-       'character)
-      ((code)
-       'code)
-      (t (let ((deriver (gethash type-specifier *derived-typespecs*)))
-	   (if (not deriver)
-	       t
-	     (upgraded-array-element-type (funcall deriver)))))))
-   ((null type-specifier)
-    t)
-   ((consp type-specifier)
-    (case (car type-specifier)
-      ((integer)
-       (let* ((q (cdr type-specifier))
-	      (min (if q (pop q) '*))
-	      (max (if q (pop q) '*)))
-	 (let ((min (if (consp min) (1+ (car min)) min))
-	       (max (if (consp max) (1- (car max)) max)))
-	   (cond
-	    ((or (eq min '*) (eq max '*))
-	     t)
-	    ((<= 0 min max 1)
-	     'bit)
-	    ((<= 0 min max #xff)
-	     '(unsigned-byte 8))
-	    ((<= 0 min max #xffff)
-	     '(unsigned-byte 16))
-	    ((<= 0 min max #xffffffff)
-	     '(unsigned-byte 32))))))
-      (t (let ((deriver (gethash (car type-specifier) *derived-typespecs*)))
-	   (if (not deriver)
-	       t
-	     (upgraded-array-element-type (apply deriver (cdr type-specifier)) environment))))))
-   (t t)))
+    ((symbolp type-specifier)
+     (case type-specifier
+       ((nil character base-char standard-char)
+        'character)
+       ((code)
+        'code)
+       (t (let ((deriver (gethash type-specifier *derived-typespecs*)))
+            (if (not deriver)
+                t
+                (upgraded-array-element-type (funcall deriver)))))))
+    ((null type-specifier)
+     t)
+    ((consp type-specifier)
+     (case (car type-specifier)
+       ((integer)
+        (let* ((q (cdr type-specifier))
+               (min (if q (pop q) '*))
+               (max (if q (pop q) '*)))
+          (let ((min (if (consp min) (1+ (car min)) min))
+                (max (if (consp max) (1- (car max)) max)))
+            (cond
+              ((or (eq min '*) (eq max '*))
+               t)
+              ((<= 0 min max 1)
+               'bit)
+              ((<= 0 min max #xff)
+               '(unsigned-byte 8))
+              ((<= 0 min max #xffff)
+               '(unsigned-byte 16))
+              ((<= 0 min max #xffffffff)
+               '(unsigned-byte 32))))))
+       (t (let ((deriver (gethash (car type-specifier) *derived-typespecs*)))
+            (if (not deriver)
+                t
+                (upgraded-array-element-type (apply deriver (cdr type-specifier)) environment))))))
+    (t t)))
     
 
 (defun array-dimension (array axis-number)
@@ -196,11 +198,12 @@
       ((#.(bt:enum-value 'movitz::movitz-vector-element-type :any-t)
 	#.(bt:enum-value 'movitz::movitz-vector-element-type :indirects))
        (%shallow-copy-object vector (+ 2 length)))
-      ((#.(bt:enum-value 'movitz::movitz-vector-element-type :u32))
+      ((#.(bt:enum-value 'movitz::movitz-vector-element-type :u32)
+	  #.(bt:enum-value 'movitz::movitz-vector-element-type :stack))
        (%shallow-copy-non-pointer-object vector (+ 2 length)))
       ((#.(bt:enum-value 'movitz::movitz-vector-element-type :character)
-	#.(bt:enum-value 'movitz::movitz-vector-element-type :u8)
-	#.(bt:enum-value 'movitz::movitz-vector-element-type :code))
+	  #.(bt:enum-value 'movitz::movitz-vector-element-type :u8)
+	  #.(bt:enum-value 'movitz::movitz-vector-element-type :code))
        (%shallow-copy-non-pointer-object vector	(+ 2 (truncate (+ 3 length) 4))))
       ((#.(bt:enum-value 'movitz::movitz-vector-element-type :u16))
        (%shallow-copy-non-pointer-object vector (+ 2 (truncate (+ 1 length) 2))))
@@ -323,9 +326,9 @@
 		`(with-inline-assembly (:returns :eax)
 		   (:declare-label-set
 		    basic-vector-dispatcher
-		    ,(loop with x = (make-list 8 :initial-element 'unknown)
-			 for et in '(:any-t :character :u8 :u32 :code :bit)
-			 do (setf (elt x (bt:enum-value
+		    ,(loop with x = (make-list 9 :initial-element 'unknown)
+			for et in '(:any-t :character :u8 :u32 :stack :code :bit)
+			do (setf (elt x (bt:enum-value
 					  'movitz::movitz-vector-element-type
 					  et))
 			      et)
@@ -352,6 +355,7 @@
 		   (:jnever '(:sub-program (unknown)
 			      (:int 100)))
 		  :u32
+		  :stack
 		   (:movl (:eax :ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data))
 			  :ecx)
 		   (:call-local-pf box-u32-ecx)
@@ -407,14 +411,16 @@
 		   (:compile-form (:result-mode :edx) index)
 		   (:testb 7 :cl)
 		   (:jnz '(:sub-program (not-a-vector)
-			   (:compile-form (:result-mode :ignore)
-			    (error "Not a vector: ~S." vector))))
+                           (:movl :ebx :eax)
+                           (:load-constant vector :edx)
+                           (:int 59)))
 		   (:movl (:ebx ,movitz:+other-type-offset+) :ecx)
 		   (:andl #xffff :ecx)
 		   (:testb ,movitz:+movitz-fixnum-zmask+ :dl)
 		   (:jnz '(:sub-program (not-an-index)
-			   (:compile-form (:result-mode :ignore)
-			    (error "Not a vector index: ~S." index))))
+                           (:movl :edx :eax)
+                           (:load-constant index :edx)
+			   (:int 59)))
 		   (:cmpl (:ebx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::num-elements))
 			  :edx)
 		   (:jnc '(:sub-program (illegal-index)
@@ -434,8 +440,8 @@
 		   (:jne 'not-character-vector)
 		   (:cmpb ,(movitz:tag :character) :al)
 		   (:jne '(:sub-program (not-a-character)
-			   (:compile-form (:result-mode :ignore)
-			    (error "Not a character: ~S" value))))
+                           (:load-constant character :edx)
+			   (:int 59)))
 		   (:movl :edx :ecx)
 		   (:shrl ,movitz:+movitz-fixnum-shift+ :ecx)
 		   (:movb :ah (:ebx :ecx ,(bt:slot-offset 'movitz:movitz-basic-vector 'movitz::data)))
@@ -951,12 +957,22 @@ and return basic-vector and accessors for that subsequence."
       (setf (fill-pointer array) length)))
     (cond
      (initial-element
-      ;; (check-type initial-element (unsigned-byte 32))
+      (check-type initial-element (unsigned-byte 32))
       (dotimes (i length)
 	(setf (u32ref%unsafe array i) initial-element)))
      (initial-contents
       (replace array initial-contents)))
     array))
+
+(defun make-stack-vector (length)
+  (let ((vector (make-basic-vector%u32 length nil nil nil)))
+    (with-inline-assembly (:returns :nothing)
+      (:load-lexical (:lexical-binding vector) :eax)
+      (:movl #.(movitz:basic-vector-type-tag :stack)
+	     (:eax (:offset movitz-basic-vector type))))
+    (when (%basic-vector-has-fill-pointer-p vector)
+      (setf (fill-pointer vector) length))
+    vector))
 
 (defun make-basic-vector%u8 (length fill-pointer initial-element initial-contents)
   (check-type length (and fixnum (integer 0 *)))
@@ -1153,14 +1169,14 @@ and return basic-vector and accessors for that subsequence."
       (make-basic-vector%code size fill-pointer initial-element initial-contents))
      (t (make-basic-vector%t size fill-pointer initial-element initial-contents)))))
 
-(defun make-array (dimensions &key element-type initial-element initial-contents adjustable
+(defun make-array (dimensions &key (element-type t) initial-element initial-contents adjustable
 				   fill-pointer displaced-to displaced-index-offset)
   (let ((size (cond ((integerp dimensions)
                      dimensions)
                     ((and (consp dimensions) (null (cdr dimensions)))
                      (car dimensions))
-                    (t
-                     (error "Multi-dimensional arrays not supported.")))))
+                    (t (warn "Array of rank ~D not supported." (length dimensions))
+		       (return-from make-array nil))))) ; XXX
     (cond
      (displaced-to
       (make-indirect-vector displaced-to displaced-index-offset fill-pointer size))

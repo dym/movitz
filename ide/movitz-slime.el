@@ -61,7 +61,7 @@ Emacs Lisp package."))
 
 (defcustom movitz-mode-image-file nil
   "*Movitz image file.
-This is set by `movitz-dump-image' and can also be preinitialized in
+This is set by `movitz-dump' and can also be preinitialized in
 your init file."
   :type 'string
   :group 'movitz)
@@ -172,43 +172,24 @@ then prompt for the file to compile."
                         (lambda (result)
                           (message "Movitz args for %s: %s." string result))))))
 
-
-
-
-(defun movitz-dump-image (filename)
-  "Dump the current image to FILENAME."
-  (interactive (list (if (and (null current-prefix-arg)
-                              movitz-mode-image-file)
-                         movitz-mode-image-file
-                       (let ((filename (read-file-name "Image file: ")))
-                         (setq movitz-mode-image-file filename)
-                         filename))))
-  (message "Dumping..")
-  (slime-eval-async `(movitz.ide:dump-image ,filename)
-                    (lambda (_) (message "Finished."))))
-
-
-(defun movitz-dump-image-and-qemu (filename)
-  "Dump the current image to FILENAME."
-  (interactive (list (if (and (null current-prefix-arg)
-                              movitz-mode-image-file)
-                         movitz-mode-image-file
-                       (let ((filename (expand-file-name (read-file-name "Image file: "))))
-                         (setq movitz-mode-image-file filename)
-                         filename))))
-  (lexical-let ((filename filename))
-    (message "Dumping '%s'.." filename)
-    (slime-eval-async `(movitz.ide:dump-image ,(file-name-nondirectory filename))
-                      (lambda (_)
-                        (message "Dumping '%s'..done, starting qemu" filename)
-                        (call-process movitz-mode-qemu-binary-path
-                                      nil 0 nil
-                                      "-s"
-                                      "-L" movitz-mode-qemu-directory
-                                      "-fda" filename
-                                      "-boot" "a")))))
-
-
+(defun movitz-dump (&optional run-emulator)
+  "Dump the current image to a file.
+If RUN-EMULATOR is non-nil, call an emulator on the resulting file."
+  (when (not movitz-mode-image-file)
+    (setq movitz-mode-image-file (expand-file-name (read-file-name "Image file: "))))
+  (message "Dumping '%s'.." movitz-mode-image-file)
+  (slime-eval-async `(movitz.ide:dump-image ,(file-name-nondirectory movitz-mode-image-file))
+		    (if run-emulator
+			;; choose emulator here, currently only qemu
+			(lambda (_)
+			  (message "Dumping '%s'..done, starting qemu" movitz-mode-image-file)
+			  (call-process movitz-mode-qemu-binary-path
+					nil 0 nil
+					"-s"
+					"-L" movitz-mode-qemu-directory
+					"-fda" movitz-mode-image-file
+					"-boot" "a"))	
+		      (lambda (_) (message "Dumping '%s'..done" movitz-mode-image-file)))))
 
 (defun movitz-defun-name-and-type ()
   (interactive)
@@ -268,8 +249,8 @@ then prompt for the file to compile."
 (defconst movitz-mode-map
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map text-mode-map)
-    (define-key map (kbd "C-c d") 'movitz-dump-image)
-    (define-key map (kbd "C-c C-d") 'movitz-dump-image-and-qemu)
+    (define-key map (kbd "C-c d") '(lambda () (interactive) (movitz-dump)))
+    (define-key map (kbd "C-c C-d") '(lambda () (interactive) (movitz-dump t)))
     (define-key map (kbd "C-c C-v") 'movitz-disassemble-defun)
     (define-key map (kbd "C-c m") 'movitz-macroexpand)
     (define-key map (kbd "C-c a") 'movitz-arglist)

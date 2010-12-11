@@ -9,7 +9,7 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: integers.lisp,v 1.124 2008/02/04 10:08:18 ffjeld Exp $
+;;;; $Id: integers.lisp,v 1.128 2008-04-27 19:41:10 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -309,14 +309,23 @@
 
 (define-number-relational /= /=%2op nil :defun-p nil)
 
-(defun /= (&rest numbers)
-  (declare (dynamic-extent numbers))
-  (do ((p (cdr numbers) (cdr p)))
-      ((null p) t)
-    (do ((v numbers (cdr v)))
-	((eq p v))
-      (when (= (car p) (car v))
-	(return-from /= nil)))))
+(defun /= (first-number &rest more-numbers)
+  (numargs-case
+   (1 (x)
+      (declare (ignore x))
+      t)
+   (2 (x y)
+      (/=%2op x y))
+   (t (first-number &rest more-numbers)
+      (declare (dynamic-extent more-numbers))
+      (dolist (y more-numbers)
+	(when (= first-number y)
+	  (return nil)))
+      (do ((p more-numbers (cdr p)))
+	  ((null p) t)
+	(dolist (q (cdr p))
+	  (when (= (car p) q)
+	    (return nil)))))))
 
 
 ;;;;
@@ -2170,7 +2179,8 @@
       (abs (* (truncate (max n m) (gcd n m)) (min n m))))
    (t (&rest numbers)
       (declare (dynamic-extent numbers))
-      (reduce #'lcm numbers))))
+      (reduce #'lcm numbers
+              :initial-value 1))))
 
 (defun floor (n &optional (divisor 1))
   "This is floor written in terms of truncate."
@@ -2248,8 +2258,7 @@
 	   (numerator power-number)))))
     
 (defun floatp (x)
-  (declare (ignore x))
-  nil)
+  (typep x 'real))
 
 (defun realpart (number)
   number)
@@ -2263,3 +2272,65 @@
 
 (defun realp (x)
   (typep x 'real))
+
+(defconstant boole-clr 'boole-clr)
+(defconstant boole-1 'boole-1)
+(defconstant boole-2 'boole-2)
+(defconstant boole-c1 'boole-c1)
+(defconstant boole-c2 'boole-c2)
+(defconstant boole-eqv 'logeqv)
+(defconstant boole-and 'logand)
+(defconstant boole-nand 'lognand)
+(defconstant boole-andc1 'logandc1)
+(defconstant boole-andc2 'logandc2)
+(defconstant boole-ior 'logior)
+(defconstant boole-nor 'lognor)
+(defconstant boole-orc1 'logorc1)
+(defconstant boole-orc2 'logorc2)
+(defconstant boole-xor 'logxor)
+(defconstant boole-set 'boole-set)
+
+(defun boole (op integer-1 integer-2)
+  "=> result-integer"
+  (funcall op integer-1 integer-2))
+
+(defun boole-clr (integer-1 integer-2)
+  (declare (ignore integer-1 integer-2))
+  0)
+
+(defun boole-set (integer-1 integer-2)
+  (declare (ignore integer-1 integer-2))
+  -1)
+
+(defun boole-1 (integer-1 integer-2)
+  (declare (ignore integer-2))
+  integer-1)
+
+(defun boole-2 (integer-1 integer-2)
+  (declare (ignore integer-1))
+  integer-2)
+
+(defun boole-c1 (integer-1 integer-2)
+  (declare (ignore integer-2))
+  (lognot integer-1))
+
+(defun boole-c2 (integer-1 integer-2)
+  (declare (ignore integer-1))
+  (lognot integer-2))
+
+(defun logeqv (integer-1 integer-2)
+  (lognot (logxor integer-1 integer-2)))
+
+(defun lognand (integer-1 integer-2)
+  (lognot (logand integer-1 integer-2)))
+
+(defun lognor (integer-1 integer-2)
+  (lognot (logior integer-1 integer-2)))
+
+(defun logorc1 (integer-1 integer-2)
+  (logior (lognot integer-1)
+	  integer-2))
+
+(defun logorc2 (integer-1 integer-2)
+  (logior integer-1
+	  (lognot integer-2)))

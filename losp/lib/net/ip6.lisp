@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov 14 17:25:31 2001
 ;;;;                
-;;;; $Id: ip6.lisp,v 1.7 2004/11/24 16:21:42 ffjeld Exp $
+;;;; $Id: ip6.lisp,v 1.8 2008-06-13 16:25:31 aantoniadis Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -584,7 +584,7 @@ Return as primary value the offset of the optional source link-layer address, if
     (format t "~&Solicited-node address: ~/ip6:pprint-ip6/~%" solicited-node-address)
     (setf (look-up-neighbor neighbor-cache link-local-address :start 0)
       (mac-address ne2000))
-    ;; (format t "~&Local neighbor lookup: ~S.~%" (look-up-neighbor neighbor-cache link-local-address))
+;     (format t "~&Local neighbor lookup: ~S.~%" (look-up-neighbor neighbor-cache link-local-address)) ;;comment this out
     (let ((packet-pool (make-array 16 :fill-pointer 0)))
       (flet ((get-packet (packet-pool)
 	       (cond
@@ -704,7 +704,7 @@ Return as primary value the offset of the optional source link-layer address, if
 			    (when (= (udp-header-checksum request)
 				     (udp-checksum request))
 			      (when (= 1 (udp-header-destination request))
-				(setf (muerte:vector-element-type request)
+				(setf (muerte::vector-element-type request)
 				  #.(bt:enum-value 'movitz::movitz-vector-element-type :character))
 				(let (seqno last-seqno (poff (+ 8 offset)))
 				  (multiple-value-setq (seqno poff)
@@ -727,7 +727,7 @@ Return as primary value the offset of the optional source link-layer address, if
 				   (t (warn "Eval-UDP lost packet ~D." eval-prev-seqno)
 				      (setf (fill-pointer eval-buffer) 0
 					    eval-prev-seqno 0)))
-				  (setf (muerte:vector-element-type request)
+				  (setf (muerte::vector-element-type request)
 				    #.(bt:enum-value 'movitz::movitz-vector-element-type :u8))))
 			      #+ignore
 			      (warn "UDP src ~D, dst ~D, len ~D"

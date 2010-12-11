@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 19 17:05:25 2001
 ;;;;                
-;;;; $Id: strings.lisp,v 1.3 2005/06/12 20:01:49 ffjeld Exp $
+;;;; $Id: strings.lisp,v 1.6 2008-04-27 19:45:33 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -20,6 +20,9 @@
 (provide :muerte/strings)
 
 (in-package muerte)
+
+(deftype string-designator ()
+  '(or string symbol character))
 
 (defun string= (string1 string2 &key (start1 0) end1 (start2 0) end2)
   (setf string1 (string string1)
@@ -49,14 +52,20 @@
 	   (return nil)))))
 
 (defun string-not-equal (string1 string2 &key (start1 0) end1 (start2 0) end2)
-  (not (string-equal string1 string2 :start1 start1 :end1 end1 :start2 start2 :end2 end2)))
+  (not (string-equal string1 string2
+		     :start1 start1
+		     :end1 end1
+		     :start2 start2
+		     :end2 end2)))
 
 (defun string (name)
   (typecase name
     (string name)
     (symbol (symbol-name name))
     (character (make-string 1 :initial-element name))
-    (t (error "Not a string designator: ~S" name))))
+    (t (error 'type-error
+              :datum name
+              :expected-type 'string-designator))))
 	    
 (defun make-string (size &key initial-element (element-type 'character))
   (if (not initial-element)
@@ -99,5 +108,86 @@
 	   (t (setf between-words-p (not (char-alpha-p c)))
 	      (char-downcase c))))))))
 				
-       
-      
+(defun string< (string1 string2 &key (start1 0) end1 (start2 0) end2)
+  "=> mismatch-index"
+  (let ((mismatch (mismatch string1 string2
+			    :start1 start1
+			    :end1 end1
+			    :start2 start2
+			    :end2 end2
+			    :test #'char=)))
+    (cond
+      ((not mismatch)
+       nil)
+      ((>= mismatch
+	   (or end1 (length string1)))
+       mismatch)
+      ((>= (+ start2 mismatch)
+	   (or end2 (length string2)))
+       nil)
+      (t (when (char< (char string1 mismatch)
+		      (char string2 (+ start2 mismatch)))
+	   mismatch)))))
+
+(defun string<= (string1 string2 &key (start1 0) end1 (start2 0) end2)
+  "=> mismatch-index"
+  (let ((mismatch (mismatch string1 string2
+			    :start1 start1
+			    :end1 end1
+			    :start2 start2
+			    :end2 end2
+			    :test #'char=)))
+    (cond
+      ((not mismatch)
+       (or end1 (length string1)))
+      ((>= mismatch
+	   (or end1 (length string1)))
+       mismatch)
+      ((>= (+ start2 mismatch)
+	   (or end2 (length string2)))
+       nil)
+      (t (when (char<= (char string1 mismatch)
+		       (char string2 (+ start2 mismatch)))
+	   mismatch)))))
+
+(defun string> (string1 string2 result= start1 end1 start2 end2)
+  "=> mismatch-index"
+  (let ((mismatch (mismatch string1 string2
+			    :start1 start1
+			    :end1 end1
+			    :start2 start2
+			    :end2 end2
+			    :test #'char=)))
+    (cond
+      ((not mismatch)
+       nil)
+      ((>= mismatch
+	   (or end1 (length string1)))
+       mismatch)
+      ((>= (+ start2 mismatch)
+	   (or end2 (length string2)))
+       nil)
+      (t (when (char> (char string1 mismatch)
+		      (char string2 (+ start2 mismatch)))
+	   mismatch)))))
+
+(defun string>= (string1 string2 result= start1 end1 start2 end2)
+  "=> mismatch-index"
+  (let ((mismatch (mismatch string1 string2
+			    :start1 start1
+			    :end1 end1
+			    :start2 start2
+			    :end2 end2
+			    :test #'char=)))
+    (cond
+      ((not mismatch)
+       (or end1 (length string1)))
+      ((>= mismatch
+	   (or end1 (length string1)))
+       mismatch)
+      ((>= (+ start2 mismatch)
+	   (or end2 (length string2)))
+       nil)
+      (t (when (char>= (char string1 mismatch)
+		       (char string2 (+ start2 mismatch)))
+	   mismatch)))))

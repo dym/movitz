@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Apr  7 01:50:03 2004
 ;;;;                
-;;;; $Id: interrupt.lisp,v 1.57 2008/02/18 22:31:13 ffjeld Exp $
+;;;; $Id: interrupt.lisp,v 1.59 2008-04-21 19:41:03 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -294,10 +294,11 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 	      ((eq (load-global-constant new-unbound-value)
 		   (dereference $eax))
 	       (let ((name (dereference $ebx)))
-		 (with-simple-restart (new-value "Set the value of ~S." name)
+		 (with-simple-restart (store-value "Set the value of ~S." name)
 		   (error 'unbound-variable :name name))
 		 (format *query-io* "~&Enter a value for ~S: " name)
-		 (setf (dereference $eax) (read *query-io*))))
+		 (setf (symbol-value name)
+                       (setf (dereference $eax) (read *query-io*)))))
 	      ((typep (dereference $eax) 'fixnum)
 	       (let ((eax (dereference $eax)))
 		 (setf (dereference $eax)
@@ -308,17 +309,22 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 			1 (- eax most-negative-fixnum))))
 		 (warn "Overflow: ~S -> ~S" eax (dereference $eax))))
 	      (t (error "Primitive overflow assertion failed."))))
-	  (6 (error "Illegal instruction at ~@Z." $eip))
+	  (6 (error "Illegal CPU instruction at ~@Z." $eip))
 	  (13  (error "General protection error. EIP=~@Z, error-code: #x~X, EAX: ~@Z, EBX: ~@Z, ECX: ~@Z"
 		     $eip
 		     (dit-frame-ref nil dit-frame :error-code :unsigned-byte32)
 		     $eax $ebx $ecx))
-	  ((60)
+	  ((59)
+	   ;; EAX failed type in EDX. May not be restarted.
+	   (error 'type-error
+            :datum (dereference $eax)
+            :expected-type (dereference $edx)))
+          ((60)
 	   ;; EAX failed type in EDX. May be restarted by returning with a new value in EAX.
 	   (with-simple-restart (continue "Retry with a different value.")
 	     (error 'type-error
-		    :datum (dereference $eax)
-		    :expected-type (dereference $edx)))
+              :datum (dereference $eax)
+              :expected-type (dereference $edx)))
 	   (format *query-io* "Enter a new value: ")
 	   (setf (dereference $eax) (read *query-io*)))
 	  (61 (error 'type-error
@@ -380,8 +386,8 @@ is off, e.g. because this interrupt/exception is routed through an interrupt gat
 		   (format *debug-io* "~&Stack-warning: Bumped stack-bottom by ~D to #x~X. Reset ES.~%"
 			   (- old-bottom new-bottom)
 			   new-bottom)
-		   (backtrace :length 5 :spartan t)
-		   (break "Stack overload exception ~D at EIP=~@Z, ESP=~@Z, bottom=#x~X, ENV=#x~X."
+		   (backtrace :length 10 :spartan t :conflate nil)
+		   (error "Stack overload exception ~D at EIP=~@Z, ESP=~@Z, bottom=#x~X, ENV=#x~X."
 			  vector $eip
 			  (dit-frame-esp nil dit-frame)
 			  old-bottom

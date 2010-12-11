@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Jun  7 15:05:57 2002
 ;;;;                
-;;;; $Id: more-macros.lisp,v 1.36 2006/05/06 20:31:23 ffjeld Exp $
+;;;; $Id: more-macros.lisp,v 1.47 2008-07-09 20:20:04 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -38,10 +38,7 @@
       `(with-inline-assembly (:returns :ebx)
 	 (:compile-form (:result-mode :eax) ,place)
 	 (:globally (:call (:edi (:edi-offset fast-cdr-car))))
-	 (:lexical-store ,place :eax))
-      #+ignore
-      `(prog1 (car ,place)
-	 (setq ,place (cdr ,place)))
+	 (:lexical-store ,place :eax :protect-registers (:ebx)))      
     form))
 
 (defmacro push (&environment env item place)
@@ -55,13 +52,6 @@
 	     ,@(mapcar #'list tmp-vars tmp-var-init-forms))
 	 (let ((,store-var (cons ,item-var ,getter-form)))
 	   ,setter-form)))))
-
-#+ignore
-(define-compiler-macro push (&whole form &environment env item place)
-  (if (and (symbolp place)
-	   (not (typep (movitz::movitz-binding place env) 'movitz::symbol-macro-binding)))
-      `(setq ,place (cons ,item ,place))
-    form))
 
 (defmacro pushnew (&environment env item place &rest key-test-args)
   (multiple-value-bind (tmp-vars tmp-var-init-forms store-vars setter-form getter-form)
@@ -130,6 +120,149 @@
        (let ((,var (pop ,cons-var)))
 	 ,@declarations-and-body))))
 
+
+(defmacro destructuring-bind (lambda-list expression &body declarations-and-body)
+  (let ((bindings (list (list (gensym)
+			      expression)))
+	(ignores nil))
+    (macrolet ((pop* (place)
+		 "Like pop, but err if place is already NIL."
+		 `(let ((x ,place))
+		    (assert x () "Syntax error in destructuring lambda-list: ~S" lambda-list)
+		    (setf ,place (cdr x))
+		    (car x)))
+	       (pop-match (item place)
+		 "Pop place if (car place) is eq to item."
+		 `(let ((item ,item)
+			(x ,place))
+		    (when (eq (car x) item)
+		      (setf ,place (cdr x))
+		      (car x)))))
+      (labels
+	  ((gen-end (var)
+	     (let ((dummy-var (gensym)))
+	       (push (list dummy-var (list 'when var '(error "Too many elements in expression for lambda-list.")))
+		     bindings)
+	       (push dummy-var ignores)))
+	   (gen-lambda-list (var sub-lambda-list)
+	     (when (pop-match '&whole sub-lambda-list)
+	       (push (list (pop* sub-lambda-list) var)
+		     bindings))
+	     (gen-reqvars var sub-lambda-list))
+	   (gen-reqvars (var sub-lambda-list)
+	     (cond
+	       ((null sub-lambda-list)
+		(gen-end var))
+	       ((symbolp sub-lambda-list) ; dotted lambda-list?
+		(push (list sub-lambda-list var)
+		      bindings))
+	       ((pop-match '&optional sub-lambda-list)
+		(gen-optvars var sub-lambda-list))
+	       ((or (pop-match '&rest sub-lambda-list)
+		    (pop-match '&body sub-lambda-list))
+		(gen-restvar var sub-lambda-list))
+	       ((pop-match '&key sub-lambda-list)
+		(gen-keyvars var sub-lambda-list))
+	       ((pop-match '&aux sub-lambda-list)
+		(dolist (b sub-lambda-list)
+		  (push b bindings)))
+	       ((consp (car sub-lambda-list)) ; recursive lambda-list?
+		(let ((sub-var (gensym)))
+		  (push (list sub-var `(pop ,var))
+			bindings)
+		  (gen-lambda-list sub-var (pop sub-lambda-list)))
+		(gen-reqvars var sub-lambda-list))
+	       (t (push (let ((b (pop* sub-lambda-list)))
+			  (list b
+				`(if (null ,var)
+				     (error "Value for required argument ~S is missing." ',b)
+				     (pop ,var))))
+			bindings)
+		  (gen-reqvars var sub-lambda-list))))
+	   (gen-optvars (var sub-lambda-list)
+	     (cond
+	       ((null sub-lambda-list)
+		(gen-end var))
+	       ((symbolp sub-lambda-list) ; dotted lambda-list?
+		(push (list sub-lambda-list var)
+		      bindings))
+	       ((or (pop-match '&rest sub-lambda-list)
+		    (pop-match '&body sub-lambda-list))
+		(gen-restvar var sub-lambda-list))
+	       ((pop-match '&key sub-lambda-list)
+		(gen-keyvars var sub-lambda-list))
+	       ((pop-match '&aux sub-lambda-list)
+		(dolist (b sub-lambda-list)
+		  (push b bindings)))
+	       (t (multiple-value-bind (opt-var init-form supplied-var)
+		      (let ((b (pop sub-lambda-list)))
+			(if (atom b)
+			    (values b nil nil)
+			    (values (pop b) (pop b) (pop b))))
+		    (when supplied-var
+		      (push (list supplied-var `(if ,var t nil))
+			    bindings))
+		    (push (list opt-var
+				(if (not init-form)
+				    `(pop ,var)
+				    `(if ,var (pop ,var) ,init-form)))
+			  bindings))
+		  (gen-optvars var sub-lambda-list))))
+	   (gen-restvar (var sub-lambda-list)
+	     (let ((rest-var (pop* sub-lambda-list)))
+	       (push (list rest-var var)
+		     bindings))
+	     (cond
+	       ((pop-match '&key sub-lambda-list)
+		(gen-keyvars var sub-lambda-list))
+	       ((pop-match '&aux sub-lambda-list)
+		(dolist (b sub-lambda-list)
+		  (push b bindings)))))
+	   (gen-keyvars (var sub-lambda-list &optional keys)
+	     (cond
+	       ((endp sub-lambda-list)
+		(push (list (gensym)
+			    `(d-bind-veryfy-keys ,var ',keys))
+		      bindings)
+		(push (caar bindings)
+		      ignores))
+	       ((pop-match '&allow-other-keys sub-lambda-list)
+		(when sub-lambda-list
+		  (error "Bad destructuring lambda-list; junk after ~S." '&allow-other-keys)))
+	       ((pop-match '&aux sub-lambda-list)
+		(dolist (b sub-lambda-list)
+		  (push b bindings)))
+	       (t (multiple-value-bind (key-var key-name init-form supplied-var)
+		      (let ((b (pop sub-lambda-list)))
+			(cond
+			  ((atom b)
+			   (values b (intern (string b) :keyword) nil nil))
+			  ((atom (car b))
+			   (values (car b)
+				   (intern (string (pop b)) :keyword)
+				   (pop b)
+				   (pop b)))
+			  (t (let ((bn (pop b)))
+			       (values (cadr bn) (car bn) (pop b) (pop b))))))
+		    (when supplied-var
+		      (push supplied-var bindings))
+		    (push (list key-var
+				`(let ((x (d-bind-lookup-key ',key-name ,var)))
+ 				   ,@(when supplied-var
+ 					   `((setf ,supplied-var (if x t nil))))
+				   ,(if (not init-form)
+					'(car x)
+					`(if x
+					     (car x)
+					     ,init-form))))
+			  bindings)
+		    (gen-keyvars var sub-lambda-list (cons key-name keys)))))))
+	(gen-lambda-list (caar bindings)
+			 lambda-list)
+	`(let* ,(nreverse bindings)
+	   (declare (ignore ,@ignores))
+	   ,@declarations-and-body)))))
+
 (define-compiler-macro member (&whole form item list &key (key ''identity) (test ''eql)
 			       &environment env)
   (let* ((test (or (and (movitz:movitz-constantp test env)
@@ -156,70 +289,47 @@
 	   (return p))))
      (t form))))
 
-(defmacro letf* (bindings &body body &environment env)
-  "Does what one might expect, saving the old values and setting the generalized
-  variables to the new values in sequence.  Unwind-protects and get-setf-method
-  are used to preserve the semantics one might expect in analogy to let*,
-  and the once-only evaluation of subforms."
-  (labels ((do-bindings
-            (bindings)
-            (cond ((null bindings) body)
-                  (t (multiple-value-bind (dummies vals newval setter getter)
-			 (get-setf-expansion (caar bindings) env)
-                       (let ((save (gensym)))
-                         `((let* (,@(mapcar #'list dummies vals)
-                                  (,(car newval) ,(cadar bindings))
-                                  (,save ,getter))
-                             (unwind-protect
-                               (progn ,setter
-                                      ,@(do-bindings (cdr bindings)))
-                               (setq ,(car newval) ,save)
-                               ,setter)))))))))
-    (car (do-bindings bindings))))
-
-(defmacro with-letf (clauses &body body)
-  "Each clause is (<place> &optional <value-form> <prev-var>).
-Execute <body> with alternative values for each <place>.
-Note that this scheme does not work well with respect to multiple threads.
-XXX This should actually be using get-setf-expansion etc. to deal with
-proper evaluation of the places' subforms."
-  (let ((place-value-save (loop for (place . value-save) in clauses
-			      if value-save
-			      collect (list place `(progn ,(first value-save))
-					    (or (second value-save) (gensym)))
-			      else collect (list place nil (gensym)))))
-    `(let (,@(loop for (place nil save-var) in place-value-save
-		 collect `(,save-var ,place)))
-       (unwind-protect
-	   (progn (setf ,@(loop for (place value) in place-value-save
-			      append `(,place ,value)))
-		  ,@body)
-	 (setf ,@(loop for (place nil save) in place-value-save
-		     append `(,place ,save)))))))
-
 (defmacro with-alternative-fdefinitions (clauses &body body)
   "Each clause is (<name> <definition>). Execute <body> with alternative
 fdefinitions for each <name>. Note that this scheme does not work well with
 respect to multiple threads."
-  (let ((tmp-name-def (loop for (name def) in clauses
-			  collect (list (gensym) name def))))
-    `(let (,@(loop for (tmp name) in tmp-name-def collect `(,tmp (fdefinition ',name))))
+  (let ((tmp-name-def (mapcar (lambda (clause)
+				(destructuring-bind (name def)
+				    clause
+				  (list (gensym) name def)))
+			      clauses)))
+    `(let (,@(mapcar (lambda (tnd)
+		       `(,(car tnd) (fdefinition ',(cadr tnd))))
+		     tmp-name-def))
        (macrolet ((previous-fdefinition (&whole form name)
 		    (case name
-		      ,@(loop for (tmp name) in tmp-name-def
-			    collect `(,name ',tmp))
+		      ,@(mapcar (lambda (tnd)
+				`(,(car tnd) ',(cadr tnd)))
+			      tmp-name-def)
 		      (t form))))
 	 (unwind-protect
-	     (progn (setf ,@(loop for (nil name def) in tmp-name-def
-				append `((fdefinition ',name) ,def)))
-		    ,@body)
-	   (setf ,@(loop for (tmp name) in tmp-name-def
-		       append `((fdefinition ',name) ,tmp))))))))
+	      (progn (setf ,@(mapcan (lambda (tnd)
+				       (list `(fdefinition ',(cadr tnd))
+					     (caddr tnd)))
+				     tmp-name-def))
+		     ,@body)
+	   (setf ,@(mapcan (lambda (tnd)
+			     (list `(fdefinition ',(cadr tnd))
+				   (car tnd)))
+			   tmp-name-def)))))))
 
 (defmacro eof-or-lose (stream eof-errorp eof-value)
   `(if ,eof-errorp
        (error 'end-of-file :stream ,stream)
        ,eof-value))
+
+(defmacro/run-time with-dynamic-extent-scope ((tag) &body body)
+  (declare (ignore tag))
+  `(progn ,@body))
+
+(defmacro/run-time with-dynamic-extent-allocation ((tag) &body body)
+  (declare (ignore tag))
+  `(progn ,@body))
 
 (defmacro handler-bind (bindings &body forms)
   (if (null bindings)
@@ -237,12 +347,14 @@ respect to multiple threads."
 	     ,@forms))))))
 
 (defmacro handler-case (expression &rest clauses)
-  (multiple-value-bind (normal-clauses no-error-clauses)
-      (loop for clause in clauses
-	  if (eq :no-error (car clause))
-	  collect clause into no-error-clauses
-	  else collect clause into normal-clauses
-	  finally (return (values normal-clauses no-error-clauses)))
+  (let ((normal-clauses (mapcan (lambda (clause)
+				  (when (not (eq :no-error (car clause)))
+				    (list clause)))
+				clauses))
+	(no-error-clauses (mapcan (lambda (clause)
+				    (when (eq :no-error (car clause))
+				      (list clause)))
+				  clauses)))
     (case (length no-error-clauses)
       (0 (let ((block-name (gensym "handler-case-block-"))
 	       (var-name (gensym "handler-case-var-"))
@@ -284,8 +396,11 @@ respect to multiple threads."
   (let ((instance-variable (gensym "with-accessors-instance-")))
     `(let ((,instance-variable ,instance-form))
        (declare (ignorable ,instance-variable))
-       (symbol-macrolet ,(loop for (variable-name accessor-name) in slot-entries
-			     collecting `(,variable-name (,accessor-name ,instance-variable)))
+       (symbol-macrolet ,(mapcar (lambda (slot-entry)
+				   (destructuring-bind (variable-name accessor-name)
+				       slot-entry
+				     `(,variable-name (,accessor-name ,instance-variable))))
+				 slot-entries)
 	 ,@declarations-and-forms))))
 
 (defmacro with-slots (slot-entries instance-form &body declarations-and-forms)
@@ -425,13 +540,14 @@ respect to multiple threads."
 
 (define-unimplemented-macro with-open-file)
 (define-unimplemented-macro restart-case)
+(define-unimplemented-macro with-condition-restarts)
 
-(defmacro load (filespec &key verbose print if-does-not-exist external-format)
+(defmacro/cross-compilation load (filespec &key verbose print if-does-not-exist external-format)
   "hm..."
-  (assert (movitz:movitz-constantp filespec) (filespec)
-    "Can't load a non-constant filename: ~S" filespec)
   (warn "load-compile: ~S" filespec)
-  `(funcall ',(movitz:movitz-compile-file (format nil "losp/ansi-tests/~A" filespec))))
+  `(progn
+     (format t "~&Loading ~S.." ',filespec)
+     (funcall ',(movitz:movitz-compile-file (format nil "losp/ansi-tests/~A" filespec)))))
 
 (defmacro locally (&body body)
   `(let () ,@body))
@@ -459,3 +575,19 @@ respect to multiple threads."
 	 (*read-suppress* nil)
 	 #+ignore (*readtable* nil))
      ,@body))
+
+(defmacro/run-time define-compiler-macro (name &rest ignore)
+  (declare (ignore ignore))
+  'compiler-macro
+  name)
+
+(defmacro movitz-macroexpand (&rest args)
+  `(macroexpand ,@args))
+
+(defmacro movitz-macroexpand-1 (&rest args)
+  `(macroexpand-1 ,@args))
+
+(defmacro/run-time defun (name lambda-list &body body)
+  `(setf (symbol-function ',name)
+	 (install-funobj-name ',name
+			      (lambda ,lambda-list ,@body))))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Nov 15 21:39:55 2003
 ;;;;                
-;;;; $Id: packages.lisp,v 1.57 2008/02/25 23:34:46 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.61 2008-04-27 19:20:06 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -1084,6 +1084,11 @@
 	   yes-or-no-p
 	   zerop))
 
+(defpackage muerte.common-lisp-user
+  (:nicknames muerte.cl-user)
+  (:use muerte.common-lisp))
+
+
 (defpackage muerte
   (:use muerte.mop muerte.common-lisp)
   (:import-from common-lisp cl:nil)
@@ -1100,6 +1105,10 @@
 	   #:newline
 	   #:check-the
 	   #:index
+	   #:make-stack-vector
+	   #:stack-vector
+	   
+	   #:defmacro/cross-compilation
 	   
 	   #:*print-safely*
 	   
@@ -1225,7 +1234,12 @@
 	   #:decode-keyword-formal
 	   #:parse-declarations-and-body
 	   #:parse-docstring-declarations-and-body
+           #:parse-macro-lambda-list
 	   #:compute-function-block-name
+	   #:movitz-macroexpand
+	   #:movitz-macroexpand-1
+	   #:decode-optional-formal
+	   #:decode-keyword-formal
 	   
 	   #:movitz-accessor
 	   #:%object-lispval
@@ -1382,8 +1396,13 @@
 		muerte::decode-keyword-formal
 		muerte::parse-declarations-and-body
 		muerte::parse-docstring-declarations-and-body
+                muerte::parse-macro-lambda-list
 		muerte::unfold-circular-list
 		muerte::compute-function-block-name
+		muerte::movitz-macroexpand
+		muerte::movitz-macroexpand-1
+		muerte::decode-optional-formal
+		muerte::decode-keyword-formal
 		))
 
 

@@ -9,7 +9,7 @@
 ;;;; Created at:    Tue Dec  5 18:40:11 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: lists.lisp,v 1.22 2007/03/21 20:17:48 ffjeld Exp $
+;;;; $Id: lists.lisp,v 1.29 2008-04-27 09:36:39 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -82,6 +82,40 @@
 	    (when (test item (key (car a)))
 	      (return a))))))))
 
+(defun assoc-if (predicate alist &key (key 'identity))
+  "=> entry"
+  (numargs-case
+   (2 (predicate alist)
+      (with-funcallable (predicate)
+	(dolist (a alist)
+	  (when a
+	    (when (predicate (car a))
+	      (return a))))))
+   (t (predicate alist &key (key 'identity))
+      (with-funcallable (key)
+	(with-funcallable (predicate)
+	  (dolist (a alist)
+	    (when a
+	      (when (predicate (key (car a)))
+		(return a)))))))))
+
+(defun assoc-if-not (predicate alist &key (key 'identity))
+  "=> entry"
+  (numargs-case
+   (2 (predicate alist)
+      (with-funcallable (predicate)
+	(dolist (a alist)
+	  (when a
+	    (when (not (predicate (car a)))
+	      (return a))))))
+   (t (predicate alist &key (key 'identity))
+      (with-funcallable (key)
+	(with-funcallable (predicate)
+	  (dolist (a alist)
+	    (when a
+	      (when (not (predicate (key (car a))))
+		(return a)))))))))
+
 (defun rassoc (item alist &key (test 'eql) (key 'identity))
   (numargs-case
    (2 (item alist)
@@ -94,6 +128,24 @@
 	  (dolist (a alist)
 	    (when (test item (key (cdr a)))
 	      (return a))))))))
+
+(defun rassoc-if (predicate alist &key (key 'identity))
+  "=> entry"
+  (numargs-case
+   (2 (predicate alist)
+      (with-funcallable (predicate)
+	(dolist (a alist)
+	  (when a
+	    (when (predicate (cdr a))
+	      (return a))))))
+   (t (predicate alist &key (key 'identity))
+      (with-funcallable (key)
+	(with-funcallable (predicate)
+	  (dolist (a alist)
+	    (when a
+	      (when (predicate (key (cdr a)))
+		(return a)))))))))
+
 
 (defun list-length (x)
   (do ((n 0 (+ n 2))			;Counter.
@@ -127,6 +179,38 @@
 		((endp p) nil)
 	      (when (test (key item) (key (car p)))
 		(return p)))))))))
+
+(defun member-if (predicate list &key key)
+  (numargs-case
+   (2 (predicate list)
+      (with-funcallable (predicate)
+	(do ((p list (cdr p)))
+	    ((endp p) nil)
+	  (when (predicate (car p))
+	    (return p)))))
+   (t (predicate list &key (key 'identity))
+      (with-funcallable (predicate)
+	(with-funcallable (key)
+	  (do ((p list (cdr p)))
+	      ((endp p) nil)
+	    (when (predicate (key (car p)))
+	      (return p))))))))
+
+(defun member-if-not (predicate list &key key)
+  (numargs-case
+   (2 (predicate list)
+      (with-funcallable (predicate)
+	(do ((p list (cdr p)))
+	    ((endp p) nil)
+	  (when (not (predicate (car p)))
+	    (return p)))))
+   (t (predicate list &key (key 'identity))
+      (with-funcallable (predicate)
+	(with-funcallable (key)
+	  (do ((p list (cdr p)))
+	      ((endp p) nil)
+	    (when (not (predicate (key (car p))))
+	      (return p))))))))
 
 (defun last (list &optional (n 1))
   ;; from the hyperspec..
@@ -197,13 +281,22 @@
 	     (unless copied-result
 	       (setf copied-result copy))))))))
 
+(defun revappend (list tail)
+  "=> result-list"
+  (do () ((null list)
+	  tail)
+    (push (pop list)
+	  tail)))
+
 (defun copy-list (list)
   (if (null list)
       nil
-    (let ((new-list (cons (pop list) list)))
-      (do ((new-tail new-list (cdr new-tail)))
-	  ((atom list) new-list)
-	(setf (cdr new-tail) (cons (pop list) list))))))
+    (let* ((new-list (cons (pop list) nil))
+	   (new-tail new-list))
+      (do () ((atom list) new-list)
+	(setf new-tail
+	      (setf (cdr new-tail)
+		    (cons (pop list) nil)))))))
 
 (defun list (&rest objects)
   (numargs-case
@@ -284,33 +377,114 @@
       (return (values (car p) (cadr p) p)))))
 
 (defun mapcar (function first-list &rest more-lists)
-  (declare (dynamic-extent more-lists))
-  (cond
-   ((null more-lists)
-    ;; 1 list
-    (do ((result nil)
-	 (p first-list (cdr p)))
-	((endp p) (nreverse result))
-      (push (funcall function (car p))
-	    result)))
-   ((null (cdr more-lists))
-    ;; two lists
-    (do ((result nil)
-	 (p1 first-list (cdr p1))
-	 (p2 (car more-lists) (cdr p2)))
-	((or (endp p1) (endp p2)) (nreverse result))
-      (push (funcall function (car p1) (car p2))
-	    result)))
-   ((null (cddr more-lists))
-    ;; three lists
-    (do ((result nil)
-	 (p1 first-list (cdr p1))
-	 (p2 (car more-lists) (cdr p2))
-	 (p3 (cadr more-lists) (cdr p2)))
-	((or (endp p1) (endp p2) (endp p3)) (nreverse result))
-      (push (funcall function (car p1) (car p2) (car p3))
-	    result)))
-   (t (error "mapcar not fully implemented."))))
+  (numargs-case
+   (2 (function first-list)
+      (do ((result nil)
+	   (p first-list (cdr p)))
+	  ((endp p)
+	   (nreverse result))
+	(push (funcall function (car p))
+	      result)))
+   (3 (function first-list second-list)
+      (do ((result nil)
+	   (p1 first-list (cdr p1))
+	   (p2 second-list (cdr p2)))
+	  ((or (endp p1) (endp p2))
+	   (nreverse result))
+	(push (funcall function (car p1) (car p2))
+	      result)))
+   (t (function first-list &rest more-lists)
+      (declare (dynamic-extent more-lists))
+      (do ((result nil))
+	  ((or (endp first-list)
+	       (some #'endp more-lists))
+	   (nreverse result))
+	(push (apply function (pop first-list) (mapcar #'car more-lists))
+	      result)
+	(setf more-lists
+	      (map-into more-lists #'cdr more-lists))))))
+
+(defun mapcan (function first-list &rest more-lists)
+  (numargs-case
+   (2 (function first-list)
+      (do ((result nil)
+	   (tail nil)
+	   (p first-list (cdr p)))
+	  ((endp p) result)
+	(let ((m (funcall function (car p))))
+	  (if tail
+	      (setf (cdr tail) m)
+	      (setf result m))
+	  (setf tail (last m)))))
+   (3 (function first-list second-list)
+      (do ((result nil)
+	   (tail nil)
+	   (p first-list (cdr p))
+	   (q second-list (cdr q)))
+	  ((or (endp p)
+	       (endp q))
+	   result)
+	(let ((m (funcall function (car p) (car q))))
+	  (if tail
+	      (setf (cdr tail) m)
+	      (setf result m))
+	  (setf tail (last m)))))
+   (t (function first-list &rest more-lists)
+      (declare (dynamic-extent more-lists))
+      (do ((result nil)
+	   (tail nil))
+	  ((or (endp first-list)
+	       (some #'endp more-lists))
+	   result)
+	(let ((m (apply function (pop first-list) (mapcar #'car more-lists))))
+	  (if tail
+	      (setf (cdr tail) m)
+	      (setf result m))
+	  (setf tail (last m)))
+	(setf more-lists
+	      (map-into more-lists #'cdr more-lists))))))
+
+(defun mapcon (function first-list &rest more-lists)
+  (numargs-case
+   (2 (function first-list)
+      (do ((result nil)
+	   (tail nil)
+	   (p first-list (cdr p)))
+	  ((endp p) result)
+	(let ((m (funcall function p)))
+	  (if tail
+	      (setf (cdr tail) m)
+	      (setf result m))
+	  (setf tail (last m)))))
+   (3 (function first-list second-list)
+      (do ((result nil)
+	   (tail nil)
+	   (p first-list (cdr p))
+	   (q second-list (cdr q)))
+	  ((or (endp p)
+	       (endp q))
+	   result)
+	(let ((m (funcall function p q)))
+	  (if tail
+	      (setf (cdr tail) m)
+	      (setf result m))
+	  (setf tail (last m)))))
+   (t (function first-list &rest more-lists)
+      (declare (dynamic-extent more-lists))
+      (do ((result nil)
+	   (tail nil))
+	  ((or (endp first-list)
+	       (some #'endp more-lists))
+	   result)
+	(let ((m (apply function first-list more-lists)))
+	  (if tail
+	      (setf (cdr tail) m)
+	      (setf result m))
+	  (setf tail (last m)))
+	(setf first-list
+	      (cdr first-list))
+	(setf more-lists
+	      (map-into more-lists #'cdr more-lists))))))
 
 (defun mapc (function first-list &rest more-lists)
   (numargs-case
@@ -350,6 +524,56 @@
 		(setf (car p) x)))))
 	first-list))))
 
+(defun maplist (function first-list &rest more-lists)
+  (numargs-case
+   (2 (function first-list)
+      (do ((result nil)
+	   (p first-list (cdr p)))
+	  ((endp p)
+	   (nreverse result))
+	(push (funcall function p)
+	      result)))
+   (3 (function first-list second-list)
+      (do ((result nil)
+	   (p1 first-list (cdr p1))
+	   (p2 second-list (cdr p2)))
+	  ((or (endp p1) (endp p2))
+	   (nreverse result))
+	(push (funcall function p1 p2)
+	      result)))
+   (t (function first-list &rest more-lists)
+      (declare (dynamic-extent more-lists))
+      (do ((result nil))
+	  ((or (endp first-list)
+	       (some #'endp more-lists))
+	   (nreverse result))
+	(push (apply function first-list more-lists)
+	      result)
+	(setf first-list (cdr first-list)
+	      more-lists (map-into more-lists #'cdr more-lists))))))
+
+(defun mapl (function first-list &rest more-lists)
+  (numargs-case
+   (2 (function first-list)
+      (do ((p first-list (cdr p)))
+	  ((endp p)
+	   first-list)
+	(funcall function p)))
+   (3 (function first-list second-list)
+      (do ((p1 first-list (cdr p1))
+	   (p2 second-list (cdr p2)))
+	  ((or (endp p1) (endp p2))
+	   first-list)
+	(funcall function p1 p2)))
+   (t (function first-list &rest more-lists)
+      (declare (dynamic-extent more-lists))
+      (do ()
+	  ((or (endp first-list)
+	       (some #'endp more-lists))
+	   first-list)
+	(apply function first-list more-lists)
+	(setf first-list (cdr first-list)
+	      more-lists (map-into more-lists #'cdr more-lists))))))
 
 (defun nbutlast (list &optional (n 1))
   (let ((start-right (nthcdr n list)))
@@ -435,6 +659,33 @@
 		     :test (if test-not
 			       (complement test-not)
 			     test)))
+
+(defun set-exclusive-or (list-1 list-2 &key (key 'identity) (test 'eql) test-not)
+  (union (set-difference list-1 list-2
+			 :key key
+			 :test test
+			 :test-not test-not)
+	 (set-difference list-2 list-1
+			 :key key
+			 :test test
+			 :test-not test-not)
+	 :key key
+	 :test test
+	 :test-not test-not))
+
+(defun nset-exclusive-or (list-1 list-2 &key (key 'identity) (test 'eql) test-not)
+  (nunion (nset-difference list-1 list-2
+			   :key key
+			   :test test
+			   :test-not test-not)
+	  (nset-difference list-2 list-1
+			   :key key
+			   :test test
+			   :test-not test-not)
+	 :key key
+	 :test test
+	 :test-not test-not))
+
   
 (defun subsetp (list-1 list-2 &key (key 'identity) (test 'eql) test-not)
   "=> generalized-boolean"

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Feb  5 19:05:01 2001
 ;;;;                
-;;;; $Id: characters.lisp,v 1.4 2004/07/20 08:54:00 ffjeld Exp $
+;;;; $Id: characters.lisp,v 1.7 2009-07-19 18:51:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -28,6 +28,9 @@
     (:cmpb #.(movitz::tag :character) :al)
     (:jne '(:sub-program (not-a-character) (:int 66)))
     (:shrl #.(cl:- 8 movitz::+movitz-fixnum-shift+) :eax)))
+
+(defun char-int (c)
+  (char-code c))
 
 (defun code-char (code)
   (with-inline-assembly (:returns :eax)
@@ -50,27 +53,25 @@
 (defun char= (first-character &rest characters)
   (numargs-case
    (2 (x y)
-      (and (eql x y) 'pinglo))
+      (eql x y))
    (t (first-character &rest characters)
       (declare (dynamic-extent characters))
-      (dolist (c characters 'dumbolo)
+      (dolist (c characters t)
 	(unless (char= c first-character)
 	  (return nil))))))
 
 (defun char/= (first-character &rest characters)
   (numargs-case
+   (1 (x) (declare (ignore x)) t)
    (2 (x y) (not (eql x y)))
-   (t (&rest characters)
-      (declare (dynamic-extent characters))
-      (do ((p (cdr characters) (cdr p)))
-	  ((null p) t)
-	(do ((v characters (cdr v)))
-	    ((eq p v))
-	  (when (eql (car p) (car v))
-	    (return-from char/= nil)))))))
+   (t (first-character &rest more-characters)
+      (declare (dynamic-extent more-characters))
+      (do ((c first-character (pop more-characters)))
+          ((null more-characters) t)
+        (when (member c more-characters)
+          (return nil))))))
 
-
-(defmacro define-char-cmp (name mode not-branch)
+(defmacro/cross-compilation define-char-cmp (name mode not-branch)
   `(defun ,name (first-character &rest more-characters)
      (numargs-case
       (1 (x) (declare (ignore x)) t)
@@ -138,7 +139,9 @@
 
 (defun char-equal (first-character &rest more-characters)
   (numargs-case
-   (1 (x) (declare (ignore x)) t)
+   (1 (x)
+      (declare (ignore x))
+      t)
    (2 (x y)
       (char= (char-upcase x) (char-upcase y)))
    (t (first-character &rest more-characters)
@@ -147,6 +150,71 @@
 	(dolist (c more-characters t)
 	  (unless (char= f (char-upcase c))
 	    (return nil)))))))
+
+(defun char-not-equal (first-character &rest more-characters)
+  (numargs-case
+   (1 (x)
+      (declare (ignore x))
+      t)
+   (2 (x y)
+      (not (char= (char-upcase x) (char-upcase y))))
+   (t (first-character &rest more-characters)
+      (declare (dynamic-extent more-characters))
+      (not (apply #'char-equal first-character more-characters)))))
+
+(defun char-lessp (first-character &rest more-characters)
+  (numargs-case
+   (1 (x)
+      (declare (ignore x))
+      t)
+   (2 (x y)
+      (char< (char-upcase x)
+	     (char-upcase y)))
+   (t (first-character &rest more-characters)
+      (declare (dynamic-extent more-characters))
+      (let ((x (char-upcase first-character)))
+	(dolist (y more-characters t)
+	  (unless (char< x (setf x (char-upcase y)))
+	    (return nil)))))))
+
+(defun char-not-lessp (first-character &rest more-characters)
+  (numargs-case
+   (1 (x)
+      (declare (ignore x))
+      t)
+   (2 (x y)
+      (not (char< (char-upcase x)
+		  (char-upcase y))))
+   (t (first-character &rest more-characters)
+      (declare (dynamic-extent more-characters))
+      (not (apply #'char-lessp first-character more-characters)))))
+
+(defun char-greaterp (first-character &rest more-characters)
+  (numargs-case
+   (1 (x)
+      (declare (ignore x))
+      t)
+   (2 (x y)
+      (char> (char-upcase x)
+	     (char-upcase y)))
+   (t (first-character &rest more-characters)
+      (declare (dynamic-extent more-characters))
+      (let ((x (char-upcase first-character)))
+	(dolist (y more-characters t)
+	  (unless (char> x (setf x (char-upcase y)))
+	    (return nil)))))))
+
+(defun char-not-greaterp (first-character &rest more-characters)
+  (numargs-case
+   (1 (x)
+      (declare (ignore x))
+      t)
+   (2 (x y)
+      (not (char> (char-upcase x)
+		  (char-upcase y))))
+   (t (first-character &rest more-characters)
+      (declare (dynamic-extent more-characters))
+      (not (apply #'char-greaterp first-character more-characters)))))
 
 (defun standard-char-p (c)
   "CLHS 2.1.3 Standard Characters"
@@ -217,3 +285,13 @@
       (char= character #\Return)
       (char= character #\Tab)
       (char= character #\Linefeed)))
+
+(defun character (c)
+  (etypecase c
+    (character c)
+    ((string 1)
+     (char c 0))
+    (symbol
+     (character (symbol-name c)))))
+
+

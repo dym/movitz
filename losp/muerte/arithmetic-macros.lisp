@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Jul 17 13:42:46 2004
 ;;;;                
-;;;; $Id: arithmetic-macros.lisp,v 1.20 2007/11/19 20:39:52 ffjeld Exp $
+;;;; $Id: arithmetic-macros.lisp,v 1.23 2008-04-27 19:26:14 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -22,12 +22,26 @@
 
 ;;;
 
+(defun number-double-dispatch-error (x y)
+  (when (not (typep x 'number))
+    (error 'type-error
+           :datum x
+           :expected-type 'number))
+  (when (not (typep y 'number))
+    (error 'type-error
+           :datum y
+           :expected-type 'number))
+  (error "Operation not implemented for numbers ~S and ~S." x y))
+
 (defmacro number-double-dispatch ((x y) &rest clauses)
   `(let ((x ,x) (y ,y))
-     (cond ,@(loop for ((x-type y-type) . then-body) in clauses
-		 collect `((and (typep x ',x-type) (typep y ',y-type))
-			   ,@then-body))
-	   (t (error "Not numbers or not implemented: ~S or ~S." x y)))))
+     (cond ,@(mapcar (lambda (clause)
+		       (destructuring-bind ((x-type y-type) . then-body)
+			   clause
+			 `((and (typep x ',x-type) (typep y ',y-type))
+			   ,@then-body)))
+		     clauses)
+	   (t (number-double-dispatch-error x y)))))
 
 
 (define-compiler-macro evenp (x)
@@ -291,22 +305,28 @@
 				      finally (return (if (= -1 folded-constant)
 							  non-constants
 							(cons folded-constant non-constants))))))
-    (case (length constant-folded-integers)
-      (0 0)
-      (1 (first constant-folded-integers))
-      (2 (cond
-	  ((typep (first constant-folded-integers)
-		  '(unsigned-byte 32))
-	   (let ((x (first constant-folded-integers)))
-	     `(with-inline-assembly (:returns :untagged-fixnum-ecx
-					      :type (unsigned-byte ,(integer-length x)))
-		(:compile-form (:result-mode :untagged-fixnum-ecx)
-			       ,(second constant-folded-integers))
-		(:andl ,x :ecx))))
-	  (t `(no-macro-call logand
-			     ,(first constant-folded-integers)
-			     ,(second constant-folded-integers)))))
-      (t `(logand (logand ,(first constant-folded-integers) ,(second constant-folded-integers))
+    (cond
+      ((null constant-folded-integers)
+       0)
+      ((null (rest constant-folded-integers))
+       (first constant-folded-integers))
+      ((eql 0 (first constant-folded-integers))
+       `(progn ,@(rest constant-folded-integers) 0))
+      ((null (cddr constant-folded-integers))
+       (cond
+	 ((typep (first constant-folded-integers)
+		 '(unsigned-byte 32))
+	  (let ((x (first constant-folded-integers)))
+	    `(with-inline-assembly (:returns :untagged-fixnum-ecx
+					     :type (unsigned-byte ,(integer-length x)))
+	       (:compile-form (:result-mode :untagged-fixnum-ecx)
+			      ,(second constant-folded-integers))
+	       (:andl ,x :ecx))))
+	 (t `(no-macro-call logand
+			    ,(first constant-folded-integers)
+			    ,(second constant-folded-integers)))))
+      (t `(logand (logand ,(first constant-folded-integers)
+			  ,(second constant-folded-integers))
 		  ,@(cddr constant-folded-integers))))))
 
 (define-compiler-macro logior (&whole form &rest integers &environment env)
@@ -396,7 +416,7 @@
    (t form)))
 
 (define-compiler-macro ldb (&whole form &environment env bytespec integer)
-  (let ((bytespec (movitz::movitz-macroexpand bytespec env)))
+  (let ((bytespec (movitz-macroexpand bytespec env)))
     (if (not (and (consp bytespec) (eq 'byte (car bytespec))))
 	form
       `(ldb%byte ,(second bytespec) ,(third bytespec) ,integer))))
@@ -517,7 +537,7 @@
 
 ;;;
 
-(defmacro define-number-relational (name 2op-name condition &key (defun-p t) 3op-name)
+(defmacro/cross-compilation define-number-relational (name 2op-name condition &key (defun-p t) 3op-name)
   `(progn
      ,(when condition
 	`(define-compiler-macro ,2op-name (n1 n2 &environment env)

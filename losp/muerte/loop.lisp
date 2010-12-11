@@ -64,8 +64,19 @@
 ;;;(in-package :ansi-loop)
 
 
-(provide :muerte/loop :load-priority 0)
+(provide :muerte/loop :load-priority 1)
 
+;; #+movitz
+;; (progn
+;;   (defmacro movitz-macroexpand (&rest args)
+;;     `(macroexpand ,@args))
+;;   (defmacro movitz-macroexpand-1 (&rest args)
+;;     `(macroexpand-1 ,@args))
+;;   (eval-when (:compile-toplevel)
+;;     (defmacro movitz-macroexpand (&rest args)
+;;       `(movitz::movitz-macroexpand ,@args))
+;;     (defmacro movitz-macroexpand-1 (&rest args)
+;;       `(movitz::movitz-macroexpand-1 ,@args))))
 
 ;;;This is the "current" loop context in use when we are expanding a
 ;;;loop.  It gets bound on each invocation of LOOP.
@@ -76,7 +87,7 @@
   ;;@@@@Explorer??
   #-Genera `(copy-list ,l))
 
-(eval-when (:compile-toplevel)
+(eval-when (:compile-toplevel :load-toplevel :execute)
   (defvar *loop-real-data-type* 'real)
   (defvar *loop-universe*)
 
@@ -259,50 +270,49 @@
 (defmacro loop-collect-rplacd (&environment env
 			       (head-var tail-var &optional user-head-var) form)
   (declare
-    #+LISPM (ignore head-var user-head-var)	;use locatives, unconditionally update through the tail.
-    )
-  (setq form (movitz::movitz-macroexpand form env))
-  (flet ((cdr-wrap (form n)
-	   (declare (fixnum n))
-	   (do () ((<= n 4) (setq form `(,(case n
-					    (1 'cdr)
-					    (2 'cddr)
-					    (3 'cdddr)
-					    (4 'cddddr))
-					 ,form)))
-	     (setq form `(cddddr ,form) n (- n 4)))))
-    (let ((tail-form form) (ncdrs nil))
-      ;;Determine if the form being constructed is a list of known length.
-      (when (consp form)
-	(cond ((eq (car form) 'list)
-	       (setq ncdrs (1- (length (cdr form))))
-	       ;;@@@@ Because the last element is going to be RPLACDed,
-	       ;; we don't want the cdr-coded implementations to use
-	       ;; cdr-nil at the end (which would just force copying
-	       ;; the whole list again).
-	       #+LISPM (setq tail-form `(list* ,@(cdr form) nil)))
-	      ((member (car form) '(list* cons))
-	       (when (and (cddr form) (member (car (last form)) '(nil 'nil)))
-		 (setq ncdrs (- (length (cdr form)) 2))))))
-      (let ((answer
-	      (cond ((null ncdrs)
-		     `(when (setf (cdr ,tail-var) ,tail-form)
-			(setq ,tail-var (last (cdr ,tail-var)))))
-		    ((< ncdrs 0) (return-from loop-collect-rplacd nil))
-		    ((= ncdrs 0)
-		     ;;@@@@ Here we have a choice of two idioms:
-		     ;; (rplacd tail (setq tail tail-form))
-		     ;; (setq tail (setf (cdr tail) tail-form)).
-		     ;;Genera and most others I have seen do better with the former.
-		     `(rplacd ,tail-var (setq ,tail-var ,tail-form)))
-		    (t `(setq ,tail-var ,(cdr-wrap `(setf (cdr ,tail-var) ,tail-form)
-						   ncdrs))))))
-	;;If not using locatives or something similar to update the user's
-	;; head variable, we've got to set it...  It's harmless to repeatedly set it
-	;; unconditionally, and probably faster than checking.
-	#-LISPM (when user-head-var
-		  (setq answer `(progn ,answer (setq ,user-head-var (cdr ,head-var)))))
-	answer))))
+    #+LISPM (ignore head-var user-head-var))	;use locatives, unconditionally update through the tail.
+  (let ((form (movitz-macroexpand form env)))
+    (flet ((cdr-wrap (form n)
+	     (declare (fixnum n))
+	     (do () ((<= n 4) (setq form `(,(case n
+						  (1 'cdr)
+						  (2 'cddr)
+						  (3 'cdddr)
+						  (4 'cddddr))
+					    ,form)))
+	       (setq form `(cddddr ,form) n (- n 4)))))
+      (let ((tail-form form) (ncdrs nil))
+	;;Determine if the form being constructed is a list of known length.
+	(when (consp form)
+	  (cond ((eq (car form) 'list)
+		 (setq ncdrs (1- (length (cdr form))))
+		 ;;@@@@ Because the last element is going to be RPLACDed,
+		 ;; we don't want the cdr-coded implementations to use
+		 ;; cdr-nil at the end (which would just force copying
+		 ;; the whole list again).
+		 #+LISPM (setq tail-form `(list* ,@(cdr form) nil)))
+		((member (car form) '(list* cons))
+		 (when (and (cddr form) (member (car (last form)) '(nil 'nil)))
+		   (setq ncdrs (- (length (cdr form)) 2))))))
+	(let ((answer
+	       (cond ((null ncdrs)
+		      `(when (setf (cdr ,tail-var) ,tail-form)
+			 (setq ,tail-var (last (cdr ,tail-var)))))
+		     ((< ncdrs 0) (return-from loop-collect-rplacd nil))
+		     ((= ncdrs 0)
+		      ;;@@@@ Here we have a choice of two idioms:
+		      ;; (rplacd tail (setq tail tail-form))
+		      ;; (setq tail (setf (cdr tail) tail-form)).
+		      ;;Genera and most others I have seen do better with the former.
+		      `(rplacd ,tail-var (setq ,tail-var ,tail-form)))
+		     (t `(setq ,tail-var ,(cdr-wrap `(setf (cdr ,tail-var) ,tail-form)
+						    ncdrs))))))
+	  ;;If not using locatives or something similar to update the user's
+	  ;; head variable, we've got to set it...  It's harmless to repeatedly set it
+	  ;; unconditionally, and probably faster than checking.
+	  #-LISPM (when user-head-var
+		    (setq answer `(progn ,answer (setq ,user-head-var (cdr ,head-var)))))
+	  answer)))))
 
 
 (defmacro loop-collect-answer (head-var &optional user-head-var)
@@ -364,7 +374,7 @@
 
 ;;;; Maximization Technology
 
-(eval-when (:compile-toplevel :execute)
+(eval-when (:compile-toplevel :load-toplevel :execute)
 
 #|
 The basic idea of all this minimax randomness here is that we have to
@@ -494,7 +504,7 @@ code to be loaded.
 
 ;;;; Token Hackery
 
-(eval-when (:compile-toplevel #+movitz-loop :load-toplevel)
+(eval-when (:compile-toplevel :load-toplevel :execute)
 
 
 ;;;Compare two "tokens".  The first is the frob out of *LOOP-SOURCE-CODE*,
@@ -712,7 +722,7 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
 
 
 
-(eval-when (:compile-toplevel #+movitz-loop :load-toplevel)
+(eval-when (:compile-toplevel :load-toplevel :execute)
 
 ;;;; Code Analysis Stuff
 
@@ -812,8 +822,10 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
 	     (dolist (x l n) (incf n (estimate-code-size-1 x env))))))
     ;;@@@@ ???? (declare (function list-size (list) fixnum))
     (cond ((constantp x #+Genera env) 1)
-	  ((symbolp x) (multiple-value-bind (new-form expanded-p) (movitz::movitz-macroexpand-1 x env)
-			 (if expanded-p (estimate-code-size-1 new-form env) 1)))
+	  ((symbolp x)
+	   (multiple-value-bind (new-form expanded-p)
+	       (movitz-macroexpand-1 x env)
+	     (if expanded-p (estimate-code-size-1 new-form env) 1)))
 	  ((atom x) 1)				;??? self-evaluating???
 	  ((symbolp (car x))
 	   (let ((fn (car x)) (tem nil) (n 0))
@@ -848,7 +860,8 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
 		     ((eq fn 'return-from) (1+ (estimate-code-size-1 (third x) env)))
 		     ((or (special-operator-p fn) (member fn *estimate-code-size-punt*))
 		      (throw 'estimate-code-size nil))
-		     (t (multiple-value-bind (new-form expanded-p) (movitz::movitz-macroexpand-1 x env)
+		     (t (multiple-value-bind (new-form expanded-p)
+			    (movitz-macroexpand-1 x env)
 			  (if expanded-p
 			      (estimate-code-size-1 new-form env)
 			      (f 3))))))))
@@ -864,14 +877,12 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
 
 
 (defun loop-error (format-string &rest format-args)
-  #+movitz (declare (dynamic-extent format-args))
   #+(or Genera CLOE) (declare (dbg:error-reporter))
   #+Genera (setq format-args (copy-list format-args))	;Don't ask.
   (error "~?~%Current LOOP context:~{ ~S~}." format-string format-args (loop-context)))
 
 
 (defun loop-warn (format-string &rest format-args)
-  #+movitz (declare (dynamic-extent format-args))
   (warn "~?~%Current LOOP context:~{ ~S~}." format-string format-args (loop-context)))
 
 
@@ -919,11 +930,11 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
     (loop-iteration-driver)
     (loop-bind-block)
     (let ((answer `(loop-body
-		     ,(nreverse *loop-prologue*)
-		     ,(nreverse *loop-before-loop*)
-		     ,(nreverse *loop-body*)
-		     ,(nreverse *loop-after-body*)
-		     ,(nreconc *loop-epilogue* (nreverse *loop-after-epilogue*)))))
+		     ,(reverse *loop-prologue*)
+		     ,(reverse *loop-before-loop*)
+		     ,(reverse *loop-body*)
+		     ,(reverse *loop-after-body*)
+		     ,(revappend *loop-epilogue* (reverse *loop-after-epilogue*)))))
       (do () (nil)
 	(setq answer `(block ,(pop *loop-names*) ,answer))
 	(unless *loop-names* (return nil)))
@@ -1234,7 +1245,7 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
 
 
 
-(eval-when (:compile-toplevel #+movitz-loop :load-toplevel)
+(eval-when (:compile-toplevel :load-toplevel :execute)
 
 (defun loop-get-collection-info (collector class default-type)
   (let ((form (loop-get-form))
@@ -2037,10 +2048,6 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
     w))
 
 
-(defparameter *loop-ansi-universe*
-    (make-ansi-loop-universe nil))
-
-
 (defun loop-standard-expansion (keywords-and-forms environment universe)
   (if (and keywords-and-forms (symbolp (car keywords-and-forms)))
       (loop-translate keywords-and-forms environment universe)
@@ -2048,6 +2055,13 @@ a LET-like macro, and a SETQ-like macro, which perform LOOP-style destructuring.
 	`(block nil (tagbody ,tag (progn ,@keywords-and-forms) (go ,tag))))))
 
 )
+
+(eval-when (:compile-toplevel)
+  (defvar *loop-ansi-universe*
+    (make-ansi-loop-universe nil)))
+
+(eval-when (:load-toplevel :execute)
+  (defvar *loop-ansi-universe* nil))
 
 ;;;INTERFACE: ANSI
 (defmacro loop (&rest keywords-and-forms)
@@ -2085,11 +2099,11 @@ collected result will be returned as the value of the LOOP."
 	   (pify (l) (if (null (cdr l)) (car l) `(progn ,@l)))
 	   (makebody ()
 	     (let ((form `(tagbody
-			    ,@(psimp (append prologue (nreverse rbefore)))
-			 next-loop
-			    ,@(psimp (append main-body (nreconc rafter `((go next-loop)))))
-			 end-loop
-			    ,@(psimp epilogue))))
+			     ,@(psimp (append prologue (nreverse rbefore)))
+			   next-loop
+			     ,@(psimp (append main-body (nreconc rafter `((go next-loop)))))
+			   end-loop
+			     ,@(psimp epilogue))))
 	       (if flagvar `(let ((,flagvar nil)) ,form) form))))
     (when (or *loop-duplicate-code* (not rbefore))
       (return-from loop-body (makebody)))
@@ -2115,7 +2129,7 @@ collected result will be returned as the value of the LOOP."
       ;; What chronologically precedes the non-duplicatable form will
       ;; be handled the next time around the outer loop.
       (do ((bb rbefore (cdr bb)) (aa rafter (cdr aa)) (lastdiff nil) (count 0) (inc nil))
-	  ((null bb) (return-from loop-body (makebody)))	;Did it.
+	  ((null bb) (return-from loop-body (makebody))) ;Did it.
 	(cond ((not (equal (car bb) (car aa))) (setq lastdiff bb count 0))
 	      ((or (not (setq inc (estimate-code-size (car bb) env)))
 		   (> (incf count inc) threshold))
@@ -2161,7 +2175,7 @@ collected result will be returned as the value of the LOOP."
 				   (and (consp x)
 					(or (not (eq (car x) 'car))
 					    (not (symbolp (cadr x)))
-					    (not (symbolp (setq x (movitz::movitz-macroexpand x env)))))
+					    (not (symbolp (setq x (movitz-macroexpand x env)))))
 					(cons x nil)))
 			       (cdr val))
 		       `(,val))))

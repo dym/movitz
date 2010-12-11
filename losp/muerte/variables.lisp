@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Nov  5 21:53:34 2003
 ;;;;                
-;;;; $Id: variables.lisp,v 1.10 2006/04/10 11:58:27 ffjeld Exp $
+;;;; $Id: variables.lisp,v 1.15 2008-07-09 20:00:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -30,13 +30,17 @@
 (defvar // nil)
 (defvar /// nil)
 
+(defvar - nil)
 (defvar + nil)
 (defvar ++ nil)
 (defvar +++ nil)
 
 (defvar *read-base* 10)
+(defvar *read-eval* t)
+(defvar *read-suppress* nil)
 (defvar *package* nil)
 
+(defvar *macroexpand-hook* 'funcall)
 (defparameter *debugger-hook* nil)
 (defvar *active-condition-handlers* nil)
 (defvar *multiboot-data* nil)
@@ -62,11 +66,38 @@
 (defvar single-float-negative-epsilon -1/1000)
 (defvar double-float-negative-epsilon -1/1000)
 (defvar long-float-negative-epsilon -1/1000)
+(defvar long-float-epsilon 1/10000)
 
+(defconstant most-negative-short-float most-negative-fixnum)
+(defconstant most-negative-single-float most-negative-fixnum)
+(defconstant most-negative-long-float most-negative-fixnum)
+(defconstant most-negative-double-float most-negative-fixnum)
 
-(defconstant call-arguments-limit #xffff0)
-(defconstant lambda-parameters-limit #x1000) ; ?
+(defconstant least-positive-short-float 1/100000)
+(defconstant least-positive-single-float 1/100000)
+(defconstant least-positive-double-float 1/100000)
+(defconstant least-positive-long-float 1/100000)
+
+(defconstant least-negative-short-float -1/100000)
+(defconstant least-negative-single-float -1/100000)
+(defconstant least-negative-double-float -1/100000)
+(defconstant least-negative-long-float -1/100000)
+
+(defconstant call-arguments-limit 512)
+(defconstant lambda-parameters-limit 512) ; ?
 
 (defvar *print-pprint-dispatch* nil)
 
-(declaim (special *build-number*))
+(defvar *build-number*) ; set at bootup
+
+(defvar *features* '(:movitz))
+(defvar *modules* nil)
+
+(defvar *compile-file-pathname* nil)
+(defvar *compile-file-truename* nil)
+(defvar *compile-print* nil)
+(defvar *compile-verbose* nil)
+(defvar *load-print* nil)
+(defvar *load-verbose* nil)
+(defvar *load-truename* nil)
+(defvar *default-pathname-defaults* #p"")

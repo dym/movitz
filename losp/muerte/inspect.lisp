@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Fri Oct 24 09:50:41 2003
 ;;;;                
-;;;; $Id: inspect.lisp,v 1.60 2007/04/12 16:10:47 ffjeld Exp $
+;;;; $Id: inspect.lisp,v 1.61 2008-04-02 20:49:44 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -91,7 +91,7 @@ after the point that called this stack-frame."
 Otherwise, stack-frame is an absolute location."
   (cond
    ((not (null stack))
-    (check-type stack (simple-array (unsigned-byte 32) 1))
+    (check-type stack stack-vector)
     (let ((pos (+ frame index)))
       (assert (< -1 pos (length stack))
 	  () "Index ~S, pos ~S, len ~S" index pos (length stack))
@@ -101,7 +101,7 @@ Otherwise, stack-frame is an absolute location."
 (defun (setf stack-frame-ref) (value stack frame index &optional (type ':lisp))
   (cond
    ((not (eq nil stack))
-    (check-type stack (simple-array (unsigned-byte 32) 1))
+    (check-type stack stack-vector)
     (let ((pos (+ frame index)))
       (assert (< -1 pos (length stack))
 	  () "Index ~S, pos ~S, len ~S" index pos (length stack))
@@ -420,7 +420,9 @@ Obviously, this correspondence is not guaranteed to hold e.g. across GC."
 	   (+ -1 object-location
 	      (movitz-type-word-size :movitz-funobj)
 	      (funobj-num-constants object))))
-      ((or string code-vector (simple-array (unsigned-byte 8) 1))
+      ((or string
+	   code-vector
+	   (simple-array (unsigned-byte 8) 1))
        (<= object-location
 	   location
 	   (+ -1 object-location
@@ -432,7 +434,9 @@ Obviously, this correspondence is not guaranteed to hold e.g. across GC."
 	   (+ -1 object-location
 	      (movitz-type-word-size 'movitz-basic-vector)
 	      (* 2 (truncate (+ (array-dimension object 0) 3) 4)))))
-      ((or simple-vector (simple-array (unsigned-byte 32) 1))
+      ((or simple-vector
+	   (simple-array (unsigned-byte 32) 1)
+	   stack-vector)
        (<= object-location
 	   location
 	   (+ -1 object-location

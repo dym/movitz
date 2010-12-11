@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: storage-types.lisp,v 1.59 2007/02/06 20:03:53 ffjeld Exp $
+;;;; $Id: storage-types.lisp,v 1.65 2008-04-27 19:23:25 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -68,19 +68,22 @@
   :null 5
   :other 6
   :symbol 7
-  
+
+  ;; The lower 2 bits of these are significant in mysterious ways.
+  ;; 10: Requires GC parsing.
+  ;; 00: Requires no GC parsing (all GC-safe lisp-vals).
+  ;; 11: Illegal/special values
   :basic-vector #x22
   :defstruct #x2a
+  :basic-restart #x32
   :funobj #x3a
   :bignum #x4a
   :ratio #x52
   :complex #x5a
   :std-instance #x40
-  :run-time-context #x50
+  :run-time-context #x62
   :illegal #x13
-  :infant-object #x23
-  :basic-restart #x32
-  )
+  :infant-object #x23)
 
 (defconstant +fixnum-tags+ '(:even-fixnum :odd-fixnum))
 (defparameter +scan-skip-word+ #x00000003)
@@ -234,13 +237,6 @@ integer (native lisp) value."
   (print-unreadable-object (x stream)
     (format stream "MOVITZ-CHARACTER: ~S" (movitz-char x))))
 
-(defun movitz-eql (x y)
-  (if (and (typep x 'movitz-immediate-object)
-	   (typep y 'movitz-immediate-object))
-      (= (movitz-immediate-value x)
-	 (movitz-immediate-value y))
-    (eq x y)))
-
 ;;; Code element
 
 (define-binary-class movitz-code (movitz-immediate-object)
@@ -342,9 +338,10 @@ integer (native lisp) value."
 		   :u8 2
 		   :u16 3
 		   :u32 4
-		   :bit 5
-		   :code 6
-		   :indirects 7)
+		   :stack 5
+		   :bit 6
+		   :code 7
+		   :indirects 8)
     :initarg :element-type
     :reader movitz-vector-element-type)
    (fill-pointer
@@ -396,7 +393,7 @@ integer (native lisp) value."
 
 (defun movitz-vector-element-type-size (element-type)
   (ecase element-type
-    ((:any-t :u32) 32)
+    ((:any-t :u32 :stack) 32)
     ((:character :u8 :code) 8)
     (:u16 16)
     (:bit 1)))
@@ -417,15 +414,26 @@ integer (native lisp) value."
 	     (:character (write-binary 'char8 stream data))
 	     (:any-t     (write-binary 'word stream (movitz-read-and-intern data 'word))))))
     (+ (call-next-method)		; header
-       (etypecase (movitz-vector-symbolic-data obj)
-	 (list 
-	  (loop for data in (movitz-vector-symbolic-data obj)
-	      with type = (movitz-vector-element-type obj)
-	      summing (write-element type stream data)))
-	 (vector
-	  (loop for data across (movitz-vector-symbolic-data obj)
-	      with type = (movitz-vector-element-type obj)
-	      summing (write-element type stream data)))))))
+       (multiple-value-bind (data type)
+	   (case (movitz-vector-element-type obj)
+	     (:bit (let ((data (movitz-vector-symbolic-data obj)))
+		     (values (loop for byte upfrom 0 below (ceiling (length data) 8)
+				collect (loop for bit from 0 to 7
+					   sum (* (let ((b (+ (* byte 8) bit)))
+						    (if (< b (length data))
+							(bit data b)
+							0))
+						  (expt 2 bit))))
+			     :u8)))
+	     (t (values (movitz-vector-symbolic-data obj)
+			(movitz-vector-element-type obj))))
+	 (etypecase data
+	   (list 
+	    (loop for datum in data
+	       sum (write-element type stream datum)))
+	   (vector
+	    (loop for datum across data
+	       sum (write-element type stream datum))))))))
 
 (defmethod read-binary-record ((type-name (eql 'movitz-basic-vector)) stream &key &allow-other-keys)
   (let ((object (call-next-method)))
@@ -452,6 +460,8 @@ integer (native lisp) value."
   (cond
    ((eq type 'code)
     (values :code 0))
+   ((subtypep type 'bit)
+    (values :bit 0))
    ((subtypep type '(unsigned-byte 8))
     (values :u8 0))
    ((subtypep type '(unsigned-byte 16))
@@ -502,7 +512,7 @@ integer (native lisp) value."
       (setf initial-contents
 	(make-array size :initial-element (or (and initial-element-p initial-element)
 					      default-element))))
-    (assert (member et '(:any-t :character :u8 :u32 :code)))
+    (assert (member et '(:any-t :bit :character :u8 :u32 :code)))
     (when flags (break "flags: ~S" flags))
     (when (and alignment-offset (plusp alignment-offset))
       (break "alignment: ~S" alignment-offset))
@@ -673,7 +683,8 @@ integer (native lisp) value."
     :binary-type (define-enum movitz-funobj-type (u8)
 		   :standard-function 0
 		   :generic-function 1
-		   :method-function 2)
+		   :method-function 2
+		   :macro-function 3)
     :initform :standard-function
     :accessor movitz-funobj-type)
    (debug-info
@@ -1215,6 +1226,9 @@ integer (native lisp) value."
 	(write-char #\space stream)
 	(write (aref (movitz-print (slot-value object 'slots)) 0)
 	       :stream stream))))
+  object)
+
+(defmethod update-movitz-object ((object movitz-std-instance) lisp-object)
   object)
 
 ;;;;

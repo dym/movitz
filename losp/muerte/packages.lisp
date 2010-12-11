@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Aug 30 15:19:43 2001
 ;;;;                
-;;;; $Id: packages.lisp,v 1.13 2006/04/28 21:19:08 ffjeld Exp $
+;;;; $Id: packages.lisp,v 1.17 2008-04-27 19:43:37 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -25,13 +25,49 @@
 	    (:constructor make-package-object)
 	    (:conc-name package-object-))
   name
-  external-symbols
-  internal-symbols
+  (external-symbols (make-hash-table :test #'equal))
+  (internal-symbols (make-hash-table :test #'equal))
   shadowing-symbols-list
   use-list
   nicknames)
 
 (defvar *packages*)			; Set by dump-image.
+
+(deftype package-designator ()
+  '(or package string-designator))
+
+(defun make-package (name &key nicknames use)
+  (let ((name* (string name))
+        (nicknames* (mapcar #'string nicknames))
+        (use* (mapcar #'find-package use)))
+    (when (some #'null use*)
+      (warn "Cannot use nonexisting package ~S."
+            (find-if-not #'find-package use))
+      (setf use* (remove nil use*)))
+    (let ((existing-packages (remove-if-not #'find-package (cons name* nicknames*))))
+      (when existing-packages
+        (cerror "Create the package anyway."
+                "There already exist package~P by the name~:P ~{~A~^ ~}."
+                (length existing-packages)
+                existing-packages)))
+    (let ((package (make-package-object :name name*
+                                        :use-list use*
+                                        :nicknames nicknames*)))
+      (dolist (nickname nicknames*)
+        (setf (gethash nickname *packages*) package))
+      (setf (gethash name* *packages*) package))))
+
+(defun delete-package (package)
+  (let ((package (find-package package)))
+    (when (and (package-name package)
+               (eq package (find-package (package-name package))))
+      (dolist (nickname (package-nicknames package))
+        (when (eq package (gethash nickname *packages*))
+          (setf (gethash nickname *packages*) nil)))
+      (setf (gethash (package-name package) *packages*)
+            nil)
+      (setf (package-object-name package) nil)
+      t)))
 
 (defun package-name (object)
   (package-object-name (find-package object)))
@@ -45,9 +81,13 @@
 (defun find-package (name)
   (typecase name
     (package name)
-    (null (find-package 'common-lisp))	; This can be practical..
-    ((or symbol string) (find-package-string (string name)))
-    (t (error "Not a package name: ~S" name))))
+    (null
+     (find-package 'common-lisp))	; This can be practical..
+    (string-designator
+     (find-package-string (string name)))
+    (t (error 'type-error
+        :datum name
+        :expected-type 'package-designator))))
 
 (defun find-package-string (name &optional (start 0) (end (length name)) (key 'identity))
   (values (gethash-string name start end *packages* nil key)))
@@ -100,7 +140,7 @@
 	  (when (eq package (find-package :keyword))
 	    (setf (symbol-flags symbol)
 	      #.(bt:enum-value 'movitz::movitz-symbol-flags '(:constant-variable)))
-	    (setf (symbol-value symbol)
+	    (setf (%symbol-global-value symbol)
 	      symbol))))
       (unless (symbol-package symbol)
 	(setf (memref symbol (movitz-type-slot-offset 'movitz-symbol 'package)) package))
@@ -133,31 +173,33 @@
 	     (return ,result-form))
 	   (let ((,package-hash-var (package-object-external-symbols ,package-var)))
 	     (tagbody ,loop-tag
-	       (with-hash-table-iterator (,next-symbol ,package-hash-var)
-		 (tagbody ,loop-tag
-		   (multiple-value-bind (,more-symbols-var ,dummy ,symbol-var)
-		       (,next-symbol)
-		     (declare (ignore ,dummy))
-		     (unless ,more-symbols-var (go ,end-tag))
-		     (let ((,var ,symbol-var))
-		       ,@declarations-and-body))
-		   (go ,loop-tag)
-		   ,end-tag))
-	       (let ((internals (package-object-internal-symbols ,package-var)))
-		 (unless (eq ,package-hash-var internals)
-		   (setf ,package-hash-var internals)
-		   (go ,loop-tag))))))))))
+		(with-hash-table-iterator (,next-symbol ,package-hash-var)
+		  (tagbody ,loop-tag
+		     (multiple-value-bind (,more-symbols-var ,dummy ,symbol-var)
+			 (,next-symbol)
+		       (declare (ignore ,dummy))
+		       (unless ,more-symbols-var (go ,end-tag))
+		       (prog ((,var ,symbol-var))
+			  ,@declarations-and-body))
+		     (go ,loop-tag)
+		     ,end-tag))
+		(let ((internals (package-object-internal-symbols ,package-var)))
+		  (unless (eq ,package-hash-var internals)
+		    (setf ,package-hash-var internals)
+		    (go ,loop-tag))))))))))
 
 (defmacro do-external-symbols
-    ((var &optional (package *package*) result-form) &body declarations-and-body)
+    ((var &optional (package '*package*) result-form) &body declarations-and-body)
   (let ((next-var (gensym))
 	(more-var (gensym))
 	(key-var (gensym)))
     `(with-hash-table-iterator (,next-var (package-object-external-symbols (assert-package ,package)))
        (do () (nil)
 	 (multiple-value-bind (,more-var ,key-var ,var) (,next-var)
-	   (unless ,more-var (return ,result-form))
-	   (let () ,@declarations-and-body))))))
+	   (unless ,more-var
+	     (return ,result-form))
+	   (prog ()
+	      ,@declarations-and-body))))))
 
 (defmacro do-symbols ((var &optional (package '*package*) result-form) &body declarations-and-body)
   (let ((state-var (gensym))
@@ -175,35 +217,64 @@
 			      (1 (package-object-internal-symbols ,package-object-var))
 			      (t (let ((x (pop ,use-list-var)))
 				   (and x (package-object-external-symbols x)))))))
-	 ((not ,hash-table-var) ,result-form)
+	  ((not ,hash-table-var) ,result-form)
        (declare (index ,state-var))
        (with-hash-table-iterator (,next-var ,hash-table-var)
 	 (do () (nil)
 	   (multiple-value-bind (,more-var ,key-var ,var) (,next-var)
 	     (declare (ignore ,key-var))
 	     (if ,more-var
-		 (let () ,@declarations-and-body)
-	       (return))))))))
+		 (prog ()
+		    ,@declarations-and-body)
+		 (return))))))))
 
 (defun apropos (string &optional package)
   (flet ((apropos-symbol (symbol string)
 	   (when (search string (symbol-name symbol) :test #'char-equal)
 	     (cond
-	      ((keywordp symbol)
-	       (format t "~&~W == keyword~%" symbol))
-	      ((fboundp symbol)
-	       (format t "~&~W == function ~:A~%"
-		       symbol (funobj-lambda-list (symbol-function symbol))))
-	      ((boundp symbol)
-	       (format t "~&~W == variable ~S~%"
-		       symbol (symbol-value symbol)))
-	      (t (format t "~&~W~%" symbol))))))
+	       ((keywordp symbol)
+		(format t "~&~W == keyword~%" symbol))
+	       ((fboundp symbol)
+		(format t "~&~W == function ~:A~%"
+			symbol (funobj-lambda-list (symbol-function symbol))))
+	       ((boundp symbol)
+		(format t "~&~W == variable ~S~%"
+			symbol (symbol-value symbol)))
+	       (t (format t "~&~W~%" symbol))))))
     (let ((string (string string)))
       (if package
 	  (do-symbols (symbol package)
 	    (apropos-symbol symbol string))
-	(do-all-symbols (symbol)
-	  (apropos-symbol symbol string)))))
+	  (do-all-symbols (symbol)
+	    (apropos-symbol symbol string)))))
   (values))
 
+(defun package-used-by-list (package)
+  "Return a list of all packages that use package."
+  (let ((package (find-package package)))
+    (let ((used-by-list nil))
+      (maphash (lambda (name other-package)
+		 (declare (ignore name))
+		 (when (member package
+			       (package-object-use-list other-package)
+			       :test #'eq)
+		   (pushnew other-package used-by-list)))
+	       *packages*)
+      used-by-list)))
 
+(defun list-all-packages ()
+  (with-hash-table-iterator (p *packages*)
+    (do (packages) (nil)
+      (multiple-value-bind (more k v)
+	  (p)
+	(declare (ignore k))
+	(when (not more)
+	  (return packages))
+	(push v packages)))))
+
+
+(defmacro with-package-iterator ((name package-list-form &rest symbol-types) &body body)
+  `(macrolet ((,name ()
+		'(warn "with-package-iterator not implemented."
+		  (values nil nil nil nil))))
+     ,@body))

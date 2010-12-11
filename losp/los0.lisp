@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  1 18:08:32 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: los0.lisp,v 1.51 2007/04/09 17:30:15 ffjeld Exp $
+;;;; $Id: los0.lisp,v 1.52 2008-04-17 19:31:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -30,10 +30,6 @@
 (require :lib/repl)
 
 (require :lib/threading)
-(require :lib/scheduler)
-
-(require :lib/graphics)
-
 
 ;; (require :lice-0.1/all)
 
@@ -60,7 +56,7 @@
 (in-package los0)
 
 ;; (defun load-ansi-tests ()
-;;   (load "../ansi-tests.lisp"))
+;;   (load "ansi-tests.lisp"))
 
 (defun assess-cpu-frequency ()
   "Assess the CPU's frequency in units of 1024 Hz."
@@ -137,6 +133,13 @@
 		    (+ (ash (ldb (byte 16 0) hi) 13) 
 		       (ash lo -16)))))
 	      (setf internal-time-units-per-second res))))))))
+  (setf (symbol-function 'sleep)
+    (lambda (seconds)
+      ;; A stupid busy-waiting sleeper.
+      (check-type seconds (real 0 *))
+      (loop with start-time = (get-internal-run-time)
+	  with end-time = (+ start-time (* seconds internal-time-units-per-second))
+	  while (< (get-internal-run-time) end-time))))
   (values))
 
 
@@ -398,11 +401,6 @@
   (values))
 
 
-(defun turn-on-irqs ()
-  ;; listen for timer and keyboard IRQ interrupts
-  (setf (pic8259-irq-mask) #xfffc)
-  (with-inline-assembly (:returns :nothing) (:sti)))
-
 (defun genesis ()
   ;; (install-shallow-binding)
   (setf *debugger-function* #'los0-debugger)
@@ -437,7 +435,7 @@
        (with-simple-restart (abort "Abort to the top command level.")
          (read-eval-print))))
 
-;  (set-textmode +vga-state-90x30+)
+  (set-textmode +vga-state-90x30+)
   (let ((muerte::*error-no-condition-for-debugger* t))
     (clos-bootstrap))
 
@@ -472,14 +470,12 @@
 		       *standard-input* s
 		       *terminal-io* s
 		       *debug-io* s)))
-    
+    (when (fboundp 'muerte::make-ansi-loop-universe)
+      (setf muerte::*loop-ansi-universe*
+	    (muerte::make-ansi-loop-universe nil)))
     (setf threading:*segment-descriptor-table-manager*
       (make-instance 'threading:segment-descriptor-table-manager))
-
-    (muerte.x86-pc.keyboard:setup-kbd)
-    (muerte.lib::setup-scheduling)
-   (turn-on-irqs)
-
+    
 ;;;    (ignore-errors
 ;;;     (setf (symbol-function 'write-char)
 ;;;       (muerte.x86-pc.serial::make-serial-write-char :baudrate 38400))

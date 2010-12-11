@@ -6,7 +6,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: asm.lisp,v 1.17 2008/03/06 19:18:51 ffjeld Exp $
+;;;; $Id: asm.lisp,v 1.18 2008-03-14 11:07:47 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -289,7 +289,7 @@ Secondarily, return the symtab."
 												symtab)))))
 								     `(quote ,(car entry)))))))))))))
     (values (loop for (pc data-instruction) on proglist0 by #'cddr
-	       for (data . instruction) = data-instruction
+	       for instruction = (cdr data-instruction)
 	       for label = (when collect-labels
 			     (rassoc pc symtab))
 	       when label

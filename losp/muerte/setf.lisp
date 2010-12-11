@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Feb  8 20:43:20 2001
 ;;;;                
-;;;; $Id: setf.lisp,v 1.6 2007/04/13 23:29:31 ffjeld Exp $
+;;;; $Id: setf.lisp,v 1.7 2008-03-21 00:20:22 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -59,6 +59,14 @@
                              (list store-var)
                              `(funcall #'(setf ,(car place)) ,store-var ,@arglist)
                              (list* (car place) arglist)))))))))))
+
+(eval-when (:load-toplevel)
+  (defun get-setf-expansion (place &optional env)
+    (cond
+      ((symbolp place)
+       (let ((store-var (gensym "store-var-")))
+	 (values nil nil (list store-var) `(setq ,place ,store-var) place)))
+      (t (error "Place ~S not implemented.")))))
 
 
 ;;;(defsetf subseq (sequence start &optional end) (new-sequence)

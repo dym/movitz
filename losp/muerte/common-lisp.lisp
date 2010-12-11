@@ -9,14 +9,21 @@
 ;;;; Created at:    Wed Nov  8 18:41:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: common-lisp.lisp,v 1.14 2006/04/07 21:48:41 ffjeld Exp $
+;;;; $Id: common-lisp.lisp,v 1.18 2008-03-20 22:21:00 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
+(require :muerte/defmacro-bootstrap)
 (require :muerte/basic-macros)
 (require :muerte/setf)
 (require :muerte/more-macros)
 (require :muerte/arithmetic-macros)
+
+(require :muerte/defmacro-runtime)
+(include :muerte/basic-macros)
+(include :muerte/more-macros)
+(include :muerte/arithmetic-macros)
+
 (require :muerte/memref)
 (require :muerte/integers)
 (require :muerte/basic-functions)
@@ -37,6 +44,8 @@
 (require :muerte/run-time-context)
 (require :muerte/defstruct)
 (require :muerte/hash-tables)
+(require :muerte/pathnames)
+(require :muerte/complexes)
 (require :muerte/ratios)
 (require :muerte/packages)
 (require :muerte/format)

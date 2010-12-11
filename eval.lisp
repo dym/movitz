@@ -9,7 +9,7 @@
 ;;;; Created at:    Thu Nov  2 17:45:05 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: eval.lisp,v 1.12 2007/03/11 21:18:40 ffjeld Exp $
+;;;; $Id: eval.lisp,v 1.13 2008-04-27 19:17:17 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -76,10 +76,17 @@
 	       ((muerte.cl:quote) t)
 	       ((muerte.cl:not)
 		(movitz-constantp (second form)))
-	       ((muerte.cl:+ muerte.cl:- muerte.cl:* muerte.cl:coerce)
+	       ((muerte.cl:+ muerte.cl:- muerte.cl:*)
 		(every (lambda (sub-form)
 			 (movitz-constantp sub-form env))
-		       (cdr form)))))
+		       (cdr form)))
+	       ((muerte.cl:coerce)
+		(and (= 3 (length form))
+		     (every (lambda (sub-form)
+			      (movitz-constantp sub-form env))
+			    (cdr form))
+		     (not (member (movitz-eval (third form) env)
+				  '(muerte.cl:function)))))))
 	   (and compiler-macro-function
 		(not (movitz-env-get (car form) 'notinline nil env))
 		(not (eq form compiler-macro-expansion))

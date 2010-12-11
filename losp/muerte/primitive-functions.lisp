@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Tue Oct  2 21:02:18 2001
 ;;;;                
-;;;; $Id: primitive-functions.lisp,v 1.69 2007/02/19 21:58:27 ffjeld Exp $
+;;;; $Id: primitive-functions.lisp,v 1.71 2008-03-21 22:28:26 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -72,11 +72,9 @@
      ,docstring
      (with-inline-assembly (:returns :nothing)
        (:movl :esi :edx)		; parameter for standard-gf-function.
-       (:movl (:esi ,(bt:slot-offset 'movitz::movitz-funobj-standard-gf
-				     (intern (symbol-name to) :movitz)))
+       (:movl (:esi (:offset movitz-funobj-standard-gf ,to))
 	      :esi)
-       (:jmp (:esi ,(bt:slot-offset 'movitz::movitz-funobj
-				    (intern (symbol-name forward) :movitz)))))))
+       (:jmp (:esi  (:offset movitz-funobj ,forward))))))
   
 (define-gf-dispatcher standard-gf-dispatcher ()
   "The code-vector of standard-gf instances." code-vector standard-gf-function)
@@ -140,7 +138,7 @@ it's supposed to have been found by e.g. dynamic-locate-catch-tag."
     
    search-loop
     (:jecxz '(:sub-program () (:int 63)))
-    (:locally (:bound (:edi (:edi-offset stack-bottom)) :ecx))
+    ;; (:locally (:bound (:edi (:edi-offset stack-bottom)) :ecx))
 
     (:cmpl :ecx :eax)
     (:je 'found-dynamic-env)
@@ -582,6 +580,8 @@ BUFFER-SIZE is the number of words in the buffer."
      (find-class 'function))
     (structure-object
      (structure-object-class object))
+    (macro-function
+     (find-class 'macro-function))
     (character
      (find-class 'character))
     (null

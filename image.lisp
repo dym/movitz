@@ -9,7 +9,7 @@
 ;;;; Created at:    Sun Oct 22 00:22:43 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: image.lisp,v 1.116 2008/02/24 12:13:06 ffjeld Exp $
+;;;; $Id: image.lisp,v 1.126 2008-07-18 13:15:40 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -839,14 +839,15 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
   (values))
 
 (defun dump-image (&key (path *default-image-file*) ((:image *image*) *image*)
-                   (multiboot-p t) ignore-dump-count (qemu-align-p t))
+                   (multiboot-p t) ignore-dump-count (qemu-align :floppy))
   "When <multiboot-p> is true, include a MultiBoot-compliant header in the image."
   (when (and (not ignore-dump-count)
 	     (= 0 (dump-count *image*)))
     ;; This is a hack to deal with the fact that the first dump won't work
     ;; because the packages aren't properly set up.
     (format t "~&;; Doing initiating dump..")
-    (dump-image :path path :multiboot-p multiboot-p :ignore-dump-count t)
+    (dump-image :path path :multiboot-p multiboot-p :ignore-dump-count t
+		:qemu-align nil)
     (assert (plusp (dump-count *image*))))
   (setf (movitz-symbol-value (movitz-read 'muerte:*build-number*))
     (1+ *bootblock-build*))
@@ -894,14 +895,13 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 	  (unless (typep (movitz-env-named-function (car cf) nil)
 			 'movitz-funobj)
 	    (warn "Function ~S is called (in ~S) but not defined." (car cf) (cdr cf))))
-	(maphash #'(lambda (symbol function-value)
-		     (let ((movitz-symbol (movitz-read symbol)))
-		       (if (typep function-value 'movitz-object)
-			   ;; (warn "SETTING ~A's funval to ~A"
-			 ;; movitz-symbol function-value)
-			   (setf (movitz-symbol-function-value movitz-symbol)
-			     function-value)
-			 #+ignore (warn "fv: ~W" (movitz-macro-expander-function function-value)))))
+	(maphash (lambda (symbol function-value)
+		   (let ((movitz-symbol (movitz-read symbol)))
+		     (etypecase function-value
+		       (movitz-funobj
+			(setf (movitz-symbol-function-value movitz-symbol) function-value))
+		       (movitz-macro
+			#+ignore (warn "fv: ~S ~S ~S" symbol function-value (movitz-env-get symbol :macro-expansion))))))
 		 (movitz-environment-function-cells (image-global-environment *image*)))
 	(let ((run-time-context (image-run-time-context *image*)))
 	  ;; pull in functions in run-time-context
@@ -958,7 +958,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 				 :num-elements #x3ffe
 				 :fill-pointer 0
 				 :symbolic-data nil
-				 :element-type :u32))
+				 :element-type :stack))
 		 (image-start (file-position stream)))
 	    (dump-image-core *image* stream) ; dump the kernel proper.
 	    ;; make a stack-vector for the root run-time-context
@@ -970,8 +970,8 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		   (image-end (file-position stream))
 		   (kernel-size (- image-end image-start)))
 	      (format t "~&;; Kernel size: ~D octets.~%" kernel-size)
-              (cond
-                (qemu-align-p
+              (ecase qemu-align
+		(:floppy
                  ;; QEMU is rather stupid about "auto-detecting" floppy geometries.
                  (loop for qemu-geo in '(320 360 640 720 720 820 840 1440 1440 1600 1640 1660 1760 2080 2240 2400
                                          2880 2952 2988 3200 3200 3360 3444 3486 3520 3680 3840 5760 6240 6400 7040 7680)
@@ -981,13 +981,19 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
                           (write-byte #x0 stream)
                           (return))
                      finally
-                      (cerror "Never mind, dump the image."
-                              "No matching QEMU floppy geometry for size ~,2F MB." (/ image-end (* 1024 1024)))))
-                (t (let ((align-image-size 512)) ; Ensure image is multiple of x octets
-                     (unless (zerop (mod image-end align-image-size))
-                       (set-file-position stream (+ image-end (- (1- align-image-size) (mod image-end 512)))
-                                          'pad-image-tail)
-                       (write-byte #x0 stream)))))         
+                      (cerror "Never mind, dump the image without any QEMU geometry alignment."
+                              "No matching QEMU floppy geometry for size ~,2F MB."
+			      (/ image-end (* 1024 1024)))))
+		(:hd (let ((align-image-size (* 512 16 63))) ; Ensure image is multiple of x octets
+		       (unless (zerop (mod image-end align-image-size))
+			 (set-file-position stream (+ image-end (- (1- align-image-size) (mod image-end 512)))
+					    'pad-image-tail)
+			 (write-byte #x0 stream))))
+		((nil) (let ((align-image-size (* 512 1))) ; Ensure image is multiple of x octets
+			 (unless (zerop (mod image-end align-image-size))
+			   (set-file-position stream (+ image-end (- (1- align-image-size) (mod image-end 512)))
+					      'pad-image-tail)
+			   (write-byte #x0 stream)))))
 	      (format t "~&;; Image file size: ~D octets.~%" image-end)
 	      ;; Write simple stage1 bootblock into sector 0..
 	      (format t "~&;; Dump count: ~D." (incf (dump-count *image*)))
@@ -1016,7 +1022,7 @@ a cons is an offset (the car) from some other code-vector (the cdr)."
 		  (set-file-position stream (global-slot-position 'stack-vector) 'stack-vector)
 		  (write-binary 'word stream stack-vector-word)
 		  (set-file-position stream (global-slot-position 'stack-bottom) 'stack-bottom)
-		  (write-binary 'lu32 stream (+ 8 (* 4 4096) ; cushion
+		  (write-binary 'lu32 stream (+ 8 (* 8 4096) ; cushion
 						(- stack-vector-word (tag :other))))
 		  (set-file-position stream (global-slot-position 'stack-top) 'stack-top)
 		  (write-binary 'lu32 stream (+ 8 (- stack-vector-word (tag :other))
@@ -1133,7 +1139,13 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 		    sum)))))
 
 (defun intern-movitz-symbol (name)
-  (assert (not (eq (symbol-package name) (find-package :common-lisp)))
+  (assert (not (member (symbol-package name)
+		       '(:common-lisp :movitz)
+		       :key #'find-package))
+      (name)
+    "Trying to movitz-intern a symbol in the ~A package: ~S" (symbol-package name) name)
+  (assert (not (eq (symbol-package name)
+		   (find-package :movitz)))
       (name)
     "Trying to movitz-intern a symbol in the Common-Lisp package: ~S" name)
   (or (gethash name (image-oblist *image*))
@@ -1169,12 +1181,18 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 				  name symbol)
 		   name)))
 	     (ensure-package (package-name lisp-package &optional context)
-	       (assert (not (member (package-name lisp-package)
-				    #+allegro '(excl common-lisp sys aclmop)
-				    #-allegro '(common-lisp)
-				    :test #'string=)) ()
-		 "I don't think you really want to dump the package ~A ~@[for symbol ~S~] with Movitz."
-		 lisp-package context)
+	       (restart-case (assert (not (member (package-name lisp-package)
+						  '(common-lisp movitz
+						    #+allegro excl
+						    #+allegro sys
+						    #+allegro aclmop
+						    #+sbcl sb-ext)
+						  :test #'string=)) ()
+						  "I don't think you really want to dump the package ~A ~@[for symbol ~S~] with Movitz."
+						  lisp-package context)
+		 (use-muerte ()
+		   :report "Substitute the muerte pacakge."
+		   (return-from ensure-package (ensure-package :muerte (find-package :muerte)))))
 	       (setf (gethash lisp-package lisp-to-movitz-package)
 		 (or (gethash package-name packages-hash nil)
 		     (let* ((nicks (mapcar #'movitz-package-name (package-nicknames lisp-package)))
@@ -1196,6 +1214,8 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 					       (find-package :muerte.common-lisp))))
 	(setf (gethash "NIL" (funcall 'muerte:package-object-external-symbols movitz-cl-package))
 	  nil))
+      (ensure-package (symbol-name :common-lisp-user)
+		      (find-package :muerte.common-lisp-user))
       (loop for symbol being the hash-key of (image-oblist *image*)
 	  as lisp-package = (symbol-package symbol)
 	  as package-name = (and lisp-package
@@ -1226,15 +1246,13 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 			  'package)
 	  (movitz-read (ensure-package (string :common-lisp) :muerte.common-lisp)))
 	(loop for symbol being the hash-key of (image-oblist *image*)
-	    as lisp-package = (symbol-package symbol)
-	    as package-name = (and lisp-package
-				   (movitz-package-name (package-name lisp-package) symbol))
-;;;	    do (when (string= symbol :method)
-;;;		 (warn "XXXX ~S ~S ~S" symbol lisp-package package-name))
-	    when package-name
-	    do (let* ((movitz-package (ensure-package package-name lisp-package symbol)))
-		 (setf (movitz-symbol-package (movitz-read symbol))
-		   (movitz-read movitz-package))))
+	   as lisp-package = (symbol-package symbol)
+	   as package-name = (and lisp-package
+				  (movitz-package-name (package-name lisp-package) symbol))
+	   when package-name
+	   do (let* ((movitz-package (ensure-package package-name lisp-package symbol)))
+		(setf (movitz-symbol-package (movitz-read symbol))
+		      (movitz-read movitz-package))))
 	movitz-packages))))
 
 
@@ -1280,6 +1298,7 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
      when (and funobj
 	       (typep operand 'asm:indirect-operand)
 	       (member :esi operand)
+	       (= 2 (length operand))
 	       (<= 12 (asm:indirect-operand-offset operand)))
      collect (format nil "~A"
 		     (nth (truncate (- (+ (asm:indirect-operand-offset operand)
@@ -1460,8 +1479,10 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
 	      (length (movitz-funobj-const-list funobj))
 	      (movitz-funobj-const-list funobj)
 	      (loop with pc = 0
-		 for (data . instruction) in (asm:disassemble-proglist code :symtab (movitz-funobj-symtab funobj)
-									    :collect-data t)
+		 for (data . instruction) in (let ((asm-x86:*cpu-mode* :32-bit))
+					       (asm:disassemble-proglist code
+									 :symtab (movitz-funobj-symtab funobj)
+									 :collect-data t))
 		 when (assoc pc entry-points)
 		 collect (list pc nil
 			       (format nil "  => Entry-point for ~D arguments <=" (cdr (assoc pc entry-points)))
@@ -1624,63 +1645,83 @@ In sum this accounts for ~,1F%, or ~D bytes.~%;;~%"
   (with-movitz-read-context ()
     (when (typep expr 'movitz-object)
       (return-from movitz-read expr))
-    (or (and (not re-read)
-	     (let ((old-object (image-lisp-to-movitz-object *image* expr)))
-	       (when (and old-object (not (gethash old-object *movitz-reader-clean-map*)))
-		 (update-movitz-object old-object expr)
-		 (setf (gethash old-object *movitz-reader-clean-map*) t))
-	       old-object))
+    (or (unless re-read
+	  (let ((old-object (image-lisp-to-movitz-object *image* expr)))
+	    (when (and old-object
+		       (not (gethash old-object *movitz-reader-clean-map*)))
+	      (setf (gethash old-object *movitz-reader-clean-map*) t)
+	      (update-movitz-object old-object expr))
+	    old-object))
 	(setf (image-lisp-to-movitz-object *image* expr)
-	  (etypecase expr
-	    (null *movitz-nil*)
-	    ((member t) (movitz-read 'muerte.cl:t))
-	    ((eql unbound) (make-instance 'movitz-unbound-value))
-	    (symbol (intern-movitz-symbol expr))
-	    (integer (make-movitz-integer expr))
-	    (character (make-movitz-character expr))
-	    (string (or (gethash expr (image-string-constants *image*))
-			(setf (gethash expr (image-string-constants *image*))
-			  (make-movitz-string expr))))
-	    (vector (make-movitz-vector (length expr)
-					:element-type (array-element-type expr)
-					:initial-contents expr))
-	    (cons
-	     (or (let ((old-cons (gethash expr (image-cons-constants *image*))))
-		   (when old-cons
-		     (update-movitz-object old-cons expr)
-		     old-cons))
-		 (setf (gethash expr (image-cons-constants *image*))
-		   (if (eq '#0=#:error (ignore-errors (when (not (list-length expr)) '#0#)))
-		       (multiple-value-bind (unfolded-expr cdr-index)
-			   (unfold-circular-list expr)
-			 (let ((result (movitz-read unfolded-expr)))
-			   (setf (movitz-last-cdr result)
-			     (movitz-nthcdr cdr-index result))
-			   result))
-		     (make-movitz-cons (movitz-read (car expr))
-				       (movitz-read (cdr expr)))))))
-	    (hash-table
-	     (make-movitz-hash-table expr))
-	    (ratio
-	     (make-instance 'movitz-ratio
-	       :value expr))
-	    (structure-object
-	     (let ((slot-descriptions (gethash (type-of expr)
-					       (image-struct-slot-descriptions *image*)
-					       nil)))
-	       (unless slot-descriptions
-		 (error "Don't know how to movitz-read struct: ~S" expr))
-	       (let ((movitz-object (make-instance 'movitz-struct
-				      :class (muerte::movitz-find-class (type-of expr))
-				      :length (length slot-descriptions))))
-		 (setf (image-lisp-to-movitz-object *image* expr) movitz-object)
-		 (setf (slot-value movitz-object 'slot-values)
-		   (mapcar #'(lambda (slot)
-			       (movitz-read (slot-value expr (if (consp slot) (car slot) slot))))
-			   slot-descriptions))
-		 movitz-object)))
-	    (float			; XXX
-	     (movitz-read (rationalize expr))))))))
+	      (etypecase expr
+		(null *movitz-nil*)
+		((member t) (movitz-read 'muerte.cl:t))
+		((eql unbound) (make-instance 'movitz-unbound-value))
+		(symbol (intern-movitz-symbol expr))
+		(integer (make-movitz-integer expr))
+		(character (make-movitz-character expr))
+		(string (or (gethash expr (image-string-constants *image*))
+			    (setf (gethash expr (image-string-constants *image*))
+				  (make-movitz-string expr))))
+		(vector (make-movitz-vector (length expr)
+					    :element-type (array-element-type expr)
+					    :initial-contents expr))
+		(cons
+		 (or (let ((old-cons (gethash expr (image-cons-constants *image*))))
+		       (when old-cons
+			 (update-movitz-object old-cons expr)
+			 old-cons))
+		     (setf (gethash expr (image-cons-constants *image*))
+			   (if (eq '#0=#:error
+				   (ignore-errors
+				     (when (not (list-length expr))
+				       '#0#)))
+			       (multiple-value-bind (unfolded-expr cdr-index)
+				   (unfold-circular-list expr)
+				 (let ((result (movitz-read unfolded-expr)))
+				   (setf (movitz-last-cdr result)
+					 (movitz-nthcdr cdr-index result))
+				   result))
+			       (make-movitz-cons (movitz-read (car expr))
+						 (movitz-read (cdr expr)))))))
+		(hash-table
+		 (make-movitz-hash-table expr))
+		(pathname
+		 (make-instance 'movitz-struct
+				:class (muerte::movitz-find-class 'muerte::pathname)
+				:length 1
+				:slot-values (list (movitz-read (namestring expr)))))
+		(complex
+		 (make-instance 'movitz-struct
+				:class (muerte::movitz-find-class 'muerte::complex)
+				:length 2
+				:slot-values (list (movitz-read (realpart expr))
+						   (movitz-read (imagpart expr)))))
+		(ratio
+		 (make-instance 'movitz-ratio
+				:value expr))
+		(structure-object
+		 (let ((slot-descriptions (gethash (type-of expr)
+						   (image-struct-slot-descriptions *image*)
+						   nil)))
+		   (unless slot-descriptions
+		     (error "Don't know how to movitz-read struct: ~S" expr))
+		   (let ((movitz-object (make-instance 'movitz-struct
+						       :class (muerte::movitz-find-class (type-of expr))
+						       :length (length slot-descriptions))))
+		     (setf (image-lisp-to-movitz-object *image* expr) movitz-object)
+		     (setf (slot-value movitz-object 'slot-values)
+			   (mapcar #'(lambda (slot)
+				       (movitz-read (slot-value expr (if (consp slot) (car slot) slot))))
+				   slot-descriptions))
+		     movitz-object)))
+		(float			; XXX
+		 (movitz-read (rationalize expr)))
+		(class
+		 (muerte::movitz-find-class (translate-program (class-name expr)
+							       :cl :muerte.cl)))
+		(array			; XXX
+		 (movitz-read nil)))))))
 
 ;;;
 

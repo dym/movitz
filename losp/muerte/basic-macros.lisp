@@ -9,48 +9,24 @@
 ;;;; Created at:    Wed Nov  8 18:44:57 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: basic-macros.lisp,v 1.70 2007/03/26 21:11:40 ffjeld Exp $
+;;;; $Id: basic-macros.lisp,v 1.79 2009-11-10 20:19:57 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
 (provide :muerte/basic-macros)
 
-;; First of all we must define DEFMACRO..
-(muerte::defmacro-compile-time muerte.cl:defmacro (name lambda-list &body macro-body)
-  (`(muerte.cl:progn
-      (muerte::defmacro-compile-time ,name ,lambda-list ,macro-body)
-      ',name)))
-
-(muerte.cl:defmacro muerte.cl:in-package (name)
-  `(progn
-     (eval-when (:compile-toplevel)
-       (in-package ,(movitz::movitzify-package-name name)))))
-
 (in-package muerte)
-
-(defmacro defmacro (name lambda-list &body macro-body)
-  `(progn
-     (defmacro-compile-time ,name ,lambda-list ,macro-body)
-     #+ignore
-     (eval-when (:compile-toplevel)
-       (let ((name (intern (symbol-name ',name))))
-	 (when (eq (symbol-package name)
-		   (find-package 'muerte.common-lisp))
-	   ;; (warn "setting ~S" name)
-	   (setf (movitz:movitz-env-get name 'macro-expansion)
-	     (list* 'lambda ',lambda-list
-		    ',macro-body)))))
-     ',name))
 
 (defmacro defun (function-name lambda-list &body body)
   "Define a function."
-;;;  (warn "defun ~S.." function-name)
   (multiple-value-bind (real-body declarations docstring)
       (movitz::parse-docstring-declarations-and-body body 'cl:declare)
     (let ((block-name (compute-function-block-name function-name)))
       `(progn
-	 (make-named-function ,function-name ,lambda-list
-			      ,declarations ,docstring
+	 (make-named-function ,function-name
+			      ,lambda-list
+			      ,declarations
+			      ,docstring
 			      (block ,block-name ,@real-body))
 	 ',function-name))))
 
@@ -114,7 +90,7 @@
       `(compiled-cond (,test-form ,then-form) (t ,else-form))
     `(compiled-cond (,test-form ,then-form))))
 
-(defmacro throw (tag result-form)
+(defmacro/cross-compilation throw (tag result-form)
   (let ((tag-var (gensym "throw-tag-")))
     `(let ((,tag-var ,tag))
        (exact-throw (find-catch-tag ,tag-var)
@@ -152,7 +128,7 @@
       `(declaim (special ,name))
     `(defparameter ,name ,value ,documentation)))
 
-(defmacro define-compile-time-variable (name value)
+(defmacro/cross-compilation define-compile-time-variable (name value)
   (let ((the-value (eval value)))
     `(progn
        (eval-when (:compile-toplevel)
@@ -163,7 +139,7 @@
        (eval-when (:load-toplevel :excute)
 	 (defvar ,name 'uninitialized-compile-time-variable)))))
 
-(defmacro let* (var-list &body declarations-and-body)
+(defmacro/cross-compilation let* (var-list &body declarations-and-body)
   (multiple-value-bind (body declarations)
       (movitz::parse-declarations-and-body declarations-and-body 'cl:declare)
     (labels ((expand (rest-vars body)
@@ -209,19 +185,59 @@
     (0 nil)
     (2 `(setq ,(first pairs) ,(second pairs)))
     (t (multiple-value-bind (setq-specs let-specs)
-	   (loop for (var form) on pairs by #'cddr
-	       as temp-var = (gensym)
-	       collect (list temp-var form) into let-specs
-	       collect var into setq-specs
-	       collect temp-var into setq-specs
-	       finally (return (values setq-specs let-specs)))
-	 `(let ,(butlast let-specs)
-	    (setq ,@(last pairs 2) ,@(butlast setq-specs 2)))))))
-  
+	   (do (ss ls (p pairs))
+	       ((endp p)
+		(values (nreverse ss)
+			(nreverse ls)))
+	     (let ((var (pop p))
+		   (form (pop p))
+		   (temp-var (gensym)))
+	       (push (list temp-var form) ls)
+	       (push var ss)
+	       (push temp-var ss)))
+	 `(let ,let-specs
+	    (setq ,@setq-specs))))))
+
 (defmacro return (&optional (result-form nil result-form-p))
   (if result-form-p
       `(return-from nil ,result-form)
     `(return-from nil)))
+
+(defmacro do (var-specs (end-test-form &rest result-forms) &body declarations-and-body)
+  (flet ((var-spec-let-spec (var-spec)
+	   (cond
+	     ((symbolp var-spec)
+	      var-spec)
+	     ((cddr var-spec)
+	      (subseq var-spec 0 2))
+	     (t var-spec)))
+	 (var-spec-var (spec)
+	   (if (symbolp spec) spec (car spec)))
+	 (var-spec-step-form (var-spec)
+	   (and (listp var-spec)
+		(= 3 (list-length var-spec))
+		(or (third var-spec)
+		    '(quote nil)))))
+    (multiple-value-bind (body declarations)
+	(parse-declarations-and-body declarations-and-body)
+      (let* ((loop-tag (gensym "do-loop"))
+	     (start-tag (gensym "do-start")))
+	`(block nil
+	   (let ,(mapcar #'var-spec-let-spec var-specs)
+	     (declare ,@declarations)
+	     (tagbody
+		(go ,start-tag)
+		,loop-tag
+		,@body
+		(psetq ,@(mapcan (lambda (var-spec)
+				   (let ((step-form (var-spec-step-form var-spec)))
+				     (when step-form
+				       (list (var-spec-var var-spec)
+					     step-form))))
+				 var-specs))
+		,start-tag
+		(unless ,end-test-form (go ,loop-tag)))
+	     ,@result-forms))))))
 
 (define-compiler-macro do (var-specs (end-test-form &rest result-forms) &body declarations-and-body)
   (flet ((var-spec-let-spec (var-spec)
@@ -239,16 +255,16 @@
 		(or (third var-spec)
 		    '(quote nil)))))
     (multiple-value-bind (body declarations)
-	(movitz::parse-declarations-and-body declarations-and-body 'cl:declare)
+	(parse-declarations-and-body declarations-and-body 'cl:declare)
       (let* ((loop-tag (gensym "do-loop"))
 	     (start-tag (gensym "do-start")))
 	`(block nil
 	   (let ,(mapcar #'var-spec-let-spec var-specs)
 	     (declare ,@declarations (loop-tag ,loop-tag))
 	     (tagbody
-	       ,(unless (and (movitz:movitz-constantp end-test-form)
-			     (not (movitz::movitz-eval end-test-form)))
-		  `(go ,start-tag))
+		,(unless (and (movitz:movitz-constantp end-test-form)
+			      (not (movitz::movitz-eval end-test-form)))
+			 `(go ,start-tag))
 	       ,loop-tag
 	       ,@body
 	       (psetq ,@(loop for var-spec in var-specs
@@ -262,11 +278,11 @@
 (defmacro do* (var-specs (end-test-form &rest result-forms) &body declarations-and-body)
   (flet ((var-spec-let-spec (var-spec)
 	   (cond
-	    ((symbolp var-spec)
-	     var-spec)
-	    ((cddr var-spec)
-	     (subseq var-spec 0 2))
-	    (t var-spec)))
+	     ((symbolp var-spec)
+	      var-spec)
+	     ((cddr var-spec)
+	      (subseq var-spec 0 2))
+	     (t var-spec)))
 	 (var-spec-var (var-spec)
 	   (if (symbolp var-spec) var-spec (car var-spec)))
 	 (var-spec-step-form (var-spec)
@@ -275,22 +291,24 @@
 		(or (third var-spec)
 		    '(quote nil)))))
     (multiple-value-bind (body declarations)
-	(movitz::parse-declarations-and-body declarations-and-body 'cl:declare)
+	(parse-declarations-and-body declarations-and-body)
       (let* ((loop-tag (gensym "do*-loop"))
 	     (start-tag (gensym "do*-start")))
 	`(block nil
 	   (let* ,(mapcar #'var-spec-let-spec var-specs)
 	     (declare ,@declarations)
 	     (tagbody
-	       (go ,start-tag)
-	       ,loop-tag
-	       ,@body
-	       (setq ,@(loop for var-spec in var-specs
-			   as step-form = (var-spec-step-form var-spec)
-			   when step-form
-			   append (list (var-spec-var var-spec) step-form)))
-	       ,start-tag
-	       (unless ,end-test-form (go ,loop-tag)))
+		(go ,start-tag)
+		,loop-tag
+		,@body
+		(setq ,@(mapcan (lambda (var-spec)
+				  (let ((step-form (var-spec-step-form var-spec)))
+				    (when step-form
+				      (list (var-spec-var var-spec)
+					    step-form))))
+				var-specs))
+		,start-tag
+		(unless ,end-test-form (go ,loop-tag)))
 	     ,@result-forms))))))
 
 (define-compiler-macro do* (var-specs (end-test-form &rest result-forms) &body declarations-and-body)
@@ -324,26 +342,24 @@
 
 
 (defmacro case (keyform &rest clauses)
-  (flet ((otherwise-clause-p (x)
-	   (member (car x) '(t otherwise))))
-    (let ((key-var (make-symbol "case-key-var")))
-      `(let ((,key-var ,keyform))
-	 (cond
-	  ,@(loop for clause-head on clauses
-		as clause = (first clause-head)
-		as keys =  (first clause)
-		as forms = (rest clause)
-			   ;; do (warn "clause: ~S, op: ~S" clause (otherwise-clause-p clause))
-		if (and (endp (rest clause-head)) (otherwise-clause-p clause))
-		collect (cons t forms)
-		else if (otherwise-clause-p clause)
-		do (error "Case's otherwise clause must be the last clause.")
-		else if (atom keys)
-		collect `((eql ,key-var ',keys) ,@forms)
-		else collect `((or ,@(mapcar #'(lambda (c)
-						 `(eql ,key-var ',c))
-					     keys))
-			       ,@forms)))))))
+  (let ((key-var (make-symbol "case-key-var")))
+    `(let ((,key-var ,keyform))
+       (cond
+	 ,@(mapcar (lambda (clause)
+		     (destructuring-bind (keys . forms)
+			 clause
+		       (let ((forms (or forms '(nil))))
+                         (cond
+                           ((or (eq keys 't)
+                                (eq keys 'otherwise))
+                            `(t ,@forms))
+                           ((not (listp keys))
+                            `((eql ,key-var ',keys) ,@forms))
+                           (t `((or ,@(mapcar (lambda (k)
+                                                `(eql ,key-var ',k))
+                                              keys))
+                                ,@forms))))))
+		   clauses)))))
 
 (define-compiler-macro case (keyform &rest clauses)
   (case (length clauses)
@@ -359,11 +375,18 @@
 		`(compiled-case ,keyform ,@clauses))))))
     (t `(compiled-case ,keyform ,@clauses))))
 
-(defmacro ecase (keyform &rest clauses)
-  ;; "Not quite implemented.."
-  `(case ,keyform ,@clauses (t (error "~S fell through an ecase where the legal cases were ~S"
-				      ,keyform
-				      ',(mapcar #'first clauses)))))
+(defmacro ecase (keyform &rest clauses) 	 
+  (let ((ecase-var (gensym))) 	 
+    `(let ((,ecase-var ,keyform)) 	 
+       (case ,ecase-var 	 
+	 ,@clauses 	 
+	 (t (ecase-error ,ecase-var 	 
+			 ',(mapcan (lambda (clause) 	 
+				     (let ((x (car clause))) 	 
+				       (if (atom x) 	 
+					   (list x) 	 
+					   (copy-list x)))) 	 
+				   clauses)))))))
 
 (define-compiler-macro asm-register (register-name)
   (if (member register-name '(:eax :ebx :ecx :untagged-fixnum-ecx :edx))
@@ -371,7 +394,7 @@
     `(with-inline-assembly (:returns :eax)
        (:movl ,register-name :eax))))
 
-(defmacro movitz-accessor (object-form type slot-name)
+(defmacro/cross-compilation movitz-accessor (object-form type slot-name)
   (warn "movitz-accesor deprecated.")
   `(with-inline-assembly (:returns :register :side-effects nil)
      (:compile-form (:result-mode :eax) ,object-form)
@@ -380,7 +403,7 @@
 				   (find-symbol (string slot-name) :movitz)))
 	    (:result-register))))
 
-(defmacro setf-movitz-accessor ((object-form type slot-name) value-form)
+(defmacro/cross-compilation setf-movitz-accessor ((object-form type slot-name) value-form)
   (warn "setf-movitz-accesor deprecated.")
   `(with-inline-assembly (:returns :eax :side-effects t)
      (:compile-two-forms (:eax :ebx) ,value-form ,object-form)
@@ -388,23 +411,23 @@
       :movl :eax (:ebx ,(bt:slot-offset (find-symbol (string type) :movitz)
 					(find-symbol (string slot-name) :movitz))))))
 
-(defmacro movitz-accessor-u16 (object-form type slot-name)
-  `(with-inline-assembly (:returns :eax)
-     (:compile-form (:result-mode :eax) ,object-form)
-     (:movzxw (:eax ,(bt:slot-offset (find-symbol (string type) :movitz)
-				     (find-symbol (string slot-name) :movitz)))
-	      :ecx)
-     (:leal ((:ecx #.movitz::+movitz-fixnum-factor+) :edi ,(- (movitz::image-nil-word movitz::*image*)))
-	    :eax)))
+;; (defmacro movitz-accessor-u16 (object-form type slot-name)
+;;   `(with-inline-assembly (:returns :eax)
+;;      (:compile-form (:result-mode :eax) ,object-form)
+;;      (:movzxw (:eax ,(bt:slot-offset (find-symbol (string type) :movitz)
+;; 				     (find-symbol (string slot-name) :movitz)))
+;; 	      :ecx)
+;;      (:leal ((:ecx #.movitz::+movitz-fixnum-factor+) :edi ,(- (movitz::image-nil-word movitz::*image*)))
+;; 	    :eax)))
 
-(defmacro set-movitz-accessor-u16 (object-form type slot-name value)
-  `(with-inline-assembly (:returns :eax)
-     (:compile-two-forms (:eax :ecx) ,object-form ,value)
-     (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
-     (:movw :cx (:eax ,(bt:slot-offset (find-symbol (string type) :movitz)
-				       (find-symbol (string slot-name) :movitz))))
-     (:leal ((:ecx #.movitz::+movitz-fixnum-factor+) :edi ,(- (movitz::image-nil-word movitz::*image*)))
-	    :eax)))
+;; (defmacro set-movitz-accessor-u16 (object-form type slot-name value)
+;;   `(with-inline-assembly (:returns :eax)
+;;      (:compile-two-forms (:eax :ecx) ,object-form ,value)
+;;      (:shrl ,movitz::+movitz-fixnum-shift+ :ecx)
+;;      (:movw :cx (:eax ,(bt:slot-offset (find-symbol (string type) :movitz)
+;; 				       (find-symbol (string slot-name) :movitz))))
+;;      (:leal ((:ecx #.movitz::+movitz-fixnum-factor+) :edi ,(- (movitz::image-nil-word movitz::*image*)))
+;; 	    :eax)))
 
 (define-compiler-macro movitz-type-word-size (type &environment env)
   (if (not (movitz:movitz-constantp type env))
@@ -500,13 +523,12 @@
     `(block nil (let* ,variable-list (declare ,@declarations) (tagbody ,@body)))))
 
 (defmacro multiple-value-setq (vars form)
-  (let ((tmp-vars (loop repeat (length vars) collect (gensym))))
+  (let ((tmp-vars (mapcar (lambda (v)
+			    (declare (ignore v))
+			    (gensym))
+			  vars)))
     `(multiple-value-bind ,tmp-vars ,form
-       (setq ,@(loop for v in vars and tmp in tmp-vars collect v collect tmp)))))
-
-;;;(defmacro declaim (&rest declarations)
-;;;  (movitz::movitz-env-load-declarations declarations nil :declaim)
-;;;  (values))
+       (setq ,@(mapcan #'list vars tmp-vars)))))
 
 (define-compiler-macro defconstant (name initial-value &optional documentation)
   (declare (ignore documentation))
@@ -528,16 +550,19 @@
 	       (symbol-value movitz-name) movitz-value)))
      (declaim (muerte::constant-variable ,name))))
 
-(defmacro define-symbol-macro (symbol expansion)
+(define-compile-time-variable *symbol-macros* (make-hash-table :test #'eq))
+
+(defmacro/cross-compilation define-symbol-macro (symbol expansion)
   (check-type symbol symbol "a symbol-macro symbol")
   `(progn
      (eval-when (:compile-toplevel)
        (movitz::movitz-env-add-binding nil (make-instance 'movitz::symbol-macro-binding
-					:name ',symbol
-					:expander (lambda (form env)
-						    (declare (ignore form env))
-						    (movitz::translate-program ',expansion
-									     :cl :muerte.cl)))))
+                                            :name ',symbol
+                                            :expander (lambda (form env)
+                                                        (declare (ignore form env))
+                                                        (movitz::translate-program ',expansion
+                                                         :cl :muerte.cl)))))
+     (setf (gethash ',symbol *symbol-macros*) ',expansion)
      ',symbol))
 
 (defmacro check-type (place type &optional type-string)
@@ -696,7 +721,7 @@
     (t form)))
 
 
-(defmacro with-unbound-protect (x &body error-continuation &environment env)
+(defmacro/cross-compilation with-unbound-protect (x &body error-continuation &environment env)
   (cond
    ((movitz:movitz-constantp x env)
     `(values ,x))
@@ -901,7 +926,7 @@
 (defmacro lambda (&whole form)
   `(function ,form))
 
-(defmacro backquote (form)
+(defmacro/cross-compilation backquote (form)
   (typecase form
     (list
      (if (eq 'backquote-comma (car form))
@@ -961,7 +986,7 @@
      (:andl #x7 :ecx)
      (:call (:edi (:ecx 4) ,(movitz::global-constant-offset 'fast-class-of)))))
 
-(defmacro std-instance-reader (slot instance-form)
+(defmacro/cross-compilation std-instance-reader (slot instance-form)
   (let ((slot (intern (symbol-name slot) :movitz)))
     `(with-inline-assembly-case ()
        (do-case (:ecx)
@@ -977,7 +1002,7 @@
 	  :movl ((:result-register) ,(bt:slot-offset 'movitz::movitz-std-instance slot))
 		(:result-register))))))
 
-(defmacro std-instance-writer (slot value instance-form)
+(defmacro/cross-compilation std-instance-writer (slot value instance-form)
   (let ((slot (intern (symbol-name slot) :movitz)))
     `(with-inline-assembly-case ()
        (do-case (t :eax)
@@ -1040,17 +1065,17 @@ busy-waiting loop on P4."
 
 (defmacro spin-wait-pause ())
 
-(defmacro capture-reg8 (reg)
-  `(with-inline-assembly (:returns :eax)
-     (:movzxb ,reg :eax)
-     (:shll ,movitz::+movitz-fixnum-shift+ :eax)))
+;; (defmacro capture-reg8 (reg)
+;;   `(with-inline-assembly (:returns :eax)
+;;      (:movzxb ,reg :eax)
+;;      (:shll ,movitz::+movitz-fixnum-shift+ :eax)))
 
-(defmacro asm (&rest prg)
+(define-compiler-macro asm (&rest prg)
   "Insert a single assembly instruction that returns noting."
   `(with-inline-assembly (:returns :nothing)
      ,prg))
 
-(defmacro asm1 (&rest prg)
+(define-compiler-macro asm1 (&rest prg)
   "Insert a single assembly instruction that returns a value in eax."
   `(with-inline-assembly (:returns :eax)
      ,prg))
@@ -1078,7 +1103,7 @@ busy-waiting loop on P4."
        (:halt)
        (:jmp ',infinite-loop-label))))
 
-(defmacro function-name-or-nil ()
+(define-compiler-macro function-name-or-nil ()
   (let ((function-name-not-found-label (gensym)))
     `(with-inline-assembly (:returns :eax)
        (:movl :edi :eax)
@@ -1103,11 +1128,17 @@ busy-waiting loop on P4."
 
 (define-compiler-macro boundp (symbol)
   `(with-inline-assembly-case ()
-     (do-case (t :boolean-zf=0 :labels (boundp-done))
+     (do-case (t :boolean-zf=0 :labels (boundp-done boundp-restart))
        (:compile-form (:result-mode :ebx) ,symbol)
+       boundp-restart
        (:leal (:ebx ,(- (movitz:tag :null))) :ecx)
        (:testb 5 :cl)
-       (:jne '(:sub-program () (:int 66)))
+       (:jne '(:sub-program ()
+	       (:movl :ebx :eax)
+	       (:load-constant symbol :edx)
+	       (:int 60)
+	       (:movl :eax :ebx)
+	       (:jmp 'boundp-restart)))
        (:call-local-pf dynamic-variable-lookup)
        (:globally (:cmpl (:edi (:edi-offset new-unbound-value)) :eax)))))
 

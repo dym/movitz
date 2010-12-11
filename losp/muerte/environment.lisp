@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Sat Oct 20 00:41:57 2001
 ;;;;                
-;;;; $Id: environment.lisp,v 1.15 2006/04/07 21:53:47 ffjeld Exp $
+;;;; $Id: environment.lisp,v 1.19 2009-07-19 18:57:48 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -86,7 +86,7 @@
 				(fresh-line *trace-output*)
 				(dotimes (i *trace-level*)
 				  (write-string "  " *trace-output*))
-				(format *trace-output* "~D: (~S~{ ~S~})~%"
+				(format *trace-output* "~&~D: (~S~{ ~S~})~%"
 					*trace-level* function-name args))
 			      (multiple-value-call
 				  (lambda (&rest results)
@@ -95,7 +95,7 @@
 				      (fresh-line *trace-output*)
 				      (dotimes (i (min *trace-level* 10))
 					(write-string "  " *trace-output*))
-				      (format *trace-output* "~D: =>~{ ~W~^,~}.~%"
+				      (format *trace-output* "~&~D: =>~{ ~W~^,~}.~%"
 					      *trace-level* results)
 				      (values-list results)))
 				(let ((*trace-level* (1+ *trace-level*))
@@ -108,6 +108,15 @@
 	wrapper)))
   (values))
 
+(defmacro trace (&rest names)
+  (if (null names)
+      `(mapcar #'car *trace-map*)
+      `(progn
+	 ,@(mapcar (lambda (name)
+		     `(do-trace ',name))
+		   names)
+	 (values))))
+
 (defun do-untrace (name)
   (let ((map (assoc name *trace-map*)))
     (assert map () "~S is not traced." name)
@@ -118,6 +127,16 @@
       (setf *trace-map*
 	(delete name *trace-map* :key 'car))))
   (values))
+
+(defmacro untrace (&rest names)
+  (if (null names)
+      '(do () ((null muerte::*trace-map*))
+	(do-untrace (caar muerte::*trace-map*)))
+      `(progn
+	 ,@(mapcar (lambda (name)
+		     `(do-untrace ',name))
+		   names)
+	 (values))))
 
 (defun time-skew-measure (mem x-lo x-hi)
   (declare (ignore mem))
@@ -169,4 +188,8 @@
   (error "There is no default implementation of sleep."))
 
 (defstruct random-state state)
-(defstruct pathname name)
+
+(defvar *random-state* #s(random-state :state 0))
+
+(defmethod documentation (x doc-type)
+  nil)

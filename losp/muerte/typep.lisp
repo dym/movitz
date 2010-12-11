@@ -9,7 +9,7 @@
 ;;;; Created at:    Fri Dec  8 11:07:53 2000
 ;;;; Distribution:  See the accompanying file COPYING.
 ;;;;                
-;;;; $Id: typep.lisp,v 1.54 2006/05/06 20:29:10 ffjeld Exp $
+;;;; $Id: typep.lisp,v 1.60 2008-04-27 19:45:43 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -265,6 +265,8 @@
 		(std-instance 
 		 (make-other-typep :std-instance)
 		 #+ignore (make-tag-typep :std-instance))
+		(macro-function
+		 (make-function-typep :macro-function))
 		(standard-gf-instance
 		 (make-function-typep :generic-function))
 		(list
@@ -285,6 +287,8 @@
 		 (make-other-typep :funobj))
 		((vector)
 		 (make-other-typep :basic-vector))
+		(stack-vector
+		 (make-basic-vector-typep :stack))
 		(indirect-vector
 		 (make-basic-vector-typep :indirects))
 		(simple-vector
@@ -597,7 +601,11 @@
 			   (or (eq xdim '*) (eql xdim adim)))
 			 dimension-spec
 			 (array-dimensions x)))))))
-      
+(defun bit-vector-p (x)
+  (typep x 'bit-vector))
+
+(defun arrayp (x)
+  (typep x 'array))      
 
 (define-simple-typep (atom atom) (x)
   (typep x 'atom))
@@ -648,6 +656,12 @@
 (define-simple-typep (function functionp) (x)
   (typep x 'function))
 
+(define-simple-typep (compiled-function compiled-function-p) (x)
+  (typep x 'compiled-function))
+
+(define-simple-typep (macro-function macro-function-p) (x)
+  (typep x 'macro-function))
+
 (define-simple-typep (hash-table hash-table-p))
 (define-simple-typep (package packagep))
 
@@ -692,6 +706,21 @@
 
 (deftype bit ()
   '(integer 0 1))
+
+(deftype float ()
+  'real)
+
+(deftype short-float ()
+  'real)
+
+(deftype long-float ()
+  'real)
+
+(deftype single-float ()
+  'real)
+
+(deftype double-float ()
+  'real)
 
 (defun type-of (x)
   (class-name (class-of x)))

@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Thu Mar 20 15:01:15 2003
 ;;;;                
-;;;; $Id: arp.lisp,v 1.10 2005/06/05 01:08:21 ffjeld Exp $
+;;;; $Id: arp.lisp,v 1.11 2008-06-13 16:21:18 aantoniadis Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -97,22 +97,33 @@
 					     (mac-address nic)
 					     muerte.ethernet:+broadcast-address+
 					     muerte.ethernet:+ether-type-arp+)))))
-	  
-(defun test-arp (&optional (ip #(129 242 16 30)) (my-ip #(129 242 16 173))
-			   (device *ne2000*))
+
+
+(defun device-init ()
+    (let ((ethernet
+	   (some #'muerte.x86-pc.ne2k:ne2k-probe
+		 muerte.x86-pc.ne2k:*ne2k-probe-addresses*)))
+      (assert ethernet ethernet "No ethernet device.")
+      ethernet))
+
+
+(defun test-arp (&optional (ip #(192 168 178 1)) (my-ip #(147 52 192 157))
+			   (device (device-init)))
   
   (loop with ip = (ip4-address ip) and my-ip = (ip4-address my-ip)
       for packet = (muerte.ethernet:receive device)
-      with i = 9999
-      do (when (= (incf i) 10000)
-	   (setf i 0)
-	   (transmit device
-		     (format-ethernet-packet (format-arp-request nil +arp-op-request+
-								 my-ip (mac-address device) ip)
-					     (mac-address device)
-					     muerte.ethernet:+broadcast-address+
-					     muerte.ethernet:+ether-type-arp+)))
+      with i = 9999 ;;this way we go into the do in the first iteration
+      do 
+      (when (= (incf i) 10000)
+	(setf i 0)
+	(transmit device
+		  (format-ethernet-packet (format-arp-request nil +arp-op-request+
+							      my-ip (mac-address device) ip)
+					  (mac-address device)
+					  muerte.ethernet:+broadcast-address+
+					  muerte.ethernet:+ether-type-arp+)))
       until (or (muerte.x86-pc.keyboard:poll-char)
+			;		(format t "~a~%" packet) ;;mine
 		(when (and packet
 			   (or (eq +ether-type-arp+ (ether-type packet))
 			       (warn "not type"))

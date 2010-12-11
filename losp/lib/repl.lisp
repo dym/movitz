@@ -10,7 +10,7 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Wed Mar 19 14:58:12 2003
 ;;;;                
-;;;; $Id: repl.lisp,v 1.17 2005/10/31 09:19:15 ffjeld Exp $
+;;;; $Id: repl.lisp,v 1.18 2008-04-27 08:34:46 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
@@ -98,8 +98,9 @@
 		 (restart
 		  (invoke-restart-interactively restart))
 		 ((not (keywordp form))
-		  (multiple-value-call #'process-expresion
-		    form previous-package t (eval form)))
+		  (let ((- form))
+		    (multiple-value-call #'process-expresion
+		      form previous-package t (eval form))))
 		 (t (multiple-value-call #'process-expresion
 		      form previous-package nil
 		      (apply 'muerte.toplevel:invoke-toplevel-command
