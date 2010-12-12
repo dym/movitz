@@ -77,6 +77,62 @@
   `(io-port (slot-value ,hdc 'control-base) :unsigned-byte8))
 
 ;;;
+;;; misc
+;;;
+(defun get-bit (number place)
+  (/= 0 (ldb (byte 1 number) place)))
+
+(defmacro set-bit (number value place)
+  `(setf ,place (dpb (if ,value 1 0) (byte 1 ,number) ,place)))
+
+(defmacro while (test &body body)
+  `(do () ((not ,test))
+    ,@body))
+
+(defun log2 (n)
+  (cond ((= n 256) 8)
+        ((= n 128) 7)
+        ((= n 64) 6)
+        ((= n 32) 5)
+        ((= n 16) 4)
+        ((= n 8) 3)
+        ((= n 4) 2)
+        ((= n 2) 1)
+        ((= n 1) 0)))
+  
+(defmacro with-hd-info ((hdc drive-number) hd-number &body body)
+  (let ((gs-hdnr (gensym "hd-number-")))
+    `(let* ((,gs-hdnr ,hd-number)
+            (,hdc (aref *hd-controllers* (truncate ,hd-number 2)))
+            (,drive-number (mod ,gs-hdnr 2)))
+      ,@body)))
+
+(defun error-code-meaning (code)
+  (if (< 0 code 257)
+      (nth (log2 code)
+           '("Address Mark Not Found"
+             "Track 0 Not Found"
+             "Media Change Requested"
+             "Aborted Command"
+             "ID Not Found"
+             "Media Changed"
+             "Uncorrectable Data Error"
+             "Bad Block Detected"))
+      "No error"))
+    
+(defun hdc-error (hdc command-name hdnr)
+  (puts "In HDC error")
+  (error "Harddrive command ~A returned error. HD number: ~A. Error message: '~A'." 
+         command-name hdnr 
+         (error-code-meaning 
+          (io-port (error-register hdc) :unsigned-byte8))))
+
+(defun puts (s)
+  (fresh-line)
+  (format t s)
+  (terpri))
+
+;;;
 ;;; getters
 ;;;
 (defun reg-bsy (hdc)
@@ -149,62 +205,6 @@
                                  ('write-sectors #x30)
                                  ('write-sectors-ext #x34))))
           
-;;;
-;;; misc
-;;;
-(defun get-bit (number place)
-  (/= 0 (ldb (byte 1 number) place)))
-
-(defmacro set-bit (number value place)
-  `(setf ,place (dpb (if ,value 1 0) (byte 1 ,number) ,place)))
-
-(defmacro while (test &body body)
-  `(do () ((not ,test))
-    ,@body))
-
-(defun log2 (n)
-  (cond ((= n 256) 8)
-        ((= n 128) 7)
-        ((= n 64) 6)
-        ((= n 32) 5)
-        ((= n 16) 4)
-        ((= n 8) 3)
-        ((= n 4) 2)
-        ((= n 2) 1)
-        ((= n 1) 0)))
-  
-(defmacro with-hd-info ((hdc drive-number) hd-number &body body)
-  (let ((gs-hdnr (gensym "hd-number-")))
-    `(let* ((,gs-hdnr ,hd-number)
-            (,hdc (aref *hd-controllers* (truncate ,hd-number 2)))
-            (,drive-number (mod ,gs-hdnr 2)))
-      ,@body)))
-
-(defun error-code-meaning (code)
-  (if (< 0 code 257)
-      (nth (log2 code)
-           '("Address Mark Not Found"
-             "Track 0 Not Found"
-             "Media Change Requested"
-             "Aborted Command"
-             "ID Not Found"
-             "Media Changed"
-             "Uncorrectable Data Error"
-             "Bad Block Detected"))
-      "No error"))
-    
-(defun hdc-error (hdc command-name hdnr)
-  (puts "In HDC error")
-  (error "Harddrive command ~A returned error. HD number: ~A. Error message: '~A'." 
-         command-name hdnr 
-         (error-code-meaning 
-          (io-port (error-register hdc) :unsigned-byte8))))
-
-(defun puts (s)
-  (fresh-line)
-  (format t s)
-  (terpri))
-
 ;;;
 ;;; hd operations
 ;;;
