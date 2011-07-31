@@ -10,11 +10,10 @@
 ;;;; Author:        Frode Vatvedt Fjeld <frodef@acm.org>
 ;;;; Created at:    Mon Sep 24 16:04:12 2001
 ;;;;                
-;;;; $Id: keyboard.lisp,v 1.8 2007/03/31 21:08:13 ffjeld Exp $
+;;;; $Id: keyboard.lisp,v 1.8 2007-03-31 21:08:13 ffjeld Exp $
 ;;;;                
 ;;;;------------------------------------------------------------------
 
-(require :lib/package)
 (require :lib/named-integers)
 (provide :x86-pc/keyboard)
 
@@ -27,7 +26,6 @@
 	   poll-key
 	   set-leds
 	   cpu-reset
-           setup-kbd
            set-kbd-layout))
 
 (in-package muerte.x86-pc.keyboard)
@@ -50,7 +48,6 @@
        nil      :kp-ins  nil      :kp-del  nil      nil      nil      :f11 ; #x50
        :f12     nil      nil      nil      nil      nil      nil      nil ; #x58
       			       
-       ;; e0 scancodes are mapped into this area
        nil      nil      nil      nil      nil      nil      nil      nil ; #x60
        nil      nil      nil      nil      nil      nil      nil      nil ; #x68
        nil      nil      nil      nil      nil      nil      nil      nil ; #x70
@@ -187,120 +184,8 @@
     (setf *scan-codes* normal
           *scan-codes-shift* shifted)))
 
-(defvar *keyboard-state* nil)
-(defvar *keyboard-queue* nil)
-
-(defvar *keyboard-last-code* nil)
-
-;; map e0 codes into our scancode space
-(defconstant +e0-base+      #x60)
-(defconstant +e0-kpenter+   (+ +e0-base+ 0))
-(defconstant +e0-rctrl+     (+ +e0-base+ 1))
-(defconstant +e0-kpslash+   (+ +e0-base+ 2))
-(defconstant +e0-prscr+     (+ +e0-base+ 3))
-(defconstant +e0-ralt+      (+ +e0-base+ 4))
-(defconstant +e0-break+     (+ +e0-base+ 5))
-(defconstant +e0-home+      (+ +e0-base+ 6))
-(defconstant +e0-up+        (+ +e0-base+ 7))
-(defconstant +e0-pgup+      (+ +e0-base+ 8))
-(defconstant +e0-left+      (+ +e0-base+ 9))
-(defconstant +e0-right+     (+ +e0-base+ 10))
-(defconstant +e0-end+       (+ +e0-base+ 11))
-(defconstant +e0-down+      (+ +e0-base+ 12))
-(defconstant +e0-pgdn+      (+ +e0-base+ 13))
-(defconstant +e0-ins+       (+ +e0-base+ 14))
-(defconstant +e0-del+       (+ +e0-base+ 15))
-;; BTC
-(defconstant +e0-macro+     (+ +e0-base+ 16))
-;; LK450
-(defconstant +e0-f13+       (+ +e0-base+ 17))
-(defconstant +e0-f14+       (+ +e0-base+ 18))
-(defconstant +e0-help+      (+ +e0-base+ 19))
-(defconstant +e0-do+        (+ +e0-base+ 20))
-(defconstant +e0-f17+       (+ +e0-base+ 21))
-(defconstant +e0-kpminplus+ (+ +e0-base+ 22))
-
-(defconstant +e1-pause+     (+ +e0-base+ 23))
-
-;; This is initialized in setup-kbd
-(defvar *e0-keys* nil
-  "Lookup table that maps e0 codes into the scancode space.")
-
-(defun send-kbd-command (cmd-code)
-  (kbd-wait)
-  (setf (io-port #x64 :unsigned-byte8) cmd-code))
-
-(defun kbd-wait ()
-  (loop until (logbitp 1 (io-port #x64 :unsigned-byte8))))
-
 (defun lowlevel-event-p ()
   (logbitp 0 (io-port #x64 :unsigned-byte8)))
-
-(defun kbd-int-handler (vector exception-frame)
-  (declare (ignore vector exception-frame))
-  ;;   (write-line "key event.")
-  ;;  (send-kbd-command #xAD)               ; disable keyboard
-  ;;   (kbd-wait)
-  (when (lowlevel-event-p)
-    (let ((scancode (io-port #x60 :unsigned-byte8)))
-      ;; #xfa #xfe #xff
-      (if (find scancode '(#xe0 #xe1))
-          (setf *keyboard-last-code* scancode)
-          (let ((release-p (logbitp 7 scancode))
-                (scancode (ldb (byte 7 0) scancode)))
-            (when *keyboard-last-code*
-              ;; usually #xe0
-              (if (eql *keyboard-last-code* #xe0)
-                  (progn
-                    (setf *keyboard-last-code* nil)
-                    ;; Apparently these codes should be ignored
-                    (unless (find scancode '(#x2a #x36))
-                      (let ((newcode (svref *e0-keys* scancode)))
-                        (if newcode
-                            (setf scancode newcode)
-                            (warn "keyboard: unknown scancode #xe0 #x~x" scancode)))))
-                  (cond ((and (eql *keyboard-last-code* #xe1)
-                              (eql scancode #x1d))
-                         (setf *keyboard-last-code* :pause-sequence))
-                        ((and (eql *keyboard-last-code* :pause-sequence)
-                              (eql scancode #x45))
-                         (setf scancode +e1-pause+
-                               *keyboard-last-code* nil))
-                        (t
-                         (warn "keyboard: unknown e1 escape sequence")
-                         (setf *keyboard-last-code* nil)))))
-            ;; Now scancode contains the proper scan code. Keep track of
-            ;; it's pressed status and throw the (key . release) pair on
-            ;; the queue.
-            (setf (bit *keyboard-state* scancode) (if release-p 0 1)
-                  *keyboard-queue* (append *keyboard-queue* (list (cons scancode release-p))))))))
-  ;; interrupt cleanup
-  ;;   (send-kbd-command #xAE)               ; enable the keyboard
-  (pic8259-end-of-interrupt 1)
-  ;; we need to call this for rescheduling
-  (muerte.lib:scheduler))
-
-(defun setup-kbd ()
-  (setf *e0-keys* (vector nil nil nil nil nil nil nil nil
-                          nil nil nil nil nil nil nil nil
-                          nil nil nil nil nil nil nil nil
-                          nil nil nil nil +e0-kpenter+ +e0-rctrl+ nil nil
-                          nil nil nil nil nil nil nil nil
-                          nil nil nil nil nil nil nil nil
-                          nil nil nil nil nil +e0-kpslash+ nil +e0-prscr+
-                          +e0-ralt+ nil nil nil nil +e0-f13+ +e0-f14+ +e0-help+
-                          +e0-do+ +e0-f17+ nil nil nil nil +e0-break+ +e0-home+
-                          +e0-up+ +e0-pgup+ nil +e0-left+ nil +e0-right+ +e0-kpminplus+ +e0-end+
-                          +e0-down+ +e0-pgdn+ +e0-ins+ +e0-del+ nil nil nil nil
-                          nil nil nil nil nil nil nil nil
-                          nil nil nil nil nil nil nil nil
-                          nil nil nil nil nil nil nil +e0-macro+
-                          nil nil nil nil nil nil nil nil
-                          nil nil nil nil nil nil nil nil)
-        *keyboard-queue* nil
-        *keyboard-state* (make-array 256 :element-type 'bit :initial-element 0)
-        (exception-handler 33) #'kbd-int-handler)
-  (write-line "Keyboard Initialized."))
 
 (defun keyboard-ack ()
   (prog1 (io-port #x60 :unsigned-byte8)
@@ -315,6 +200,27 @@
     (setf (io-port #x61 :unsigned-byte8) (logior a #x80)
 	  (io-port #x61 :unsigned-byte8) a))
   (io-delay 500000))
+
+(defun lowlevel-read ()
+  "Read a keyboard event. Return two values:
+The scan-code, with bit 7 set if it was an extended (#xe0) code.
+Secondly, whether this was a release event is returned."
+  (let ((first-code (io-port #x60 :unsigned-byte8)))
+    (case first-code
+      (#xe0
+       ;; (warn "e0")
+       (let ((second-code (progn
+			    (loop until (logbitp 0 (io-port #x64 :unsigned-byte8)))
+			    (io-port #x60 :unsigned-byte8))))
+	 (values (logior #x80 second-code)
+		 (logbitp 7 second-code))))
+      (#xe1				; XXX
+       (loop until (logbitp 0 (io-port #x64 :unsigned-byte8)))
+       (io-port #x60 :unsigned-byte8)
+       (loop until (logbitp 0 (io-port #x64 :unsigned-byte8)))
+       (io-port #x60 :unsigned-byte8))
+      (t (values (ldb (byte 7 0) first-code)
+		 (logbitp 7 first-code))))))
 
 (defconstant +qualifier-shift+ 0)
 (defconstant +qualifier-ctrl+ 1)
@@ -357,29 +263,22 @@
 ;;;  (< -1 key-code (length *scan-codes*)))
 
 (defun get-key ()
-  (muerte.lib:process-wait "get-key" #'(lambda () (and *keyboard-queue* t)))
-  (when *keyboard-queue*
-    (let* ((key-pair (pop *keyboard-queue*))
-           (key-code (car key-pair))
-           (release-p (cdr key-pair))
-           (key (or (decode-key-code key-code *qualifier-state*)
-                    key-code)))
-;;    (when (lowlevel-event-p)
-;;      (multiple-value-bind (key-code release-p)
-;;  	(lowlevel-read)
-;;        (let ((key (or (decode-key-code key-code *qualifier-state*)
-;;  		     key-code)))
-      (case key
-        ((:ctrl-left :ctrl-right)
-         (setf (ldb (byte 1 +qualifier-ctrl+) *qualifier-state*)
-               (if release-p 0 1)))
-        ((:shift-left :shift-right)
-         (setf (ldb (byte 1 +qualifier-shift+) *qualifier-state*)
-               (if release-p 0 1)))
-        ((:alt-left :alt-right)
-         (setf (ldb (byte 1 +qualifier-alt+) *qualifier-state*)
-               (if release-p 0 1))))
-      (values key release-p))))
+  (when (lowlevel-event-p)
+    (multiple-value-bind (key-code release-p)
+	(lowlevel-read)
+      (let ((key (or (decode-key-code key-code *qualifier-state*)
+		     key-code)))
+	(case key
+	  ((:ctrl-left :ctrl-right)
+	   (setf (ldb (byte 1 +qualifier-ctrl+) *qualifier-state*)
+	     (if release-p 0 1)))
+	  ((:shift-left :shift-right)
+	   (setf (ldb (byte 1 +qualifier-shift+) *qualifier-state*)
+	     (if release-p 0 1)))
+	  ((:alt-left :alt-right)
+	   (setf (ldb (byte 1 +qualifier-alt+) *qualifier-state*)
+	     (if release-p 0 1))))
+	(values key release-p)))))
 
 (defun poll-keypress ()
   (multiple-value-bind (key release-p)
